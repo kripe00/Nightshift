@@ -39,7 +39,7 @@ Every UI element in *Night Shift: Redline (Reactor No. 4)* must look and feel li
 | `font-vt323` | `VT323` | K.O.M.R.A.D.-84 CRT terminal, digital counters, Nixie / 7-segment readouts |
 | `font-courier` | `Courier Prime` | Pravda dot-matrix directives, Security Manual pages, rubber stamp text |
 
-Always apply `uppercase` and wide letter-spacing (`tracking-wider` or `tracking-widest`) on `font-kremlin` engraved plates.
+> **Important `Kremlin` Font Tip:** In `public/fonts/kremlin.ttf`, all characters render as Soviet block capitals, but **lowercase** `b, e, f, k, n, r, u, w` render the faux-Cyrillic glyphs (`Б, Э, Ф, К, И, Я, Ц, Щ`), while **uppercase** `B, E, F, K, N, R, U, W` render standard Latin block letters. Do NOT blindly apply CSS `uppercase` if you want the faux-Cyrillic glyphs to appear on `font-kremlin` headers!
 
 ---
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./public/title-banner.svg" alt="Meltdown is Propaganda — A Soviet Night Shift Simulator" width="100%" />
+</p>
+
 # ☢️ Meltdown is Propaganda
 ### *A Soviet Night Shift Simulator*
 
