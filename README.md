@@ -41,11 +41,11 @@ Between midnight and 06:00, you must keep the reactor core from melting down, fe
 
 Strict **1980s Soviet Industrial Hardware Aesthetic**—zero modern SaaS UI, floating cards, or glassmorphism. Every screen region is a physical piece of control-room hardware.
 
-> **Title Typography Note:** In code, repository metadata, and on itch.io, the title is written in standard Latin characters (**Meltdown is Propaganda**) for searchability, while visually inside the game it is rendered using Soviet display fonts (*Kremlin* / `Russo One`).
+> **Title Typography Note:** In code, repository metadata, and on itch.io, the title is written in standard Latin characters (**Meltdown is Propaganda**) for searchability, while visually inside the game it is rendered using the **`Kremlin`** font (from DaFont).
 
 | Surface | Typography | Role |
 | :--- | :--- | :--- |
-| **Title Branding & Steel Panels** | `Kremlin` / `Russo One` | In-game propaganda headers, stenciled panel labels, warning plates, and switches |
+| **Title Branding & Steel Panels** | `Kremlin` (DaFont) | In-game propaganda headers, stenciled panel labels, warning plates, and switches |
 | **K.O.M.R.A.D.-84 CRT Terminal** | `VT323` | Phosphor-green scanline terminal, diagnostics, and Nixie readouts |
 | **Pravda Printer & Bureaucracy** | `Courier Prime` | Dot-matrix directives, Security Manual pages, and ink stamps |
 

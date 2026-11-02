@@ -12,7 +12,7 @@
 - **Subtitle:** *A Soviet Night Shift Simulator*
 - **Searchability vs. Diegetic Display Rule:**
   - In source code, repository metadata, and on the itch.io store page, the title is always written with standard Latin letters (**Meltdown is Propaganda**) to ensure full searchability.
-  - Visually inside the game UI, title headers and propaganda banners use Soviet display fonts (*Kremlin* / `Russo One`), paired with `VT323` (CRT terminal) and `Courier Prime` (Pravda dot-matrix directives & Security Manual).
+  - Visually inside the game UI, title headers, panel labels, and propaganda banners use the **`Kremlin`** font from DaFont (bundled locally via `@font-face` in `public/fonts/`), paired with `VT323` (CRT terminal) and `Courier Prime` (Pravda dot-matrix directives & Security Manual).
 
 ---
 
@@ -20,8 +20,9 @@
 
 Before **Kristian** (`reactor` & `terminal`) and **Ole** (`inspector`) split off to build gameplay mechanics on their respective branches, the following 5 shared infrastructure pieces will be implemented on `main` and synced to both branches:
 
-### [ ] 1. itch.io Sub-Directory & Iframe Compatibility
+### [ ] 1. itch.io Sub-Directory & Local Font Compatibility
 - Configure `base: './'` in `vite.config.ts`.
+- Bundle the **`Kremlin`** font (from DaFont) locally in `public/fonts/` and register it via `@font-face` (`--font-kremlin`) in `src/index.css` (removing `Russo One`).
 - Use strictly relative paths (`./...`) for all static assets, fonts, and bundled chunks so the production build runs inside itch.io's sub-directory iframe without white-screening or broken paths.
 
 ### [ ] 2. Locked 16:9 Viewport Scaler (`1600x900`) — `src/shared/ViewportScaler.tsx`

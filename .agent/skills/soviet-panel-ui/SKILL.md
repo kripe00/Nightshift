@@ -31,15 +31,15 @@ Every UI element in *Night Shift: Redline (Reactor No. 4)* must look and feel li
 
 ## 2. Mandatory Typography Rules
 
-Fonts are loaded in `index.html` and mapped in `src/index.css`:
+`Kremlin` (from DaFont) is loaded locally via `@font-face` in `src/index.css`, while `VT323` and `Courier Prime` are loaded in `index.html`:
 
 | Font Token / Class | Font Family | Mandatory Usage |
 | :--- | :--- | :--- |
-| `font-russo` | `Russo One` | Stenciled/engraved metal labels, panel headers, switch plates, warning placards |
+| `font-kremlin` | `Kremlin` | Propaganda headers, stenciled/engraved metal labels, switch plates, warning placards |
 | `font-vt323` | `VT323` | K.O.M.R.A.D.-84 CRT terminal, digital counters, Nixie / 7-segment readouts |
 | `font-courier` | `Courier Prime` | Pravda dot-matrix directives, Security Manual pages, rubber stamp text |
 
-Always apply `uppercase` and wide letter-spacing (`tracking-wider` or `tracking-widest`) on `font-russo` engraved plates.
+Always apply `uppercase` and wide letter-spacing (`tracking-wider` or `tracking-widest`) on `font-kremlin` engraved plates.
 
 ---
 
@@ -69,7 +69,7 @@ Always apply `uppercase` and wide letter-spacing (`tracking-wider` or `tracking-
 ### Engraved Bakelite Nameplate
 ```tsx
 <div className="inline-block border-2 border-[#0e100f] bg-[#181a19] px-3 py-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.9)]">
-  <span className="font-russo text-xs tracking-widest text-[#d8d2c5] uppercase">
+  <span className="font-kremlin text-xs tracking-widest text-[#d8d2c5] uppercase">
     COOLING LOOP A // ОХЛАЖДЕНИЕ
   </span>
 </div>
@@ -120,5 +120,5 @@ Always apply `uppercase` and wide letter-spacing (`tracking-wider` or `tracking-
 
 ## 5. Verification Checklist Before Completing UI Work
 1. Verify zero default browser inputs or unstyled flat buttons exist.
-2. Confirm every label uses `font-russo`, every CRT/digital readout uses `font-vt323`, and every paper/manual element uses `font-courier`.
+2. Confirm every label uses `font-kremlin`, every CRT/digital readout uses `font-vt323`, and every paper/manual element uses `font-courier`.
 3. Check that all code stays strictly within the developer's assigned domain (`src/modules/reactor/`, `src/modules/terminal/`, or `src/modules/inspector/`).

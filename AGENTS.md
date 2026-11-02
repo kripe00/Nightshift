@@ -31,8 +31,8 @@
 - **NO Modern SaaS Web UI:** Never use floating minimalist cards, soft drop shadows, glassmorphism, modern rounded pills, or clean corporate dashboards.
 - **Diegetic Hardware Surfaces:** Every UI element must look and feel like physical 1984 Soviet control room equipment—bolted steel panels, weathered olive/gunmetal enamel, Bakelite switches, guarded toggle switches, Nixie tube / 7-segment readouts, analog needle gauges, phosphor-green CRT monitors with scanlines, tractor-feed dot-matrix paper, and heavy rubber ink stamps.
 - **Typography & Title Convention:**
-  - **Title Searchability Rule:** In code, metadata, and on itch.io, the game title is always written with standard Latin characters (**Meltdown is Propaganda**) for searchability, while in-game branding and headers use Soviet display typography (*Kremlin* / `Russo One`).
-  - `Kremlin` / `Russo One` — In-game propaganda title headers, industrial stenciled/engraved metal labels, warnings, and panel headers.
+  - **Title Searchability Rule:** In code, metadata, and on itch.io, the game title is always written with standard Latin characters (**Meltdown is Propaganda**) for searchability, while in-game branding and headers use the Soviet display font **`Kremlin`** (from DaFont, bundled locally via `@font-face`).
+  - `Kremlin` — In-game propaganda title headers, industrial stenciled/engraved metal labels, warnings, and panel headers.
   - `VT323` — K.O.M.R.A.D.-84 CRT terminal display, digital diagnostics, and readout tickers.
   - `Courier Prime` — Pravda dot-matrix printer directives, Security Manual pages, and stamped bureaucracy documents.
 
