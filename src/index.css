@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@theme {
+  --font-russo: "Russo One", sans-serif;
+  --font-vt323: "VT323", monospace;
+  --font-courier: "Courier Prime", monospace;
+}
