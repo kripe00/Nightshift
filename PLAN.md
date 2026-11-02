@@ -1,164 +1,197 @@
-# PLAN.md — Technical Roadmap & Phase 1 Infrastructure Specification
-
-> **Project:** **Meltdown is Propaganda** (*A Soviet Night Shift Simulator*)  
-> **Event:** GitHub Game Off 2026 (Theme: **SHIFT**)  
-> **Current Status:** 📐 **Planning Phase** *(No game code or Phase 1 infrastructure is built until explicit go-ahead)*
-
----
-
-## 1. Naming & Typography Convention
-
-- **Official Title:** **Meltdown is Propaganda**
-- **Subtitle:** *A Soviet Night Shift Simulator*
-- **Searchability vs. Diegetic Display Rule:**
-  - In source code, repository metadata, and on the itch.io store page, the title is always written with standard Latin letters (**Meltdown is Propaganda**) to ensure full searchability.
-  - Visually inside the game UI, title headers, panel labels, and propaganda banners use the **`Kremlin`** font from DaFont (bundled locally via `@font-face` in `public/fonts/`), paired with `VT323` (CRT terminal) and `Courier Prime` (Pravda dot-matrix directives & Security Manual).
+# ☢️ MELTDOWN IS PROPAGANDA
+**Undertittel:** *A Soviet Night Shift Simulator*  
+**Anledning:** GitHub Game Off 2026 (1. nov – 1. des 2026)  
+**Tema:** **SHIFT**  
+**Utviklere:** Kristian (`Kristian`-branch) & Ole (`Ole`-branch)
 
 ---
 
-## 2. Phase 1 Checklist: Shared Core Infrastructure (To Be Built on `main` First)
+## 1. Høykonsept & Tolkning av temaet «SHIFT»
+Året er 1984 i et alternativt, retro-futuristisk Sovjetunionen (*Cassette Futurism / Atompunk*). Spilleren er alene på nattskiftet i kontrollrommet på **Folkets Automatiserte Atomkraftverk № 4**. 
 
-Before **Kristian** (`reactor` & `terminal`) and **Ole** (`inspector`) split off to build gameplay mechanics on their respective branches, the following 5 shared infrastructure pieces will be implemented on `main` and synced to both branches:
-
-### [ ] 1. itch.io Sub-Directory & Local Font Compatibility
-- Configure `base: './'` in `vite.config.ts`.
-- Bundle the **`Kremlin`** font (from DaFont) locally in `public/fonts/` and register it via `@font-face` (`--font-kremlin`) in `src/index.css` (removing `Russo One`).
-- Use strictly relative paths (`./...`) for all static assets, fonts, and bundled chunks so the production build runs inside itch.io's sub-directory iframe without white-screening or broken paths.
-
-### [ ] 2. Locked 16:9 Viewport Scaler (`1600x900`) — `src/shared/ViewportScaler.tsx`
-- Lock the internal game canvas to a fixed **`1600x900`** pixel coordinate system (`16:9` aspect ratio).
-- Automatically scale the canvas (`transform: scale(...)`, `transform-origin: center center`) to fit any browser window or itch.io embed while preserving aspect ratio and centering with black letterbox bars.
-- Disable accidental text selection (`user-select: none` / `select-none`) and right-click context menus (`onContextMenu={(e) => e.preventDefault()}`) across the viewport so dragging documents, moving the magnifying glass, and throwing switches feel like a native desktop game.
-- Expose the current scale factor via React context (`useViewportScale()`) so pointer drag deltas (`clientX` / `clientY`) inside `inspector` and `reactor` map 1:1 to the `1600x900` coordinate space.
-
-### [ ] 3. Web Audio Unlock & Boot Screen ("Main Breaker") — `src/shared/MainBreakerOverlay.tsx`
-- Modern browsers suspend the Web Audio API (`AudioContext`) until the first user interaction.
-- Render a diegetic 1984 Soviet industrial breaker box overlay on initial load featuring a heavy Bakelite switch labeled:
-  `[ ENGAGE MAIN REACTOR BREAKER ]`
-- Clicking the breaker switch initializes and resumes the singleton `AudioContext`, triggers a procedural mechanical breaker clank + 60Hz transformer hum kick-in, and sets `isBreakerEngaged = true` in the shared store to start the shift.
-
-### [ ] 4. `F2` Developer Debug Overlay — `src/shared/DebugMenu.tsx`
-- A floating developer panel toggled with the **`F2`** key so Kristian and Ole can test their modules in complete isolation without waiting on each other's systems:
-  - **For Ole (`src/modules/inspector/`):**
-    - `[+ Spawn Genuine Directive]` — Pushes a valid Pravda directive onto the desk.
-    - `[+ Spawn CIA Forgery]` — Pushes a forged directive with detectable flaws (watermark, authorization cipher, ink color, or ministry typo).
-    - `[Clear Desk]` — Empties all active directives from the desk.
-    - `[Pause Reactor Meltdown (God Mode)]` — Freezes core temperature escalation and blackouts so Ole can test document dragging, the magnifying glass, stamps, and the Security Manual in peace without dying.
-  - **For Kristian (`src/modules/reactor/` & `src/modules/terminal/`):**
-    - `[Set Core Temp: Normal (300°C) / Critical (950°C)]` — Instantly jumps reactor core temperature to test gauges, alarms, and thermal loops.
-    - `[Trigger Redline Blackout]` — Forces a `>100 MW` Redline overload blackout state.
-    - `[Trigger K.O.M.R.A.D.-84 Gaslight Message]` — Pushes an ideological gaslighting message/override attempt to the CRT terminal.
-    - `[Skip to Shift 1 / Shift 2 / Shift 3]` — Switches active shift difficulty parameters.
-
-### [ ] 5. Shared Zustand Contract (`src/shared/types.ts` & `src/shared/useGameStore.ts`)
-- Establish the cross-module state store and TypeScript interfaces so `reactor`, `terminal`, and `inspector` never import directly from one another.
+Temaet **SHIFT** er flettet inn på tre nivåer:
+1. **The Night Shift (Tid & Overlevelse):** Du må overleve 5 stadig mer kaotiske nattskift (kl. 00:00 til 06:00) uten at reaktoren smelter ned eller at du blir arrestert for forræderi.
+2. **Power Shifting (Fysisk `SHIFT`-clutch):** Reaktoren produserer kun **100 MW** trygg strøm, men systemene krever **180 MW** på maks. Spilleren må holde inne den fysiske `SHIFT`-tasten på tastaturet (fungerer som en tung mekanisk clutch) for å omdirigere strøm mellom **Kjøling**, **Cyber-forsvar** og **Fasiliteter**. Å overklokke inn i *Redline* (101–180 MW) øker faren for sikringsbrudd og mørklegging.
+3. **Reality Shifting (Propaganda vs. Virkelighet):** Den statlige AI-en **K.O.M.R.A.D.-84** nekter for at feil kan oppstå i Sovjetunionen og forsøker å "gasslighte" spilleren, samtidig som CIA sender inn forfalskede sabotasjeordre via matriseskriveren.
 
 ---
 
-## 3. Proposed Shared Contract Specification (`src/shared/`)
+## 2. Skjerm-layout (Låst 16:9 Cockpit – `1600x900`)
+Hele spillet foregår på én fast skjerm uten scrolling, delt inn i 4 diegetiske soner:
 
-### Data Flow Between Kristian & Ole
-
-```mermaid
-flowchart LR
-  subgraph Kristian["Kristian's Domain"]
-    Reactor["src/modules/reactor/\n(SHIFT Clutch, Core Temp, Redline)"]
-    Terminal["src/modules/terminal/\n(K.O.M.R.A.D.-84 CRT & Cyber Defense)"]
-  end
-
-  subgraph Shared["Shared Contract (src/shared/)"]
-    Store["useGameStore.ts\n& types.ts"]
-  end
-
-  subgraph Ole["Ole's Domain"]
-    Inspector["src/modules/inspector/\n(Desk, Pravda Printer, Magnifier, Stamps)"]
-  end
-
-  Reactor <-->|"powerAllocation, coreTemp,\nisBlackout, isShiftHeld"| Store
-  Terminal <-->|"terminalLogs, aiOverrideActive,\ncyberDefenseLevel"| Store
-  Inspector <-->|"directives, resolveDirective(id, decision),\nfacilityPower"| Store
+```text
++-----------------------------------+-----------------------------------+
+| SONE 1: REAKTOR & KJØLING         | SONE 2: K.O.M.R.A.D.-84 TERMINAL  |
+| (Kristian - src/modules/reactor)  | (Kristian - src/modules/terminal) |
+| - Analoge SVG-målere (Temp/Trykk) | - Grønn CRT-skjerm med scanlines  |
+| - Kjølepumper, ventiler & AZ-5    | - AI-propaganda & feilmeldinger   |
+| - Geigerteller & varsellamper     | - CIA Cyber-angrep / Firewall     |
++-----------------------------------+-----------------------------------+
+| SONE 3: POWER SHIFTING MATRIX     | SONE 4: INSPEKTØR-SKRIVEBORDET    |
+| (Kristian - src/modules/reactor)  | (Ole - src/modules/inspector)     |
+| - Krever at [SHIFT] holdes inne   | - "Pravda" Matriseskriver         |
+| - Fordeler MW mellom:             | - Papirdirektiver som kan flyttes |
+|   1. COOLING (Kjølepumper)        | - Sikkerhetsmanual (bla i sider)  |
+|   2. DEFENSE (K.O.M.R.A.D./Mur)   | - Forstørrelsesglass (Lupe)       |
+|   3. FACILITY (Lys, Printer, Luft)| - Stempler: [APPROVE] / [SHRED]   |
++-----------------------------------+-----------------------------------+
 ```
 
-### Proposed TypeScript Interfaces (`src/shared/types.ts`)
+---
 
-```ts
-export type SubsystemKey = 'cooling' | 'defense' | 'facility'
+## 3. Ansvarsfordeling & Moduler (Null Merge-konflikter)
 
-export type StampType =
-  | 'MINATOM_OFFICIAL'
-  | 'POLITBURO_URGENT'
-  | 'KGB_DIRECTORATE_4'
-  | 'PLANT_INTERNAL'
+### 🛠️ Kristians Domene (`src/modules/reactor/` & `src/modules/terminal/`)
 
-export type InkColor =
-  | 'SOVIET_CRIMSON'
-  | 'BUREAU_VIOLET'
-  | 'FADED_BLACK'
-  | 'IMPERIALIST_BLUE'
+1. **Reaktor-fysikk & Game Loop (`tick`):**
+   - Kjerne-temperatur (300°C normal -> 1000°C nedsmelting), trykk og stråling.
+   - Håndtering av `SHIFT`-clutchen for å flytte strøm mellom systemene.
+   - *Redline Overclocking:* Tillater mer enn 100 MW midlertidig, men bygger opp ustabilitet som kan slå ut strømmen (Blackout).
 
-export type DirectiveDecision = 'APPROVED' | 'SHREDDED'
+2. **K.O.M.R.A.D.-84 CRT-Terminal:**
+   - Parodisk sovjetisk AI som skriver meldinger på en grønn fosforskjerm.
+   - Finner på farlige "effektiviseringstiltak" (f.eks. skrur av kjølepumper for å spare strøm til Femårsplanen) som spilleren må overstyre.
+   - Viser innkommende CIA-dataangrep som krever strøm på `DEFENSE` for å blokkeres.
 
-export interface PrintedDirective {
-  id: string
-  title: string
-  bodyText: string
-  isCiaForgery: boolean
-  stampType: StampType
-  inkColor: InkColor
-  authorizationCode: string
-  watermark: string
-  flawDescription: string | null
-  status: 'PENDING' | DirectiveDecision
-}
+3. **Prosedural Lyd (`Web Audio API`):**
+   - Reaktor-during som endrer tonehøyde etter varme/MW, Geigerteller-klikk, tunge bryter-klakk og alarmer.
 
-export interface TerminalLogEntry {
-  id: string
-  timestamp: string
-  sender: 'K.O.M.R.A.D.-84' | 'SYSTEM' | 'OPERATOR'
-  text: string
-  type: 'INFO' | 'WARNING' | 'GASLIGHT' | 'OVERRIDE'
+### 🔍 Oles Domene (`src/modules/inspector/`)
+
+1. **Pravda Matriseskriver & Skrivebord:**
+   - Skriver ut fysiske papirdirektiver som lander på skrivebordet.
+   - Hvis `FACILITY`-strømmen er lav, går skriveren tregt og skrivebordslampen flimrer/slukkes.
+
+2. **Sikkerhetsmanualen (Partiets Regelbok):**
+   - En bok på pulten spilleren kan åpne og bla i. Inneholder gyldige stempler, autorisasjonskoder, departementsnavn og sikkerhetsregler for dagens skift.
+
+3. **Forstørrelsesglasset (Lupe):**
+   - Et verktøy spilleren drar over papirdirektivene. Avslører skjulte ledetråder som kun synes gjennom lupa: mikroskrift, UV-vannmerker, feil blekkfarge eller vestlige skrivefeil fra CIA.
+
+4. **Stempler (`APPROVED` / `SHREDDED`):**
+   - Spilleren stempler dokumentet grønt (`APPROVED`) eller sender det i makuleringsmaskinen (`SHREDDED`).
+   - Sender resultatet til `useGameStore.resolveDirective(id, decision)`.
+
+---
+
+## 4. Konsekvens-matrise (Hvordan Oles pult påvirker Kristians reaktor)
+
+| Dokumenttype | Spillerens valg | Konsekvens i spillet |
+| --- | --- | --- |
+| **Ekte Parti-ordre** | `APPROVED` (Riktig) | Ordren utføres trygt (f.eks. ekstra kjølevann eller stabilisert strøm). Partiet er fornøyd. |
+| **Ekte Parti-ordre** | `SHREDDED` (Feil!) | **Mistanke om forræderi (+1 Strike).** K.O.M.R.A.D.-84 kjefter, og ved 3 strikes blir du sendt til Sibir (Game Over). |
+| **Falsk CIA-sabotasje** | `SHREDDED` (Riktig) | Sabotasje avverget! Bonus til reaktor-stabilitet og skryt i terminalen. |
+| **Falsk CIA-sabotasje** | `APPROVED` (Katastrofe!) | **Sabotasje utført!** Reaktortemperaturen spiker (+200°C), kjølepumper låses midlertidig, eller K.O.M.R.A.D.-84 blir hacket. |
+
+---
+
+## 5. Progresjon gjennom 5 Nattskift (Kampanjen)
+
+Hvert skift varer i ca. 3–4 minutter (kl. 00:00–06:00 i spilltid):
+
+* **Skift 1 (Opplæring):** Rolig reaktor. Sikkerhetsmanualen krever kun sjekk av **Riktig Departements-stempel** og **Dato (1984)**.
+* **Skift 2 (Strømklemme):** Høyere grunnvarme – spilleren må bruke `SHIFT` aktivt. Manualen innfører **Autorisasjonskoder** (må sjekkes mot tabell i manualen).
+* **Skift 3 (Lupe & Vannmerker):** CIA begynner å bruke perfekte stempler. Spilleren må bruke **Forstørrelsesglasset** for å sjekke **Vannmerker** og skjulte stavefeil i mikroskrift.
+* **Skift 4 (K.O.M.R.A.D.-84 klikker):** AI-en begynner å tvangsstyre strømmen i *Power Matrix* for å nå produksjonsmål. Spilleren må balansere strømkutt i mørket mens dokumentene renner inn.
+* **Skift 5 (Redline Finale):** Maksimal krise. Krever kontrollert overklokking i *Redline* (>100 MW), hyppige CIA-forfalskninger med falske signaturer og konstant kjøling frem til kl. 06:00.
+
+---
+
+## 6. Felles Datakontrakt (`src/shared/types.ts` & `useGameStore.ts`)
+
+Når vi starter kodingen i Fase 1, skal modulene KUN kommunisere gjennom dette grensesnittet i Zustand:
+
+```typescript
+// PLANLAGT KONTRAKT (Kun dokumentasjon foreløpig)
+export type SystemType = 'cooling' | 'defense' | 'facility';
+export type DirectiveDecision = 'APPROVED' | 'SHREDDED';
+
+export interface DirectiveDocument {
+  id: string;
+  title: string;
+  ministry: string;
+  date: string;
+  authCode: string;
+  bodyText: string;
+  stampType: 'party_star' | 'ministry_atom' | 'kgb_shield' | 'forged_eagle';
+  inkColor: 'red' | 'blue' | 'purple';
+  watermarkText: string; // Kun synlig med lupe!
+  isCiaForgery: boolean;
+  flawReason?: string;   // Forklaring på hvorfor den var falsk (vises ved feil)
+  effectOnApprove: {
+    tempDelta: number;
+    powerBonus?: number;
+    sabotageSystem?: SystemType;
+  };
 }
 
 export interface GameState {
-  // Boot & Shift State
-  isBreakerEngaged: boolean
-  currentShift: 1 | 2 | 3
-  godMode: boolean
-
-  // Reactor & Power Shifting (Kristian -> Shared -> Ole)
-  powerAllocation: {
-    cooling: number   // MW routed to core cooling pumps
-    defense: number   // MW routed to K.O.M.R.A.D. firewall / anti-sabotage
-    facility: number  // MW routed to desk lamp & Pravda printer speed
-  }
-  coreTemp: number    // Nominal ~300°C, Meltdown >1000°C
-  isBlackout: boolean // Triggered when Redline (>100 MW total) overloads grid
-
-  // K.O.M.R.A.D.-84 Terminal (Kristian -> Shared)
-  terminalLogs: TerminalLogEntry[]
-
-  // Pravda Printer & Document Inspector (Ole -> Shared -> Kristian)
-  directives: PrintedDirective[]
-
-  // Cross-Module Actions
-  engageMainBreaker: () => void
-  setShift: (shift: 1 | 2 | 3) => void
-  toggleGodMode: () => void
-  setPowerAllocation: (next: Partial<GameState['powerAllocation']>) => void
-  setCoreTemp: (temp: number) => void
-  triggerRedlineBlackout: () => void
-  triggerKomradGaslight: () => void
-  spawnDirective: (isCiaForgery: boolean) => void
-  clearDirectives: () => void
-  resolveDirective: (id: string, decision: DirectiveDecision) => void
+  // Spillstatus
+  shiftNumber: number;       // 1 til 5
+  shiftTimeMinutes: number;  // 0 (00:00) til 360 (06:00)
+  isShiftKeyHeld: boolean;   // Om fysisk SHIFT-clutch holdes inne
+  isGodMode: boolean;        // Fra F2 Debug-meny (pauser nedsmelting for Ole)
+  treasonStrikes: number;    // 0 til 3 (3 = Gulag Game Over)
+  
+  // Reaktor & Strøm (Kristian)
+  coreTemp: number;          // 300°C til 1000°C
+  maxSafePower: number;      // 100 MW (180 MW med Redline)
+  powerAllocation: Record<SystemType, number>;
+  isBlackout: boolean;
+  
+  // Terminal (Kristian)
+  terminalLogs: string[];
+  
+  // Skrivebord & Direktiver (Ole)
+  activeDirectives: DirectiveDocument[];
+  
+  // Felles Actions
+  setShiftKeyHeld: (held: boolean) => void;
+  shiftPower: (system: SystemType, deltaMW: number) => void;
+  spawnDirective: (forceForgery?: boolean) => void;
+  resolveDirective: (id: string, decision: DirectiveDecision) => void;
+  tick: () => void;
 }
 ```
 
-### How Cross-Module Effects Work:
-1. **Kristian -> Ole (`powerAllocation.facility` & `isBlackout`):**
-   - Ole's `inspector` module reads `powerAllocation.facility` and `isBlackout` from `useGameStore`.
-   - If Kristian starves `facility` power or triggers a Redline blackout, Ole's desk lamp flickers/dims and the Pravda printer slows down or stalls.
-2. **Ole -> Kristian (`resolveDirective(id, decision)`):**
-   - When Ole stamps a document `APPROVED` or `SHREDDED`, `inspector` calls `useGameStore.getState().resolveDirective(id, decision)`.
-   - Approving a **CIA Forgery** triggers a sabotage penalty in the store (e.g., spiking `coreTemp`, draining `cooling`, or triggering a K.O.M.R.A.D.-84 lock), which Kristian's `reactor` and `terminal` modules immediately react to.
-   - Shredding a **Genuine Directive** logs a bureaucratic infraction from Commissar Volkov on the CRT terminal.
+---
+
+## 7. Visuell Stil & Lyd-regler
+
+* **Totalforbud mot moderne web-UI:** Ingen hvite kort, ingen avrundede SaaS-knapper, ingen standard HTML-slidere.
+* **Materialer (CSS + Inline SVG):** Slitt sovjetisk industrigrønn (`#23312b`), bakelitt-svart (`#141414`), fosfor-grønn CRT (`#33ff66`), varsel-oransje (`#ffb000`), alarm-rød (`#ff2a2a`) og gulnet papir (`#e6dec3`).
+* **Typografi:**
+  * *Overskrifter / Metallskilt:* Sovjetisk display-font (*Kremlin* fra DaFont som lokal `.ttf` for faux-kyrillisk preg i logo og skilt, men lagret som vanlig latinsk tekst i DOM for søkbarhet).
+  * *CRT-Terminal:* `VT323` eller `Share Tech Mono`.
+  * *Skriver & Manual:* `Courier Prime` eller `DotGothic16`.
+
+---
+
+## 8. Utviklingsløp (4 Faser)
+
+### Fase 1: Felles Grunnmur i `main` (Før vi splitter opp)
+
+Gjøres sammen før Kristian og Ole går til hver sin branch:
+
+1. `vite.config.ts` med `base: './'` (for itch.io iframe-støtte).
+2. `ViewportScaler.tsx` (låser oppløsningen til `1600x900` med CSS scale).
+3. `MainBreaker` oppstartsskjerm som låser opp nettleserens `AudioContext`.
+4. `DebugMenu.tsx` på `F2`-tasten (lar Ole spawne dokumenter og skru på *God Mode* uten at reaktoren smelter, og lar Kristian teste kriser).
+5. `types.ts`, `useGameStore.ts` og et 4-soners grid i `App.tsx`.
+
+### Fase 2: Parallell «Graybox» på `Kristian`- og `Ole`-branchene
+
+* **Kristian:** Bygger `tick()`-loop, `SHIFT`-strømfordeling, temperatur-fysikk og K.O.M.R.A.D.-84 meldingslogg.
+* **Ole:** Bygger skrivebordet, papirlapper som kan klikkes/dras, Sikkerhetsmanual-visningen, lupe-effekten og `APPROVE`/`SHRED`-knapper.
+
+### Fase 3: Sovjet-Polish, Prosedural Lyd & Innhold (Skift 1–5)
+
+* Bytt ut gråbokser med SVG-målere, vippebrytere med sikkerhetslokk, ekte blekkstempler og CRT-scanlines.
+* Koble på `web-audio-synth` for mekaniske lyder og reaktor-during.
+* Skriv inn 30–40 unike direktiver (ekte og CIA-forfalskninger) og K.O.M.R.A.D.-84 sitater.
+
+### Fase 4: Innspurt, Firebase Global Telemetri & itch.io-lansering
+
+* **Firebase (Firestore – kun anonym telemetri til slutt):**
+  * Ingen innloggingsmur! Bruk kun bakgrunnsteller for globale stats på slutt-/startskjermen (*"Totalt antall nedsmeltinger i USSR"*, *"Kamerater sendt til Sibir"*, *"CIA-agenter avslørt"*) + en valgfri arkade-highscoretavle.
+* Bygg `.zip` med `npm run build` og last opp til itch.io + koble til GitHub Game Off 2026 før 1. desember.
