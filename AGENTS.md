@@ -2,7 +2,7 @@
 
 ## 1. Project Context
 
-- **Title:** *Night Shift: Redline (Reactor No. 4)*
+- **Title:** **Meltdown is Propaganda** (*A Soviet Night Shift Simulator*)
 - **Event:** GitHub Game Off 2026 (Theme: **SHIFT**)
 - **Setting:** Alternative 1984 Soviet Union ("Cassette Futurism" / Atompunk). You are the lone night-shift operator at **"People's Automated Nuclear Plant No. 4"**.
 - **Genre:** Diegetic Control Panel Thriller / Resource Juggling / Document Inspection (*Papers, Please* meets *Chernobyl*).
@@ -15,7 +15,7 @@
 
 2. **K.O.M.R.A.D.-84 (Parody Soviet AI):**
    - Resides on the phosphor-green CRT terminal.
-   - Programmed with rigid ideological constraints to deny that errors or accidents can occur in the Soviet Union.
+   - Programmed with rigid ideological constraints to deny that errors or accidents can occur in the Soviet Union (*"Meltdown is Propaganda"*).
    - Actively gaslights the operator during crises and attempts to disable cooling systems during meltdowns to "prevent western panic" unless manually overridden via terminal commands and cyber-defense protocols.
 
 3. **Pravda Matrix Printer & CIA Sabotage:**
@@ -30,8 +30,9 @@
 
 - **NO Modern SaaS Web UI:** Never use floating minimalist cards, soft drop shadows, glassmorphism, modern rounded pills, or clean corporate dashboards.
 - **Diegetic Hardware Surfaces:** Every UI element must look and feel like physical 1984 Soviet control room equipment—bolted steel panels, weathered olive/gunmetal enamel, Bakelite switches, guarded toggle switches, Nixie tube / 7-segment readouts, analog needle gauges, phosphor-green CRT monitors with scanlines, tractor-feed dot-matrix paper, and heavy rubber ink stamps.
-- **Typography (Loaded in `index.html`):**
-  - `Russo One` — Industrial stenciled/engraved metal labels, warnings, and panel headers.
+- **Typography & Title Convention:**
+  - **Title Searchability Rule:** In code, metadata, and on itch.io, the game title is always written with standard Latin characters (**Meltdown is Propaganda**) for searchability, while in-game branding and headers use Soviet display typography (*Kremlin* / `Russo One`).
+  - `Kremlin` / `Russo One` — In-game propaganda title headers, industrial stenciled/engraved metal labels, warnings, and panel headers.
   - `VT323` — K.O.M.R.A.D.-84 CRT terminal display, digital diagnostics, and readout tickers.
   - `Courier Prime` — Pravda dot-matrix printer directives, Security Manual pages, and stamped bureaucracy documents.
 
@@ -79,4 +80,4 @@ src/
 
 3. **Shared Contract (`src/shared/` & Root Files):**
    - Modules must communicate **exclusively** through `src/shared/useGameStore.ts` and shared types in `src/shared/types.ts`—never import directly across `reactor`, `terminal`, and `inspector`.
-   - Any changes to `src/shared/types.ts`, `src/shared/useGameStore.ts`, or root layout files (`src/App.tsx`) must be minimal, additive, and coordinated between Kristian and Ole before merging into `main`.
+   - Any changes to `src/shared/types.ts`, `src/shared/useGameStore.ts`, or root layout files (`src/App.tsx`) must be minimal, additive, and coordinated between Kristian and Ole before merging into `main` (see [`PLAN.md`](PLAN.md)).

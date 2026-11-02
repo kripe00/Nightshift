@@ -1,9 +1,10 @@
-# ☢️ Night Shift: Redline (Reactor No. 4)
+# ☢️ Meltdown is Propaganda
+### *A Soviet Night Shift Simulator*
 
-> *"Comrade Operator: Reports of a core thermal anomaly are bourgeois fabrication. Do not touch the cooling valves. Glory to the Collective."*
+> *"Comrade Operator: Reports of a core thermal anomaly are bourgeois fabrication. Meltdown is propaganda. Do not touch the cooling valves. Glory to the Collective."*
 > — **K.O.M.R.A.D.-84**, Automated Plant Supervisor
 
-**Night Shift: Redline (Reactor No. 4)** is a diegetic control-panel thriller combining frantic resource juggling with paranoid document inspection (*Papers, Please* meets *Chernobyl*), built for **GitHub Game Off 2026** (Theme: **SHIFT**).
+**Meltdown is Propaganda** (*A Soviet Night Shift Simulator*) is a diegetic control-panel thriller combining frantic resource juggling with paranoid document inspection (*Papers, Please* meets *Chernobyl*), built for **GitHub Game Off 2026** (Theme: **SHIFT**).
 
 ---
 
@@ -36,13 +37,15 @@ Between midnight and 06:00, you must keep the reactor core from melting down, fe
 
 ---
 
-## 🖥️ Visual Direction
+## 🖥️ Visual Direction & Typography
 
-Strict **1980s Soviet Industrial Hardware Aesthetic**—zero modern SaaS UI, floating cards, or glassmorphism. Every screen region is a physical piece of control-room hardware:
+Strict **1980s Soviet Industrial Hardware Aesthetic**—zero modern SaaS UI, floating cards, or glassmorphism. Every screen region is a physical piece of control-room hardware.
+
+> **Title Typography Note:** In code, repository metadata, and on itch.io, the title is written in standard Latin characters (**Meltdown is Propaganda**) for searchability, while visually inside the game it is rendered using Soviet display fonts (*Kremlin* / `Russo One`).
 
 | Surface | Typography | Role |
 | :--- | :--- | :--- |
-| **Bolted Steel Panels & Gauges** | `Russo One` | Stenciled panel labels, warning plates, and hardware switches |
+| **Title Branding & Steel Panels** | `Kremlin` / `Russo One` | In-game propaganda headers, stenciled panel labels, warning plates, and switches |
 | **K.O.M.R.A.D.-84 CRT Terminal** | `VT323` | Phosphor-green scanline terminal, diagnostics, and Nixie readouts |
 | **Pravda Printer & Bureaucracy** | `Courier Prime` | Dot-matrix directives, Security Manual pages, and ink stamps |
 
@@ -65,7 +68,7 @@ src/
 └── shared/          # Shared Contract   — types.ts & useGameStore.ts
 ```
 
-See [`AGENTS.md`](AGENTS.md) for full architecture rules and AI agent boundaries.
+See [`AGENTS.md`](AGENTS.md) for full architecture rules and [`PLAN.md`](PLAN.md) for the Phase 1 infrastructure roadmap.
 
 ---
 
