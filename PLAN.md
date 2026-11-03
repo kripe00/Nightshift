@@ -159,6 +159,7 @@ export interface GameState {
 ## 7. Visuell Stil & Lyd-regler
 
 * **Totalforbud mot moderne web-UI:** Ingen hvite kort, ingen avrundede SaaS-knapper, ingen standard HTML-slidere.
+* **Fysiske spaker som må dras (Aldri kun klikk):** Alle spaker (inkludert `MainBreaker`, kjølepumpe-spaker og `SHIFT`-strømspaker) skal animeres langs sporet sitt og **må dras fysisk opp og ned med musen** (`pointerdown` + `pointermove` + `pointerup`) for å aktiveres – aldri bare klikkes på. Slippes spaken før terskelverdien, spretter den tilbake; dras den helt over, låses den med et tungt mekanisk klakk.
 * **Materialer (CSS + Inline SVG):** Slitt sovjetisk industrigrønn (`#23312b`), bakelitt-svart (`#141414`), fosfor-grønn CRT (`#33ff66`), varsel-oransje (`#ffb000`), alarm-rød (`#ff2a2a`) og gulnet papir (`#e6dec3`).
 * **Typografi:**
   * *Overskrifter / Metallskilt:* Sovjetisk display-font (*Kremlin* fra DaFont som lokal `.ttf` for faux-kyrillisk preg i logo og skilt, men lagret som vanlig latinsk tekst i DOM for søkbarhet).
@@ -175,7 +176,7 @@ Gjøres sammen før Kristian og Ole går til hver sin branch:
 
 1. `vite.config.ts` med `base: './'` (for itch.io iframe-støtte).
 2. `ViewportScaler.tsx` (låser oppløsningen til `1600x900` med CSS scale).
-3. `MainBreaker` oppstartsskjerm som låser opp nettleserens `AudioContext`.
+3. `MainBreaker` oppstartsskjerm med en tung hovedstrømspak som må dras fysisk ned for å slå på kontrollrommet og låse opp nettleserens `AudioContext`.
 4. `DebugMenu.tsx` på `F2`-tasten (lar Ole spawne dokumenter og skru på *God Mode* uten at reaktoren smelter, og lar Kristian teste kriser).
 5. `types.ts`, `useGameStore.ts` og et 4-soners grid i `App.tsx`.
 

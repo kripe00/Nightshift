@@ -80,6 +80,7 @@ Each night shift runs from **00:00 to 06:00** (~3–4 minutes of real-time press
 
 Strict **1980s Soviet Industrial Hardware Aesthetic**—zero modern SaaS UI, floating cards, or default HTML sliders.
 
+- **Tactile Drag-Operated Levers:** Industrial levers (`spaker`) and main breakers are never simple click-to-toggle buttons—every lever is animated and must be physically grabbed and dragged up or down through its mechanical throw to operate.
 - **Palette:** Weathered Soviet industrial green (`#23312b`), Bakelite black (`#141414`), phosphor CRT green (`#33ff66`), warning amber (`#ffb000`), alarm crimson (`#ff2a2a`), and aged tractor-feed paper (`#e6dec3`).
 - **Title Searchability Rule:** Written as **Meltdown is Propaganda** in standard Latin text across code, DOM, and itch.io for searchability, and styled visually in-game using the **`Kremlin`** display font (from DaFont).
 

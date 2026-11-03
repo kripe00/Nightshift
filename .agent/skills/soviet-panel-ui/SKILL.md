@@ -18,12 +18,13 @@ Every UI element in *Night Shift: Redline (Reactor No. 4)* must look and feel li
 - Modern SaaS web UI (floating cards, clean white/slate containers, glassmorphism, `backdrop-blur` cards).
 - Soft drop shadows (`shadow-sm`, `shadow-md`) or modern rounded pills (`rounded-full`, `rounded-2xl`).
 - Flat, borderless buttons or standard browser `<input type="range">` sliders without heavy industrial chrome.
+- **Click-only levers (`spaker`):** Never implement industrial levers, knife switches, or heavy throw switches that simply toggle state on `onClick`.
 - System sans-serif fonts (`Inter`, `Roboto`, `system-ui`) on any visible control surface.
 
 ### ✅ REQUIRED (Always Use)
 - **Bolted Steel & Enamel Panels:** Weathered olive-drab (`#2b332a`), Soviet teal-grey (`#283838`), gunmetal (`#1b1e1f`), and oxidized steel frames with corner screw/rivet details and recessed bevels (`inset` box shadows).
 - **Inline SVG Analog Gauges:** Dials with tick marks, redline danger zones (`>100 MW`), glass glare overlays, and jittering needles driven by spring/noise physics.
-- **Heavy Bakelite Toggle Switches:** Tactile rotary knobs and heavy lever toggles with physical ON/OFF throws and indicator lamps.
+- **Animated Drag-Operated Levers (`Spaker`):** Heavy Bakelite and steel levers that **must be physically grabbed and dragged up or down** (`pointerdown` -> `pointermove` -> `pointerup` with `setPointerCapture`) along a vertical track. They must animate smoothly with the user's drag, change handle shading/perspective and drop shadow as the angle changes, spring back if released early, and snap into their detent/throw with a heavy mechanical clank.
 - **Guarded Emergency Buttons:** Flip-up translucent red/yellow hazard plastic safety covers (`AZ-5` / Scram style) that must be flipped open before pressing the underlying button.
 - **Phosphor-Green CRT Monitors:** Curved bezel frames, scanline overlays, subtle vignette, and glowing phosphor text (`#33ff66` / `#ffb000`).
 
@@ -113,12 +114,22 @@ Every UI element in *Night Shift: Redline (Reactor No. 4)* must look and feel li
 - Clicking the cover toggles `coverOpen` with a sharp mechanical hinge transition (`origin-top -rotate-110`).
 - Only when `coverOpen === true` is the deep recessed Bakelite red plunger button interactive.
 
-### C. Heavy Bakelite Toggle Switch
-- Build toggles as custom buttons (`role="switch"`, `aria-checked`) with a metallic bezel housing, a vertical slot, and a shaded lever Bat handle that shifts vertically between top (`ON`) and bottom (`OFF`) positions, accompanied by a jewel indicator lamp (amber `#ffb000`, red `#ff2a2a`, or green `#2bd95a`).
+### C. Animated Drag-Operated Industrial Levers (`Spaker`) — Mandatory Drag-to-Operate
+- **Strict Interaction Rule:** Levers (`spaker`) such as the `MainBreaker`, cooling loop throws, and `SHIFT` power routing levers **MUST NEVER** toggle on a simple click (`onClick`). The player must grab the handle (`onPointerDown`), physically drag it up or down (`onPointerMove`), and release (`onPointerUp`).
+- **Pointer Capture & Continuous Travel State:**
+  - Use `e.currentTarget.setPointerCapture(e.pointerId)` on `pointerdown`.
+  - Track normalized lever progress `travel` (`0` = top/UP, `1` = bottom/DOWN, or continuous `0..1` for variable power/valve levers) calculated from `(e.clientY - trackTop) / trackHeight`.
+- **Visual Animation & 3D Foreshortening:**
+  - Render a deep vertical recessed steel slot with rubber dust baffles and bolted end-stops.
+  - As `travel` moves from `0` to `1`, animate the lever shaft and Bakelite T-bar/ball handle vertically, scale the shaft height/perspective (`scaleY`) relative to the pivot point at the center of the slot, shift the specular highlight across the grip, and offset the cast shadow onto the steel panel below.
+- **Detent Snap & Spring-Back Physics:**
+  - **Binary Throw Levers (e.g., Main Breaker, Pump Throws):** Require dragging past a `75%` travel threshold to commit the throw. If the user releases the pointer before `75%`, animate the lever springing back (`cubic-bezier(0.34, 1.56, 0.64, 1)`) to its original position. Once dragged past `75%`, snap it firmly to `100%`, trigger `playSwitchClank(true)`, and illuminate the corresponding jewel indicator lamp (amber `#ffb000`, red `#ff2a2a`, or green `#2bd95a`).
+  - **Stepped / Continuous Levers (e.g., `SHIFT` Power Matrix Levers):** Require holding the `SHIFT` clutch (when applicable) while dragging the lever up/down through notched mechanical detents, firing a subtle metallic ratchet tick on each step.
 
 ---
 
 ## 5. Verification Checklist Before Completing UI Work
 1. Verify zero default browser inputs or unstyled flat buttons exist.
-2. Confirm every label uses `font-kremlin`, every CRT/digital readout uses `font-vt323`, and every paper/manual element uses `font-courier`.
-3. Check that all code stays strictly within the developer's assigned domain (`src/modules/reactor/`, `src/modules/terminal/`, or `src/modules/inspector/`).
+2. Confirm all levers (`spaker`) require physical vertical dragging (`onPointerDown` + `onPointerMove` + `onPointerUp` with animated travel and snap/spring-back physics) and **cannot** be triggered by a simple click.
+3. Confirm every label uses `font-kremlin`, every CRT/digital readout uses `font-vt323`, and every paper/manual element uses `font-courier`.
+4. Check that all code stays strictly within the developer's assigned domain (`src/modules/reactor/`, `src/modules/terminal/`, or `src/modules/inspector/`).

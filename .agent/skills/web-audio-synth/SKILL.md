@@ -42,6 +42,7 @@ export function getAudioContext(): AudioContext {
 Simulates a heavy Soviet Bakelite toggle or guarded cover slam by layering a short low-frequency thud with a filtered white-noise metallic transient:
 - **Transient Burst:** 35ms white-noise buffer routed through a `bandpass` `BiquadFilterNode` (`frequency: 1400 Hz`, `Q: 3.5`) with fast exponential decay (`0.3 -> 0.001`).
 - **Mechanical Body Thud:** `triangle` oscillator sweeping from `180 Hz` down to `45 Hz` over `45ms`.
+- **Lever Drag Ratchet (`playLeverRatchet`):** When the player physically drags a lever (`spak`) up or down along its slot, trigger a short `12ms` filtered impulse (`bandpass` at `950 Hz`, `Q: 4.5`) across notched detent steps, followed by `playSwitchClank(true)` when the lever snaps past its throw threshold.
 
 ```ts
 export function playSwitchClank(heavy = true): void {
