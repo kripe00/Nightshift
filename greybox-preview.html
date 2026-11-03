@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="no">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./public/favicon.svg" />
+    <link rel="alternate icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meltdown is Propaganda — 1600x900 Greybox Layout</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: #111;
+        color: #e0e0e0;
+        font-family: ui-monospace, "Cascadia Code", "Courier New", monospace;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+      }
+
+      /* Responsive wrapper that preserves 16:9 (1600x900) aspect ratio */
+      .viewport-frame {
+        width: min(100%, calc((100vh - 32px) * (16 / 9)));
+        aspect-ratio: 16 / 9;
+        background: #1e1e1e;
+        border: 3px solid #666;
+        display: grid;
+        grid-template-rows: 52px 1fr;
+        gap: 10px;
+        padding: 10px;
+      }
+
+      /* Top HUD / Status Bar */
+      .hud-bar {
+        background: #2a2a2a;
+        border: 2px dashed #777;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        font-size: 13px;
+      }
+
+      .hud-pills {
+        display: flex;
+        gap: 12px;
+      }
+
+      .pill {
+        background: #383838;
+        border: 1px solid #888;
+        padding: 4px 10px;
+      }
+
+      .nav-link {
+        color: #fff;
+        background: #444;
+        border: 1px solid #999;
+        padding: 4px 10px;
+        text-decoration: none;
+        font-weight: bold;
+      }
+      .nav-link:hover {
+        background: #555;
+      }
+
+      /* 4-Zone Cockpit Grid (PLAN.md Section 2) */
+      .cockpit-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1.1fr 0.9fr;
+        gap: 10px;
+        min-height: 0;
+      }
+
+      .zone {
+        background: #262626;
+        border: 2px solid #888;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        position: relative;
+      }
+
+      /* Subtle owner tag color coding on border */
+      .zone.kristian {
+        border-color: #7a9ec2;
+      }
+      .zone.ole {
+        border-color: #c29d7a;
+      }
+
+      .zone-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #555;
+        padding-bottom: 6px;
+      }
+
+      .zone-title {
+        font-size: 14px;
+        font-weight: bold;
+        color: #fff;
+      }
+
+      .owner-tag {
+        font-size: 11px;
+        padding: 2px 6px;
+        background: #383838;
+        border: 1px solid #777;
+        color: #ccc;
+      }
+
+      /* Wireframe placeholder blocks inside each zone */
+      .grey-box {
+        background: #333;
+        border: 1px dashed #888;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 8px;
+        font-size: 12px;
+        color: #ccc;
+      }
+
+      .grey-box strong {
+        color: #fff;
+        font-size: 13px;
+        margin-bottom: 3px;
+      }
+
+      /* SONE 1: REAKTOR & KJØLING */
+      .zone1-body {
+        flex: 1;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 10px;
+      }
+
+      .gauges-strip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        height: 95px;
+      }
+
+      .gauge-circle {
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        border: 2px solid #999;
+        background: #292929;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        margin-bottom: 4px;
+      }
+
+      .zone1-controls {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr 0.8fr;
+        gap: 8px;
+      }
+
+      /* SONE 2: K.O.M.R.A.D.-84 TERMINAL */
+      .zone2-body {
+        flex: 1;
+        display: grid;
+        grid-template-rows: 1fr auto;
+        gap: 10px;
+      }
+
+      .crt-frame {
+        background: #202020;
+        border: 2px solid #999;
+        padding: 10px;
+        display: grid;
+        grid-template-columns: 1.4fr 0.8fr;
+        gap: 10px;
+      }
+
+      /* SONE 3: POWER SHIFTING MATRIX */
+      .zone3-body {
+        flex: 1;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 8px;
+      }
+
+      .shift-bars {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .bar-placeholder {
+        width: 100%;
+        height: 18px;
+        background: #222;
+        border: 1px solid #777;
+        margin-top: 6px;
+        position: relative;
+      }
+
+      .bar-fill {
+        height: 100%;
+        background: #666;
+      }
+
+      /* SONE 4: INSPEKTØR-SKRIVEBORDET */
+      .zone4-body {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 0.9fr 1.3fr 0.9fr;
+        gap: 8px;
+      }
+
+      .desk-center {
+        display: grid;
+        grid-template-rows: 1fr auto;
+        gap: 8px;
+      }
+
+      .stamp-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        height: 46px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="viewport-frame">
+      <!-- TOP GLOBAL BAR -->
+      <header class="hud-bar">
+        <div>
+          <strong>GREYBOX (1600×900 / 16:9 LÅST COCKPIT)</strong> — Ingen scrolling, 4 faste soner
+        </div>
+        <div class="hud-pills">
+          <span class="pill">SKIFT: 1 / 5</span>
+          <span class="pill">KLOKKE: 02:15 (00:00–06:00)</span>
+          <span class="pill">STRIKES: 0 / 3</span>
+          <span class="pill">[F2] DEBUG MENY</span>
+          <a class="nav-link" href="./style-preview.html">2. RØFF STIL &rarr;</a>
+          <a class="nav-link" href="./micro-pixel-preview.html">3. MICRO PIXEL-ART &rarr;</a>
+          <a class="nav-link" style="background: #7c3819; border-color: #ffb000" href="./cockpit-preview.html">4. COCKPIT MED DRAG-SPAKER &rarr;</a>
+        </div>
+      </header>
+
+      <!-- 4-ZONE GRID -->
+      <main class="cockpit-grid">
+        <!-- SONE 1: REAKTOR & KJØLING (KRISTIAN) -->
+        <section class="zone kristian">
+          <div class="zone-header">
+            <span class="zone-title">SONE 1: REAKTOR &amp; KJØLING</span>
+            <span class="owner-tag">Kristian — src/modules/reactor/</span>
+          </div>
+
+          <div class="zone1-body">
+            <!-- Gauges -->
+            <div class="gauges-strip">
+              <div class="grey-box">
+                <div class="gauge-circle">340°C</div>
+                <strong>CORE TEMP</strong>
+              </div>
+              <div class="grey-box">
+                <div class="gauge-circle">95 MW</div>
+                <strong>OUTPUT MW</strong>
+              </div>
+              <div class="grey-box">
+                <div class="gauge-circle">42 BAR</div>
+                <strong>PRESSURE</strong>
+              </div>
+              <div class="grey-box">
+                <div class="gauge-circle">RAD</div>
+                <strong>GEIGER / RAD</strong>
+              </div>
+            </div>
+
+            <!-- Switches, Warnings & AZ-5 -->
+            <div class="zone1-controls">
+              <div class="grey-box">
+                <strong>VARSELLAMPER &amp; DRAG-SPAKER</strong>
+                <span>OWAM / OH / HC + Pumpe-spaker (MÅ DRAS OPP/NED, ALDRI KUN KLIKK)</span>
+              </div>
+              <div class="grey-box">
+                <strong>KNIVBRYTERE &amp; VENTILER (DRAGBARE)</strong>
+                <span>GPM / DNK Spaker med fjæring &amp; FUSE</span>
+              </div>
+              <div class="grey-box" style="border-style: solid; border-width: 2px">
+                <strong>[ AZ-5 ]</strong>
+                <span>Nødstopp med sikkerhetslokk</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SONE 2: K.O.M.R.A.D.-84 TERMINAL (KRISTIAN) -->
+        <section class="zone kristian">
+          <div class="zone-header">
+            <span class="zone-title">SONE 2: K.O.M.R.A.D.-84 CRT-TERMINAL</span>
+            <span class="owner-tag">Kristian — src/modules/terminal/</span>
+          </div>
+
+          <div class="zone2-body">
+            <div class="crt-frame">
+              <div class="grey-box" style="align-items: flex-start; text-align: left">
+                <strong>CRT TEKST-LOGG (VT323)</strong>
+                <span>&gt; AI-propaganda &amp; meldinger</span>
+                <span>&gt; Gasslighting ved høy temp</span>
+                <span>&gt; Advarsel ved CIA-dataangrep</span>
+              </div>
+              <div class="grey-box">
+                <div
+                  class="gauge-circle"
+                  style="width: 78px; height: 78px; border-style: dashed"
+                >
+                  RADAR
+                </div>
+                <strong>SYS.DEFENSE</strong>
+                <span>CIA Cyber-angrep / Sweep</span>
+              </div>
+            </div>
+
+            <div class="grey-box" style="height: 44px; flex-direction: row; gap: 16px">
+              <strong>TERMINAL OVERSTYRING:</strong>
+              <span>[ OVERRIDE AI LOCK ]</span>
+              <span>[ PURGE FIREWALL ]</span>
+              <span>[ СЕТЬ POWER LED ]</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- SONE 3: POWER SHIFTING MATRIX (KRISTIAN) -->
+        <section class="zone kristian">
+          <div class="zone-header">
+            <span class="zone-title">SONE 3: POWER SHIFTING MATRIX (SHIFT-CLUTCH)</span>
+            <span class="owner-tag">Kristian — src/modules/reactor/</span>
+          </div>
+
+          <div class="zone3-body">
+            <div class="grey-box" style="height: 42px; flex-direction: row; justify-content: space-between; padding: 0 16px">
+              <strong>MEKANISK CLUTCH: [ HOLD PHYSICAL SHIFT KEY ]</strong>
+              <span>TOTAL: 95 / 100 MW (101–180 MW = REDLINE FARE)</span>
+            </div>
+
+            <div class="shift-bars">
+              <div class="grey-box">
+                <strong>1. COOLING (40 MW)</strong>
+                <span>Styrer kjølepumper i Sone 1</span>
+                <div class="bar-placeholder"><div class="bar-fill" style="width: 55%"></div></div>
+              </div>
+              <div class="grey-box">
+                <strong>2. DEFENSE (35 MW)</strong>
+                <span>Styrer K.O.M.R.A.D. Firewall i Sone 2</span>
+                <div class="bar-placeholder"><div class="bar-fill" style="width: 45%"></div></div>
+              </div>
+              <div class="grey-box">
+                <strong>3. FACILITY (20 MW)</strong>
+                <span>Styrer lys &amp; skriverhastighet i Sone 4</span>
+                <div class="bar-placeholder"><div class="bar-fill" style="width: 30%"></div></div>
+              </div>
+            </div>
+
+            <div class="grey-box" style="height: 36px">
+              <strong>REDLINE OVERCLOCK METER (&gt;100 MW)</strong> — Bygger opp ustabilitet / risiko for Blackout
+            </div>
+          </div>
+        </section>
+
+        <!-- SONE 4: INSPEKTØR-SKRIVEBORDET (OLE) -->
+        <section class="zone ole">
+          <div class="zone-header">
+            <span class="zone-title">SONE 4: INSPEKTØR-SKRIVEBORDET</span>
+            <span class="owner-tag">Ole — src/modules/inspector/</span>
+          </div>
+
+          <div class="zone4-body">
+            <!-- Left: Printer & Manual -->
+            <div style="display: grid; grid-template-rows: 1fr 1fr; gap: 8px">
+              <div class="grey-box">
+                <strong>«PRAVDA» MATRISESKRIVER</strong>
+                <span>Spytter ut nye papirdirektiver</span>
+              </div>
+              <div class="grey-box">
+                <strong>SIKKERHETSMANUAL</strong>
+                <span>Klikk for å bla i gyldige koder &amp; stempler</span>
+              </div>
+            </div>
+
+            <!-- Center: Active Document & Stamps -->
+            <div class="desk-center">
+              <div class="grey-box" style="background: #3d3d3d; border: 2px solid #aaa">
+                <strong>AKTIVT PAPIRDIREKTIV (DRAGBAR)</strong>
+                <span>Departement, Dato, Auth-kode, Stempel</span>
+                <span style="margin-top: 6px; font-size: 11px; color: #bbb">
+                  (Dra forstørrelsesglass over for å se skjult vannmerke / CIA-feil)
+                </span>
+              </div>
+              <div class="stamp-row">
+                <div class="grey-box">
+                  <strong>[ STEMPEL: APPROVED ]</strong>
+                </div>
+                <div class="grey-box">
+                  <strong>[ MAKULER: SHREDDED ]</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Magnifying Glass / Desk Dock -->
+            <div class="grey-box">
+              <div
+                class="gauge-circle"
+                style="width: 68px; height: 68px; border-width: 3px"
+              >
+                LUPE
+              </div>
+              <strong>FORSTØRRELSESGLASS</strong>
+              <span>Verktøy som dras over dokumentet</span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
+

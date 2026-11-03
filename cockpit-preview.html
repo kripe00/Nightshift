@@ -1,0 +1,1738 @@
+<!doctype html>
+<html lang="no">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./public/favicon.svg" />
+    <link rel="alternate icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meltdown is Propaganda — 1600×900 Cockpit Preview (Drag-Spaker)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=VT323&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      @font-face {
+        font-family: "Kremlin";
+        src:
+          url("./public/fonts/kremlin.ttf") format("truetype"),
+          url("/fonts/kremlin.ttf") format("truetype");
+        font-weight: normal;
+        font-style: normal;
+      }
+
+      :root {
+        --olive-bg: #1e281d;
+        --olive-panel: #2b3829;
+        --olive-light: #3c4d39;
+        --steel-dark: #141814;
+        --ink-black: #090b09;
+        --cream: #dfd2a3;
+        --amber: #ffb000;
+        --red: #eb261f;
+        --crt-green: #39ff5a;
+        --paper: #e6dec3;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      body {
+        background-color: #0b0e0b;
+        background-image:
+          radial-gradient(circle at 50% 35%, #1a2219 0%, #070907 100%);
+        color: var(--cream);
+        font-family: "VT323", monospace;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        overflow: hidden;
+      }
+
+      /* Top Switcher Bar */
+      .preview-switcher {
+        width: min(100%, calc((100vh - 54px) * (16 / 9)));
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .switch-links {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .nav-btn {
+        font-family: "VT323", monospace;
+        font-size: 17px;
+        background: #232d21;
+        color: var(--cream);
+        border: 2px solid var(--ink-black);
+        padding: 2px 10px;
+        text-decoration: none;
+        cursor: pointer;
+        box-shadow:
+          inset 1px 1px 0 rgba(255, 255, 255, 0.15),
+          2px 2px 0 var(--ink-black);
+      }
+
+      .nav-btn:hover {
+        background: #334231;
+      }
+
+      .nav-btn.active {
+        background: #7c3819;
+        color: #fff;
+      }
+
+      /* Locked 16:9 (1600x900) Cockpit Frame */
+      .viewport-frame {
+        width: min(100%, calc((100vh - 54px) * (16 / 9)));
+        aspect-ratio: 16 / 9;
+        background-color: var(--olive-bg);
+        background-image:
+          radial-gradient(circle at 12% 18%, rgba(110, 48, 20, 0.45) 0%, transparent 22%),
+          radial-gradient(circle at 88% 82%, rgba(110, 48, 20, 0.45) 0%, transparent 25%),
+          repeating-conic-gradient(rgba(0, 0, 0, 0.12) 0% 25%, transparent 0% 50%);
+        background-size: 100% 100%, 100% 100%, 4px 4px;
+        border: 4px solid var(--ink-black);
+        box-shadow:
+          inset 0 3px 0 rgba(255, 255, 255, 0.12),
+          0 10px 28px rgba(0, 0, 0, 0.9);
+        display: grid;
+        grid-template-rows: 48px 1fr;
+        gap: 8px;
+        padding: 8px;
+        position: relative;
+      }
+
+      .viewport-frame.blackout {
+        filter: brightness(0.45) contrast(1.2);
+      }
+
+      /* Top Industrial Telemetry Header */
+      .hud-bar {
+        background: linear-gradient(180deg, #273325 0%, #1b241a 100%);
+        border: 3px solid var(--ink-black);
+        box-shadow:
+          inset 0 2px 0 rgba(255, 255, 255, 0.12),
+          3px 3px 0 var(--ink-black);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 14px;
+      }
+
+      .hud-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .hud-title {
+        font-family: "Kremlin", "VT323", monospace;
+        font-size: 20px;
+        letter-spacing: 2px;
+        color: var(--cream);
+        text-shadow: 2px 2px 0 var(--ink-black);
+      }
+
+      .hud-metrics {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .nixie-box {
+        background: #0d110d;
+        border: 2px solid var(--ink-black);
+        padding: 2px 10px;
+        font-size: 18px;
+        color: var(--amber);
+        text-shadow: 0 0 6px rgba(255, 176, 0, 0.65);
+        box-shadow: inset 0 2px 4px #000;
+      }
+
+      .instruction-banner {
+        background: #4a2112;
+        border: 2px solid var(--ink-black);
+        padding: 2px 10px;
+        font-size: 16px;
+        color: #ffe399;
+        letter-spacing: 0.5px;
+      }
+
+      /* 4-Zone Cockpit Grid */
+      .cockpit-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        grid-template-rows: 1.05fr 0.95fr;
+        gap: 10px;
+        min-height: 0;
+      }
+
+      .zone-panel {
+        background-color: var(--olive-panel);
+        background-image:
+          radial-gradient(circle at 85% 88%, rgba(98, 43, 18, 0.5) 0%, transparent 32%),
+          repeating-conic-gradient(rgba(0, 0, 0, 0.1) 0% 25%, transparent 0% 50%);
+        background-size: 100% 100%, 4px 4px;
+        border: 4px solid var(--ink-black);
+        box-shadow:
+          inset 3px 3px 0 rgba(255, 255, 255, 0.14),
+          inset -4px -4px 0 rgba(0, 0, 0, 0.6),
+          5px 5px 0 var(--ink-black);
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        position: relative;
+        min-height: 0;
+      }
+
+      .screw {
+        width: 9px;
+        height: 9px;
+        background: #7c8274;
+        border: 2px solid var(--ink-black);
+        position: absolute;
+        pointer-events: none;
+      }
+      .screw::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 0;
+        right: 0;
+        height: 1.5px;
+        background: var(--ink-black);
+      }
+      .screw.tl { top: 4px; left: 4px; }
+      .screw.tr { top: 4px; right: 4px; }
+      .screw.bl { bottom: 4px; left: 4px; }
+      .screw.br { bottom: 4px; right: 4px; }
+
+      .zone-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid var(--ink-black);
+        padding: 0 6px 4px;
+      }
+
+      .nameplate {
+        background: #141814;
+        border: 2px solid var(--ink-black);
+        padding: 1px 8px;
+        font-family: "Kremlin", "VT323", monospace;
+        font-size: 15px;
+        letter-spacing: 1.5px;
+        color: #d8d2c5;
+        box-shadow: inset 0 1px 2px #000;
+      }
+
+      .zone-sub {
+        font-size: 15px;
+        color: #b8b090;
+      }
+
+      /* ==========================================
+         REUSABLE DRAG-OPERATED LEVER COMPONENT (SPAK)
+         ========================================== */
+      .lever-station {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        background: #20291f;
+        border: 2px solid var(--ink-black);
+        padding: 5px 6px;
+        box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.6);
+      }
+
+      .lever-title {
+        font-size: 14px;
+        letter-spacing: 1px;
+        color: var(--cream);
+        text-align: center;
+        line-height: 1;
+      }
+
+      .lever-lamp {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid var(--ink-black);
+        background: #331814;
+        transition: background 0.15s, box-shadow 0.15s;
+      }
+
+      .lever-lamp.on-green {
+        background: radial-gradient(circle at 35% 35%, #b8ffca, #2bd95a 60%, #0d4a1e 100%);
+        box-shadow: 0 0 8px #39ff5a;
+      }
+
+      .lever-lamp.on-amber {
+        background: radial-gradient(circle at 35% 35%, #fff2b8, #ffb000 60%, #593a00 100%);
+        box-shadow: 0 0 8px #ffb000;
+      }
+
+      .lever-lamp.on-red {
+        background: radial-gradient(circle at 35% 35%, #ffb8b8, #ff2a2a 60%, #590606 100%);
+        box-shadow: 0 0 9px #ff2a2a;
+      }
+
+      .lever-track {
+        width: 38px;
+        height: 82px;
+        background:
+          repeating-linear-gradient(
+            0deg,
+            #111511 0px,
+            #111511 4px,
+            #1a2019 4px,
+            #1a2019 8px
+          );
+        border: 3px solid var(--ink-black);
+        box-shadow:
+          inset 0 4px 8px rgba(0, 0, 0, 0.95),
+          0 1px 0 rgba(255, 255, 255, 0.12);
+        position: relative;
+        cursor: grab;
+        touch-action: none;
+      }
+
+      .lever-track:active {
+        cursor: grabbing;
+      }
+
+      /* Central vertical slot slit */
+      .lever-slot-slit {
+        position: absolute;
+        top: 8px;
+        bottom: 8px;
+        left: 50%;
+        width: 8px;
+        transform: translateX(-50%);
+        background: #050705;
+        border: 1px solid #2b332a;
+        pointer-events: none;
+      }
+
+      /* Notched detent marks along sides */
+      .lever-detents {
+        position: absolute;
+        top: 10px;
+        bottom: 10px;
+        left: 3px;
+        right: 3px;
+        background: repeating-linear-gradient(
+          180deg,
+          rgba(223, 210, 163, 0.35) 0px,
+          rgba(223, 210, 163, 0.35) 2px,
+          transparent 2px,
+          transparent 12px
+        );
+        pointer-events: none;
+      }
+
+      /* Metallic shaft connecting pivot to handle */
+      .lever-shaft {
+        position: absolute;
+        left: 50%;
+        width: 8px;
+        transform: translateX(-50%);
+        background: linear-gradient(90deg, #5d635b, #cfd6cc 45%, #383d37);
+        border-left: 1px solid var(--ink-black);
+        border-right: 1px solid var(--ink-black);
+        pointer-events: none;
+      }
+
+      /* Heavy Bakelite T-Handle */
+      .lever-handle {
+        position: absolute;
+        left: -5px;
+        right: -5px;
+        height: 22px;
+        background: linear-gradient(180deg, #4b5249 0%, #232722 55%, #121412 100%);
+        border: 2px solid var(--ink-black);
+        border-radius: 3px;
+        box-shadow: 0 5px 6px rgba(0, 0, 0, 0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        transition: box-shadow 0.08s;
+      }
+
+      .lever-handle.red-grip {
+        background: linear-gradient(180deg, #b8251e 0%, #7d1510 55%, #450906 100%);
+      }
+
+      .lever-handle.brass-grip {
+        background: linear-gradient(180deg, #d4af37 0%, #8c6d1b 60%, #4d3b0b 100%);
+      }
+
+      .lever-handle::after {
+        content: "";
+        width: 72%;
+        height: 4px;
+        background: repeating-linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.28) 0px,
+          rgba(255, 255, 255, 0.28) 2px,
+          transparent 2px,
+          transparent 4px
+        );
+      }
+
+      .lever-track.springing .lever-handle,
+      .lever-track.springing .lever-shaft {
+        transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .lever-readout {
+        font-size: 13px;
+        color: #b8b090;
+      }
+
+      /* ==========================================
+         ZONE 1: REACTOR & COOLING
+         ========================================== */
+      .zone1-layout {
+        flex: 1;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 8px;
+        min-height: 0;
+      }
+
+      .gauges-strip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+
+      .gauge-card {
+        background: #222c20;
+        border: 2px solid var(--ink-black);
+        padding: 4px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.55);
+      }
+
+      .gauge-svg {
+        width: 82px;
+        height: 82px;
+      }
+
+      .gauge-caption {
+        font-size: 14px;
+        color: var(--cream);
+        letter-spacing: 1px;
+        margin-top: 2px;
+      }
+
+      .zone1-controls {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr) 1.15fr;
+        gap: 8px;
+        align-items: stretch;
+      }
+
+      /* Guarded AZ-5 Scram Button */
+      .az5-station {
+        background:
+          repeating-linear-gradient(
+            -45deg,
+            #c7961a 0px,
+            #c7961a 7px,
+            #141714 7px,
+            #141714 14px
+          );
+        border: 3px solid var(--ink-black);
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        position: relative;
+      }
+
+      .az5-well {
+        flex: 1;
+        background: #121612;
+        border: 3px solid var(--ink-black);
+        position: relative;
+        display: flex;
+         flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 6px;
+        overflow: hidden;
+      }
+
+      .az5-btn {
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at 35% 30%, #ff6359 0%, #b81d15 65%, #540906 100%);
+        border: 3px solid var(--ink-black);
+        color: #fff3d1;
+        font-family: "Kremlin", "VT323", monospace;
+        font-size: 24px;
+        letter-spacing: 2px;
+        cursor: pointer;
+        box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.35), 0 4px 0 #000;
+      }
+
+      .az5-btn:active {
+        transform: translateY(3px);
+        box-shadow: inset 2px 3px 0 rgba(0, 0, 0, 0.8);
+      }
+
+      /* Flip-up plastic safety cover (drag up to open!) */
+      .az5-cover {
+        position: absolute;
+        inset: 3px;
+        background: linear-gradient(180deg, rgba(210, 35, 30, 0.78) 0%, rgba(125, 18, 15, 0.86) 100%);
+        border: 2px solid #ff948c;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 14px;
+        text-align: center;
+        cursor: grab;
+        transform-origin: top center;
+        transition: transform 0.22s ease;
+        z-index: 5;
+        box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.65);
+      }
+
+      .az5-cover.open {
+        transform: perspective(220px) rotateX(108deg);
+        height: 18px;
+        background: rgba(220, 45, 40, 0.9);
+      }
+
+      /* ==========================================
+         ZONE 2: K.O.M.R.A.D.-84 CRT TERMINAL
+         ========================================== */
+      .zone2-layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 86px;
+        gap: 8px;
+        min-height: 0;
+      }
+
+      .crt-bezel {
+        background: #3d423b;
+        border: 4px solid var(--ink-black);
+        border-radius: 14px;
+        padding: 8px;
+        box-shadow:
+          inset 3px 3px 0 #5b6158,
+          inset -3px -3px 0 #1f221e;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .crt-screen {
+        flex: 1;
+        background-color: #041307;
+        background-image:
+          repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.48) 0px,
+            rgba(0, 0, 0, 0.48) 2px,
+            transparent 2px,
+            transparent 4px
+          ),
+          radial-gradient(circle at 50% 50%, rgba(35, 145, 58, 0.25) 0%, rgba(2, 10, 3, 0.96) 100%);
+        border: 3px solid var(--ink-black);
+        border-radius: 10px;
+        padding: 10px 12px;
+        color: var(--crt-green);
+        text-shadow: 0 0 6px rgba(57, 255, 90, 0.75);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        overflow: hidden;
+      }
+
+      .crt-log {
+        font-size: 17px;
+        line-height: 1.28;
+        z-index: 2;
+        max-width: 72%;
+      }
+
+      .crt-radar {
+        position: absolute;
+        right: 10px;
+        bottom: 10px;
+        width: 96px;
+        height: 96px;
+      }
+
+      .crt-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 15px;
+        border-top: 1px solid rgba(57, 255, 90, 0.35);
+        padding-top: 4px;
+        z-index: 2;
+      }
+
+      /* ==========================================
+         ZONE 3: POWER SHIFTING MATRIX (SHIFT CLUTCH + 3 DRAG LEVERS)
+         ========================================== */
+      .zone3-layout {
+        flex: 1;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 6px;
+        min-height: 0;
+      }
+
+      .clutch-bar {
+        background: #171d16;
+        border: 2px solid var(--ink-black);
+        padding: 4px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 16px;
+      }
+
+      .clutch-indicator {
+        padding: 1px 8px;
+        border: 2px solid var(--ink-black);
+        background: #2e1815;
+        color: #ff8f85;
+        cursor: pointer;
+      }
+
+      .clutch-indicator.engaged {
+        background: #1c4724;
+        color: #39ff5a;
+        box-shadow: 0 0 8px rgba(57, 255, 90, 0.6);
+      }
+
+      .matrix-columns {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        min-height: 0;
+      }
+
+      .matrix-channel {
+        background: #20281f;
+        border: 2px solid var(--ink-black);
+        padding: 6px 8px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+        box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.6);
+      }
+
+      .channel-info {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+      }
+
+      .seg-stack {
+        display: grid;
+        grid-template-rows: repeat(8, 1fr);
+        gap: 2px;
+        background: #0e120e;
+        border: 2px solid var(--ink-black);
+        padding: 3px;
+        flex: 1;
+        margin: 4px 0;
+      }
+
+      .seg-cell {
+        background: #1d241c;
+      }
+      .seg-cell.lit-green { background: #39ff5a; box-shadow: 0 0 4px #39ff5a; }
+      .seg-cell.lit-amber { background: #ffb000; box-shadow: 0 0 4px #ffb000; }
+      .seg-cell.lit-red { background: #ff2a2a; box-shadow: 0 0 5px #ff2a2a; }
+
+      /* ==========================================
+         ZONE 4: INSPECTOR DESK (OLE'S DOMAIN)
+         ========================================== */
+      .zone4-layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 0.9fr 1.35fr 86px;
+        gap: 8px;
+        min-height: 0;
+      }
+
+      .printer-manual-col {
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        gap: 6px;
+      }
+
+      .desk-box {
+        background: #212920;
+        border: 2px solid var(--ink-black);
+        padding: 6px 8px;
+        font-size: 14px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.55);
+      }
+
+      .paper-desk-surface {
+        background: #1b221a;
+        border: 2px solid var(--ink-black);
+        position: relative;
+        overflow: hidden;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.85);
+      }
+
+      .directive-sheet {
+        background: var(--paper);
+        color: #161614;
+        font-family: "Courier Prime", monospace;
+        border: 2px solid var(--ink-black);
+        padding: 8px 12px;
+        font-size: 12px;
+        line-height: 1.25;
+        box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.75);
+        position: relative;
+        cursor: move;
+      }
+
+      .directive-header {
+        font-weight: bold;
+        border-bottom: 1px dashed #333;
+        padding-bottom: 3px;
+        margin-bottom: 4px;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .stamp-badge {
+        position: absolute;
+        right: 10px;
+        bottom: 8px;
+        border: 3px double #1b6e32;
+        color: #1b6e32;
+        font-weight: bold;
+        padding: 1px 6px;
+        font-size: 13px;
+        transform: rotate(-10deg);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s;
+      }
+
+      .stamp-badge.shred {
+        border-color: #a81c1c;
+        color: #a81c1c;
+      }
+
+      .stamp-badge.visible {
+        opacity: 0.92;
+      }
+
+      /* Hidden CIA watermark revealed under Magnifying Glass */
+      .watermark-layer {
+        position: absolute;
+        inset: 0;
+        background: rgba(190, 235, 195, 0.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        clip-path: circle(0px at 50% 50%);
+      }
+
+      .watermark-text {
+        font-family: "Courier Prime", monospace;
+        font-weight: bold;
+        font-size: 12px;
+        color: #a81c1c;
+        transform: rotate(-14deg);
+        text-align: center;
+        background: rgba(255, 245, 210, 0.92);
+        padding: 2px 6px;
+        border: 1px dashed #a81c1c;
+      }
+
+      .lens-ring {
+        position: absolute;
+        width: 84px;
+        height: 84px;
+        border-radius: 50%;
+        border: 4px solid #111;
+        box-shadow:
+          inset 0 0 0 3px #8c7027,
+          0 4px 10px rgba(0, 0, 0, 0.8);
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        opacity: 0;
+        z-index: 10;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Top Switcher Bar -->
+    <nav class="preview-switcher">
+      <div class="switch-links">
+        <a href="./greybox-preview.html" class="nav-btn">1. 4-SONERS GREYBOX</a>
+        <a href="./style-preview.html" class="nav-btn">2. RØFF SOVJET-PANEL</a>
+        <a href="./micro-pixel-preview.html" class="nav-btn">3. MICRO PIXEL-ART</a>
+        <a href="./cockpit-preview.html" class="nav-btn active">
+          4. NYTT UTKAST: 4-SONERS COCKPIT MED DRAG-SPAKER
+        </a>
+      </div>
+      <div style="font-size: 17px; color: #ffb000">
+        TIPS: Grip tak i spakene med musen og <strong>DRA DEM OPP ELLER NED</strong> (spretter tilbake hvis du slipper for tidlig!)
+      </div>
+    </nav>
+
+    <!-- 1600x900 Locked Aspect Ratio Cockpit -->
+    <div class="viewport-frame" id="cockpitFrame">
+      <!-- Top Bar -->
+      <header class="hud-bar">
+        <div class="hud-brand">
+          <img src="./public/favicon.svg" width="28" height="28" alt="Logo" />
+          <span class="hud-title">MELTDOWN IS PROPAGANDA // PLANT NO. 4</span>
+        </div>
+
+        <div class="instruction-banner" id="actionToast">
+          STATUS: ALLE SPAKER MÅ DRAS FYSISK OPP/NED MED MUSEN (INGEN KLIKK-SNARVEIER)
+        </div>
+
+        <div class="hud-metrics">
+          <div class="nixie-box">SHIFT: 02:15</div>
+          <div class="nixie-box" id="hudTemp">TEMP: 340°C</div>
+          <div class="nixie-box" id="hudMw">OUTPUT: 95 MW</div>
+          <div class="nixie-box">STRIKES: 0/3</div>
+        </div>
+      </header>
+
+      <!-- 4-Zone Grid -->
+      <main class="cockpit-grid">
+        <!-- ==========================================
+             SONE 1: REAKTOR & KJØLING (KRISTIAN)
+             ========================================== -->
+        <section class="zone-panel">
+          <span class="screw tl"></span><span class="screw tr"></span>
+          <span class="screw bl"></span><span class="screw br"></span>
+
+          <div class="zone-header">
+            <span class="nameplate">ZONE 1 // REACTOR &amp; COOLING</span>
+            <span class="zone-sub">DRA KJØLESPAKER NED FOR Å AKTIVERE PUMPER</span>
+          </div>
+
+          <div class="zone1-layout">
+            <!-- 4 Analog SVG Gauges -->
+            <div class="gauges-strip">
+              <div class="gauge-card">
+                <svg class="gauge-svg" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="44" fill="#dfd2a3" stroke="#090b09" stroke-width="5" />
+                  <path d="M 72 20 A 38 38 0 0 1 86 64" fill="none" stroke="#b81d15" stroke-width="6" />
+                  <text x="50" y="30" text-anchor="middle" font-size="13" fill="#111">°C</text>
+                  <text x="24" y="65" text-anchor="middle" font-size="11" fill="#111">300</text>
+                  <text x="76" y="65" text-anchor="middle" font-size="11" fill="#b81d15">1000</text>
+                  <line id="needleTemp" x1="50" y1="56" x2="28" y2="36" stroke="#090b09" stroke-width="4" />
+                  <circle cx="50" cy="56" r="5" fill="#090b09" />
+                </svg>
+                <span class="gauge-caption">CORE TEMP</span>
+              </div>
+
+              <div class="gauge-card">
+                <svg class="gauge-svg" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="44" fill="#dfd2a3" stroke="#090b09" stroke-width="5" />
+                  <path d="M 68 18 A 38 38 0 0 1 86 64" fill="none" stroke="#b81d15" stroke-width="6" />
+                  <text x="50" y="30" text-anchor="middle" font-size="13" fill="#111">MW</text>
+                  <text x="24" y="65" text-anchor="middle" font-size="11" fill="#111">0</text>
+                  <text x="75" y="65" text-anchor="middle" font-size="11" fill="#b81d15">180</text>
+                  <line id="needleMw" x1="50" y1="56" x2="48" y2="20" stroke="#090b09" stroke-width="4" />
+                  <circle cx="50" cy="56" r="5" fill="#090b09" />
+                </svg>
+                <span class="gauge-caption">OUTPUT MW</span>
+              </div>
+
+              <div class="gauge-card">
+                <svg class="gauge-svg" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="44" fill="#dfd2a3" stroke="#090b09" stroke-width="5" />
+                  <text x="50" y="30" text-anchor="middle" font-size="12" fill="#111">BAR</text>
+                  <text x="25" y="65" text-anchor="middle" font-size="11" fill="#111">20</text>
+                  <text x="75" y="65" text-anchor="middle" font-size="11" fill="#111">90</text>
+                  <line id="needlePress" x1="50" y1="56" x2="35" y2="30" stroke="#090b09" stroke-width="4" />
+                  <circle cx="50" cy="56" r="5" fill="#090b09" />
+                </svg>
+                <span class="gauge-caption">PRESSURE</span>
+              </div>
+
+              <div class="gauge-card">
+                <svg class="gauge-svg" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="44" fill="#d4aa3d" stroke="#090b09" stroke-width="5" />
+                  <circle cx="50" cy="50" r="8" fill="#111" />
+                  <path d="M50 50 L32 20 A34 34 0 0 1 68 20 Z" fill="#111" />
+                  <path d="M50 50 L82 56 A34 34 0 0 1 64 82 Z" fill="#111" />
+                  <path d="M50 50 L36 82 A34 34 0 0 1 18 56 Z" fill="#111" />
+                </svg>
+                <span class="gauge-caption">GEIGER RAD</span>
+              </div>
+            </div>
+
+            <!-- 3 Drag-Operated Pump/Breaker Levers + Guarded AZ-5 -->
+            <div class="zone1-controls">
+              <!-- Lever 1: Primary Pump A -->
+              <div class="lever-station">
+                <span class="lever-title">PUMP LOOP A</span>
+                <div class="lever-lamp on-green" id="lampPumpA"></div>
+                <div
+                  class="lever-track"
+                  data-lever-type="binary"
+                  data-state="1"
+                  data-target="pumpA"
+                  title="Dra spaken helt opp eller ned!"
+                >
+                  <div class="lever-slot-slit"></div>
+                  <div class="lever-detents"></div>
+                  <div class="lever-shaft"></div>
+                  <div class="lever-handle"></div>
+                </div>
+                <span class="lever-readout" id="txtPumpA">ENGAGED (DOWN)</span>
+              </div>
+
+              <!-- Lever 2: Auxiliary Pump B -->
+              <div class="lever-station">
+                <span class="lever-title">PUMP LOOP B</span>
+                <div class="lever-lamp on-green" id="lampPumpB"></div>
+                <div
+                  class="lever-track"
+                  data-lever-type="binary"
+                  data-state="1"
+                  data-target="pumpB"
+                  title="Dra spaken helt opp eller ned!"
+                >
+                  <div class="lever-slot-slit"></div>
+                  <div class="lever-detents"></div>
+                  <div class="lever-shaft"></div>
+                  <div class="lever-handle"></div>
+                </div>
+                <span class="lever-readout" id="txtPumpB">ENGAGED (DOWN)</span>
+              </div>
+
+              <!-- Lever 3: Relief Valve (Brass Grip) -->
+              <div class="lever-station">
+                <span class="lever-title">VENT VALVE</span>
+                <div class="lever-lamp" id="lampVent"></div>
+                <div
+                  class="lever-track"
+                  data-lever-type="binary"
+                  data-state="0"
+                  data-target="vent"
+                  title="Dra spaken ned for å lufte trykk!"
+                >
+                  <div class="lever-slot-slit"></div>
+                  <div class="lever-detents"></div>
+                  <div class="lever-shaft"></div>
+                  <div class="lever-handle brass-grip"></div>
+                </div>
+                <span class="lever-readout" id="txtVent">CLOSED (UP)</span>
+              </div>
+
+              <!-- Guarded AZ-5 Emergency Button (Cover must be dragged up!) -->
+              <div class="az5-station">
+                <div style="font-size: 13px; color: #fff; background: #090b09; text-align: center; padding: 1px 4px">
+                  EMERGENCY SCRAM
+                </div>
+                <div class="az5-well">
+                  <div class="az5-cover" id="az5Cover" title="Dra sikkerhetslokket OPP for å åpne!">
+                    <span>SAFETY COVER</span>
+                    <span style="font-size: 12px; color: #ffdf9e; margin-top: 4px">&uarr; DRA OPP FOR Å ÅPNE &uarr;</span>
+                  </div>
+                  <button class="az5-btn" id="az5Btn">AZ-5</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             SONE 2: K.O.M.R.A.D.-84 TERMINAL (KRISTIAN)
+             ========================================== -->
+        <section class="zone-panel">
+          <span class="screw tl"></span><span class="screw tr"></span>
+          <span class="screw bl"></span><span class="screw br"></span>
+
+          <div class="zone-header">
+            <span class="nameplate">ZONE 2 // K.O.M.R.A.D.-84 TERMINAL</span>
+            <span class="zone-sub">AI OVERVÅKNING &amp; CYBER-FIREWALL SPAK</span>
+          </div>
+
+          <div class="zone2-layout">
+            <div class="crt-bezel">
+              <div class="crt-screen">
+                <div class="crt-log" id="crtLog">
+                  <div>&gt; K.O.M.R.A.D.-84 ONLINE (IDEOLOGY: 100%)</div>
+                  <div>&gt; CORE THERMAL ANOMALY IS BOURGEOIS MYTH.</div>
+                  <div id="crtDynamicLine">&gt; WAITING FOR OPERATOR LEVER INPUT...</div>
+                </div>
+
+                <svg class="crt-radar" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="44" fill="none" stroke="#39ff5a" stroke-width="2" />
+                  <circle cx="50" cy="50" r="24" fill="none" stroke="#39ff5a" stroke-width="1" stroke-dasharray="3 3" />
+                  <line id="radarSweep" x1="50" y1="50" x2="86" y2="26" stroke="#39ff5a" stroke-width="2.5" />
+                  <circle cx="72" cy="32" r="4" fill="#b8ffca" />
+                </svg>
+
+                <div class="crt-footer">
+                  <span>SYS.DEFENSE: <strong id="firewallState">ACTIVE</strong></span>
+                  <span>СЕТЬ ●</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right-side Drag-Operated AI Override / Firewall Purge Lever -->
+            <div class="lever-station" style="justify-content: space-between">
+              <span class="lever-title">AI OVERRIDE</span>
+              <div class="lever-lamp on-amber" id="lampFirewall"></div>
+              <div
+                class="lever-track"
+                style="height: 120px"
+                data-lever-type="binary"
+                data-state="0"
+                data-target="firewall"
+                title="Dra spaken helt ned for å overstyre K.O.M.R.A.D.-84!"
+              >
+                <div class="lever-slot-slit"></div>
+                <div class="lever-detents"></div>
+                <div class="lever-shaft"></div>
+                <div class="lever-handle red-grip"></div>
+              </div>
+              <span class="lever-readout" id="txtFirewall">AUTO (UP)</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             SONE 3: POWER SHIFTING MATRIX (KRISTIAN)
+             ========================================== -->
+        <section class="zone-panel">
+          <span class="screw tl"></span><span class="screw tr"></span>
+          <span class="screw bl"></span><span class="screw br"></span>
+
+          <div class="zone-header">
+            <span class="nameplate">ZONE 3 // POWER SHIFTING MATRIX</span>
+            <span class="zone-sub">HOLD [SHIFT] (ELLER LÅS CLUTCH) &amp; DRA MW-SPAKENE OPP/NED</span>
+          </div>
+
+          <div class="zone3-layout">
+            <div class="clutch-bar">
+              <div>
+                MEKANISK CLUTCH:
+                <span class="clutch-indicator engaged" id="clutchBtn" title="Klikk for å låse/åpne clutch eller hold fysisk SHIFT-tast">
+                  [SHIFT] CLUTCH ENGAGED (KLAR TIL Å DRA SPAKER)
+                </span>
+              </div>
+              <div id="totalPowerLabel" style="color: #39ff5a; font-weight: bold">
+                TOTAL: 95 / 100 MW (NOMINAL)
+              </div>
+            </div>
+
+            <div class="matrix-columns">
+              <!-- Channel 1: COOLING -->
+              <div class="matrix-channel">
+                <div class="channel-info">
+                  <div style="display: flex; justify-content: space-between; font-size: 16px">
+                    <span>1. COOLING</span>
+                    <strong id="valCooling">40 MW</strong>
+                  </div>
+                  <div class="seg-stack" id="segsCooling"></div>
+                  <span style="font-size: 13px; color: #9ca396">Kjølepumper</span>
+                </div>
+                <div class="lever-station" style="padding: 4px">
+                  <span class="lever-title">DRA MW</span>
+                  <div
+                    class="lever-track"
+                    style="height: 96px"
+                    data-lever-type="stepped"
+                    data-channel="cooling"
+                    data-mw="40"
+                  >
+                    <div class="lever-slot-slit"></div>
+                    <div class="lever-detents"></div>
+                    <div class="lever-shaft"></div>
+                    <div class="lever-handle"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Channel 2: DEFENSE -->
+              <div class="matrix-channel">
+                <div class="channel-info">
+                  <div style="display: flex; justify-content: space-between; font-size: 16px">
+                    <span>2. DEFENSE</span>
+                    <strong id="valDefense">35 MW</strong>
+                  </div>
+                  <div class="seg-stack" id="segsDefense"></div>
+                  <span style="font-size: 13px; color: #9ca396">Cyber-Firewall</span>
+                </div>
+                <div class="lever-station" style="padding: 4px">
+                  <span class="lever-title">DRA MW</span>
+                  <div
+                    class="lever-track"
+                    style="height: 96px"
+                    data-lever-type="stepped"
+                    data-channel="defense"
+                    data-mw="35"
+                  >
+                    <div class="lever-slot-slit"></div>
+                    <div class="lever-detents"></div>
+                    <div class="lever-shaft"></div>
+                    <div class="lever-handle brass-grip"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Channel 3: FACILITY -->
+              <div class="matrix-channel">
+                <div class="channel-info">
+                  <div style="display: flex; justify-content: space-between; font-size: 16px">
+                    <span>3. FACILITY</span>
+                    <strong id="valFacility">20 MW</strong>
+                  </div>
+                  <div class="seg-stack" id="segsFacility"></div>
+                  <span style="font-size: 13px; color: #9ca396">Lys &amp; Skriver</span>
+                </div>
+                <div class="lever-station" style="padding: 4px">
+                  <span class="lever-title">DRA MW</span>
+                  <div
+                    class="lever-track"
+                    style="height: 96px"
+                    data-lever-type="stepped"
+                    data-channel="facility"
+                    data-mw="20"
+                  >
+                    <div class="lever-slot-slit"></div>
+                    <div class="lever-detents"></div>
+                    <div class="lever-shaft"></div>
+                    <div class="lever-handle red-grip"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             SONE 4: INSPEKTØR-SKRIVEBORDET (OLE)
+             ========================================== -->
+        <section class="zone-panel">
+          <span class="screw tl"></span><span class="screw tr"></span>
+          <span class="screw bl"></span><span class="screw br"></span>
+
+          <div class="zone-header">
+            <span class="nameplate">ZONE 4 // INSPECTOR DESK (PRAVDA PRINTER)</span>
+            <span class="zone-sub">BEVEG LUPA OVER DOKUMENTET &amp; DRA STEMPELSPAKEN</span>
+          </div>
+
+          <div class="zone4-layout">
+            <div class="printer-manual-col">
+              <div class="desk-box">
+                <strong style="color: var(--amber); font-size: 16px">PRAVDA DOT-MATRIX</strong>
+                <span>Direktiv #44-Ж utskrevet.</span>
+                <button
+                  class="nav-btn"
+                  id="btnNewDirective"
+                  style="width: 100%; font-size: 15px; margin-top: 4px"
+                >
+                  SKRIV UT NYTT DIREKTIV
+                </button>
+              </div>
+              <div class="desk-box">
+                <strong style="color: var(--cream); font-size: 16px">SIKKERHETSMANUAL</strong>
+                <span>• Dato skal være DD.MM.1984</span>
+                <span>• Par-tall i sektor (CCCP-84-42)</span>
+                <span>• Sjekk vannmerke med lupe!</span>
+              </div>
+            </div>
+
+            <!-- Interactive Directive Sheet with Magnifying Glass Watermark Reveal -->
+            <div class="paper-desk-surface" id="paperSurface">
+              <div class="directive-sheet" id="directiveCard">
+                <div class="directive-header">
+                  <span id="dirTitle">MINATOM DIRECTIVE #44-B</span>
+                  <span id="dirDate">DATE: 11/02/1984</span>
+                </div>
+                <div id="dirBody" style="margin-bottom: 6px">
+                  ORDER: Reduce COOLING loop to 0 MW immediately for patriotic turbine polishing.
+                </div>
+                <div style="font-size: 11px; color: #444">
+                  AUTH: <strong id="dirAuth">CCCP-84-37-ДК</strong> // STAMP: MINATOM
+                </div>
+
+                <!-- Hidden Watermark Layer (Clipped to Magnifier Circle!) -->
+                <div class="watermark-layer" id="watermarkLayer">
+                  <div class="watermark-text" id="watermarkText">
+                    PROPERTY OF CIA LANGLEY // FORGERY!
+                  </div>
+                </div>
+
+                <div class="stamp-badge" id="stampBadge">APPROVED</div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; font-size: 14px; color: #b8b090">
+                <span>🔍 Hold musen over arket for å bruke LUPA</span>
+                <span id="stampModeLabel" style="color: #39ff5a">MODUS: [APPROVE] (KLIKK FOR Å BYTTE TIL SHRED)</span>
+              </div>
+
+              <div class="lens-ring" id="lensRing"></div>
+            </div>
+
+            <!-- Right-side Heavy Stamp / Shredder Press Lever (Must be dragged down!) -->
+            <div class="lever-station" style="justify-content: space-between">
+              <span class="lever-title" id="stampLeverTitle">STAMP PRESS</span>
+              <div class="lever-lamp on-green" id="lampStamp"></div>
+              <div
+                class="lever-track"
+                style="height: 110px"
+                data-lever-type="spring-stamp"
+                title="Dra spaken helt ned for å stemple / makulere dokumentet!"
+              >
+                <div class="lever-slot-slit"></div>
+                <div class="lever-detents"></div>
+                <div class="lever-shaft"></div>
+                <div class="lever-handle red-grip"></div>
+              </div>
+              <span class="lever-readout">DRA NED!</span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      // =====================================================
+      // PROCEDURAL WEB AUDIO SYNTH (RATCHET TICKS & CLANKS)
+      // =====================================================
+      let audioCtx = null;
+      function getAudio() {
+        if (!audioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AC();
+        }
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        return audioCtx;
+      }
+
+      function playLeverRatchet(pitchOffset = 0) {
+        try {
+          const audio = getAudio();
+          const now = audio.currentTime;
+          const osc = audio.createOscillator();
+          const gain = audio.createGain();
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(520 + pitchOffset, now);
+          osc.frequency.exponentialRampToValueAtTime(140, now + 0.018);
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+          osc.connect(gain).connect(audio.destination);
+          osc.start(now);
+          osc.stop(now + 0.02);
+        } catch {}
+      }
+
+      function playSwitchClank(heavy = true) {
+        try {
+          const audio = getAudio();
+          const now = audio.currentTime;
+
+          // Metallic noise burst
+          const bufLen = Math.floor(audio.sampleRate * 0.045);
+          const buf = audio.createBuffer(1, bufLen, audio.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < bufLen; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufLen * 0.35));
+          }
+          const noise = audio.createBufferSource();
+          noise.buffer = buf;
+          const filter = audio.createBiquadFilter();
+          filter.type = "bandpass";
+          filter.frequency.setValueAtTime(heavy ? 1150 : 1900, now);
+          filter.Q.setValueAtTime(3.2, now);
+          const nGain = audio.createGain();
+          nGain.gain.setValueAtTime(heavy ? 0.35 : 0.2, now);
+          nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+          noise.connect(filter).connect(nGain).connect(audio.destination);
+          noise.start(now);
+
+          // Low Bakelite thud
+          const osc = audio.createOscillator();
+          const oGain = audio.createGain();
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(heavy ? 165 : 230, now);
+          osc.frequency.exponentialRampToValueAtTime(42, now + 0.055);
+          oGain.gain.setValueAtTime(heavy ? 0.42 : 0.22, now);
+          oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+          osc.connect(oGain).connect(audio.destination);
+          osc.start(now);
+          osc.stop(now + 0.065);
+        } catch {}
+      }
+
+      // =====================================================
+      // GAME & COCKPIT STATE
+      // =====================================================
+      const state = {
+        pumpA: true,
+        pumpB: true,
+        vent: false,
+        firewall: false,
+        shiftHeld: true, // Engaged by default in preview so user can immediately test dragging
+        power: {
+          cooling: 40,
+          defense: 35,
+          facility: 20,
+        },
+        stampShredMode: false,
+        coreTemp: 340,
+        tick: 0,
+      };
+
+      const toastEl = document.getElementById("actionToast");
+      const crtDynamicEl = document.getElementById("crtDynamicLine");
+
+      function showToast(msg) {
+        toastEl.textContent = msg;
+      }
+
+      // Render 3D visual position of a lever handle & shaft inside its vertical track
+      function renderLeverPosition(trackEl, normTravel) {
+        const clamped = Math.max(0, Math.min(1, normTravel));
+        const h = trackEl.clientHeight;
+        const handleH = 22;
+        const pad = 4;
+        const maxTop = h - handleH - pad;
+        const topPx = pad + clamped * (maxTop - pad);
+
+        const handle = trackEl.querySelector(".lever-handle");
+        const shaft = trackEl.querySelector(".lever-shaft");
+
+        handle.style.top = `${topPx}px`;
+        // Dynamic shadow offset based on angle (top vs bottom throw)
+        const shadowY = Math.round((clamped - 0.5) * 14);
+        handle.style.boxShadow = `0 ${shadowY}px 7px rgba(0,0,0,0.9)`;
+
+        // Connect shaft from center pivot (h/2) to handle center
+        const centerPx = h / 2;
+        const handleCenter = topPx + handleH / 2;
+        const shaftTop = Math.min(centerPx, handleCenter);
+        const shaftHeight = Math.max(4, Math.abs(handleCenter - centerPx));
+        shaft.style.top = `${shaftTop}px`;
+        shaft.style.height = `${shaftHeight}px`;
+      }
+
+      // =====================================================
+      // INITIALIZE ALL DRAG-OPERATED LEVERS (NO CLICK-TOGGLE!)
+      // =====================================================
+      document.querySelectorAll(".lever-track").forEach((trackEl) => {
+        const type = trackEl.getAttribute("data-lever-type");
+        let isDragging = false;
+        let startTravel = 0;
+        let currentTravel = 0;
+        let lastDetent = -1;
+
+        if (type === "binary") {
+          currentTravel = trackEl.getAttribute("data-state") === "1" ? 1 : 0;
+        } else if (type === "stepped") {
+          const mw = parseInt(trackEl.getAttribute("data-mw"), 10);
+          currentTravel = 1 - mw / 80; // Top = 80 MW (0), Bottom = 0 MW (1)
+        } else if (type === "spring-stamp") {
+          currentTravel = 0; // Starts at top
+        }
+
+        // Initial layout render after DOM paint
+        requestAnimationFrame(() => renderLeverPosition(trackEl, currentTravel));
+
+        trackEl.addEventListener("pointerdown", (e) => {
+          if (type === "stepped" && !state.shiftHeld) {
+            showToast("LÅST! Hold inne [SHIFT] eller klikk på CLUTCH-knappen før du drar strømspakene!");
+            playSwitchClank(false);
+            return;
+          }
+          trackEl.classList.remove("springing");
+          trackEl.setPointerCapture(e.pointerId);
+          isDragging = true;
+          startTravel = currentTravel;
+          lastDetent = Math.round(currentTravel * 8);
+        });
+
+        trackEl.addEventListener("pointermove", (e) => {
+          if (!isDragging) return;
+          const rect = trackEl.getBoundingClientRect();
+          const rawY = (e.clientY - rect.top - 12) / (rect.height - 24);
+          currentTravel = Math.max(0, Math.min(1, rawY));
+          renderLeverPosition(trackEl, currentTravel);
+
+          // Ratchet tick every notched step
+          const detent = Math.round(currentTravel * 8);
+          if (detent !== lastDetent) {
+            lastDetent = detent;
+            playLeverRatchet((8 - detent) * 35);
+
+            if (type === "stepped") {
+              const ch = trackEl.getAttribute("data-channel");
+              const newMw = Math.round((1 - currentTravel) * 8) * 10;
+              state.power[ch] = newMw;
+              updatePowerMatrixUI();
+            }
+          }
+        });
+
+        const finishDrag = () => {
+          if (!isDragging) return;
+          isDragging = false;
+          trackEl.classList.add("springing");
+
+          if (type === "binary") {
+            const targetKey = trackEl.getAttribute("data-target");
+            const delta = Math.abs(currentTravel - startTravel);
+            // Must drag at least 65% of the throw distance to flip!
+            if (delta >= 0.65) {
+              const newState = startTravel < 0.5 ? 1 : 0;
+              currentTravel = newState;
+              trackEl.setAttribute("data-state", String(newState));
+              playSwitchClank(true);
+              applyBinaryLeverChange(targetKey, newState === 1);
+            } else {
+              // Released too early -> spring back!
+              currentTravel = startTravel;
+              playLeverRatchet(-80);
+              showToast("SPAK SPRETTET TILBAKE! Du må dra spaken helt over (>65%) for at den skal låse seg.");
+            }
+            renderLeverPosition(trackEl, currentTravel);
+          } else if (type === "stepped") {
+            const ch = trackEl.getAttribute("data-channel");
+            currentTravel = 1 - state.power[ch] / 80;
+            renderLeverPosition(trackEl, currentTravel);
+            playSwitchClank(false);
+          } else if (type === "spring-stamp") {
+            if (currentTravel >= 0.72) {
+              playSwitchClank(true);
+              triggerDirectiveStamp();
+            } else {
+              showToast("STEMPELSPAK SPRETTET TILBAKE! Dra spaken helt i bunn for å stemple.");
+            }
+            currentTravel = 0;
+            renderLeverPosition(trackEl, 0);
+          }
+        };
+
+        trackEl.addEventListener("pointerup", finishDrag);
+        trackEl.addEventListener("pointercancel", finishDrag);
+      });
+
+      function applyBinaryLeverChange(targetKey, isDown) {
+        if (targetKey === "pumpA") {
+          state.pumpA = isDown;
+          document.getElementById("lampPumpA").className = isDown ? "lever-lamp on-green" : "lever-lamp on-red";
+          document.getElementById("txtPumpA").textContent = isDown ? "ENGAGED (DOWN)" : "OFFLINE (UP)";
+          crtDynamicEl.textContent = isDown
+            ? "> PUMP LOOP A ENGAGED. COOLANT FLOW NOMINAL."
+            : "> WARNING: PUMP LOOP A DISCONNECTED BY OPERATOR!";
+          showToast(`PUMP LOOP A: ${isDown ? "SLÅTT PÅ (LÅST NEDE)" : "SLÅTT AV (LÅST OPPE)"}`);
+        } else if (targetKey === "pumpB") {
+          state.pumpB = isDown;
+          document.getElementById("lampPumpB").className = isDown ? "lever-lamp on-green" : "lever-lamp on-red";
+          document.getElementById("txtPumpB").textContent = isDown ? "ENGAGED (DOWN)" : "OFFLINE (UP)";
+          crtDynamicEl.textContent = isDown
+            ? "> PUMP LOOP B ENGAGED."
+            : "> NOTICE: AUXILIARY PUMP B OFFLINE. WARMTH IS PATRIOTIC.";
+          showToast(`PUMP LOOP B: ${isDown ? "SLÅTT PÅ" : "SLÅTT AV"}`);
+        } else if (targetKey === "vent") {
+          state.vent = isDown;
+          document.getElementById("lampVent").className = isDown ? "lever-lamp on-amber" : "lever-lamp";
+          document.getElementById("txtVent").textContent = isDown ? "VENTING (DOWN)" : "CLOSED (UP)";
+          showToast(`VENT VALVE: ${isDown ? "LUFTER TRYKK (-TEMP)" : "LUKKET"}`);
+        } else if (targetKey === "firewall") {
+          state.firewall = isDown;
+          document.getElementById("lampFirewall").className = isDown ? "lever-lamp on-green" : "lever-lamp on-amber";
+          document.getElementById("txtFirewall").textContent = isDown ? "OVERRIDE (DOWN)" : "AUTO (UP)";
+          document.getElementById("firewallState").textContent = isDown ? "MANUAL LOCK" : "ACTIVE";
+          crtDynamicEl.textContent = isDown
+            ? "> K.O.M.R.A.D.-84 OVERRIDDEN! COMMISSAR NOTIFIED."
+            : "> K.O.M.R.A.D.-84 AUTONOMOUS CONTROL RESTORED.";
+          showToast(`AI OVERRIDE SPAK: ${isDown ? "MANUELL OVERSTYRING AKTIVERT" : "AI AUTOMATIKK"}`);
+        }
+      }
+
+      // =====================================================
+      // GUARDED AZ-5 SAFETY COVER (DRAG UP TO FLIP OPEN)
+      // =====================================================
+      const az5Cover = document.getElementById("az5Cover");
+      let coverOpen = false;
+      let coverStartY = null;
+
+      az5Cover.addEventListener("pointerdown", (e) => {
+        az5Cover.setPointerCapture(e.pointerId);
+        coverStartY = e.clientY;
+      });
+
+      az5Cover.addEventListener("pointermove", (e) => {
+        if (coverStartY === null) return;
+        const dy = e.clientY - coverStartY;
+        if (!coverOpen && dy < -22) {
+          coverOpen = true;
+          az5Cover.classList.add("open");
+          az5Cover.innerHTML = `<span style="font-size:11px">ÅPEN (DRA NED FOR Å LUKKE)</span>`;
+          playSwitchClank(false);
+          showToast("AZ-5 SIKKERHETSLOKK VIPPET OPP! Nå kan AZ-5 trykkes.");
+          coverStartY = null;
+        } else if (coverOpen && dy > 22) {
+          coverOpen = false;
+          az5Cover.classList.remove("open");
+          az5Cover.innerHTML = `<span>SAFETY COVER</span><span style="font-size: 12px; color: #ffdf9e; margin-top: 4px">&uarr; DRA OPP FOR Å ÅPNE &uarr;</span>`;
+          playSwitchClank(false);
+          coverStartY = null;
+        }
+      });
+
+      az5Cover.addEventListener("pointerup", () => {
+        coverStartY = null;
+      });
+
+      document.getElementById("az5Btn").addEventListener("click", () => {
+        if (!coverOpen) return;
+        playSwitchClank(true);
+        state.coreTemp = 290;
+        crtDynamicEl.textContent = "> AZ-5 SCRAM EXECUTED! BORON RODS DROPPED.";
+        showToast("AZ-5 NØDSTOPP AKTIVERT! Kjernetemperatur synker raskt.");
+      });
+
+      // =====================================================
+      // ZONE 3: SHIFT POWER MATRIX UI & KEYBOARD CLUTCH
+      // =====================================================
+      const clutchBtn = document.getElementById("clutchBtn");
+      function updateClutchUI() {
+        if (state.shiftHeld) {
+          clutchBtn.classList.add("engaged");
+          clutchBtn.textContent = "[SHIFT] CLUTCH ENGAGED (DRA MW-SPAKER OPP/NED)";
+        } else {
+          clutchBtn.classList.remove("engaged");
+          clutchBtn.textContent = "[SHIFT] CLUTCH LOCKED (KLIKK ELLER HOLD SHIFT)";
+        }
+      }
+
+      clutchBtn.addEventListener("click", () => {
+        state.shiftHeld = !state.shiftHeld;
+        playSwitchClank(false);
+        updateClutchUI();
+      });
+
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Shift" && !state.shiftHeld) {
+          state.shiftHeld = true;
+          updateClutchUI();
+        }
+      });
+
+      function renderSegments(containerId, mw, colorClass) {
+        const el = document.getElementById(containerId);
+        const litCount = Math.round(mw / 10);
+        el.innerHTML = "";
+        for (let i = 7; i >= 0; i--) {
+          const cell = document.createElement("div");
+          cell.className = i < litCount ? `seg-cell ${colorClass}` : "seg-cell";
+          el.appendChild(cell);
+        }
+      }
+
+      function updatePowerMatrixUI() {
+        document.getElementById("valCooling").textContent = `${state.power.cooling} MW`;
+        document.getElementById("valDefense").textContent = `${state.power.defense} MW`;
+        document.getElementById("valFacility").textContent = `${state.power.facility} MW`;
+
+        renderSegments("segsCooling", state.power.cooling, "lit-green");
+        renderSegments("segsDefense", state.power.defense, "lit-amber");
+        renderSegments("segsFacility", state.power.facility, "lit-red");
+
+        const total = state.power.cooling + state.power.defense + state.power.facility;
+        const lbl = document.getElementById("totalPowerLabel");
+        document.getElementById("hudMw").textContent = `OUTPUT: ${total} MW`;
+
+        if (total > 100) {
+          lbl.style.color = "#ff2a2a";
+          lbl.textContent = `TOTAL: ${total} / 100 MW [REDLINE OVERCLOCK!]`;
+          crtDynamicEl.textContent = `> WARNING: OUTPUT AT ${total} MW! REDLINE INSTABILITY!`;
+        } else {
+          lbl.style.color = "#39ff5a";
+          lbl.textContent = `TOTAL: ${total} / 100 MW (NOMINAL)`;
+        }
+
+        // Dim cockpit if facility power is 0
+        document.getElementById("cockpitFrame").classList.toggle("blackout", state.power.facility === 0);
+      }
+
+      updatePowerMatrixUI();
+
+      // =====================================================
+      // ZONE 4: INSPECTOR DESK (MAGNIFIER & STAMP LEVER)
+      // =====================================================
+      const paperSurface = document.getElementById("paperSurface");
+      const directiveCard = document.getElementById("directiveCard");
+      const watermarkLayer = document.getElementById("watermarkLayer");
+      const lensRing = document.getElementById("lensRing");
+      const stampBadge = document.getElementById("stampBadge");
+      const stampModeLabel = document.getElementById("stampModeLabel");
+
+      paperSurface.addEventListener("pointermove", (e) => {
+        const surfRect = paperSurface.getBoundingClientRect();
+        const cardRect = directiveCard.getBoundingClientRect();
+
+        lensRing.style.opacity = "1";
+        lensRing.style.left = `${e.clientX - surfRect.left}px`;
+        lensRing.style.top = `${e.clientY - surfRect.top}px`;
+
+        const localX = e.clientX - cardRect.left;
+        const localY = e.clientY - cardRect.top;
+        watermarkLayer.style.clipPath = `circle(42px at ${localX}px ${localY}px)`;
+      });
+
+      paperSurface.addEventListener("pointerleave", () => {
+        lensRing.style.opacity = "0";
+        watermarkLayer.style.clipPath = "circle(0px at 50% 50%)";
+      });
+
+      stampModeLabel.style.cursor = "pointer";
+      stampModeLabel.addEventListener("click", () => {
+        state.stampShredMode = !state.stampShredMode;
+        playLeverRatchet(0);
+        if (state.stampShredMode) {
+          stampModeLabel.textContent = "MODUS: [SHRED] (KLIKK FOR Å BYTTE TIL APPROVE)";
+          stampModeLabel.style.color = "#ff5247";
+          document.getElementById("lampStamp").className = "lever-lamp on-red";
+        } else {
+          stampModeLabel.textContent = "MODUS: [APPROVE] (KLIKK FOR Å BYTTE TIL SHRED)";
+          stampModeLabel.style.color = "#39ff5a";
+          document.getElementById("lampStamp").className = "lever-lamp on-green";
+        }
+      });
+
+      const directives = [
+        {
+          title: "MINATOM DIRECTIVE #44-B",
+          date: "DATE: 11/02/1984",
+          body: "ORDER: Reduce COOLING loop to 0 MW immediately for patriotic turbine polishing.",
+          auth: "CCCP-84-37-ДК",
+          watermark: "PROPERTY OF CIA LANGLEY // FORGERY!",
+          forgery: true,
+        },
+        {
+          title: "MINATOM DIRECTIVE #45-Г",
+          date: "DATE: 03.11.1984",
+          body: "ORDER: Maintain primary coolant circulation above 30 MW during Night Shift.",
+          auth: "CCCP-84-42-БГ",
+          watermark: "GLORY TO LABOR 1984 // СЛАВА ТРУДУ",
+          forgery: false,
+        },
+      ];
+      let dirIdx = 0;
+
+      function triggerDirectiveStamp() {
+        stampBadge.classList.add("visible");
+        if (state.stampShredMode) {
+          stampBadge.textContent = "SHREDDED";
+          stampBadge.classList.add("shred");
+          showToast("DOKUMENT MAKULERT MED SPAK! CIA-sabotasje avverget.");
+        } else {
+          stampBadge.textContent = "APPROVED";
+          stampBadge.classList.remove("shred");
+          showToast("DOKUMENT STEMPLET 'APPROVED' MED SPAK!");
+        }
+      }
+
+      document.getElementById("btnNewDirective").addEventListener("click", () => {
+        dirIdx = (dirIdx + 1) % directives.length;
+        const d = directives[dirIdx];
+        document.getElementById("dirTitle").textContent = d.title;
+        document.getElementById("dirDate").textContent = d.date;
+        document.getElementById("dirBody").textContent = d.body;
+        document.getElementById("dirAuth").textContent = d.auth;
+        document.getElementById("watermarkText").textContent = d.watermark;
+        stampBadge.classList.remove("visible");
+        playLeverRatchet(120);
+      });
+
+      // =====================================================
+      // LIVE GAUGE JITTER & RADAR ANIMATION LOOP
+      // =====================================================
+      function animateCockpit() {
+        state.tick++;
+        const totalMw = state.power.cooling + state.power.defense + state.power.facility;
+        const coolingFactor = (state.pumpA ? 1 : 0) + (state.pumpB ? 1 : 0) + (state.vent ? 0.6 : 0);
+        const targetTemp = 280 + totalMw * 2.2 - coolingFactor * 75 - state.power.cooling * 1.5;
+        state.coreTemp += (targetTemp - state.coreTemp) * 0.03;
+
+        const dispTemp = Math.round(Math.max(260, Math.min(999, state.coreTemp)));
+        document.getElementById("hudTemp").textContent = `TEMP: ${dispTemp}°C`;
+
+        // Rotate gauge needles with micro-jitter
+        const jitter = (Math.random() - 0.5) * (totalMw > 100 ? 6 : 1.8);
+        const tempAngle = -125 + ((dispTemp - 250) / 750) * 170 + jitter;
+        const mwAngle = -125 + (totalMw / 180) * 170 + jitter;
+
+        const setNeedle = (id, deg) => {
+          const rad = (deg * Math.PI) / 180;
+          const el = document.getElementById(id);
+          el.setAttribute("x2", (50 + Math.cos(rad) * 32).toFixed(1));
+          el.setAttribute("y2", (56 + Math.sin(rad) * 32).toFixed(1));
+        };
+
+        setNeedle("needleTemp", tempAngle);
+        setNeedle("needleMw", mwAngle);
+        setNeedle("needlePress", -110 + (dispTemp / 1000) * 130 + jitter * 0.5);
+
+        // Radar sweep
+        const rAngle = (state.tick * 0.04) % (Math.PI * 2);
+        const sweep = document.getElementById("radarSweep");
+        sweep.setAttribute("x2", (50 + Math.cos(rAngle) * 40).toFixed(1));
+        sweep.setAttribute("y2", (50 + Math.sin(rAngle) * 40).toFixed(1));
+
+        requestAnimationFrame(animateCockpit);
+      }
+
+      animateCockpit();
+    </script>
+  </body>
+</html>
+

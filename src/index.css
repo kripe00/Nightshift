@@ -1,7 +1,15 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Kremlin";
+  src: url("/fonts/kremlin.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --font-russo: "Russo One", sans-serif;
+  --font-kremlin: "Kremlin", sans-serif;
   --font-vt323: "VT323", monospace;
   --font-courier: "Courier Prime", monospace;
 }
