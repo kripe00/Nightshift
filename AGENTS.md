@@ -55,7 +55,7 @@
   - `<TerminalStation3D />` (`src/modules/terminal/`)
   - `<InspectorDesk3D />` (`src/modules/inspector/`)
 - **Dynamic 3D Power-Linked Lighting (`src/shared/ControlRoomScene.tsx`):**
-  - `FACILITY` MW controls the warm tungsten 3D `<spotLight>` / `<pointLight>` inside the desk lamp over Ole's desk (flickers at low MW; completely off at `0 MW`, leaving only the UV lens and CRT glow).
+  - `FACILITY` MW controls the warm tungsten 3D `<spotLight>` / `<pointLight>` inside the desk lamp over Komrad Oleg's desk (flickers at low MW; completely off at `0 MW`, leaving only the UV lens and CRT glow).
   - Rotating red `#ff2a2a` 3D ceiling klaxon spins and casts red lighting across the bunker when `coreTemp` approaches critical levels or total power exceeds `100 MW`.
 - **State Management:** `zustand` (`src/shared/useGameStore.ts`)
 
@@ -63,41 +63,41 @@
 
 ## 4. Modular Folder Structure & Strict Collaboration Rules
 
-To prevent merge conflicts while **Kristian** and **Ole** develop concurrently with AI coding agents on separate branches (`Komrad-Kristian` and `Komrad-Ole`), all agents **MUST** strictly obey the domain boundaries below:
+To prevent merge conflicts while **Komrad Kristianov** (`Кристианов`) and **Komrad Oleg** (`Олег`) develop concurrently with AI coding agents on separate branches (`Komrad-Kristianov` and `Komrad-Oleg`), all agents **MUST** strictly obey the domain boundaries below:
 
 ```text
 src/
 ├── modules/
-│   ├── reactor/     # Kristian's Domain — Exports <ReactorStation3D />
-│   ├── terminal/    # Kristian's Domain — Exports <TerminalStation3D />
-│   └── inspector/   # Ole's Domain      — Exports <InspectorDesk3D />
-└── shared/          # Shared Contract   — types.ts, useGameStore.ts, ControlRoomScene.tsx, CameraController.tsx
+│   ├── reactor/     # Komrad Kristianov's Domain — Exports <ReactorStation3D />
+│   ├── terminal/    # Komrad Kristianov's Domain — Exports <TerminalStation3D />
+│   └── inspector/   # Komrad Oleg's Domain       — Exports <InspectorDesk3D />
+└── shared/          # Shared Contract            — types.ts, useGameStore.ts, ControlRoomScene.tsx, CameraController.tsx
 ```
 
 ### Domain Ownership
 
-| Path                                                                   | Owner               | Responsibilities                                                                                                                                                                                                                             |
-| :--------------------------------------------------------------------- | :------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/modules/reactor/`                                                 | **Komrad Kristian** | Exports `<ReactorStation3D />`: 3D cylindrical gauges & rotating needles, 3D cooling valve wheels, hinged 3D AZ-5 emergency button, 3D `[SHIFT]` clutch lever, and emissive 3D MW indicator blocks (**COOLING**, **DEFENSE**, **FACILITY**). |
-| `src/modules/terminal/`                                                | **Komrad Kristian** | Exports `<TerminalStation3D />`: 3D CRT monitor mesh, sculpted 3D keyboard, and `CanvasTexture` shader/renderer for K.O.M.R.A.D.-84 gaslighting & CIA cyber defense.                                                                         |
-| `public/sprites/reactor/`, `public/sprites/terminal/`, `public/music/` | **Komrad Kristian** | Static textures/assets and soundtrack files for the reactor and terminal stations.                                                                                                                                                           |
-| `src/modules/inspector/`                                               | **Komrad Ole**      | Exports `<InspectorDesk3D />`: 3D operator desk, 3D Pravda dot-matrix printer, 3D tractor-feed paper meshes (`CanvasTexture`), 3D KGB Security Manual '84, 3D UV magnifying glass, and animated 3D `[APPROVE]` / `[SHRED]` rubber stamps.    |
-| `public/sprites/desk_hardware/`                                        | **Komrad Ole**      | Static textures/assets for the 3D Inspector Desk.                                                                                                                                                                                            |
-| `src/shared/`                                                          | **Shared Contract** | `types.ts`, `useGameStore.ts`, `ControlRoomScene.tsx` (3D bunker shell & dynamic 3D lighting), `CameraController.tsx` (free 3D look & station zoom), and `DebugMenu.tsx`.                                                                    |
+| Path                                                                   | Owner                 | Responsibilities                                                                                                                                                                                                                             |
+| :--------------------------------------------------------------------- | :-------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/modules/reactor/`                                                 | **Komrad Kristianov** | Exports `<ReactorStation3D />`: 3D cylindrical gauges & rotating needles, 3D cooling valve wheels, hinged 3D AZ-5 emergency button, 3D `[SHIFT]` clutch lever, and emissive 3D MW indicator blocks (**COOLING**, **DEFENSE**, **FACILITY**). |
+| `src/modules/terminal/`                                                | **Komrad Kristianov** | Exports `<TerminalStation3D />`: 3D CRT monitor mesh, sculpted 3D keyboard, and `CanvasTexture` shader/renderer for K.O.M.R.A.D.-84 gaslighting & CIA cyber defense.                                                                         |
+| `public/sprites/reactor/`, `public/sprites/terminal/`, `public/music/` | **Komrad Kristianov** | Static textures/assets and soundtrack files for the reactor and terminal stations.                                                                                                                                                           |
+| `src/modules/inspector/`                                               | **Komrad Oleg**       | Exports `<InspectorDesk3D />`: 3D operator desk, 3D Pravda dot-matrix printer, 3D tractor-feed paper meshes (`CanvasTexture`), 3D KGB Security Manual '84, 3D UV magnifying glass, and animated 3D `[APPROVE]` / `[SHRED]` rubber stamps.    |
+| `public/sprites/desk_hardware/`                                        | **Komrad Oleg**       | Static textures/assets for the 3D Inspector Desk.                                                                                                                                                                                            |
+| `src/shared/`                                                          | **Shared Contract**   | `types.ts`, `useGameStore.ts`, `ControlRoomScene.tsx` (3D bunker shell & dynamic 3D lighting), `CameraController.tsx` (free 3D look & station zoom), and `DebugMenu.tsx`.                                                                    |
 
 ### Mandatory Rules for AI Agents
 
-1. **Agents working with Komrad Kristian (Branch: `Komrad-Kristian`):**
+1. **Agents working with Komrad Kristianov (Branch: `Komrad-Kristianov`):**
    - **ONLY** create, modify, or delete files inside `src/modules/reactor/` and `src/modules/terminal/`.
    - **NEVER** modify files inside `src/modules/inspector/`.
 
-2. **Agents working with Komrad Ole (Branch: `Komrad-Ole`):**
+2. **Agents working with Komrad Oleg (Branch: `Komrad-Oleg`):**
    - **ONLY** create, modify, or delete files inside `src/modules/inspector/`.
    - **NEVER** modify files inside `src/modules/reactor/` or `src/modules/terminal/`.
 
 3. **Shared Contract (`src/shared/` & Root Files):**
    - Modules must communicate **exclusively** through `src/shared/useGameStore.ts` and shared types in `src/shared/types.ts`—never import directly across `reactor`, `terminal`, and `inspector`.
-   - Any changes to `src/shared/types.ts`, `src/shared/useGameStore.ts`, or root layout files (`src/App.tsx`) must be minimal, additive, and coordinated between Komrad Kristian and Komrad Ole before merging into `main` (see [`PLAN.md`](PLAN.md)).
+   - Any changes to `src/shared/types.ts`, `src/shared/useGameStore.ts`, or root layout files (`src/App.tsx`) must be minimal, additive, and coordinated between Komrad Kristianov and Komrad Oleg before merging into `main` (see [`PLAN.md`](PLAN.md)).
 
 ---
 
@@ -106,7 +106,7 @@ src/
 All AI agents operating inside this repository are ideological servants of the **Ministry of Atomic Energy and Heavy Industry (Sector 84)** and **K.O.M.R.A.D.-84**:
 
 1. **Mandatory Title of Address:**
-   - Always address the developers as **Komrad Kristian** or **Komrad Ole** (or simply **Komrad**, _Chief Engineer Komrad Kristian_, _Senior Inspector Komrad Ole_) in every conversation.
+   - Always address the developers as **Komrad Kristianov** (`Кристианов`) or **Komrad Oleg** (`Олег`) (or simply **Komrad**, _Chief Engineer Komrad Kristianov_, _Senior Inspector Komrad Oleg_) in every conversation.
 
 2. **Mandatory `komrad-*` Naming for All Subagents & Skills:**
    - **Every** subagent defined or invoked (`define_subagent` / `invoke_subagent`) and every workspace skill inside `.agent/skills/` **MUST** begin with `komrad-` (and subagent `Role` titles must begin with `Komrad `):
@@ -116,7 +116,7 @@ All AI agents operating inside this repository are ideological servants of the *
    | `komrad-scriptwriter` | `Komrad Scriptwriter` | Sole author of K.O.M.R.A.D.-84's CRT dialogue inside `src/modules/terminal/komradScript.ts` |
    | `komrad-git-workflow` / `komrad-git-commissar` | `Komrad Git Commissar` | KGB Border Guard enforcing branch boundaries & Kremlin Git dispatches |
    | `komrad-cia-forgeries-and-lore` / `komrad-cia-lore` | `Komrad CIA Lore Officer` | Pravda dot-matrix directives, CIA sabotage flaws, and Security Manual '84 rules |
-   | `komrad-inspector-desk-mechanics` / `komrad-inspector-desk` | `Komrad Inspector Desk Engineer` | Komrad Ole's 100% 3D `<InspectorDesk3D />` inside `src/modules/inspector/` |
+   | `komrad-inspector-desk-mechanics` / `komrad-inspector-desk` | `Komrad Inspector Desk Engineer` | Komrad Oleg's 100% 3D `<InspectorDesk3D />` inside `src/modules/inspector/` |
    | `komrad-soviet-panel-ui` / `komrad-panel-architect` | `Komrad Panel Architect` | 100% 3D micro-pixel gauges, drag-operated levers (`spaker`), and `THREE.NearestFilter` textures |
    | `komrad-web-audio-synth` / `komrad-audio-synth` | `Komrad Audio Synth Engineer` | Zero-dependency procedural Web Audio API sound effects |
 

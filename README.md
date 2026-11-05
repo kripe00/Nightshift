@@ -34,7 +34,7 @@ There are **no** 2D split-screen panels, flat DOM cards, or R3F `<Html>` overlay
 ```text
 +-----------------------------------+-----------------------------------+
 | LEFT 3D CONSOLE (Hotkeys [1]/[3]) | CENTER 3D CONSOLE (Hotkey [2])    |
-| <ReactorStation3D /> (Kristian)   | <TerminalStation3D /> (Kristian)  |
+| <ReactorStation3D /> (Kristianov) | <TerminalStation3D /> (Kristianov)|
 | - Cylindrical 3D gauges & needles | - Physical 3D CRT monitor & keys  |
 | - 3D rotary cooling valve wheels  | - Curved 3D glass CanvasTexture   |
 | - Hinged 3D AZ-5 hazard cover     |   with phosphor #33ff66 scanlines |
@@ -42,7 +42,7 @@ There are **no** 2D split-screen panels, flat DOM cards, or R3F `<Html>` overlay
 |   emissive 3D MW indicator blocks |   CIA ARPANET firewall defense    |
 +-----------------------------------+-----------------------------------+
 | RIGHT 3D OPERATOR DESK (Key [4])  | DYNAMIC 3D BUNKER LIGHTING        |
-| <InspectorDesk3D /> (Ole)         | (src/shared/ControlRoomScene.tsx) |
+| <InspectorDesk3D /> (Oleg)        | (src/shared/ControlRoomScene.tsx) |
 | - 3D Pravda dot-matrix printer    | - FACILITY MW drives the 3D desk  |
 | - 3D paper meshes w/ CanvasTexture|   lamp spotlight & flicker        |
 | - 3D KGB Security Manual '84      | - CRT emits #33ff66 point light   |
@@ -116,10 +116,10 @@ To guarantee zero merge conflicts during parallel AI-assisted development, the r
 ```text
 src/
 ├── modules/
-│   ├── reactor/     # Kristian's Domain — Exports <ReactorStation3D /> (3D gauges, AZ-5, valves, [SHIFT] clutch & MW blocks)
-│   ├── terminal/    # Kristian's Domain — Exports <TerminalStation3D /> (3D CRT monitor mesh, 3D keyboard & CanvasTexture)
-│   └── inspector/   # Ole's Domain      — Exports <InspectorDesk3D /> (3D desk, Pravda printer, 3D papers, UV lens & 3D stamps)
-└── shared/          # Shared Contract   — types.ts, useGameStore.ts, ControlRoomScene.tsx, CameraController.tsx, DebugMenu.tsx
+│   ├── reactor/     # Komrad Kristianov's Domain — Exports <ReactorStation3D /> (3D gauges, AZ-5, valves, [SHIFT] clutch & MW blocks)
+│   ├── terminal/    # Komrad Kristianov's Domain — Exports <TerminalStation3D /> (3D CRT monitor mesh, 3D keyboard & CanvasTexture)
+│   └── inspector/   # Komrad Oleg's Domain       — Exports <InspectorDesk3D /> (3D desk, Pravda printer, 3D papers, UV lens & 3D stamps)
+└── shared/          # Shared Contract            — types.ts, useGameStore.ts, ControlRoomScene.tsx, CameraController.tsx, DebugMenu.tsx
 ```
 
 See [`PLAN.md`](PLAN.md) for the complete 4-phase development roadmap and [`AGENTS.md`](AGENTS.md) for AI agent collaboration rules.
@@ -146,6 +146,6 @@ npm run lint
 
 ## 👥 Team & Branch Workflow
 
-- **Kristian** (`Komrad-Kristian` branch) — `<ReactorStation3D />` & `<TerminalStation3D />`
-- **Ole** (`Komrad-Ole` branch) — `<InspectorDesk3D />`
+- **Komrad Kristianov** (`Komrad-Kristianov` branch) — `<ReactorStation3D />` & `<TerminalStation3D />`
+- **Komrad Oleg** (`Komrad-Oleg` branch) — `<InspectorDesk3D />`
 - **`main`** — Shared 3D bunker infrastructure & verified integration branch

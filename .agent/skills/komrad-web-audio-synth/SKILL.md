@@ -109,4 +109,4 @@ Simulates a 9-pin tractor-feed impact printhead zipping across sprocketed paper:
 ---
 
 ## 3. Domain Boundary Note
-- Place shared audio utility functions inside the caller's own module (e.g., `src/modules/reactor/audio.ts`, `src/modules/terminal/audio.ts`, or `src/modules/inspector/audio.ts`) unless Kristian and Ole explicitly coordinate adding a shared audio helper.
+- Place shared audio utility functions inside the caller's own module (e.g., `src/modules/reactor/audio.ts`, `src/modules/terminal/audio.ts`, or `src/modules/inspector/audio.ts`) unless Komrad Kristianov and Komrad Oleg explicitly coordinate adding a shared audio helper.

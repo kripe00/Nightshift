@@ -2,7 +2,7 @@
 **Subtitle:** *A Soviet Night Shift Simulator*  
 **Event:** GitHub Game Off 2026 (Nov 1 – Dec 1, 2026)  
 **Theme:** **SHIFT**  
-**Developers:** Kristian (`Komrad-Kristian` branch) & Ole (`Komrad-Ole` branch)
+**Developers:** Komrad Kristianov (`Komrad-Kristianov` branch) & Komrad Oleg (`Komrad-Oleg` branch)
 
 ---
 
@@ -25,7 +25,7 @@ The entire game takes place inside a **100% physical first-person 3D control roo
 +-----------------------------------+-----------------------------------+
 | LEFT 3D CONSOLE (Keys [1] & [3])  | CENTER 3D CONSOLE (Key [2])       |
 | <ReactorStation3D />              | <TerminalStation3D />             |
-| (Kristian - src/modules/reactor)  | (Kristian - src/modules/terminal) |
+| (Kristianov - src/modules/reactor)| (Kristianov - src/modules/terminal)|
 | - Cylindrical 3D gauges & needles | - Physical 3D CRT monitor & keys  |
 | - 3D pipes & rotary valve wheels  | - Curved 3D screen CanvasTexture  |
 | - 3D Geiger counter & AZ-5 button |   with #33ff66 scanlines & radar  |
@@ -34,7 +34,7 @@ The entire game takes place inside a **100% physical first-person 3D control roo
 +-----------------------------------+-----------------------------------+
 | RIGHT 3D OPERATOR DESK (Key [4])  | DYNAMIC 3D SCENE LIGHTING         |
 | <InspectorDesk3D />               | (src/shared/ControlRoomScene.tsx) |
-| (Ole - src/modules/inspector)     | - FACILITY MW drives the 3D desk  |
+| (Oleg - src/modules/inspector)    | - FACILITY MW drives the 3D desk  |
 | - 3D "Pravda" dot-matrix printer  |   lamp spotlight & printer speed  |
 | - 3D tractor-feed paper meshes    | - 0 MW plunges the desk into dark |
 | - 3D KGB Security Manual '84      | - Rotating red #ff2a2a ceiling    |
@@ -51,7 +51,7 @@ The entire game takes place inside a **100% physical first-person 3D control roo
 
 ## 3. Domain Ownership & 3D Modules (Zero Merge Conflicts)
 
-### 🛠️ Kristian's Domain (`src/modules/reactor/` & `src/modules/terminal/`)
+### 🛠️ Komrad Kristianov's Domain (`src/modules/reactor/` & `src/modules/terminal/`)
 
 1. **`<ReactorStation3D />` (`src/modules/reactor/`):**
    - Cylindrical 3D gauges mounted in an angled Soviet steel console (`#23312b`) with physical 3D needles rotating around their axes in `useFrame` for Core Temp (`0–1000°C`), Pressure (`BAR`), and a 3D Geiger-Müller dosimeter (`R/h`).
@@ -65,7 +65,7 @@ The entire game takes place inside a **100% physical first-person 3D control roo
 3. **Procedural Web Audio Synthesizer (`Web Audio API`):**
    - 60Hz reactor hum shifting pitch with heat/MW, Geiger counter clicks, Bakelite switch clanks, and klaxon alarms.
 
-### 🔍 Ole's Domain (`src/modules/inspector/`)
+### 🔍 Komrad Oleg's Domain (`src/modules/inspector/`)
 
 1. **`<InspectorDesk3D />` (`src/modules/inspector/`):**
    - Physical 3D operator desk with a 3D desk lamp, 3D "Pravda" dot-matrix printer, 3D KGB Security Manual '84 binder that can be opened and paged through, a physical 3D UV magnifying glass, and two physical 3D rubber stamps (`[APPROVE]` and `[SHRED]`).
@@ -75,7 +75,7 @@ The entire game takes place inside a **100% physical first-person 3D control roo
 
 ---
 
-## 4. Consequence Matrix (How Ole's 3D Desk Impacts Kristian's 3D Reactor)
+## 4. Consequence Matrix (How Komrad Oleg's 3D Desk Impacts Komrad Kristianov's 3D Reactor)
 
 | Document Type | Operator Choice | In-Game Consequence |
 | --- | --- | --- |
@@ -116,7 +116,7 @@ export interface GameState {
   isGodMode: boolean;        // F2 Debug toggle
   treasonStrikes: number;    // 0 to 3 (3 = Gulag Game Over)
 
-  // Reactor & Power (Kristian)
+  // Reactor & Power (Komrad Kristianov)
   coreTemp: number;          // 300°C to 1000°C
   pressureBar: number;
   radiationLevel: number;
@@ -124,12 +124,12 @@ export interface GameState {
   powerAllocation: Record<SystemType, number>;
   isBlackout: boolean;
 
-  // Terminal (Kristian)
+  // Terminal (Komrad Kristianov)
   terminalLogs: string[];
   ciaIntrusionActive: boolean;
   komradOverrideLocked: boolean;
 
-  // Desk & Directives (Ole)
+  // Desk & Directives (Komrad Oleg)
   activeDirectives: DirectiveDocument[];
   printerProgress: number;
 
@@ -168,9 +168,9 @@ export interface GameState {
 2. Fullscreen 3D `<Canvas>` in `src/App.tsx`, `src/shared/ControlRoomScene.tsx`, and `src/shared/CameraController.tsx` with dynamic 3D lighting and pure 3D station mounts (`<ReactorStation3D />`, `<TerminalStation3D />`, `<InspectorDesk3D />`).
 3. `types.ts`, `useGameStore.ts`, and `DebugMenu.tsx` (`F2`).
 
-### Phase 2: Parallel 3D Station Construction (`Komrad-Kristian` & `Komrad-Ole` branches)
-* **Kristian:** Builds `<ReactorStation3D />` (3D gauges, rotary valves, hinged AZ-5, 3D `[SHIFT]` clutch & MW blocks) and `<TerminalStation3D />` (3D CRT mesh + `CanvasTexture`).
-* **Ole:** Builds `<InspectorDesk3D />` (3D desk, Pravda printer, 3D tractor-feed paper directives, 3D KGB Security Manual, 3D UV magnifying glass, and animated 3D stamps).
+### Phase 2: Parallel 3D Station Construction (`Komrad-Kristianov` & `Komrad-Oleg` branches)
+* **Komrad Kristianov:** Builds `<ReactorStation3D />` (3D gauges, rotary valves, hinged AZ-5, 3D `[SHIFT]` clutch & MW blocks) and `<TerminalStation3D />` (3D CRT mesh + `CanvasTexture`).
+* **Komrad Oleg:** Builds `<InspectorDesk3D />` (3D desk, Pravda printer, 3D tractor-feed paper directives, 3D KGB Security Manual, 3D UV magnifying glass, and animated 3D stamps).
 
 ### Phase 3: Soviet 3D Micro-Pixel Polish, Procedural Audio & Campaign (Shifts 1–5)
 * Refine `THREE.NearestFilter` pixel textures, 3D mechanical animations, Web Audio synth, and 30–40 directives + K.O.M.R.A.D.-84 voice lines.

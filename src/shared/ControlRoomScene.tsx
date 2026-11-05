@@ -72,7 +72,7 @@ function formatClock(minutes: number): string {
 }
 
 /**
- * 100% Pure 3D Inspector Desk Placeholder (Used until Ole merges <InspectorDesk3D /> from src/modules/inspector)
+ * 100% Pure 3D Inspector Desk Placeholder (Used until Komrad Oleg merges <InspectorDesk3D /> from src/modules/inspector)
  */
 const InspectorDesk3DPlaceholder: React.FC = () => {
   const [uvLensActive, setUvLensActive] = useState(false);

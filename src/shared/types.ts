@@ -57,7 +57,7 @@ export interface DirectiveDocument {
     powerBonus?: number
     sabotageSystem?: SystemType
   }
-  // Desk spatial state for Ole's Inspector module
+  // Desk spatial state for Komrad Oleg's Inspector module
   deskX: number
   deskY: number
   rotationDeg: number
@@ -80,12 +80,12 @@ export interface GameState {
   shiftNumber: number // 1 to 5
   shiftTimeMinutes: number // 0 (00:00) to 360 (06:00)
   isShiftKeyHeld: boolean // Physical SHIFT key clutch
-  isGodMode: boolean // F2 Debug menu toggle (pauses meltdown/strikes for Ole)
+  isGodMode: boolean // F2 Debug menu toggle (pauses meltdown/strikes for Komrad Oleg)
   isMusicMuted: boolean
   treasonStrikes: number // 0 to 3 (3 = Gulag Game Over)
   lastDecisionFeedback: string | null
 
-  // Reactor & Power Matrix (Kristian's Domain)
+  // Reactor & Power Matrix (Komrad Kristianov's Domain)
   coreTemp: number // 300°C nominal -> 1000°C meltdown
   pressureBar: number // 40 BAR nominal -> 120 BAR critical
   radiationLevel: number // 0.1 to 15.0 R/h
@@ -97,14 +97,14 @@ export interface GameState {
   az5Available: boolean
   az5Cooldown: number
 
-  // K.O.M.R.A.D.-84 Terminal & Cyber Defense (Kristian's Domain)
+  // K.O.M.R.A.D.-84 Terminal & Cyber Defense (Komrad Kristianov's Domain)
   terminalLogs: string[]
   terminalEntries: TerminalLogEntry[]
   ciaIntrusionActive: boolean
   ciaIntrusionProgress: number // 0 to 100%
   komradOverrideLocked: boolean
 
-  // Inspector Desk & Directives (Ole's Domain)
+  // Inspector Desk & Directives (Komrad Oleg's Domain)
   activeDirectives: DirectiveDocument[]
   printerProgress: number // 0 to 100% until next directive spawns
 

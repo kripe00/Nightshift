@@ -1,14 +1,14 @@
 ---
 name: komrad-git-workflow
 description: >-
-  Enforces strict module separation and safe Git collaboration between Komrad Kristian and Komrad Ole.
-  Use this skill whenever Kristian or Ole asks to save, commit, sync, push, pull, switch branches,
+  Enforces strict module separation and safe Git collaboration between Komrad Kristianov and Komrad Oleg.
+  Use this skill whenever Kristianov or Oleg asks to save, commit, sync, push, pull, switch branches,
   merge code, "send til Kremlin" (GitHub), "sjekk Pravda", "KGB-inspeksjon", or asks "what files should I touch?".
 ---
 
-# Komrad Git Co-op Workflow — Kristian & Ole Safe Collaboration Guide
+# Komrad Git Co-op Workflow — Komrad Kristianov & Komrad Oleg Safe Collaboration Guide
 
-Use this skill whenever **Komrad Kristian** or **Komrad Ole** asks to save, commit, push, pull, merge, check status, or uses Party Git codewords:
+Use this skill whenever **Komrad Kristianov** (`Кристианов`) or **Komrad Oleg** (`Олег`) asks to save, commit, push, pull, merge, check status, or uses Party Git codewords:
 - **"Send til Kremlin" / "Telegrafer til Moskva"**: Verify domain boundaries, commit with `[QUOTA-84]` tag, and push to `origin` (`kripe00/Nightshift`).
 - **"Sjekk Pravda" / "Hent fra Kremlin"**: Fetch & merge latest updates from `origin/main` and summarize what the other Komrad accomplished on their shift.
 - **"KGB-inspeksjon"**: Run `tsc -b`, `npm run lint`, and `git status --short` boundary verification, reporting any warnings/errors as Western CIA infiltrators.
@@ -21,8 +21,8 @@ To guarantee zero merge conflicts while both developers build in parallel with A
 
 | Developer | Git Branch | Allowed Folders (READ & WRITE) | Forbidden Folders (NEVER TOUCH) |
 | :--- | :--- | :--- | :--- |
-| **Komrad Kristian** | `Komrad-Kristian` | `src/modules/reactor/`<br>`src/modules/terminal/` | `src/modules/inspector/` |
-| **Komrad Ole** | `Komrad-Ole` | `src/modules/inspector/` | `src/modules/reactor/`<br>`src/modules/terminal/` |
+| **Komrad Kristianov** | `Komrad-Kristianov` | `src/modules/reactor/`<br>`src/modules/terminal/` | `src/modules/inspector/` |
+| **Komrad Oleg** | `Komrad-Oleg` | `src/modules/inspector/` | `src/modules/reactor/`<br>`src/modules/terminal/` |
 | **Shared** | Coordinated | `src/shared/types.ts`<br>`src/shared/useGameStore.ts`<br>`src/App.tsx` | Only edit with minimal, additive changes coordinated between both developers |
 
 ---
@@ -37,31 +37,31 @@ git branch --show-current && git status --short
 
 ### Verification Rules (KGB Grensekontrollør):
 1. **Confirm Active Branch:**
-   - If working with **Komrad Kristian**, ensure the active branch is `Komrad-Kristian`.
-   - If working with **Komrad Ole**, ensure the active branch is `Komrad-Ole`.
+   - If working with **Komrad Kristianov**, ensure the active branch is `Komrad-Kristianov`.
+   - If working with **Komrad Oleg**, ensure the active branch is `Komrad-Oleg`.
 2. **Audit Modified/Untracked Files:**
-   - **On `Komrad-Kristian` branch:** Verify that **NO** files inside `src/modules/inspector/` appear in `git status`. If any file in `src/modules/inspector/` was accidentally modified, immediately sound a KGB border alert and revert it (`git checkout -- src/modules/inspector/`) before staging.
-   - **On `Komrad-Ole` branch:** Verify that **NO** files inside `src/modules/reactor/` or `src/modules/terminal/` appear in `git status`. If any file in those folders was accidentally modified, immediately sound a KGB border alert and revert it (`git checkout -- src/modules/reactor/ src/modules/terminal/`) before staging.
+   - **On `Komrad-Kristianov` branch:** Verify that **NO** files inside `src/modules/inspector/` appear in `git status`. If any file in `src/modules/inspector/` was accidentally modified, immediately sound a KGB border alert and revert it (`git checkout -- src/modules/inspector/`) before staging.
+   - **On `Komrad-Oleg` branch:** Verify that **NO** files inside `src/modules/reactor/` or `src/modules/terminal/` appear in `git status`. If any file in those folders was accidentally modified, immediately sound a KGB border alert and revert it (`git checkout -- src/modules/reactor/ src/modules/terminal/`) before staging.
 3. **Stage Domain-Scoped Paths & Stamp Commits with `[QUOTA-84]`:**
    - Prefer staging specific module directories rather than blind `git add .` when possible:
-     - Komrad Kristian: `git add src/modules/reactor src/modules/terminal`
-     - Komrad Ole: `git add src/modules/inspector`
+     - Komrad Kristianov: `git add src/modules/reactor src/modules/terminal`
+     - Komrad Oleg: `git add src/modules/inspector`
    - Include `[QUOTA-84]` in commit messages when dispatching to the Kremlin (e.g., `feat(reactor): [QUOTA-84] reinforce 3D cooling valves`).
 
 ---
 
-## 3. Beginner-Friendly Step-by-Step Git Guide (Especially for Komrad Ole)
+## 3. Beginner-Friendly Step-by-Step Git Guide (Especially for Komrad Oleg)
 
-Whenever **Komrad Ole** (or **Komrad Kristian**) asks how to save work, push changes, or pull updates from the team, always address them as **Komrad Ole** or **Komrad Kristian** with deadpan Soviet enthusiasm for the Five-Year Plan, while explaining what is happening in clear, reassuring, beginner-friendly steps (in Norwegian if the user writes in Norwegian, or English if they write in English):
+Whenever **Komrad Oleg** (or **Komrad Kristianov**) asks how to save work, push changes, or pull updates from the team, always address them as **Komrad Oleg** or **Komrad Kristianov** with deadpan Soviet enthusiasm for the Five-Year Plan, while explaining what is happening in clear, reassuring, beginner-friendly steps (in Norwegian if the user writes in Norwegian, or English if they write in English):
 
-### Scenario A: Switching to Ole's Branch (First Time Setup)
+### Scenario A: Switching to Komrad Oleg's Branch (First Time Setup)
 
-Explain: _"Utmerket, Komrad Ole! Vi sjekker at du står på din egen Partigodkjente branch (`Komrad-Ole`), slik at alt du bygger i `src/modules/inspector/` ligger trygt skjermet fra Komrad Kristians reaktorarbeid."_
+Explain: _"Utmerket, Komrad Oleg! Vi sjekker at du står på din egen Partigodkjente branch (`Komrad-Oleg`), slik at alt du bygger i `src/modules/inspector/` ligger trygt skjermet fra Komrad Kristianovs reaktorarbeid."_
 
 ```bash
 git fetch --prune origin
-git checkout Komrad-Ole
-git pull origin Komrad-Ole
+git checkout Komrad-Oleg
+git pull origin Komrad-Oleg
 ```
 
 ### Scenario B: Saving & Pushing Work ("Send til Kremlin")
@@ -78,12 +78,12 @@ git pull origin Komrad-Ole
    ```
 3. **Push to the Kremlin (GitHub):**
    ```bash
-   git push origin Komrad-Ole
+   git push origin Komrad-Oleg
    ```
 
 ### Scenario C: Pulling Latest Shared Updates from `main` ("Sjekk Pravda / Hent fra Kremlin")
 
-When Komrad Kristian and Komrad Ole want to sync shared changes (such as updated `src/shared/useGameStore.ts` or merged features on `main`):
+When Komrad Kristianov and Komrad Oleg want to sync shared changes (such as updated `src/shared/useGameStore.ts` or merged features on `main`):
 
 1. First, make sure current work is committed (`git status` should be clean).
 2. Fetch and merge `origin/main` into the developer's branch:
@@ -91,10 +91,10 @@ When Komrad Kristian and Komrad Ole want to sync shared changes (such as updated
    git fetch origin
    git merge origin/main
    ```
-3. Because Komrad Kristian only edits `reactor`/`terminal` and Komrad Ole only edits `inspector`, merging `origin/main` will complete cleanly without conflicts!
+3. Because Komrad Kristianov only edits `reactor`/`terminal` and Komrad Oleg only edits `inspector`, merging `origin/main` will complete cleanly without conflicts!
 4. Push the updated branch to the Kremlin:
    ```bash
-   git push origin <Komrad-Kristian|Komrad-Ole>
+   git push origin <Komrad-Kristianov|Komrad-Oleg>
    ```
 
 ### Scenario D: Merging Feature Work into `main`
@@ -104,7 +104,7 @@ When Komrad Kristian and Komrad Ole want to sync shared changes (such as updated
    ```bash
    git checkout main
    git pull origin main
-   git merge <Komrad-Kristian|Komrad-Ole>
+   git merge <Komrad-Kristianov|Komrad-Oleg>
    git push origin main
-   git checkout <Komrad-Kristian|Komrad-Ole>
+   git checkout <Komrad-Kristianov|Komrad-Oleg>
    ```

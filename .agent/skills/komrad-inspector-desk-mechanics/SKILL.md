@@ -1,15 +1,15 @@
 ---
 name: komrad-inspector-desk-mechanics
 description: >-
-  Ole's dedicated helper skill for building the 100% 3D <InspectorDesk3D /> station inside
+  Komrad Oleg's dedicated helper skill for building the 100% 3D <InspectorDesk3D /> station inside
   src/modules/inspector/: 3D operator desk, 3D Pravda dot-matrix printer, 3D tractor-feed paper
   meshes with CanvasTexture, 3D KGB Security Manual '84, 3D UV magnifying glass lens, and animated
   3D APPROVED/SHREDDED rubber stamps. Use this skill whenever working inside src/modules/inspector/.
 ---
 
-# Inspector Desk 3D Mechanics — Ole's Domain Guide (`src/modules/inspector/`)
+# Inspector Desk 3D Mechanics — Komrad Oleg's Domain Guide (`src/modules/inspector/`)
 
-This skill guides all development for **Ole's domain**: exporting `<InspectorDesk3D />` from `src/modules/inspector/` as a **100% real 3D station** (zero R3F `<Html>` overlays or flat 2D DOM panels).
+This skill guides all development for **Komrad Oleg's domain**: exporting `<InspectorDesk3D />` from `src/modules/inspector/` as a **100% real 3D station** (zero R3F `<Html>` overlays or flat 2D DOM panels).
 
 ---
 
