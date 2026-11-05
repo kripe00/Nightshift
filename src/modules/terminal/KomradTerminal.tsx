@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../../shared/useGameStore'
+import { getKomradLine } from './komradScript'
 
 export const KomradTerminal: React.FC = () => {
   const terminalEntries = useGameStore((s) => s.terminalEntries)
@@ -8,8 +9,26 @@ export const KomradTerminal: React.FC = () => {
   const ciaIntrusionProgress = useGameStore((s) => s.ciaIntrusionProgress)
   const komradOverrideLocked = useGameStore((s) => s.komradOverrideLocked)
   const defenseMW = useGameStore((s) => s.powerAllocation.defense)
+  const coreTemp = useGameStore((s) => s.coreTemp)
   const overrideKomradLock = useGameStore((s) => s.overrideKomradLock)
   const purgeFirewall = useGameStore((s) => s.purgeFirewall)
+
+  const [komradBulletin, setKomradBulletin] = useState<string>(() =>
+    getKomradLine('IDLE_PROPAGANDA')
+  )
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (coreTemp >= 850) {
+        setKomradBulletin(getKomradLine('CRITICAL_TEMP_DENIAL'))
+      } else if (coreTemp >= 720) {
+        setKomradBulletin(getKomradLine('HIGH_TEMP_GASLIGHT'))
+      } else {
+        setKomradBulletin(getKomradLine('IDLE_PROPAGANDA'))
+      }
+    }, 6500)
+    return () => window.clearInterval(id)
+  }, [coreTemp])
 
   const radarCanvasRef = useRef<HTMLCanvasElement>(null)
   const logContainerRef = useRef<HTMLDivElement>(null)
@@ -167,6 +186,11 @@ export const KomradTerminal: React.FC = () => {
                 SECTOR 07 RADAR
               </span>
             </div>
+          </div>
+
+          {/* K.O.M.R.A.D.-84 Live Manuscript Bulletin Ticker */}
+          <div className="border-t border-[#39ff5a]/40 pt-1 text-sm tracking-wide text-[#ffb000] truncate">
+            &gt;&gt; K.O.M.R.A.D. BULLETIN: {komradBulletin}
           </div>
         </div>
 
