@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef } from 'react'
-import { useViewportScale } from '../../shared/viewportScaleContext'
 import { playLeverRatchet, playSwitchClank } from './audioSynth'
 
 interface BinaryLeverProps {
@@ -29,7 +28,6 @@ interface SteppedLeverProps {
 export type DraggableLeverProps = BinaryLeverProps | SteppedLeverProps
 
 export const DraggableLever: React.FC<DraggableLeverProps> = (props) => {
-  const { toViewportDelta } = useViewportScale()
   const trackRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLDivElement>(null)
   const shaftRef = useRef<HTMLDivElement>(null)
@@ -125,10 +123,16 @@ export const DraggableLever: React.FC<DraggableLeverProps> = (props) => {
       return
     }
 
-    const deltaY = toViewportDelta(e.clientY - dragStateRef.current.startClientY)
+    const rect = trackRef.current?.getBoundingClientRect()
+    const renderedTrackHeight = rect && rect.height > 10 ? rect.height : heightPx
+    const renderedTravelPx = Math.max(
+      20,
+      renderedTrackHeight * (maxTravelPx / heightPx)
+    )
+    const deltaY = e.clientY - dragStateRef.current.startClientY
     const nextProgress = Math.max(
       0,
-      Math.min(1, dragStateRef.current.startProgress + deltaY / maxTravelPx)
+      Math.min(1, dragStateRef.current.startProgress + deltaY / renderedTravelPx)
     )
     dragStateRef.current.currentProgress = nextProgress
     applyVisualProgress(nextProgress, false)

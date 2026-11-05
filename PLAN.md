@@ -1,153 +1,143 @@
-# ☢️ MELTDOWN IS PROPAGANDA
-**Undertittel:** *A Soviet Night Shift Simulator*  
-**Anledning:** GitHub Game Off 2026 (1. nov – 1. des 2026)  
-**Tema:** **SHIFT**  
-**Utviklere:** Kristian (`Kristian`-branch) & Ole (`Ole`-branch)
+# ☢️ MELTDOWN IS PROPAGANDA — 3D Architecture & Development Plan
+**Subtitle:** *A Soviet Night Shift Simulator*  
+**Event:** GitHub Game Off 2026 (Nov 1 – Dec 1, 2026)  
+**Theme:** **SHIFT**  
+**Developers:** Kristian (`Kristian` branch) & Ole (`Ole` branch)
 
 ---
 
-## 1. Høykonsept & Tolkning av temaet «SHIFT»
-Året er 1984 i et alternativt, retro-futuristisk Sovjetunionen (*Cassette Futurism / Atompunk*). Spilleren er alene på nattskiftet i kontrollrommet på **Folkets Automatiserte Atomkraftverk № 4**. 
+## 1. High Concept & Interpretation of the "SHIFT" Theme
+The year is 1984 in an alternative-history, retro-futuristic Soviet Union (*Cassette Futurism / Atompunk*). The player is alone on the night shift inside the 3D bunker of **People's Automated Nuclear Plant No. 4 (Sector 84)**.
 
-Temaet **SHIFT** er flettet inn på tre nivåer:
-1. **The Night Shift (Tid & Overlevelse):** Du må overleve 5 stadig mer kaotiske nattskift (kl. 00:00 til 06:00) uten at reaktoren smelter ned eller at du blir arrestert for forræderi.
-2. **Power Shifting (Fysisk `SHIFT`-clutch):** Reaktoren produserer kun **100 MW** trygg strøm, men systemene krever **180 MW** på maks. Spilleren må holde inne den fysiske `SHIFT`-tasten på tastaturet (fungerer som en tung mekanisk clutch) for å omdirigere strøm mellom **Kjøling**, **Cyber-forsvar** og **Fasiliteter**. Å overklokke inn i *Redline* (101–180 MW) øker faren for sikringsbrudd og mørklegging.
-3. **Reality Shifting (Propaganda vs. Virkelighet):** Den statlige AI-en **K.O.M.R.A.D.-84** nekter for at feil kan oppstå i Sovjetunionen og forsøker å "gasslighte" spilleren, samtidig som CIA sender inn forfalskede sabotasjeordre via matriseskriveren.
+The theme **SHIFT** is woven into three layers:
+1. **The Night Shift (Time & Survival):** Survive 5 increasingly chaotic night shifts (`00:00` to `06:00`) without a reactor core meltdown (`1000°C`) or being arrested for treason (`3 Strikes`).
+2. **Power Shifting (Physical 3D `SHIFT` Clutch):** The reactor safely produces **100 MW**, while maximum subsystem demand reaches **180 MW**. Holding the physical `SHIFT` key rotates the heavy 3D Bakelite clutch lever into its slot with sparks and mechanical clanks, allowing the operator to route power between **COOLING**, **DEFENSE**, and **FACILITY**. Overclocking into the *Redline* (`101–180 MW`) builds grid instability and risks facility-wide blackouts.
+3. **Reality Shifting (Propaganda vs. Reality):** The state AI **K.O.M.R.A.D.-84** denies that malfunctions can occur in the Soviet Union and gaslights the operator while the **CIA** injects forged sabotage orders into the 3D dot-matrix printer.
 
 ---
 
-## 2. Skjerm-layout (Låst 16:9 Cockpit – `1600x900`)
-Hele spillet foregår på én fast skjerm uten scrolling, delt inn i 4 diegetiske soner:
+## 2. 100% True 3D First-Person Architecture (Zero 2D Screens or `<Html>` Overlays)
+The entire game takes place inside a **100% physical first-person 3D control room** rendered with **Three.js / React Three Fiber (`@react-three/fiber` & `@react-three/drei`)**.
+
+**CRITICAL ARCHITECTURAL RULE:** There are **NO** 2D split-screen panels, flat DOM overlays, SVG panels, or R3F `<Html>` tags in the 3D scene. Every gauge, needle, rotary valve, hinged safety cover, lever, CRT monitor glass, tractor-feed paper sheet, UV magnifying glass, and rubber stamp is a **real 3D mesh** with `THREE.NearestFilter` micro-pixel `CanvasTexture`s (inspired by *Buckshot Roulette* and *Inscryption*).
 
 ```text
 +-----------------------------------+-----------------------------------+
-| SONE 1: REAKTOR & KJØLING         | SONE 2: K.O.M.R.A.D.-84 TERMINAL  |
+| LEFT 3D CONSOLE (Keys [1] & [3])  | CENTER 3D CONSOLE (Key [2])       |
+| <ReactorStation3D />              | <TerminalStation3D />             |
 | (Kristian - src/modules/reactor)  | (Kristian - src/modules/terminal) |
-| - Analoge SVG-målere (Temp/Trykk) | - Grønn CRT-skjerm med scanlines  |
-| - Kjølepumper, ventiler & AZ-5    | - AI-propaganda & feilmeldinger   |
-| - Geigerteller & varsellamper     | - CIA Cyber-angrep / Firewall     |
+| - Cylindrical 3D gauges & needles | - Physical 3D CRT monitor & keys  |
+| - 3D pipes & rotary valve wheels  | - Curved 3D screen CanvasTexture  |
+| - 3D Geiger counter & AZ-5 button |   with #33ff66 scanlines & radar  |
+| - 3D [SHIFT] clutch lever &       | - K.O.M.R.A.D.-84 gaslighting &   |
+|   emissive 3D MW indicator blocks |   CIA ARPANET firewall defense    |
 +-----------------------------------+-----------------------------------+
-| SONE 3: POWER SHIFTING MATRIX     | SONE 4: INSPEKTØR-SKRIVEBORDET    |
-| (Kristian - src/modules/reactor)  | (Ole - src/modules/inspector)     |
-| - Krever at [SHIFT] holdes inne   | - "Pravda" Matriseskriver         |
-| - Fordeler MW mellom:             | - Papirdirektiver som kan flyttes |
-|   1. COOLING (Kjølepumper)        | - Sikkerhetsmanual (bla i sider)  |
-|   2. DEFENSE (K.O.M.R.A.D./Mur)   | - Forstørrelsesglass (Lupe)       |
-|   3. FACILITY (Lys, Printer, Luft)| - Stempler: [APPROVE] / [SHRED]   |
+| RIGHT 3D OPERATOR DESK (Key [4])  | DYNAMIC 3D SCENE LIGHTING         |
+| <InspectorDesk3D />               | (src/shared/ControlRoomScene.tsx) |
+| (Ole - src/modules/inspector)     | - FACILITY MW drives the 3D desk  |
+| - 3D "Pravda" dot-matrix printer  |   lamp spotlight & printer speed  |
+| - 3D tractor-feed paper meshes    | - 0 MW plunges the desk into dark |
+| - 3D KGB Security Manual '84      | - Rotating red #ff2a2a ceiling    |
+| - 3D UV Magnifying Glass lens     |   klaxon casts shadows in Redline |
+| - Animated 3D [APPROVE] / [SHRED] | - 60 FPS useFrame + getState()    |
 +-----------------------------------+-----------------------------------+
 ```
 
----
-
-## 3. Ansvarsfordeling & Moduler (Null Merge-konflikter)
-
-### 🛠️ Kristians Domene (`src/modules/reactor/` & `src/modules/terminal/`)
-
-1. **Reaktor-fysikk & Game Loop (`tick`):**
-   - Kjerne-temperatur (300°C normal -> 1000°C nedsmelting), trykk og stråling.
-   - Håndtering av `SHIFT`-clutchen for å flytte strøm mellom systemene.
-   - *Redline Overclocking:* Tillater mer enn 100 MW midlertidig, men bygger opp ustabilitet som kan slå ut strømmen (Blackout).
-
-2. **K.O.M.R.A.D.-84 CRT-Terminal:**
-   - Parodisk sovjetisk AI som skriver meldinger på en grønn fosforskjerm.
-   - Finner på farlige "effektiviseringstiltak" (f.eks. skrur av kjølepumper for å spare strøm til Femårsplanen) som spilleren må overstyre.
-   - Viser innkommende CIA-dataangrep som krever strøm på `DEFENSE` for å blokkeres.
-
-3. **Prosedural Lyd (`Web Audio API`):**
-   - Reaktor-during som endrer tonehøyde etter varme/MW, Geigerteller-klikk, tunge bryter-klakk og alarmer.
-
-### 🔍 Oles Domene (`src/modules/inspector/`)
-
-1. **Pravda Matriseskriver & Skrivebord:**
-   - Skriver ut fysiske papirdirektiver som lander på skrivebordet.
-   - Hvis `FACILITY`-strømmen er lav, går skriveren tregt og skrivebordslampen flimrer/slukkes.
-
-2. **Sikkerhetsmanualen (Partiets Regelbok):**
-   - En bok på pulten spilleren kan åpne og bla i. Inneholder gyldige stempler, autorisasjonskoder, departementsnavn og sikkerhetsregler for dagens skift.
-
-3. **Forstørrelsesglasset (Lupe):**
-   - Et verktøy spilleren drar over papirdirektivene. Avslører skjulte ledetråder som kun synes gjennom lupa: mikroskrift, UV-vannmerker, feil blekkfarge eller vestlige skrivefeil fra CIA.
-
-4. **Stempler (`APPROVED` / `SHREDDED`):**
-   - Spilleren stempler dokumentet grønt (`APPROVED`) eller sender det i makuleringsmaskinen (`SHREDDED`).
-   - Sender resultatet til `useGameStore.resolveDirective(id, decision)`.
+### Camera Navigation, Blind Spots & Direct 3D Raycasting
+* **Free 3D Camera & Blind Spots (`0` / `ESC`):** The operator sits inside the bunker and can freely rotate the camera with the mouse or `WASD` / arrow keys, or snap-zoom closely into stations (`1`–`4`). Looking toward the desk or terminal places the reactor gauges outside the field of view, making 3D audio and room lighting essential.
+* **Direct 3D Raycast Interaction:** All interactions happen directly on 3D meshes (`onPointerDown`, `onPointerMove`, `onPointerUp`, `onClick`)—physically dragging 3D levers down their slots, turning 3D cooling valve wheels, flipping the 3D hinged AZ-5 safety cover, pressing 3D terminal keys, moving the 3D UV magnifier over 3D paper meshes, and stamping directives with 3D rubber stamps.
 
 ---
 
-## 4. Konsekvens-matrise (Hvordan Oles pult påvirker Kristians reaktor)
+## 3. Domain Ownership & 3D Modules (Zero Merge Conflicts)
 
-| Dokumenttype | Spillerens valg | Konsekvens i spillet |
+### 🛠️ Kristian's Domain (`src/modules/reactor/` & `src/modules/terminal/`)
+
+1. **`<ReactorStation3D />` (`src/modules/reactor/`):**
+   - Cylindrical 3D gauges mounted in an angled Soviet steel console (`#23312b`) with physical 3D needles rotating around their axes in `useFrame` for Core Temp (`0–1000°C`), Pressure (`BAR`), and a 3D Geiger-Müller dosimeter (`R/h`).
+   - Physical 3D pipes, rotatable 3D cooling valve handwheels, 3D drag-operated pump switches, and a physical 3D **АЗ-5 (AZ-5)** emergency button under a hinged 3D safety cover with yellow and black hazard stripes.
+   - Heavy Bakelite (`#141414`) 3D `[SHIFT]` clutch lever that rotates down into its slot with mechanical sound and sparks when `[SHIFT]` is held, paired with three vertical columns of glowing emissive 3D indicator blocks (**1. COOLING**, **2. DEFENSE**, **3. FACILITY**) and a physical 3D scale for Safe Limit (`100 MW`) and *Redline Overclock* (`101–180 MW`).
+
+2. **`<TerminalStation3D />` (`src/modules/terminal/`):**
+   - Heavy physical 3D CRT monitor and sculpted 3D keyboard embedded in the center console.
+   - Curved 3D screen glass mesh driven by a dynamic `THREE.CanvasTexture` (`NearestFilter`) rendering phosphor-green (`#33ff66`) terminal logs, scanlines, K.O.M.R.A.D.-84 state gaslighting (*"Meltdown is Propaganda"*), and CIA cyber-defense telemetry, casting green light into the 3D bunker.
+
+3. **Procedural Web Audio Synthesizer (`Web Audio API`):**
+   - 60Hz reactor hum shifting pitch with heat/MW, Geiger counter clicks, Bakelite switch clanks, and klaxon alarms.
+
+### 🔍 Ole's Domain (`src/modules/inspector/`)
+
+1. **`<InspectorDesk3D />` (`src/modules/inspector/`):**
+   - Physical 3D operator desk with a 3D desk lamp, 3D "Pravda" dot-matrix printer, 3D KGB Security Manual '84 binder that can be opened and paged through, a physical 3D UV magnifying glass, and two physical 3D rubber stamps (`[APPROVE]` and `[SHRED]`).
+   - Directives feed physically out of the 3D printer as 3D paper meshes (`#e6dec3`) onto the desk surface with procedurally generated `CanvasTexture`s in `Courier Prime`.
+   - The player grabs and moves the physical 3D UV magnifying glass in 3D space over the 3D paper; the 3D lens reveals hidden CIA watermarks and micro-text on the paper underneath.
+   - Clicking with `[APPROVE]` or `[SHRED]` physically animates the 3D stamp down onto the 3D paper mesh, imprinting ink onto the document texture before archiving or feeding it into a 3D document shredder.
+
+---
+
+## 4. Consequence Matrix (How Ole's 3D Desk Impacts Kristian's 3D Reactor)
+
+| Document Type | Operator Choice | In-Game Consequence |
 | --- | --- | --- |
-| **Ekte Parti-ordre** | `APPROVED` (Riktig) | Ordren utføres trygt (f.eks. ekstra kjølevann eller stabilisert strøm). Partiet er fornøyd. |
-| **Ekte Parti-ordre** | `SHREDDED` (Feil!) | **Mistanke om forræderi (+1 Strike).** K.O.M.R.A.D.-84 kjefter, og ved 3 strikes blir du sendt til Sibir (Game Over). |
-| **Falsk CIA-sabotasje** | `SHREDDED` (Riktig) | Sabotasje avverget! Bonus til reaktor-stabilitet og skryt i terminalen. |
-| **Falsk CIA-sabotasje** | `APPROVED` (Katastrofe!) | **Sabotasje utført!** Reaktortemperaturen spiker (+200°C), kjølepumper låses midlertidig, eller K.O.M.R.A.D.-84 blir hacket. |
+| **Genuine Party Order** | `APPROVED` (Correct) | Order safely executed (auxiliary cooling or grid stabilization). The Party is pleased. |
+| **Genuine Party Order** | `SHREDDED` (Error!) | **Suspected Treason (`+1 Strike`).** K.O.M.R.A.D.-84 logs a reprimand; `3 Strikes` = Siberia (Game Over). |
+| **Forged CIA Sabotage** | `SHREDDED` (Correct) | Sabotage foiled! Reactor stability bonus and terminal commendation. |
+| **Forged CIA Sabotage** | `APPROVED` (Disaster!) | **Sabotage executed!** Core temp spikes (`+200°C`), cooling pumps lock, or K.O.M.R.A.D.-84 is hijacked. |
 
 ---
 
-## 5. Progresjon gjennom 5 Nattskift (Kampanjen)
+## 5. Campaign Progression Across 5 Night Shifts
 
-Hvert skift varer i ca. 3–4 minutter (kl. 00:00–06:00 i spilltid):
+Each shift lasts ~3–4 minutes of real time (`00:00` to `06:00` in-game):
 
-* **Skift 1 (Opplæring):** Rolig reaktor. Sikkerhetsmanualen krever kun sjekk av **Riktig Departements-stempel** og **Dato (1984)**.
-* **Skift 2 (Strømklemme):** Høyere grunnvarme – spilleren må bruke `SHIFT` aktivt. Manualen innfører **Autorisasjonskoder** (må sjekkes mot tabell i manualen).
-* **Skift 3 (Lupe & Vannmerker):** CIA begynner å bruke perfekte stempler. Spilleren må bruke **Forstørrelsesglasset** for å sjekke **Vannmerker** og skjulte stavefeil i mikroskrift.
-* **Skift 4 (K.O.M.R.A.D.-84 klikker):** AI-en begynner å tvangsstyre strømmen i *Power Matrix* for å nå produksjonsmål. Spilleren må balansere strømkutt i mørket mens dokumentene renner inn.
-* **Skift 5 (Redline Finale):** Maksimal krise. Krever kontrollert overklokking i *Redline* (>100 MW), hyppige CIA-forfalskninger med falske signaturer og konstant kjøling frem til kl. 06:00.
+* **Shift 1 (Orientation):** Calm reactor. The 3D Security Manual only requires checking **Valid Ministry Stamp** and **Date (`1984`)**.
+* **Shift 2 (Power Crunch):** Higher baseline heat—active 3D `SHIFT` clutch management required. Manual introduces **Authorization Codes**.
+* **Shift 3 (3D UV Lens & Watermarks):** CIA uses replica stamps. The operator must move the **3D UV Magnifying Glass** over 3D papers to inspect **Watermarks** and micro-text typos.
+* **Shift 4 (K.O.M.R.A.D.-84 Override):** The AI forcibly hijacks the Power Matrix to meet Five-Year Plan quotas. Balance blackouts in the dark while 3D directives accumulate.
+* **Shift 5 (Redline Finale):** Maximum crisis. Controlled overclocking in the *Redline* (`>100 MW`), multi-layered CIA forgeries, and continuous cooling until `06:00`.
 
 ---
 
-## 6. Felles Datakontrakt (`src/shared/types.ts` & `useGameStore.ts`)
+## 6. Shared Data Contract (`src/shared/types.ts` & `useGameStore.ts`)
 
-Når vi starter kodingen i Fase 1, skal modulene KUN kommunisere gjennom dette grensesnittet i Zustand:
+All 3D station modules communicate **exclusively** through Zustand (`useGameStore.getState()` inside `useFrame` for 60 FPS 3D updates and selector hooks for discrete actions):
 
 ```typescript
-// PLANLAGT KONTRAKT (Kun dokumentasjon foreløpig)
 export type SystemType = 'cooling' | 'defense' | 'facility';
 export type DirectiveDecision = 'APPROVED' | 'SHREDDED';
-
-export interface DirectiveDocument {
-  id: string;
-  title: string;
-  ministry: string;
-  date: string;
-  authCode: string;
-  bodyText: string;
-  stampType: 'party_star' | 'ministry_atom' | 'kgb_shield' | 'forged_eagle';
-  inkColor: 'red' | 'blue' | 'purple';
-  watermarkText: string; // Kun synlig med lupe!
-  isCiaForgery: boolean;
-  flawReason?: string;   // Forklaring på hvorfor den var falsk (vises ved feil)
-  effectOnApprove: {
-    tempDelta: number;
-    powerBonus?: number;
-    sabotageSystem?: SystemType;
-  };
-}
+export type CameraStation = 'overview' | 'reactor' | 'terminal' | 'power' | 'inspector';
 
 export interface GameState {
-  // Spillstatus
-  shiftNumber: number;       // 1 til 5
-  shiftTimeMinutes: number;  // 0 (00:00) til 360 (06:00)
-  isShiftKeyHeld: boolean;   // Om fysisk SHIFT-clutch holdes inne
-  isGodMode: boolean;        // Fra F2 Debug-meny (pauser nedsmelting for Ole)
-  treasonStrikes: number;    // 0 til 3 (3 = Gulag Game Over)
-  
-  // Reaktor & Strøm (Kristian)
-  coreTemp: number;          // 300°C til 1000°C
-  maxSafePower: number;      // 100 MW (180 MW med Redline)
+  phase: 'boot' | 'playing' | 'victory' | 'meltdown' | 'gulag';
+  activeStation: CameraStation;
+  shiftNumber: number;       // 1 to 5
+  shiftTimeMinutes: number;  // 0 (00:00) to 360 (06:00)
+  isShiftKeyHeld: boolean;   // Physical SHIFT clutch state
+  isGodMode: boolean;        // F2 Debug toggle
+  treasonStrikes: number;    // 0 to 3 (3 = Gulag Game Over)
+
+  // Reactor & Power (Kristian)
+  coreTemp: number;          // 300°C to 1000°C
+  pressureBar: number;
+  radiationLevel: number;
+  maxSafePower: number;      // 100 MW (180 MW in Redline)
   powerAllocation: Record<SystemType, number>;
   isBlackout: boolean;
-  
+
   // Terminal (Kristian)
   terminalLogs: string[];
-  
-  // Skrivebord & Direktiver (Ole)
+  ciaIntrusionActive: boolean;
+  komradOverrideLocked: boolean;
+
+  // Desk & Directives (Ole)
   activeDirectives: DirectiveDocument[];
-  
-  // Felles Actions
+  printerProgress: number;
+
+  // Shared Actions
+  setActiveStation: (station: CameraStation) => void;
   setShiftKeyHeld: (held: boolean) => void;
   shiftPower: (system: SystemType, deltaMW: number) => void;
+  setSubsystemPower: (system: SystemType, targetMW: number) => void;
   spawnDirective: (forceForgery?: boolean) => void;
   resolveDirective: (id: string, decision: DirectiveDecision) => void;
   tick: () => void;
@@ -156,43 +146,34 @@ export interface GameState {
 
 ---
 
-## 7. Visuell Stil & Lyd-regler
+## 7. Visual 3D Micro-Pixelart & Audio Rules
 
-* **Totalforbud mot moderne web-UI:** Ingen hvite kort, ingen avrundede SaaS-knapper, ingen standard HTML-slidere.
-* **Fysiske spaker som må dras (Aldri kun klikk):** Alle spaker (inkludert `MainBreaker`, kjølepumpe-spaker og `SHIFT`-strømspaker) skal animeres langs sporet sitt og **må dras fysisk opp og ned med musen** (`pointerdown` + `pointermove` + `pointerup`) for å aktiveres – aldri bare klikkes på. Slippes spaken før terskelverdien, spretter den tilbake; dras den helt over, låses den med et tungt mekanisk klakk.
-* **Materialer (CSS + Inline SVG):** Slitt sovjetisk industrigrønn (`#23312b`), bakelitt-svart (`#141414`), fosfor-grønn CRT (`#33ff66`), varsel-oransje (`#ffb000`), alarm-rød (`#ff2a2a`) og gulnet papir (`#e6dec3`).
-* **Typografi:**
-  * *Overskrifter / Metallskilt:* Sovjetisk display-font (*Kremlin* fra DaFont som lokal `.ttf` for faux-kyrillisk preg i logo og skilt, men lagret som vanlig latinsk tekst i DOM for søkbarhet).
-  * *CRT-Terminal:* `VT323` eller `Share Tech Mono`.
-  * *Skriver & Manual:* `Courier Prime` eller `DotGothic16`.
+* **Zero 2D Screens or `<Html>` Overlays:** All interactive elements are 3D meshes in Three.js.
+* **Mandatory 3D Drag-Operated Levers (Never Click-Only):** All 3D levers (`spaker`) must be physically grabbed and dragged up or down in 3D space via raycast pointer events (`onPointerDown` + `onPointerMove` + `onPointerUp`).
+* **3D Micro-Pixel Materials (`THREE.NearestFilter`):**
+  * Bakelite Black: `#141414`
+  * Soviet Panel Green: `#23312b` (and `#364940`)
+  * CRT Phosphor Green: `#33ff66` (and `#061a0c`)
+  * Industrial Hazard Yellow: `#ffb000`
+  * Crimson Alarm / Stamp Red: `#ff2a2a`
+  * Aged Tractor Paper / Gauge Dials: `#e6dec3`
+* **Typography on 3D Text & `CanvasTexture`s:** `'Kremlin'`, `'VT323'`, and `'Courier Prime'`.
 
 ---
 
-## 8. Utviklingsløp (4 Faser)
+## 8. 4-Phase Development Roadmap
 
-### Fase 1: Felles Grunnmur i `main` (Før vi splitter opp)
+### Phase 1: Shared 3D Bunker Foundation in `main`
+1. `vite.config.ts` with `base: './'`.
+2. Fullscreen 3D `<Canvas>` in `src/App.tsx`, `src/shared/ControlRoomScene.tsx`, and `src/shared/CameraController.tsx` with dynamic 3D lighting and pure 3D station mounts (`<ReactorStation3D />`, `<TerminalStation3D />`, `<InspectorDesk3D />`).
+3. `types.ts`, `useGameStore.ts`, and `DebugMenu.tsx` (`F2`).
 
-Gjøres sammen før Kristian og Ole går til hver sin branch:
+### Phase 2: Parallel 3D Station Construction (`Kristian` & `Ole` branches)
+* **Kristian:** Builds `<ReactorStation3D />` (3D gauges, rotary valves, hinged AZ-5, 3D `[SHIFT]` clutch & MW blocks) and `<TerminalStation3D />` (3D CRT mesh + `CanvasTexture`).
+* **Ole:** Builds `<InspectorDesk3D />` (3D desk, Pravda printer, 3D tractor-feed paper directives, 3D KGB Security Manual, 3D UV magnifying glass, and animated 3D stamps).
 
-1. `vite.config.ts` med `base: './'` (for itch.io iframe-støtte).
-2. `ViewportScaler.tsx` (låser oppløsningen til `1600x900` med CSS scale).
-3. `MainBreaker` oppstartsskjerm med en tung hovedstrømspak som må dras fysisk ned for å slå på kontrollrommet og låse opp nettleserens `AudioContext`.
-4. `DebugMenu.tsx` på `F2`-tasten (lar Ole spawne dokumenter og skru på *God Mode* uten at reaktoren smelter, og lar Kristian teste kriser).
-5. `types.ts`, `useGameStore.ts` og et 4-soners grid i `App.tsx`.
+### Phase 3: Soviet 3D Micro-Pixel Polish, Procedural Audio & Campaign (Shifts 1–5)
+* Refine `THREE.NearestFilter` pixel textures, 3D mechanical animations, Web Audio synth, and 30–40 directives + K.O.M.R.A.D.-84 voice lines.
 
-### Fase 2: Parallell «Graybox» på `Kristian`- og `Ole`-branchene
-
-* **Kristian:** Bygger `tick()`-loop, `SHIFT`-strømfordeling, temperatur-fysikk og K.O.M.R.A.D.-84 meldingslogg.
-* **Ole:** Bygger skrivebordet, papirlapper som kan klikkes/dras, Sikkerhetsmanual-visningen, lupe-effekten og `APPROVE`/`SHRED`-knapper.
-
-### Fase 3: Sovjet-Polish, Prosedural Lyd & Innhold (Skift 1–5)
-
-* Bytt ut gråbokser med SVG-målere, vippebrytere med sikkerhetslokk, ekte blekkstempler og CRT-scanlines.
-* Koble på `web-audio-synth` for mekaniske lyder og reaktor-during.
-* Skriv inn 30–40 unike direktiver (ekte og CIA-forfalskninger) og K.O.M.R.A.D.-84 sitater.
-
-### Fase 4: Innspurt, Firebase Global Telemetri & itch.io-lansering
-
-* **Firebase (Firestore – kun anonym telemetri til slutt):**
-  * Ingen innloggingsmur! Bruk kun bakgrunnsteller for globale stats på slutt-/startskjermen (*"Totalt antall nedsmeltinger i USSR"*, *"Kamerater sendt til Sibir"*, *"CIA-agenter avslørt"*) + en valgfri arkade-highscoretavle.
-* Bygg `.zip` med `npm run build` og last opp til itch.io + koble til GitHub Game Off 2026 før 1. desember.
+### Phase 4: Firebase Global Telemetry & itch.io Release
+* Anonymous Firestore global counters (*Total USSR Meltdowns*, *Comrades Sent to Siberia*, *CIA Agents Exposed*) and production `.zip` bundle for GitHub Game Off 2026.

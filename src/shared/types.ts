@@ -3,6 +3,12 @@
 export type SystemType = 'cooling' | 'defense' | 'facility'
 export type DirectiveDecision = 'APPROVED' | 'SHREDDED'
 export type GamePhase = 'boot' | 'playing' | 'victory' | 'meltdown' | 'gulag'
+export type CameraStation =
+  | 'overview'
+  | 'reactor'
+  | 'terminal'
+  | 'power'
+  | 'inspector'
 
 export type StampEmblemType =
   | 'MINATOM_OFFICIAL'
@@ -68,8 +74,9 @@ export interface TerminalLogEntry {
 }
 
 export interface GameState {
-  // Global Shift & Campaign Status
+  // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
+  activeStation: CameraStation
   shiftNumber: number // 1 to 5
   shiftTimeMinutes: number // 0 (00:00) to 360 (06:00)
   isShiftKeyHeld: boolean // Physical SHIFT key clutch
@@ -102,6 +109,7 @@ export interface GameState {
   printerProgress: number // 0 to 100% until next directive spawns
 
   // Shared Actions
+  setActiveStation: (station: CameraStation) => void
   startShift: () => void
   resetShift: () => void
   setShiftKeyHeld: (held: boolean) => void

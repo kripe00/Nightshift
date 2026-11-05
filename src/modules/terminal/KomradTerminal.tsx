@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../../shared/useGameStore'
-import { getKomradLine } from './komradScript'
+import {
+  getContextualKomradBulletin,
+  HOURLY_SHIFT_BROADCASTS,
+} from './komradScript'
 
 export const KomradTerminal: React.FC = () => {
   const terminalEntries = useGameStore((s) => s.terminalEntries)
@@ -9,26 +12,40 @@ export const KomradTerminal: React.FC = () => {
   const ciaIntrusionProgress = useGameStore((s) => s.ciaIntrusionProgress)
   const komradOverrideLocked = useGameStore((s) => s.komradOverrideLocked)
   const defenseMW = useGameStore((s) => s.powerAllocation.defense)
+  const coolingMW = useGameStore((s) => s.powerAllocation.cooling)
+  const facilityMW = useGameStore((s) => s.powerAllocation.facility)
   const coreTemp = useGameStore((s) => s.coreTemp)
+  const radiationLevel = useGameStore((s) => s.radiationLevel)
+  const shiftTimeMinutes = useGameStore((s) => s.shiftTimeMinutes)
   const overrideKomradLock = useGameStore((s) => s.overrideKomradLock)
   const purgeFirewall = useGameStore((s) => s.purgeFirewall)
 
+  const totalMW = coolingMW + defenseMW + facilityMW
+  const currentHour = Math.min(5, Math.floor(shiftTimeMinutes / 60))
+  const hourlyBanner = HOURLY_SHIFT_BROADCASTS[currentHour]
+
   const [komradBulletin, setKomradBulletin] = useState<string>(() =>
-    getKomradLine('IDLE_PROPAGANDA')
+    getContextualKomradBulletin({
+      coreTemp: 340,
+      radiationLevel: 0.4,
+      totalMW: 90,
+      shiftTimeMinutes: 0,
+    })
   )
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      if (coreTemp >= 850) {
-        setKomradBulletin(getKomradLine('CRITICAL_TEMP_DENIAL'))
-      } else if (coreTemp >= 720) {
-        setKomradBulletin(getKomradLine('HIGH_TEMP_GASLIGHT'))
-      } else {
-        setKomradBulletin(getKomradLine('IDLE_PROPAGANDA'))
-      }
-    }, 6500)
+      setKomradBulletin(
+        getContextualKomradBulletin({
+          coreTemp,
+          radiationLevel,
+          totalMW,
+          shiftTimeMinutes,
+        })
+      )
+    }, 5500)
     return () => window.clearInterval(id)
-  }, [coreTemp])
+  }, [coreTemp, radiationLevel, totalMW, shiftTimeMinutes])
 
   const radarCanvasRef = useRef<HTMLCanvasElement>(null)
   const logContainerRef = useRef<HTMLDivElement>(null)
@@ -189,8 +206,24 @@ export const KomradTerminal: React.FC = () => {
           </div>
 
           {/* K.O.M.R.A.D.-84 Live Manuscript Bulletin Ticker */}
-          <div className="border-t border-[#39ff5a]/40 pt-1 text-sm tracking-wide text-[#ffb000] truncate">
-            &gt;&gt; K.O.M.R.A.D. BULLETIN: {komradBulletin}
+          <div
+            onClick={() =>
+              setKomradBulletin(
+                getContextualKomradBulletin({
+                  coreTemp,
+                  radiationLevel,
+                  totalMW,
+                  shiftTimeMinutes,
+                })
+              )
+            }
+            title="Click to cycle K.O.M.R.A.D.-84 bulletin"
+            className="cursor-pointer border-t border-[#39ff5a]/40 pt-1 text-xs leading-tight tracking-wide"
+          >
+            <div className="truncate text-[#39ff5a]/80">{hourlyBanner}</div>
+            <div className="truncate text-sm text-[#ffb000]">
+              &gt;&gt; {komradBulletin}
+            </div>
           </div>
         </div>
 

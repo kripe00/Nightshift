@@ -4,45 +4,59 @@
 
 - **Title:** **Meltdown is Propaganda** (*A Soviet Night Shift Simulator*)
 - **Event:** GitHub Game Off 2026 (Theme: **SHIFT**)
-- **Setting:** Alternative 1984 Soviet Union ("Cassette Futurism" / Atompunk). You are the lone night-shift operator at **"People's Automated Nuclear Plant No. 4"**.
-- **Genre:** Diegetic Control Panel Thriller / Resource Juggling / Document Inspection (*Papers, Please* meets *Chernobyl*).
+- **Setting:** Alternative 1984 Soviet Union ("Cassette Futurism" / Atompunk). You are the lone night-shift operator inside the 3D bunker of **"People's Automated Nuclear Plant No. 4 (Sector 84)"**.
+- **Genre:** 100% Physical First-Person 3D Control Room Thriller / Resource Juggling / Document Inspection (*Papers, Please* meets *Chernobyl*, with *Buckshot Roulette* / *Inscryption* 3D micro-pixel aesthetics).
 
 ### Core Mechanics & "SHIFT" Theme
 
-1. **Zero-Sum Power Shifting (`SHIFT` Clutch):**
-   - Holding the physical `SHIFT` key acts as a mechanical clutch allowing the operator to route reactor power between three subsystems: **COOLING**, **DEFENSE**, and **FACILITY**.
-   - Power distribution is zero-sum under normal operating conditions. Overclocking total output into the **Redline (>100 MW)** triggers severe grid instability, equipment wear, and facility blackouts.
+1. **Zero-Sum Power Shifting (3D `SHIFT` Clutch):**
+   - Holding the physical `SHIFT` key acts as a mechanical clutch that physically rotates the 3D Bakelite clutch lever into its slot with sparks and clanks, allowing the operator to route reactor power between three subsystems: **COOLING**, **DEFENSE**, and **FACILITY**.
+   - Power distribution is zero-sum under normal operating conditions (`100 MW` safe limit). Overclocking total output into the **Redline (`101–180 MW`)** triggers severe grid instability, equipment wear, and facility blackouts.
 
-2. **K.O.M.R.A.D.-84 (Parody Soviet AI):**
-   - Resides on the phosphor-green CRT terminal.
+2. **K.O.M.R.A.D.-84 (Parody Soviet AI on 3D CRT Mesh):**
+   - Resides on the curved 3D phosphor-green CRT monitor mesh (`CanvasTexture` with `THREE.NearestFilter`).
    - Programmed with rigid ideological constraints to deny that errors or accidents can occur in the Soviet Union (*"Meltdown is Propaganda"*).
-   - Actively gaslights the operator during crises and attempts to disable cooling systems during meltdowns to "prevent western panic" unless manually overridden via terminal commands and cyber-defense protocols.
+   - Actively gaslights the operator during crises and attempts to disable cooling systems during meltdowns to "prevent western panic" unless manually overridden via 3D terminal controls and cyber-defense protocols.
 
-3. **Pravda Matrix Printer & CIA Sabotage:**
-   - A dot-matrix printer continuously outputs physical directives onto the operator's desk.
-   - The operator must cross-reference incoming directives using a physical **Security Manual** and **Magnifying Glass** on the desk to detect forged CIA sabotage orders—inspecting official stamps, ink colors, watermarks, ministry headers, and authorization codes—before stamping each directive `APPROVED` or `SHREDDED`.
+3. **3D Pravda Matrix Printer & CIA Sabotage:**
+   - A physical 3D dot-matrix printer continuously feeds 3D tractor-feed paper directives (`#e6dec3`) onto the operator's 3D desk.
+   - The operator cross-references incoming 3D directives using a physical **3D KGB Security Manual '84** and **3D UV Magnifying Glass** on the desk to detect forged CIA sabotage orders—inspecting official stamps, ink colors, UV watermarks, ministry headers, and authorization codes—before physically stamping each 3D directive `APPROVED` or `SHREDDED`.
 
 ---
 
-## 2. Visual Direction & Aesthetic Rules
+## 2. Visual Direction & Strict 3D Rules
 
-**Strict 1980s Soviet Industrial Hardware Aesthetic (Cassette Futurism / Atompunk):**
+**100% Physical 3D Meshes — ZERO 2D Screens or `<Html>` Overlays:**
 
-- **NO Modern SaaS Web UI:** Never use floating minimalist cards, soft drop shadows, glassmorphism, modern rounded pills, or clean corporate dashboards.
-- **Diegetic Hardware Surfaces:** Every UI element must look and feel like physical 1984 Soviet control room equipment—bolted steel panels, weathered olive/gunmetal enamel, heavy drag-operated industrial levers, Bakelite switches, guarded toggle switches, Nixie tube / 7-segment readouts, analog needle gauges, phosphor-green CRT monitors with scanlines, tractor-feed dot-matrix paper, and heavy rubber ink stamps.
-- **Mandatory Drag-Operated Levers (No Click-Only Levers):** All levers (`spaker`), main breakers, and heavy throw switches **MUST** be animated and physically dragged up or down with the pointer (`onPointerDown` + vertical `onPointerMove` + `onPointerUp` with `setPointerCapture`) to operate—**never** triggered by a simple `onClick`. Levers must visually track the cursor during the drag, emit ratcheting/mechanical feedback, spring back if released before the throw threshold, and snap into place with a heavy mechanical clank when fully thrown.
+- **NO R3F `<Html>` Overlays or 2D DOM Panels in the 3D Scene:** Never paste flat 2D React/HTML panels, 2D SVG gauges, or CSS cards into the 3D scene. Every gauge, needle, rotary valve wheel, hinged AZ-5 button cover, Bakelite lever, CRT screen, paper sheet, magnifying glass, and rubber stamp **MUST** be a real 3D mesh (`<mesh>` / `<group>`) interacted with via 3D raycasting (`onPointerDown`, `onPointerMove`, `onPointerUp`, `onClick`).
+- **60 FPS `useFrame` + `useRef` Architecture:** High-frequency 3D animations (jittering 3D gauge needles, rotating klaxons, flickering tungsten lights, CRT `CanvasTexture` redraws) must update inside `useFrame` using `useRef` and direct reads from `useGameStore.getState()` to maintain 60 FPS without unnecessary React re-renders.
+- **3D Micro-Pixelart Aesthetic (`THREE.NearestFilter`):** All procedural 3D `CanvasTexture`s (gauge dials, CRT screen, tractor-feed paper, stenciled metal plates) must set `magFilter = THREE.NearestFilter` and `minFilter = THREE.NearestFilter` with the fixed Soviet palette:
+  - Bakelite Black: `#141414`
+  - Soviet Panel Green: `#23312b` (and `#364940`)
+  - CRT Phosphor Green: `#33ff66` (and `#061a0c`)
+  - Industrial Hazard Yellow: `#ffb000`
+  - Crimson Alarm / Stamp Red: `#ff2a2a`
+  - Aged Tractor Paper / Gauge Dials: `#e6dec3`
+- **Mandatory 3D Drag-Operated Levers (No Click-Only Levers):** All 3D levers (`spaker`), pump throws, and power routing levers **MUST** be animated in 3D and physically dragged up or down with the pointer (`onPointerDown` + `onPointerMove` + `onPointerUp`)—**never** triggered by a simple click.
 - **Typography & Title Convention:**
-  - **Title Searchability Rule:** In code, metadata, and on itch.io, the game title is always written with standard Latin characters (**Meltdown is Propaganda**) for searchability, while in-game branding and headers use the Soviet display font **`Kremlin`** (from DaFont, bundled locally via `@font-face`).
-  - `Kremlin` — In-game propaganda title headers, industrial stenciled/engraved metal labels, warnings, and panel headers.
-  - `VT323` — K.O.M.R.A.D.-84 CRT terminal display, digital diagnostics, and readout tickers.
-  - `Courier Prime` — Pravda dot-matrix printer directives, Security Manual pages, and stamped bureaucracy documents.
+  - **Title Searchability Rule:** In code, metadata, and on itch.io, the game title is always written with standard Latin characters (**Meltdown is Propaganda**) for searchability, while 3D signage and textures use the Soviet display font **`Kremlin`**.
+  - `Kremlin` — 3D stenciled/engraved metal plates, warnings, and panel headers.
+  - `VT323` — K.O.M.R.A.D.-84 3D CRT `CanvasTexture` display, digital diagnostics, and 3D Nixie readouts.
+  - `Courier Prime` — 3D Pravda dot-matrix paper `CanvasTexture`s, 3D Security Manual pages, and 3D rubber ink stamps.
 
 ---
 
-## 3. Tech Stack
+## 3. Tech Stack & 3D Control Room Architecture
 
-- **Build Tool & Framework:** Vite + React + TypeScript
-- **Styling:** Tailwind CSS (configured with custom industrial fonts and Soviet hardware styling tokens)
+- **Build Tool & Framework:** Vite + React 19 + TypeScript (`base: './'`)
+- **3D Engine:** Three.js + React Three Fiber (`three`, `@types/three`, `@react-three/fiber`, `@react-three/drei`)
+- **Direct 3D Station Groups:**
+  - `<ReactorStation3D />` (`src/modules/reactor/`)
+  - `<TerminalStation3D />` (`src/modules/terminal/`)
+  - `<InspectorDesk3D />` (`src/modules/inspector/`)
+- **Dynamic 3D Power-Linked Lighting (`src/shared/ControlRoomScene.tsx`):**
+  - `FACILITY` MW controls the warm tungsten 3D `<spotLight>` / `<pointLight>` inside the desk lamp over Ole's desk (flickers at low MW; completely off at `0 MW`, leaving only the UV lens and CRT glow).
+  - Rotating red `#ff2a2a` 3D ceiling klaxon spins and casts red lighting across the bunker when `coreTemp` approaches critical levels or total power exceeds `100 MW`.
 - **State Management:** `zustand` (`src/shared/useGameStore.ts`)
 
 ---
@@ -54,22 +68,22 @@ To prevent merge conflicts while **Kristian** and **Ole** develop concurrently w
 ```text
 src/
 ├── modules/
-│   ├── reactor/     # Kristian's Domain
-│   ├── terminal/    # Kristian's Domain
-│   └── inspector/   # Ole's Domain
-└── shared/          # Shared Contract (types.ts & useGameStore.ts)
+│   ├── reactor/     # Kristian's Domain — Exports <ReactorStation3D />
+│   ├── terminal/    # Kristian's Domain — Exports <TerminalStation3D />
+│   └── inspector/   # Ole's Domain      — Exports <InspectorDesk3D />
+└── shared/          # Shared Contract   — types.ts, useGameStore.ts, ControlRoomScene.tsx, CameraController.tsx
 ```
 
 ### Domain Ownership
 
 | Path | Owner | Responsibilities |
 | :--- | :--- | :--- |
-| `src/modules/reactor/` | **Kristian** | `SHIFT` clutch power routing (**COOLING**, **DEFENSE**, **FACILITY**), reactor core physics, Redline (>100 MW) instability/blackouts, cooling loops, and analog gauges. |
-| `src/modules/terminal/` | **Kristian** | K.O.M.R.A.D.-84 phosphor-green CRT terminal, AI gaslighting/override mechanics, and cyber-defense subsystem. |
-| `public/sprites/reactor/`, `public/sprites/terminal/`, `public/music/` | **Kristian** | Static sprites and soundtrack assets for the reactor, power matrix, and terminal zones. |
-| `src/modules/inspector/` | **Ole** | Operator desk, Pravda dot-matrix printer, physical directives, magnifying glass inspection tool, `APPROVED` / `SHREDDED` rubber stamps, and the Security Manual. |
-| `public/sprites/desk_hardware/` | **Ole** | Static hardware sprites for the Pravda teletype, shredder, stamps, and magnifying glass on the Inspector Desk. |
-| `src/shared/` | **Shared Contract** | `types.ts` (shared TypeScript interfaces/contracts), `useGameStore.ts` (`zustand` cross-module state store), `ViewportScaler.tsx`, and `DebugMenu.tsx`. |
+| `src/modules/reactor/` | **Kristian** | Exports `<ReactorStation3D />`: 3D cylindrical gauges & rotating needles, 3D cooling valve wheels, hinged 3D AZ-5 emergency button, 3D `[SHIFT]` clutch lever, and emissive 3D MW indicator blocks (**COOLING**, **DEFENSE**, **FACILITY**). |
+| `src/modules/terminal/` | **Kristian** | Exports `<TerminalStation3D />`: 3D CRT monitor mesh, sculpted 3D keyboard, and `CanvasTexture` shader/renderer for K.O.M.R.A.D.-84 gaslighting & CIA cyber defense. |
+| `public/sprites/reactor/`, `public/sprites/terminal/`, `public/music/` | **Kristian** | Static textures/assets and soundtrack files for the reactor and terminal stations. |
+| `src/modules/inspector/` | **Ole** | Exports `<InspectorDesk3D />`: 3D operator desk, 3D Pravda dot-matrix printer, 3D tractor-feed paper meshes (`CanvasTexture`), 3D KGB Security Manual '84, 3D UV magnifying glass, and animated 3D `[APPROVE]` / `[SHRED]` rubber stamps. |
+| `public/sprites/desk_hardware/` | **Ole** | Static textures/assets for the 3D Inspector Desk. |
+| `src/shared/` | **Shared Contract** | `types.ts`, `useGameStore.ts`, `ControlRoomScene.tsx` (3D bunker shell & dynamic 3D lighting), `CameraController.tsx` (free 3D look & station zoom), and `DebugMenu.tsx`. |
 
 ### Mandatory Rules for AI Agents
 

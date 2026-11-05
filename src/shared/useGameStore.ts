@@ -2,6 +2,7 @@
 import { create } from 'zustand'
 import type {
   AppliedStampMark,
+  CameraStation,
   DirectiveDecision,
   DirectiveDocument,
   GameState,
@@ -201,6 +202,7 @@ const INITIAL_ENTRIES: TerminalLogEntry[] = [
 
 export const useGameStore = create<GameState>((set, get) => ({
   phase: 'boot',
+  activeStation: 'overview',
   shiftNumber: 1,
   shiftTimeMinutes: 0,
   isShiftKeyHeld: false,
@@ -232,6 +234,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   activeDirectives: [createDirectiveInstance(false), createDirectiveInstance(true)],
   printerProgress: 25,
+
+  setActiveStation: (station: CameraStation) => {
+    set({ activeStation: station })
+  },
 
   startShift: () => {
     const entry = createLogEntry(
