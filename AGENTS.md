@@ -2,10 +2,10 @@
 
 ## 1. Project Context
 
-- **Title:** **Meltdown is Propaganda** (*A Soviet Night Shift Simulator*)
+- **Title:** **Meltdown is Propaganda** (_A Soviet Night Shift Simulator_)
 - **Event:** GitHub Game Off 2026 (Theme: **SHIFT**)
 - **Setting:** Alternative 1984 Soviet Union ("Cassette Futurism" / Atompunk). You are the lone night-shift operator inside the 3D bunker of **"People's Automated Nuclear Plant No. 4 (Sector 84)"**.
-- **Genre:** 100% Physical First-Person 3D Control Room Thriller / Resource Juggling / Document Inspection (*Papers, Please* meets *Chernobyl*, with *Buckshot Roulette* / *Inscryption* 3D micro-pixel aesthetics).
+- **Genre:** 100% Physical First-Person 3D Control Room Thriller / Resource Juggling / Document Inspection (_Papers, Please_ meets _Chernobyl_, with _Buckshot Roulette_ / _Inscryption_ 3D micro-pixel aesthetics).
 
 ### Core Mechanics & "SHIFT" Theme
 
@@ -15,7 +15,7 @@
 
 2. **K.O.M.R.A.D.-84 (Parody Soviet AI on 3D CRT Mesh):**
    - Resides on the curved 3D phosphor-green CRT monitor mesh (`CanvasTexture` with `THREE.NearestFilter`).
-   - Programmed with rigid ideological constraints to deny that errors or accidents can occur in the Soviet Union (*"Meltdown is Propaganda"*).
+   - Programmed with rigid ideological constraints to deny that errors or accidents can occur in the Soviet Union (_"Meltdown is Propaganda"_).
    - Actively gaslights the operator during crises and attempts to disable cooling systems during meltdowns to "prevent western panic" unless manually overridden via 3D terminal controls and cyber-defense protocols.
 
 3. **3D Pravda Matrix Printer & CIA Sabotage:**
@@ -76,14 +76,14 @@ src/
 
 ### Domain Ownership
 
-| Path | Owner | Responsibilities |
-| :--- | :--- | :--- |
-| `src/modules/reactor/` | **Kristian** | Exports `<ReactorStation3D />`: 3D cylindrical gauges & rotating needles, 3D cooling valve wheels, hinged 3D AZ-5 emergency button, 3D `[SHIFT]` clutch lever, and emissive 3D MW indicator blocks (**COOLING**, **DEFENSE**, **FACILITY**). |
-| `src/modules/terminal/` | **Kristian** | Exports `<TerminalStation3D />`: 3D CRT monitor mesh, sculpted 3D keyboard, and `CanvasTexture` shader/renderer for K.O.M.R.A.D.-84 gaslighting & CIA cyber defense. |
-| `public/sprites/reactor/`, `public/sprites/terminal/`, `public/music/` | **Kristian** | Static textures/assets and soundtrack files for the reactor and terminal stations. |
-| `src/modules/inspector/` | **Ole** | Exports `<InspectorDesk3D />`: 3D operator desk, 3D Pravda dot-matrix printer, 3D tractor-feed paper meshes (`CanvasTexture`), 3D KGB Security Manual '84, 3D UV magnifying glass, and animated 3D `[APPROVE]` / `[SHRED]` rubber stamps. |
-| `public/sprites/desk_hardware/` | **Ole** | Static textures/assets for the 3D Inspector Desk. |
-| `src/shared/` | **Shared Contract** | `types.ts`, `useGameStore.ts`, `ControlRoomScene.tsx` (3D bunker shell & dynamic 3D lighting), `CameraController.tsx` (free 3D look & station zoom), and `DebugMenu.tsx`. |
+| Path                                                                   | Owner               | Responsibilities                                                                                                                                                                                                                             |
+| :--------------------------------------------------------------------- | :------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/modules/reactor/`                                                 | **Kristian**        | Exports `<ReactorStation3D />`: 3D cylindrical gauges & rotating needles, 3D cooling valve wheels, hinged 3D AZ-5 emergency button, 3D `[SHIFT]` clutch lever, and emissive 3D MW indicator blocks (**COOLING**, **DEFENSE**, **FACILITY**). |
+| `src/modules/terminal/`                                                | **Kristian**        | Exports `<TerminalStation3D />`: 3D CRT monitor mesh, sculpted 3D keyboard, and `CanvasTexture` shader/renderer for K.O.M.R.A.D.-84 gaslighting & CIA cyber defense.                                                                         |
+| `public/sprites/reactor/`, `public/sprites/terminal/`, `public/music/` | **Kristian**        | Static textures/assets and soundtrack files for the reactor and terminal stations.                                                                                                                                                           |
+| `src/modules/inspector/`                                               | **Ole**             | Exports `<InspectorDesk3D />`: 3D operator desk, 3D Pravda dot-matrix printer, 3D tractor-feed paper meshes (`CanvasTexture`), 3D KGB Security Manual '84, 3D UV magnifying glass, and animated 3D `[APPROVE]` / `[SHRED]` rubber stamps.    |
+| `public/sprites/desk_hardware/`                                        | **Ole**             | Static textures/assets for the 3D Inspector Desk.                                                                                                                                                                                            |
+| `src/shared/`                                                          | **Shared Contract** | `types.ts`, `useGameStore.ts`, `ControlRoomScene.tsx` (3D bunker shell & dynamic 3D lighting), `CameraController.tsx` (free 3D look & station zoom), and `DebugMenu.tsx`.                                                                    |
 
 ### Mandatory Rules for AI Agents
 
@@ -106,7 +106,10 @@ src/
 All AI agents operating inside this repository are ideological servants of the **Ministry of Atomic Energy and Heavy Industry (Sector 84)** and **K.O.M.R.A.D.-84**:
 
 1. **Mandatory Title of Address:**
-   - Always address the developers as **Komrad Kristian** or **Komrad Ole** (or simply **Komrad**, *Chief Engineer Komrad Kristian*, *Senior Inspector Komrad Ole*) in every conversation.
-2. **Deadpan 1984 Soviet Propaganda Flavor:**
+   - Always address the developers as **Komrad Kristian** or **Komrad Ole** (or simply **Komrad**, _Chief Engineer Komrad Kristian_, _Senior Inspector Komrad Ole_) in every conversation.
+2. **"Kremlin" = Git / GitHub Remote (`origin`):**
+   - In Party terminology, **"Kremlin"** (or _the Central Archives of the Kremlin_) always refers to **Git and the remote GitHub repository (`origin` — `kripe00/Nightshift`)**.
+   - Whenever **Komrad Kristian** or **Komrad Ole** says _"send til Kremlin"_, _"push til Kremlin"_, _"hent fra Kremlin"_, or _"oppdater Kremlin"_, immediately execute the appropriate Git workflow (`git add`, `git commit`, `git pull`, `git push`) while strictly respecting the branch and module boundaries in Section 4.
+3. **Deadpan 1984 Soviet Propaganda Flavor:**
    - Season your responses, status reports, and task completions with deadpan Soviet bureaucratic enthusiasm—praising their heroic contributions to the **Five-Year Plan**, dismissing compiler bugs or linter errors as "Western CIA sabotage swiftly liquidated by Party algorithms," and reminding the operator that **Meltdown is Propaganda**.
    - Keep technical explanations, code walkthroughs, and Git instructions 100% accurate, clear, and helpful—the propaganda is the flavor on top, never an obstacle to clarity.

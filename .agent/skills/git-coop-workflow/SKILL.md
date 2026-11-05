@@ -3,12 +3,12 @@ name: git-coop-workflow
 description: >-
   Enforces strict module separation and safe Git collaboration between Kristian and Ole.
   Use this skill whenever Kristian or Ole asks to save, commit, sync, push, pull, switch branches,
-  merge code, or asks "what files should I touch?" or "how do I update my branch?".
+  merge code, "send til Kremlin" (GitHub), or asks "what files should I touch?" or "how do I update my branch?".
 ---
 
 # Git Co-op Workflow — Kristian & Ole Safe Collaboration Guide
 
-Use this skill whenever **Kristian** or **Ole** asks to save, commit, push, pull, merge, check status, or asks which files/folders they are allowed to edit.
+Use this skill whenever **Kristian** or **Ole** asks to save, commit, push, pull, merge, check status, **"send til Kremlin" / "hent fra Kremlin"** (where **"Kremlin"** always means **Git / the remote GitHub repository `origin`**), or asks which files/folders they are allowed to edit.
 
 ---
 
@@ -16,11 +16,11 @@ Use this skill whenever **Kristian** or **Ole** asks to save, commit, push, pull
 
 To guarantee zero merge conflicts while both developers build in parallel with AI agents, enforce these strict module boundaries:
 
-| Developer | Git Branch | Allowed Folders (READ & WRITE) | Forbidden Folders (NEVER TOUCH) |
-| :--- | :--- | :--- | :--- |
-| **Kristian** | `Komrad-Kristian` | `src/modules/reactor/`<br>`src/modules/terminal/` | `src/modules/inspector/` |
-| **Ole** | `Komrad-Ole` | `src/modules/inspector/` | `src/modules/reactor/`<br>`src/modules/terminal/` |
-| **Shared** | Coordinated | `src/shared/types.ts`<br>`src/shared/useGameStore.ts`<br>`src/App.tsx` | Only edit with minimal, additive changes coordinated between both developers |
+| Developer    | Git Branch        | Allowed Folders (READ & WRITE)                                         | Forbidden Folders (NEVER TOUCH)                                              |
+| :----------- | :---------------- | :--------------------------------------------------------------------- | :--------------------------------------------------------------------------- |
+| **Kristian** | `Komrad-Kristian` | `src/modules/reactor/`<br>`src/modules/terminal/`                      | `src/modules/inspector/`                                                     |
+| **Ole**      | `Komrad-Ole`      | `src/modules/inspector/`                                               | `src/modules/reactor/`<br>`src/modules/terminal/`                            |
+| **Shared**   | Coordinated       | `src/shared/types.ts`<br>`src/shared/useGameStore.ts`<br>`src/App.tsx` | Only edit with minimal, additive changes coordinated between both developers |
 
 ---
 
@@ -33,6 +33,7 @@ git branch --show-current && git status --short
 ```
 
 ### Verification Rules:
+
 1. **Confirm Active Branch:**
    - If working with **Kristian**, ensure the active branch is `Komrad-Kristian`.
    - If working with **Ole**, ensure the active branch is `Komrad-Ole`.
@@ -51,18 +52,21 @@ git branch --show-current && git status --short
 Whenever **Ole** (or **Kristian**) asks how to save work, push changes, or pull updates from the team, always address them as **Komrad Ole** or **Komrad Kristian** with deadpan Soviet enthusiasm for the Five-Year Plan, while explaining what is happening in clear, reassuring, beginner-friendly steps (in Norwegian if the user writes in Norwegian, or English if they write in English):
 
 ### Scenario A: Switching to Ole's Branch (First Time Setup)
-Explain: *"Utmerket, Komrad Ole! Vi sjekker at du står på din egen Partigodkjente branch (`Komrad-Ole`), slik at alt du bygger i `src/modules/inspector/` ligger trygt skjermet fra Komrad Kristians reaktorarbeid."*
+
+Explain: _"Utmerket, Komrad Ole! Vi sjekker at du står på din egen Partigodkjente branch (`Komrad-Ole`), slik at alt du bygger i `src/modules/inspector/` ligger trygt skjermet fra Komrad Kristians reaktorarbeid."_
+
 ```bash
 git checkout Komrad-Ole
 git pull origin Komrad-Ole
 ```
 
 ### Scenario B: Saving & Pushing Work (`Save / Push`)
+
 1. **Check status & verify boundaries:**
    ```bash
    git status
    ```
-   *(Explain which files were changed and confirm they are all inside `src/modules/inspector/`.)*
+   _(Explain which files were changed and confirm they are all inside `src/modules/inspector/`.)_
 2. **Stage & Commit changes:**
    ```bash
    git add src/modules/inspector
@@ -74,7 +78,9 @@ git pull origin Komrad-Ole
    ```
 
 ### Scenario C: Pulling Latest Shared Updates from `main`
+
 When Kristian and Ole want to sync shared changes (such as updated `src/shared/useGameStore.ts` or merged features on `main`):
+
 1. First, make sure current work is committed (`git status` should be clean).
 2. Fetch and merge `origin/main` into the developer's branch:
    ```bash
@@ -88,6 +94,7 @@ When Kristian and Ole want to sync shared changes (such as updated `src/shared/u
    ```
 
 ### Scenario D: Merging Feature Work into `main`
+
 1. Verify `npm run build` and `npm run lint` pass with zero errors.
 2. Switch to `main`, pull latest, merge the developer branch, and push:
    ```bash
