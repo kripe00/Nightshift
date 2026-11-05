@@ -11,7 +11,7 @@ description: >-
 
 All audio in *Night Shift: Redline (Reactor No. 4)* is synthesized procedurally in TypeScript using the browser's native **Web Audio API** (`AudioContext`, `OscillatorNode`, `GainNode`, `BiquadFilterNode`, `AudioBuffer`).
 
-**CRITICAL RULE:** Never import or fetch external `.mp3`, `.wav`, or `.ogg` asset files. Every sound must be generated mathematically at runtime.
+**CRITICAL RULE:** All interactive sound effects (SFX) must be generated mathematically at runtime using the Web Audio API (background music tracks in `public/music/` are the only static audio files allowed).
 
 ---
 

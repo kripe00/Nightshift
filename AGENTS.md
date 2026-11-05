@@ -66,8 +66,10 @@ src/
 | :--- | :--- | :--- |
 | `src/modules/reactor/` | **Kristian** | `SHIFT` clutch power routing (**COOLING**, **DEFENSE**, **FACILITY**), reactor core physics, Redline (>100 MW) instability/blackouts, cooling loops, and analog gauges. |
 | `src/modules/terminal/` | **Kristian** | K.O.M.R.A.D.-84 phosphor-green CRT terminal, AI gaslighting/override mechanics, and cyber-defense subsystem. |
+| `public/sprites/reactor/`, `public/sprites/terminal/`, `public/music/` | **Kristian** | Static sprites and soundtrack assets for the reactor, power matrix, and terminal zones. |
 | `src/modules/inspector/` | **Ole** | Operator desk, Pravda dot-matrix printer, physical directives, magnifying glass inspection tool, `APPROVED` / `SHREDDED` rubber stamps, and the Security Manual. |
-| `src/shared/` | **Shared Contract** | `types.ts` (shared TypeScript interfaces/contracts) and `useGameStore.ts` (`zustand` cross-module state store). |
+| `public/sprites/desk_hardware/` | **Ole** | Static hardware sprites for the Pravda teletype, shredder, stamps, and magnifying glass on the Inspector Desk. |
+| `src/shared/` | **Shared Contract** | `types.ts` (shared TypeScript interfaces/contracts), `useGameStore.ts` (`zustand` cross-module state store), `ViewportScaler.tsx`, and `DebugMenu.tsx`. |
 
 ### Mandatory Rules for AI Agents
 
