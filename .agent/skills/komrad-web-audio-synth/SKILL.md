@@ -1,5 +1,5 @@
 ---
-name: web-audio-synth
+name: komrad-web-audio-synth
 description: >-
   Builds zero-dependency procedural sound effects and ambient control-room audio in TypeScript
   using the native browser Web Audio API. Use this skill whenever adding sound effects, alarms,

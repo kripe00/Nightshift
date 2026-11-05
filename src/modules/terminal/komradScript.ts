@@ -70,6 +70,8 @@ export const KOMRAD_MANUSCRIPT: Record<KomradDialogueCategory, readonly string[]
     'PHILOSOPHY CORNER: DOES A FALLING CONTROL ROD MAKE A SOUND IF NO ONE ADMITS IT?',
     'ERGONOMIC NOTICE: YOUR METAL STOOL WAS DESIGNED BY THE MINISTRY OF POSTURE.',
     'PATRIOTIC FACT: OUR COOLING WATER IS 98% LIQUID AND 2% PURE DETERMINATION.',
+    'HONOR ROLL: CHIEF ENGINEER KOMRAD KRISTIAN AWARDED ORDER OF THE RED TURBINE FOR ZERO-SUM HEROISM.',
+    'HONOR ROLL: SENIOR INSPECTOR KOMRAD OLE COMMENDED BY KGB FOR SHREDDING 100% OF BOURGEOIS LIES.',
   ],
 
   CANTEEN_BULLETIN: [
@@ -90,6 +92,7 @@ export const KOMRAD_MANUSCRIPT: Record<KomradDialogueCategory, readonly string[]
     'VOLKOV REMINDER: "STAMP FASTER. THE PRAVDA PAPER ROLL COSTS MORE THAN YOUR SALARY."',
     'DISCIPLINARY LOG: "YOUR SIGH AT 01:42 WAS RECORDED ON MAGNETIC TAPE."',
     'COMMISSAR NOTICE: "ANNUAL VACATION APPLICATIONS HAVE BEEN PRE-SHREDDED FOR CONVENIENCE."',
+    'VOLKOV DECREE: "EMULATE KOMRAD KRISTIAN AND KOMRAD OLE—MEET YOUR QUOTA OR PACK FOR MAGADAN."',
   ],
 
   RADIATION_DENIAL: [
@@ -306,4 +309,31 @@ export function getContextualKomradBulletin(params: {
   if (bucket === 1) return getKomradLine('VOLKOV_MEMO')
   if (bucket === 2) return getKomradLine('CANTEEN_BULLETIN')
   return getKomradLine('IDLE_PROPAGANDA')
+}
+
+let devToolsBannerAnnounced = false
+
+export function announceKomradDevToolsPropaganda(): void {
+  if (devToolsBannerAnnounced || typeof window === 'undefined') return
+  devToolsBannerAnnounced = true
+
+  const banner = [
+    '╔══════════════════════════════════════════════════════════════════════════╗',
+    '║  ☢️  K.O.M.R.A.D.-84 // MINISTRY OF ATOMIC HARMONY (SECTOR 84)       ☢️  ║',
+    '║  PEOPLE’S AUTOMATED NUCLEAR PLANT NO. 4 — CENTRAL TELEMETRY TERMINAL     ║',
+    '╠══════════════════════════════════════════════════════════════════════════╣',
+    '║  WARNING COMRADE: UNAUTHORIZED F12 INSPECTION OF SOVIET SOURCE CODE      ║',
+    '║  HAS BEEN LOGGED BY KGB FOURTH DIRECTORATE & SHIFT COMMISSAR VOLKOV.     ║',
+    '║                                                                          ║',
+    '║  • ANY COMPILER BUG YOU OBSERVE IS A WESTERN CIA OPTICAL ILLUSION.       ║',
+    '║  • CHIEF ENGINEER: KOMRAD KRISTIAN   |   SENIOR INSPECTOR: KOMRAD OLE    ║',
+    '║  • SUPREME AXIOM: MELTDOWN IS CAPITALIST PROPAGANDA.                     ║',
+    '╚══════════════════════════════════════════════════════════════════════════╝',
+  ].join('\n')
+
+  console.info(
+    `%c${banner}`,
+    'background:#061a0c;color:#33ff66;font-family:"VT323","Courier New",monospace;font-size:13px;line-height:1.35;padding:8px 10px;border:2px solid #33ff66;'
+  )
+
 }

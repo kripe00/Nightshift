@@ -1,5 +1,5 @@
 ---
-name: soviet-panel-ui
+name: komrad-soviet-panel-ui
 description: >-
   Enforces the 1984 Soviet "Cassette Futurism" and Atompunk 100% 3D micro-pixel hardware aesthetic
   (inspired by Buckshot Roulette and Inscryption). Use this skill whenever building 3D console meshes,

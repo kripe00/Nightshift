@@ -1,5 +1,5 @@
 ---
-name: cia-forgeries-and-lore
+name: komrad-cia-forgeries-and-lore
 description: >-
   Generates deadpan 1984 Soviet bureaucratic satire, K.O.M.R.A.D.-84 gaslighting AI dialogue,
   Pravda dot-matrix directives, CIA sabotage forgeries, and Security Manual inspection rules.

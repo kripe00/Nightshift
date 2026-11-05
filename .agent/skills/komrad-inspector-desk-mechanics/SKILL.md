@@ -1,5 +1,5 @@
 ---
-name: inspector-desk-mechanics
+name: komrad-inspector-desk-mechanics
 description: >-
   Ole's dedicated helper skill for building the 100% 3D <InspectorDesk3D /> station inside
   src/modules/inspector/: 3D operator desk, 3D Pravda dot-matrix printer, 3D tractor-feed paper

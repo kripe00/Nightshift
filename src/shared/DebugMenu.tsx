@@ -29,23 +29,28 @@ export const DebugMenu: React.FC = () => {
   if (!isOpen) return null
 
   return (
-    <div className="fixed top-14 right-6 z-50 w-96 border-4 border-[#090b09] bg-[#1a2219] p-4 font-vt323 text-[#dfd2a3] shadow-[8px_8px_0_#090b09]">
+    <div className="fixed top-14 right-6 z-50 w-[26rem] border-4 border-[#090b09] bg-[#1a2219] p-4 font-vt323 text-[#dfd2a3] shadow-[8px_8px_0_#090b09]">
       <div className="mb-3 flex items-center justify-between border-b-2 border-[#090b09] pb-2">
-        <span className="font-kremlin text-sm tracking-wider text-[#ffb000]">
-          COMMISSAR DEBUG CONSOLE [F2]
-        </span>
+        <div>
+          <span className="block font-kremlin text-sm tracking-wider text-[#ffb000]">
+            KGB MINISTRY OVERRIDE [F2]
+          </span>
+          <span className="block text-xs text-[#9ca396]">
+            DECREE 84-Б // KOMRAD KRISTIAN &amp; KOMRAD OLE CLEARANCE
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => setIsOpen(false)}
           className="border-2 border-[#090b09] bg-[#7c3819] px-2 py-0.5 text-base text-white shadow-[2px_2px_0_#090b09]"
         >
-          CLOSE [X]
+          SEAL [X]
         </button>
       </div>
 
       <div className="space-y-2.5 text-lg">
         <div className="flex items-center justify-between border-2 border-[#090b09] bg-[#121712] px-3 py-1.5">
-          <span>OLE GOD MODE (No Meltdown/Gulag):</span>
+          <span>POLITBURO IMMUNITY (No Meltdown/Siberia):</span>
           <button
             type="button"
             onClick={() => setGodMode(!isGodMode)}
@@ -55,7 +60,7 @@ export const DebugMenu: React.FC = () => {
                 : 'bg-[#333c31] text-[#dfd2a3]'
             }`}
           >
-            {isGodMode ? 'ENABLED' : 'OFF'}
+            {isGodMode ? 'DECREED' : 'REVOKED'}
           </button>
         </div>
 
@@ -65,14 +70,14 @@ export const DebugMenu: React.FC = () => {
             onClick={() => spawnDirective(false)}
             className="border-2 border-[#090b09] bg-[#263829] px-2 py-1 text-left shadow-[2px_2px_0_#090b09] hover:bg-[#314a35]"
           >
-            + SPAWN VALID ORDER
+            + ISSUE PRAVDA ORDER
           </button>
           <button
             type="button"
             onClick={() => spawnDirective(true)}
             className="border-2 border-[#090b09] bg-[#5c231c] px-2 py-1 text-left shadow-[2px_2px_0_#090b09] hover:bg-[#752c23]"
           >
-            + SPAWN CIA FORGERY
+            + INJECT CIA FORGERY
           </button>
         </div>
 
@@ -82,14 +87,14 @@ export const DebugMenu: React.FC = () => {
             onClick={() => debugSetTemp(860)}
             className="border-2 border-[#090b09] bg-[#4a3919] px-2 py-1 text-left shadow-[2px_2px_0_#090b09] hover:bg-[#614b21]"
           >
-            SET TEMP 860°C (HOT)
+            PROVE MELTDOWN MYTH (860°C)
           </button>
           <button
             type="button"
             onClick={() => debugSetTemp(340)}
             className="border-2 border-[#090b09] bg-[#253024] px-2 py-1 text-left shadow-[2px_2px_0_#090b09] hover:bg-[#334231]"
           >
-            COOL TO 340°C
+            SIBERIAN COOLING (340°C)
           </button>
         </div>
 
@@ -99,14 +104,14 @@ export const DebugMenu: React.FC = () => {
             onClick={debugTriggerBlackout}
             className="border-2 border-[#090b09] bg-[#2e332d] px-2 py-1 text-left shadow-[2px_2px_0_#090b09] hover:bg-[#3e453d]"
           >
-            {isBlackout ? 'CLEAR BLACKOUT' : 'TRIGGER BLACKOUT'}
+            {isBlackout ? 'RESTORE LENIN GRID' : 'STAGE GRID BLACKOUT'}
           </button>
           <button
             type="button"
             onClick={debugCompleteShift}
             className="border-2 border-[#090b09] bg-[#1e4028] px-2 py-1 text-left shadow-[2px_2px_0_#090b09] hover:bg-[#295937]"
           >
-            INSTANT WIN (06:00)
+            FULFILL 06:00 QUOTA
           </button>
         </div>
 
@@ -115,14 +120,13 @@ export const DebugMenu: React.FC = () => {
           onClick={resetShift}
           className="w-full border-2 border-[#090b09] bg-[#3b2820] px-3 py-1 text-center shadow-[2px_2px_0_#090b09] hover:bg-[#52372c]"
         >
-          RESET SHIFT 1 STATE
+          REWRITE HISTORY TO SHIFT 1 (00:00)
         </button>
 
         <div className="border-t border-[#313d2f] pt-1 text-sm text-[#9ca396]">
-          Active Papers: {activeDirectives.length} | Core: {Math.round(coreTemp)}°C
+          Pravda Queue: {activeDirectives.length} | Core Enthusiasm: {Math.round(coreTemp)}°C (Nominal)
         </div>
       </div>
     </div>
   )
 }
-

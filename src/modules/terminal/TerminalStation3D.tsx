@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useGameStore } from "../../shared/useGameStore";
 import {
+  announceKomradDevToolsPropaganda,
   getContextualKomradBulletin,
   HOURLY_SHIFT_BROADCASTS,
 } from "./komradScript";
@@ -103,6 +104,7 @@ export const TerminalStation3D: React.FC = () => {
   );
 
   useEffect(() => {
+    announceKomradDevToolsPropaganda();
     const interval = window.setInterval(() => {
       const s = useGameStore.getState();
       const totalMW =
