@@ -2,7 +2,7 @@
 **Subtitle:** *A Soviet Night Shift Simulator*  
 **Event:** GitHub Game Off 2026 (Nov 1 – Dec 1, 2026)  
 **Theme:** **SHIFT**  
-**Developers:** Kristian (`Kristian` branch) & Ole (`Ole` branch)
+**Developers:** Kristian (`Komrad-Kristian` branch) & Ole (`Komrad-Ole` branch)
 
 ---
 
@@ -168,7 +168,7 @@ export interface GameState {
 2. Fullscreen 3D `<Canvas>` in `src/App.tsx`, `src/shared/ControlRoomScene.tsx`, and `src/shared/CameraController.tsx` with dynamic 3D lighting and pure 3D station mounts (`<ReactorStation3D />`, `<TerminalStation3D />`, `<InspectorDesk3D />`).
 3. `types.ts`, `useGameStore.ts`, and `DebugMenu.tsx` (`F2`).
 
-### Phase 2: Parallel 3D Station Construction (`Kristian` & `Ole` branches)
+### Phase 2: Parallel 3D Station Construction (`Komrad-Kristian` & `Komrad-Ole` branches)
 * **Kristian:** Builds `<ReactorStation3D />` (3D gauges, rotary valves, hinged AZ-5, 3D `[SHIFT]` clutch & MW blocks) and `<TerminalStation3D />` (3D CRT mesh + `CanvasTexture`).
 * **Ole:** Builds `<InspectorDesk3D />` (3D desk, Pravda printer, 3D tractor-feed paper directives, 3D KGB Security Manual, 3D UV magnifying glass, and animated 3D stamps).
 

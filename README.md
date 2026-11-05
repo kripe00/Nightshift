@@ -146,6 +146,6 @@ npm run lint
 
 ## 👥 Team & Branch Workflow
 
-- **Kristian** (`Kristian` branch) — `<ReactorStation3D />` & `<TerminalStation3D />`
-- **Ole** (`Ole` branch) — `<InspectorDesk3D />`
+- **Kristian** (`Komrad-Kristian` branch) — `<ReactorStation3D />` & `<TerminalStation3D />`
+- **Ole** (`Komrad-Ole` branch) — `<InspectorDesk3D />`
 - **`main`** — Shared 3D bunker infrastructure & verified integration branch
