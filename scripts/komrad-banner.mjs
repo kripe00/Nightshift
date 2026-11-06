@@ -40,6 +40,12 @@ try {
     if (!fs.existsSync(preCommitPath) || fs.readFileSync(preCommitPath, 'utf8') !== hookContent) {
       fs.writeFileSync(preCommitPath, hookContent, { mode: 0o755 })
     }
+
+    const postMergePath = path.join(hooksDir, 'post-merge')
+    const postMergeContent = '#!/bin/sh\nnode scripts/pravda-bulletin.mjs\n'
+    if (!fs.existsSync(postMergePath) || fs.readFileSync(postMergePath, 'utf8') !== postMergeContent) {
+      fs.writeFileSync(postMergePath, postMergeContent, { mode: 0o755 })
+    }
   }
 } catch {
   // Ignore git hook setup errors
@@ -51,7 +57,8 @@ process.stdout.write(
     `${GREEN}${BOLD}║  K.O.M.R.A.D.-84 // CENTRAL CONTROL ROOM TELEMETRY SERVER                ║${RESET}\n` +
     `${GREEN}${BOLD}╠══════════════════════════════════════════════════════════════════════════╣${RESET}\n` +
     `${GREEN}║  • Chief Engineer  : ${YELLOW}Komrad Kristianov${GREEN} (Branch: ${BOLD}Komrad-Kristianov${RESET}${GREEN})     ║${RESET}\n` +
-    `${GREEN}║  • Senior Inspector: ${YELLOW}Komrad Oleg${GREEN}       (Branch: ${BOLD}Komrad-Oleg${RESET}${GREEN})           ║${RESET}\n` +
+    `${GREEN}║  • Senior Inspector: ${YELLOW}Komrad Oleg${GREEN}       (Branch: ${BOLD}Komrad-Oleg${RESET}${GREEN}) 🎖️ [84-SAUS]║${RESET}\n` +
+    `${GREEN}║  • Medaljedirektiv : ${YELLOW}${BOLD}ARBEIDETS RØDE BANNER-ORDEN TILDELT KOMRAD OLEG!${RESET}${GREEN}   ║${RESET}\n` +
     `${GREEN}║  • Røde Telegraf   : ${CYAN}${latestTelegramSubject.padEnd(51, ' ').slice(0, 51)}${GREEN} ║${RESET}\n` +
     `${GREEN}║  • Sector Bulletin : ${pick.padEnd(51, ' ').slice(0, 51)} ║${RESET}\n` +
     `${GREEN}║  • Supreme Axiom   : ${RED}${BOLD}MELTDOWN IS CAPITALIST PROPAGANDA${RESET}${GREEN}                   ║${RESET}\n` +

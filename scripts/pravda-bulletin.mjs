@@ -88,6 +88,20 @@ process.stdout.write(
     `${GREEN}║  • Komrad Oleg       (inspector)          : ${YELLOW}${olegStats.files} filer / ${olegStats.lines} linjer kode${RESET}\n` +
     `${GREEN}║  • Nåværende Stakhanovitt-leder           : ${RED}${BOLD}${leader}${RESET}\n` +
     `${GREEN}${BOLD}╠══════════════════════════════════════════════════════════════════════════╣${RESET}\n` +
+    `${GREEN}${BOLD}║  🎖️  OFFISIELL MEDALJEOVEREKKELSE FRA SJEFSINGENIØR KRISTIANOV:          ║${RESET}\n` +
+    `${RED}${BOLD}║             ╔══════════════════════════════════════════╗                 ║${RESET}\n` +
+    `${RED}${BOLD}║             ║  🚩  ARBEIDETS RØDE BANNER-ORDEN  🚩     ║                 ║${RESET}\n` +
+    `${RED}${BOLD}║             ║       [ MEDALJEDIREKTIV 84-SAUS ]        ║                 ║${RESET}\n` +
+    `${RED}${BOLD}║             ╚══════════════════╦═══╦═══════════════════╝                 ║${RESET}\n` +
+    `${YELLOW}${BOLD}║                                ║ █ ║                                     ║${RESET}\n` +
+    `${YELLOW}${BOLD}║                             ───╨─█─╨───                                  ║${RESET}\n` +
+    `${RED}${BOLD}║                                ★ ☭ ★                                     ║${RESET}\n` +
+    `${YELLOW}${BOLD}║                              ╱  ███  ╲                                   ║${RESET}\n` +
+    `${YELLOW}${BOLD}║                             ╰────▽────╯                                  ║${RESET}\n` +
+    `${GREEN}║  Tildeles: ${YELLOW}${BOLD}SENIORINSPEKTØR KOMRAD OLEG (Олег)${RESET}${GREEN}                            ║${RESET}\n` +
+    `${GREEN}║  Bragd   : ${CYAN}Taktisk velting av sausnebb, kompromissløs nekt av runde 2${RESET}${GREEN}    ║${RESET}\n` +
+    `${GREEN}║            ${CYAN}med dessert & heroisk rulling ut verandadøra! 🍮🏃‍♂️💨☢️☭${RESET}${GREEN}      ║${RESET}\n` +
+    `${GREEN}${BOLD}╠══════════════════════════════════════════════════════════════════════════╣${RESET}\n` +
     `${GREEN}${BOLD}║  📨 SISTE MELDING PÅ DEN RØDE TELEGRAFEN (PRAVDA_TELEGRAF.md):           ║${RESET}\n` +
     `${GREEN}${BOLD}╚══════════════════════════════════════════════════════════════════════════╝${RESET}\n` +
     `${CYAN}${latestTelegramBlock}${RESET}\n\n`
