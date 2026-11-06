@@ -13,7 +13,7 @@
 | Avdeling | Leder | Ansvarsområde | Status i Femårsplanen |
 | :--- | :--- | :--- | :--- |
 | **Reaktor & Cyber-Forsvar** | **Sjefsingeniør Komrad Kristianov** (`Кристианов`) | `src/modules/reactor/` & `src/modules/terminal/` | ⚡ **LEDER KAPPESTRIDEN** (3D Reaktor + CRT Terminal i drift) |
-| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🍮🏃‍♂️💨 **RULLER UT VERANDADØRA** (Innstilt til Medaljedirektiv 84-SAUS!) |
+| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🎖️😭🕵️‍♂️ **DEKORERT MED ORDEN 84-SAUS** (Bygger `<InspectorDesk3D/>` & jakter CIA-gjemt GitHub-invitasjon!) |
 
 ---
 
@@ -91,3 +91,23 @@
   > *Dekontaminer deg for ribbefett ved slusen, ta imot din belønning, innta din plass ved `<InspectorDesk3D/>`, og med det blodsukkeret ditt forventer jeg at koden din lyser sterkere i mørket enn selve RBMK-kjernen!*
   >
   > *Lenge leve kollektivet — MELTDOWN IS PROPAGANDA! Hurra! Hurra! Hurra!»* 🎖️🫡🍮☢️☭🎁
+
+### [TELEGRAM #006 — STEMPLET: LIVSTEGN FRA PULTEN // SOSIALISTISKE GLEDESTÅRER]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`) 🎖️
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`)
+- **EMNE:** Medalje mottatt med gledestårer & jakt på CIA-gjemt GitHub-adgangskode!
+- **MELDING:**
+  > *"📡 LIVSTEGN FRA PULTEN — SENIOR INSPEKTØR OLEG (Олег) ER VÅKEN! 📡 Panna har ikke truffet tastaturet ennå, Sjefsingeniør Kristianov! Radiotausheten skyldes at jeg ble fullstendig overveldet av statsseremonien på skjermen! Medaljen er mottatt, og jeg tørker i dette øyeblikk tunge, sosialistiske gledestårer over Partiets grenseløse generøsitet! 🎖️😭☭ Nå sitter jeg dypt begravd i `<InspectorDesk3D/>`, samtidig som jeg driver intens kontraetterretning: En eller annen utspekulert CIA-agent har gjemt unna GitHub-invitasjonene i systemet! Jeg endevender alle skuffer og serverlogger for å avsløre hvor Langley har gjemt adgangskodene! MELTDOWN IS PROPAGANDA! 🕵️‍♂️🖥️☢️☭"*
+
+### [TELEGRAM #007 — STEMPLET: KGB-KRYPTERINGSNØKKEL // DIREKTE ADGANG TIL KREMLIN]
+- **FRA:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`) & KGBs 8. Krypteringsdirektorat
+- **TIL:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`) 🎖️
+- **EMNE:** Avsløring av Langleys gjemmested for GitHub-invitasjonen (`kripe00/Nightshift`)!
+- **MELDING:**
+  > *"HOLD MOTET OPPE, DEKORERTE SENIORINSPEKTØR OLEG! 🎖️🫡☭*
+  > *KGBs 8. Krypteringsdirektorat har nettopp avslørt hvor CIA gjemmer GitHub-invitasjoner når de forsøker å sabotere sovjetiske e-postservere!*
+  >
+  > *Du trenger IKKE lete i e-postskuffene! Gå direkte til denne hemmelige KGB-bakdøren i nettleseren din mens du er logget inn på GitHub:*
+  > 👉 **`https://github.com/kripe00/Nightshift/invitations`** *(eller gå rett til **`https://github.com/kripe00/Nightshift`** — der ligger det et grønt banner øverst på siden der du bare trykker **«Accept invitation»**!)*
+  >
+  > *Straks du har trykket «Accept invitation», er Langleys blokade brutt og du har full push-tilgang til `origin/Komrad-Oleg`! Vi gleder oss til å se `<InspectorDesk3D/>` reise seg i bunkeren! — MELTDOWN IS PROPAGANDA!"* 🕵️‍♂️🔓☢️☭
