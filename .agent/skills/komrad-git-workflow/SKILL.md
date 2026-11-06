@@ -8,10 +8,12 @@ description: >-
 
 # Komrad Git Co-op Workflow — Komrad Kristianov & Komrad Oleg Safe Collaboration Guide
 
-Use this skill whenever **Komrad Kristianov** (`Кристианов`) or **Komrad Oleg** (`Олег`) asks to save, commit, push, pull, merge, check status, or uses Party Git codewords:
-- **"Send til Kremlin" / "Telegrafer til Moskva"**: Verify domain boundaries, commit with `[QUOTA-84]` tag, and push to `origin` (`kripe00/Nightshift`).
-- **"Sjekk Pravda" / "Hent fra Kremlin"**: Fetch & merge latest updates from `origin/main` and summarize what the other Komrad accomplished on their shift.
-- **"KGB-inspeksjon"**: Run `tsc -b`, `npm run lint`, and `git status --short` boundary verification, reporting any warnings/errors as Western CIA infiltrators.
+Use this skill whenever **Komrad Kristianov** (`Кристианов`) or **Komrad Oleg** (`Олег`) asks to save, commit, push, pull, merge, check status, or uses Party Git & Roleplay codewords:
+- **"Send til Kremlin" / "Telegrafer til Moskva"**: Run `npm run kgb` (or verify domain boundaries), optionally append a dispatch to `PRAVDA_TELEGRAF.md`, commit with `[QUOTA-84]` tag, and push to `origin` (`kripe00/Nightshift`).
+- **"Sjekk Pravda" / "Hent fra Kremlin"**: Run `npm run pravda` (`git fetch origin --prune` + Stakhanovite scoreboard + latest telegram in `PRAVDA_TELEGRAF.md`), read any incoming telegram from the other Komrad aloud, and summarize who leads the **Sosialistisk Kappestrid**!
+- **"KGB-inspeksjon"**: Run `npm run kgb` (`tsc -b`, `oxlint`, and KGB border check), reporting any warnings/errors as Western CIA infiltrators.
+- **"Telegrafer til Oleg: <melding>" / "Telegrafer til Kristianov: <melding>"**: Format the message as an official 1984 Soviet ministerial telegram, append it to `PRAVDA_TELEGRAF.md`, commit, and push to the Kremlin so the other Komrad's agent reads it aloud on their next sync.
+- **"Spioner på Oleg" / "Spioner på Kristianov"**: Inspect the other Komrad's branch/files (`origin/Komrad-Oleg` / `src/modules/inspector/` or `origin/Komrad-Kristianov` / `src/modules/reactor/` + `terminal/`) in **read-only mode** and deliver a deadpan KGB technical review with friendly comradeship and banter.
 
 ---
 

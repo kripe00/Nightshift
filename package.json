@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node scripts/komrad-banner.mjs && vite",
     "shift": "node scripts/komrad-banner.mjs && vite",
+    "pravda": "node scripts/pravda-bulletin.mjs",
+    "kgb": "node scripts/kgb-inspection.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

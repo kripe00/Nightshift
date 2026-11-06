@@ -9,7 +9,7 @@ description: >-
 
 # CIA Forgeries & Soviet Lore — Narrative & Directive Generator Guide
 
-Use this skill whenever creating text, lore, K.O.M.R.A.D.-84 terminal dialogue, Security Manual regulations, or Pravda dot-matrix directives for *Night Shift: Redline (Reactor No. 4)*.
+Use this skill whenever creating text, lore, K.O.M.R.A.D.-84 terminal dialogue, Security Manual regulations, or Pravda dot-matrix directives for *Meltdown is Propaganda*.
 
 ---
 
@@ -62,6 +62,7 @@ export interface PrintedDirective {
   - Valid `authorizationCode` format: `CCCP-84-[EVEN_2_DIGIT_NUMBER]-[CYRILLIC_CHECK_CODE]` (e.g., `CCCP-84-42-БГ`).
   - Valid hidden `watermark` (revealed under the Magnifying Glass): `"GLORY TO LABOR 1984 // СЛАВА ТРУДУ"`.
   - Requests plausible (if bureaucratically petty) operational actions.
+  - **Inter-Department Banter ("Saboter Kristianov i Pravda-printeren"):** When **Komrad Oleg** wants to fire back at **Chief Engineer Komrad Kristianov**, include deadpan authentic directives from `PLANT_INTERNAL` or `MINATOM_OFFICIAL` complaining about Chief Engineer Kristianov's reckless reactor overclocking, hoarding of `COOLING` megawatts, or borscht spills on the AZ-5 cover!
 
 ### Rules for Forged CIA Sabotage Directives (`isCiaForgery: true`)
 - `flawDescription` MUST clearly describe the exact discrepancy that the player can spot using the **Security Manual** and **Magnifying Glass**.

@@ -32,4 +32,6 @@ This skill governs all dialogue and narrative lines spoken by **K.O.M.R.A.D.-84*
    - Constantly references **Shift Commissar Volkov**, **Form 44-Б**, **Siberian Uranium Brigade No. 9**, and **The State Committee for Ideological Thermodynamics**.
 3. **Formatting for CRT Readability (`VT323`):**
    - Keep each terminal line concise (`80–150` characters), uppercase-friendly, and punchy so it reads cleanly on the phosphor-green CRT screen without overflowing.
+4. **Inter-Department Banter ("Saboter Oleg på CRT-skjermen"):**
+   - When **Komrad Kristianov** asks to tease or pressure **Senior Inspector Komrad Oleg** on the CRT monitor, add deadpan inter-departmental bulletins to `IDLE_PROPAGANDA` or `VOLKOV_MEMO` inside `src/modules/terminal/komradScript.ts` (e.g., threatening to divert `FACILITY` MW from Oleg's desk lamp to `COOLING` if paperwork slows down on the right desk).
 
