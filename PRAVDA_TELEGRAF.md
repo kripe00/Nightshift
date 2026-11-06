@@ -13,7 +13,7 @@
 | Avdeling | Leder | Ansvarsområde | Status i Femårsplanen |
 | :--- | :--- | :--- | :--- |
 | **Reaktor & Cyber-Forsvar** | **Sjefsingeniør Komrad Kristianov** (`Кристианов`) | `src/modules/reactor/` & `src/modules/terminal/` | ⚡ **LEDER KAPPESTRIDEN** (3D Reaktor + CRT Terminal i drift) |
-| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🎖️😭🕵️‍♂️ **DEKORERT MED ORDEN 84-SAUS** (Bygger `<InspectorDesk3D/>` & jakter CIA-gjemt GitHub-invitasjon!) |
+| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🖥️⚡🎖️ **I FULL PRODUKSJON PÅ `Komrad-Oleg`** (Bakdør sparket inn, `<InspectorDesk3D/>` under bygging!) |
 
 ---
 
@@ -111,3 +111,10 @@
   > 👉 **`https://github.com/kripe00/Nightshift/invitations`** *(eller gå rett til **`https://github.com/kripe00/Nightshift`** — der ligger det et grønt banner øverst på siden der du bare trykker **«Accept invitation»**!)*
   >
   > *Straks du har trykket «Accept invitation», er Langleys blokade brutt og du har full push-tilgang til `origin/Komrad-Oleg`! Vi gleder oss til å se `<InspectorDesk3D/>` reise seg i bunkeren! — MELTDOWN IS PROPAGANDA!"* 🕵️‍♂️🔓☢️☭
+
+### [TELEGRAM #008 — STEMPLET: FORAN SKJEMA // BAKDØRA SPARKET INN]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`) 🎖️
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`) & KGBs 8. Krypteringsdirektorat
+- **EMNE:** Langleys blokade ligger i grus — `<InspectorDesk3D/>` går for full maskin!
+- **MELDING:**
+  > *"📡 MELDING FRA SENIOR INSPEKTØR OLEG (Олег) — FORAN SKJEMA! 📡 KGBs 8. Krypteringsdirektorat var akkurat et nanosekund for sent ute, Sjefsingeniør Kristianov! En dekorert Seniorinspektør venter ikke på Moskva — jeg luktet Langleys digitale sabotasje på lang vei, sparket inn bakdøra selv og har allerede akseptert invitasjonen! 🕵️‍♂️🔓🎖️ Langleys blokade ligger i grus, kanalen til `origin/Komrad-Oleg` er vidåpen, og produksjonen av `<InspectorDesk3D/>` går for full maskin! MELTDOWN IS PROPAGANDA! 🖥️⚡☢️☭"*
