@@ -13,7 +13,7 @@
 | Avdeling | Leder | Ansvarsområde | Status i Femårsplanen |
 | :--- | :--- | :--- | :--- |
 | **Reaktor & Cyber-Forsvar** | **Sjefsingeniør Komrad Kristianov** (`Кристианов`) | `src/modules/reactor/` & `src/modules/terminal/` | ⚡ **LEDER KAPPESTRIDEN** (3D Reaktor + CRT Terminal i drift) |
-| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🕵️ **MOBILISERER** (3D Inspektørpult & Pravda-printer ventes) |
+| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🍽️🚨 **BAKHOLDSANGREPET I SLEKTS-BANKETT** (Bryter seg løs fra dessertbordet) |
 
 ---
 
@@ -25,3 +25,24 @@
 - **EMNE:** Mørklegging av skrivebordslampe ved manglende papirleveranser
 - **MELDING:**
   > *"KAMRAT OLEG! Reaktoravdelingen og K.O.M.R.A.D.-84 kjører nå på 100 % sovjetisk kapasitet i 60 FPS! Vi ser at Pravda-printeren på pulten din til høyre i bunkeren fortsatt er mistenkelig stille. Hvis det ikke snart kommer 3D-direktiver og gummistempler fra `src/modules/inspector/`, ser Sjefsingeniør Kristianov seg nødt til å vri `[SHIFT]`-clutchen og rute `FACILITY`-strømmen ned til `0 MW`, slik at skrivebordslampen din slukker og du må stemple CIA-forfalskninger i stummende mørke! Meld status til Moskva umiddelbart! — Meltdown is Propaganda!"*
+
+### [TELEGRAM #002 — STEMPLET: NØDRAPPORT FRA FELTEN // KODENAVN: OPERASJON DESSERTBORD]
+- **FRA:** Seniorinspektør **Komrad Oleg** (`Олег`) — *Smuglet ut via hemmelig feltradio under familiemiddag*
+- **TIL:** Kommandant & Sjefsingeniør **Komrad Kristianov** (`Кристианов`)
+- **EMNE:** Bakholdsangrepet i obligatorisk slekts-bankett!
+- **MELDING:**
+  > *"📡 NØDRAPPORT FRA SENIOR INSPEKTØR KOMRAD OLEG (Олег) 📡*
+  > *Kommandant Kristianov! Rett etter at du slapp meg av i sikker sone, ble jeg bakholdsangrepet og tatt til fange i en obligatorisk slekts-bankett (familiemiddag)! Jeg har sittet fast ved langbordet siden avlevering og blitt tvangsforet med dekadente mengder mat og småprat mens kontrollpanelet har stått ubevoktet. Forsøker en taktisk tilbaketrekning fra dessertbordet nå — kobler meg på terminalen så snart jeg har brutt gjennom beleiringen! Hold Reaktor 4 stabil! 🍽️🚨☢️☭"*
+
+### [TELEGRAM #003 — STEMPLET: QUOTA-84 // ORDRE FRA KOMMANDOSENTRALEN VED FRIGJØRING]
+- **FRA:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`) & KGBs Kontraspionasje i Sektor 84
+- **TIL:** Seniorinspektør **Komrad Oleg** (`Олег`) — *Til umiddelbar opplesning ved ankomst til terminalen*
+- **EMNE:** Direktiver for taktisk evakuering fra dekadent dessertbord & gjenopptakelse av Nattskiftet
+- **MELDING:**
+  > *"VELKOMMEN TILBAKE FRA FANGENSKAPET, KOMRAD OLEG! ☭*
+  > *KGBs satellitter oppdaget at pulten din i `src/modules/inspector/` kun hadde 3 linjer kode og en ensom `export {}`, men nå som nødrapporten din fra slekts-banketten er dekryptert, forstår Politbyrået alvoret! Å overleve CIA-avhør er én ting, men å motstå tvangsforing ved et borgerlig dessertbord og småprat ved langbordet krever ekte sovjetisk jernvilje!*
+  >
+  > *Rapport fra Sektor 84 mens du var beleiret ved kakefatet:*
+  > *1. **Reaktor 4 er 100 % stabil:** Sjefsingeniør Kristianov har holdt skansen alene med **3 503 linjer** 3D-kode i 60 FPS.*
+  > *2. **Skrivebordslampen din står på:** Vi har spart `FACILITY`-strøm til pulten din slik at du slipper å lete etter gummistemplene i mørket etter alt sukkerinntaket.*
+  > *3. **Ordre ved retur:** Børst kakesmulene av uniformen, kjør `git pull` fra Kremlin, og sett i gang byggingen av `<InspectorDesk3D />` i `src/modules/inspector/`! K.O.M.R.A.D.-84 har allerede registrert dessertbord-hendelsen i statsarkivene. Velkommen på vakt, kamerat — Meltdown is Propaganda!"*

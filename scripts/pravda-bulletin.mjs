@@ -53,11 +53,21 @@ const leader =
 
 let latestTelegramBlock = 'Ingen meldinger i PRAVDA_TELEGRAF.md.'
 try {
+  const candidates = []
   const telegrafPath = path.resolve(process.cwd(), 'PRAVDA_TELEGRAF.md')
   if (fs.existsSync(telegrafPath)) {
-    const content = fs.readFileSync(telegrafPath, 'utf8')
+    candidates.push(fs.readFileSync(telegrafPath, 'utf8'))
+  }
+  for (const ref of ['origin/main', 'origin/Komrad-Kristianov', 'origin/Komrad-Oleg']) {
+    const remoteContent = runGit(`git show ${ref}:PRAVDA_TELEGRAF.md`)
+    if (remoteContent) candidates.push(remoteContent)
+  }
+
+  let bestCount = 0
+  for (const content of candidates) {
     const blocks = content.split('### [TELEGRAM ')
-    if (blocks.length > 1) {
+    if (blocks.length > bestCount && blocks.length > 1) {
+      bestCount = blocks.length
       latestTelegramBlock = '[TELEGRAM ' + blocks[blocks.length - 1].trim()
     }
   }
