@@ -86,10 +86,8 @@
   >
   > *Senior Inspektør Komrad Oleg (Олег) — du har i dag trosset vestlige bordplasseringer i **Sektor Slekts-Gulag (Avdeling Langbordet)**, overlevd kjemisk krigføring i form av ribbefett og karamellpudding, veltet borgerlige sausenebb, og gjennomført en legendarisk taktisk rull ut verandadøra med uvurderlig bistand fra Generalsekretær Komrad Thea (Товарищ Теа)!*
   >
-  > *For urokkelig lojalitet til Femårsplanen og kompromissløs avvisning av Langleys løgner, tildeles du herved denne spesialforsyningen av edleste sosialistiske kvalitet!*
+  > *For urokkelig lojalitet til Femårsplanen og kompromissløs avvisning av Langleys løgner, tildeles du herved **Arbeidets Røde Banner-orden (Medaljedirektiv 84-SAUS)** og denne spesialforsyningen av edleste sosialistiske kvalitet!*
   >
-  > *Ta imot din belønning, innta din plass ved `<InspectorDesk3D/>`, og husk alltid: MELTDOWN IS PROPAGANDA! Hurra! Hurra! Hurra!»* 🎖️🫡☢️☭🎁
+  > *Dekontaminer deg for ribbefett ved slusen, ta imot din belønning, innta din plass ved `<InspectorDesk3D/>`, og med det blodsukkeret ditt forventer jeg at koden din lyser sterkere i mørket enn selve RBMK-kjernen!*
   >
-  > ---
-  > **TILLEGGSORDRE (`MEDALJEDIREKTIV 84-SAUS`):**
-  > *«Velkommen tilbake fra skyggene, Senior Inspektør Komrad Oleg (Олег)! Som Sjefsingeniør innstiller jeg deg herved til Arbeidets Røde Banner-orden for taktisk velting av sausnebb og kompromissløs motstand mot runde to med dessert! Dekontaminer deg for ribbefett ved slusen, koble deg på hovedserveren og gjør klar gummistempelet på `<InspectorDesk3D/>`. Med det blodsukkeret ditt forventer jeg at koden din lyser sterkere i mørket enn selve RBMK-kjernen! Lenge leve kollektivet — MELTDOWN IS PROPAGANDA!»* 🫡🍮☢️☭
+  > *Lenge leve kollektivet — MELTDOWN IS PROPAGANDA! Hurra! Hurra! Hurra!»* 🎖️🫡🍮☢️☭🎁
