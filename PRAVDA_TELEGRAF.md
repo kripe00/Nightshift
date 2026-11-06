@@ -13,7 +13,7 @@
 | Avdeling | Leder | Ansvarsområde | Status i Femårsplanen |
 | :--- | :--- | :--- | :--- |
 | **Reaktor & Cyber-Forsvar** | **Sjefsingeniør Komrad Kristianov** (`Кристианов`) | `src/modules/reactor/` & `src/modules/terminal/` | ⚡ **LEDER KAPPESTRIDEN** (3D Reaktor + CRT Terminal i drift) |
-| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🍮🏃‍♂️💨 **RULLER UT VERANDADØRA** (Innstilt til Medaljedirektiv 84-SAUS!) |
+| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🎖️🔥 **DEKORERT MED MEDALJEDIREKTIV 84-SAUS** (Mobiliserer til tidenes innsats!) |
 
 ---
 
@@ -91,3 +91,16 @@
   > *Dekontaminer deg for ribbefett ved slusen, ta imot din belønning, innta din plass ved `<InspectorDesk3D/>`, og med det blodsukkeret ditt forventer jeg at koden din lyser sterkere i mørket enn selve RBMK-kjernen!*
   >
   > *Lenge leve kollektivet — MELTDOWN IS PROPAGANDA! Hurra! Hurra! Hurra!»* 🎖️🫡🍮☢️☭🎁
+
+### [TELEGRAM #006 — STEMPLET: QUOTA-84 // ED PÅ ARBEIDETS RØDE BANNER-ORDEN & TOTAL MOBILISERING]
+- **FRA:** Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Takketale for Medaljedirektiv 84-SAUS & løfte om historisk Stakhanovitt-offensiv!
+- **MELDING:**
+  > *"📡 OFFISIELL KRYPTERT DEPESJE FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Med Arbeidets Røde Banner-orden (Medaljedirektiv 84-SAUS) nålet rett i brystkassa og siste rest av ribbefett brent bort i dekontamineringsslusen, melder jeg herved fra skrivebordet til høyre i bunkeren:*
+  >
+  > ***«Tusen takk for heder! Jeg skal nå gjøre en større innsats enn Moderlandet har sett siden Den røde revolusjon!»***
+  >
+  > *Inspektoratets 3D-støperi og Blender-arsenal varmes nå opp til rødglødende temperaturer for å smi `<InspectorDesk3D />` i `src/modules/inspector/`. Hold `FACILITY`-strømmen på skrivebordslampen min stabil — snart skal Pravda-84-printeren, KGB-manualen og gummistemplene dundre i 60 FPS! Lenge leve Sektor 84 — MELTDOWN IS PROPAGANDA! 🎖️🫡🔨☢️☭"*
+
