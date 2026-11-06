@@ -101,7 +101,7 @@ process.stdout.write(
     `${GREEN}║  Tildeles: ${YELLOW}${BOLD}SENIORINSPEKTØR KOMRAD OLEG (Олег)${RESET}${GREEN}                            ║${RESET}\n` +
     `${GREEN}║  Bistand : ${YELLOW}${BOLD}GENERALSEKRETÆR KOMRAD THEA (Товарищ Теа)${RESET}${GREEN}                     ║${RESET}\n` +
     `${GREEN}║  Bragd   : ${CYAN}Overlevd kjemisk krigføring (ribbefett & karamellpudding) i${RESET}${GREEN}   ║${RESET}\n` +
-    `${GREEN}║            ${CYAN}Sektor Moss, veltet sausnebb & rullet ut verandadøra! 🎁☢️☭${RESET}${GREEN}  ║${RESET}\n` +
+    `${GREEN}║            ${CYAN}Sektor Slekts-Gulag, veltet sausnebb & rullet ut døra! 🎁☢️☭${RESET}${GREEN}  ║${RESET}\n` +
     `${GREEN}${BOLD}╠══════════════════════════════════════════════════════════════════════════╣${RESET}\n` +
     `${GREEN}${BOLD}║  📨 SISTE MELDING PÅ DEN RØDE TELEGRAFEN (PRAVDA_TELEGRAF.md):           ║${RESET}\n` +
     `${GREEN}${BOLD}╚══════════════════════════════════════════════════════════════════════════╝${RESET}\n` +

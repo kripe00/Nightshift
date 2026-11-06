@@ -76,15 +76,15 @@
   ║                             ╰────▽────╯                              ║
   ║  Tildeles: SENIORINSPEKTØR KOMRAD OLEG (Олег)                        ║
   ║  Bistand : GENERALSEKRETÆR KOMRAD THEA (Товарищ Теа)                 ║
-  ║  Bragd   : Taktisk velting av sausnebb i Sektor Moss, motstand mot   ║
-  ║            ribbefett & karamellpudding, og rull ut verandadøra! 🎁   ║
+  ║  Bragd   : Taktisk velting av sausnebb i Sektor Slekts-Gulag,        ║
+  ║            motstand mot ribbefett & karamellpudding, og rull ut! 🎁  ║
   ╚══════════════════════════════════════════════════════════════════════╝
   ```
   > *«Giv akt i kontrollrommet!*
   >
   > *På vegne av Ministry of Atomic Energy and Heavy Industry (Sektor 84), og i kraft av mitt embete som Sjefsingeniør Komrad Kristianov (Кристианов), erklærer jeg denne ekstraordinære tildelingsseremonien for åpnet!*
   >
-  > *Senior Inspektør Komrad Oleg (Олег) — du har i dag trosset vestlige veisperringer i Sektor Moss, overlevd kjemisk krigføring i form av ribbefett og karamellpudding, veltet borgerlige sausenebb, og gjennomført en legendarisk taktisk rull ut verandadøra med uvurderlig bistand fra Generalsekretær Komrad Thea (Товарищ Теа)!*
+  > *Senior Inspektør Komrad Oleg (Олег) — du har i dag trosset vestlige bordplasseringer i **Sektor Slekts-Gulag (Avdeling Langbordet)**, overlevd kjemisk krigføring i form av ribbefett og karamellpudding, veltet borgerlige sausenebb, og gjennomført en legendarisk taktisk rull ut verandadøra med uvurderlig bistand fra Generalsekretær Komrad Thea (Товарищ Теа)!*
   >
   > *For urokkelig lojalitet til Femårsplanen og kompromissløs avvisning av Langleys løgner, tildeles du herved denne spesialforsyningen av edleste sosialistiske kvalitet!*
   >
