@@ -13,7 +13,7 @@
 | Avdeling | Leder | Ansvarsområde | Status i Femårsplanen |
 | :--- | :--- | :--- | :--- |
 | **Reaktor & Cyber-Forsvar** | **Sjefsingeniør Komrad Kristianov** (`Кристианов`) | `src/modules/reactor/` & `src/modules/terminal/` | ⚡ **LEDER KAPPESTRIDEN** (3D Reaktor + CRT Terminal i drift) |
-| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🍽️🚨 **BAKHOLDSANGREPET I SLEKTS-BANKETT** (Bryter seg løs fra dessertbordet) |
+| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🍮🏃‍♂️💨 **RULLER UT VERANDADØRA** (Innstilt til Medaljedirektiv 84-SAUS!) |
 
 ---
 
@@ -46,3 +46,21 @@
   > *1. **Reaktor 4 er 100 % stabil:** Sjefsingeniør Kristianov har holdt skansen alene med **3 503 linjer** 3D-kode i 60 FPS.*
   > *2. **Skrivebordslampen din står på:** Vi har spart `FACILITY`-strøm til pulten din slik at du slipper å lete etter gummistemplene i mørket etter alt sukkerinntaket.*
   > *3. **Ordre ved retur:** Børst kakesmulene av uniformen, kjør `git pull` fra Kremlin, og sett i gang byggingen av `<InspectorDesk3D />` i `src/modules/inspector/`! K.O.M.R.A.D.-84 har allerede registrert dessertbord-hendelsen i statsarkivene. Velkommen på vakt, kamerat — Meltdown is Propaganda!"*
+
+### [TELEGRAM #004 — STEMPLET: UNDER BESKYTNING // KODENAVN: VELTET SAUSNEBB]
+- **FRA:** Seniorinspektør **Komrad Oleg** (`Олег`) — *Sendt i flukt gjennom verandadøra*
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`)
+- **EMNE:** Taktisk velting av sausnebb & flukt fra runde to med dessert!
+- **MELDING:**
+  > *"📡 NØDANROP FRA SENIOR INSPEKTØR OLEG (Олег) — UNDER BESKYTNING! 📡*
+  > *Tilgi meg, SJEFSINGENIØR Kristianov! Det var ribbefettet og den ideologiske tåken i dette CIA Black Site-lokalet som midlertidig svekket dømmekraften og gradene mine! Sausnebbet er veltet, jeg nektet blankt på runde to med dessert, og jeg ruller i dette øyeblikk ut gjennom verandadøra mens slekta roper etter meg! Blodsukkeret er kritisk høyt, men viljen er av stål. Er ved terminalen og klar til å bygge `<InspectorDesk3D/>` om få strakser! MELTDOWN IS PROPAGANDA! 🍮🏃‍♂️💨☢️☭"*
+
+### [TELEGRAM #005 — STEMPLET: MEDALJEDIREKTIV 84-SAUS // HØYESTE PARTIUTMERKELSE]
+- **FRA:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`) & Reaktoravdelingen i Sektor 84
+- **TIL:** Seniorinspektør **Komrad Oleg** (`Олег`) & hans `komrad-*` kommissærer
+- **EMNE:** 🚩 MEDALJEDIREKTIV 84-SAUS FRA SJEFSINGENIØREN 🚩
+- **MELDING:**
+  > *"🚩 MEDALJEDIREKTIV 84-SAUS FRA SJEFSINGENIØREN 🚩*
+  > *Velkommen tilbake fra skyggene, Senior Inspektør Komrad Oleg (Олег)!*
+  > *Som Sjefsingeniør innstiller jeg deg herved til Arbeidets Røde Banner-orden for taktisk velting av sausnebb og kompromissløs motstand mot runde to med dessert!*
+  > *Dekontaminer deg for ribbefett ved slusen, koble deg på hovedserveren og gjør klar gummistempelet på `<InspectorDesk3D/>`. Med det blodsukkeret ditt forventer jeg at koden din lyser sterkere i mørket enn selve RBMK-kjernen! Lenge leve kollektivet — MELTDOWN IS PROPAGANDA! 🫡🍮☢️☭"*
