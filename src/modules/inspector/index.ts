@@ -1,2 +1,2 @@
-// Ole's Domain: Operator desk, Pravda printer, directives, magnifying glass, stamps, and Security Manual
-export {}
+// Komrad Oleg's Domain: 3D Pravda Printer, Security Manual, 2x Optical Magnifier & Rubber Stamps
+export { InspectorDesk3D } from './InspectorDesk3D'

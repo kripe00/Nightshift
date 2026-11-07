@@ -1,8 +1,19 @@
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { create } from "zustand";
 import type { CameraStation } from "./types";
 import { useGameStore } from "./useGameStore";
+
+interface CameraLookState {
+  isFreeLookMode: boolean;
+  setFreeLookMode: (val: boolean) => void;
+}
+
+export const useCameraLookStore = create<CameraLookState>((set) => ({
+  isFreeLookMode: false,
+  setFreeLookMode: (val: boolean) => set({ isFreeLookMode: val }),
+}));
 
 interface CameraPose {
   position: [number, number, number];
@@ -12,57 +23,65 @@ interface CameraPose {
 
 const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
   overview: {
-    position: [0, 1.54, 2.65],
-    target: [0, 1.18, -1.45],
-    fov: 54,
+    position: [0, 1.52, 2.42],
+    target: [0, 1.24, 0.56],
+    fov: 56,
   },
   reactor: {
-    position: [-0.95, 1.48, 0.28],
-    target: [-2.15, 1.42, -1.08],
-    fov: 46,
+    position: [-0.22, 1.52, 2.35],
+    target: [-1.96, 1.44, 2.35],
+    fov: 50,
   },
   power: {
-    position: [-0.95, 0.82, 0.32],
-    target: [-2.15, 0.48, -1.08],
-    fov: 46,
+    position: [-0.22, 0.92, 2.35],
+    target: [-1.96, 0.56, 2.35],
+    fov: 50,
   },
   terminal: {
-    position: [0, 1.32, 0.18],
-    target: [0, 1.22, -1.55],
+    position: [0, 1.48, 1.92],
+    target: [0, 1.38, 0.56],
     fov: 47,
   },
   inspector: {
-    position: [1.18, 1.68, 0.18],
-    target: [2.08, 0.96, -1.02],
-    fov: 45,
+    position: [0, 1.66, 1.92],
+    target: [0, 0.76, 1.54],
+    fov: 56,
   },
 };
 
-function applyEdgeLookDeadzone(norm: number, deadzone = 0.65): number {
-  const abs = Math.abs(norm);
-  if (abs <= deadzone) {
-    return norm * 0.12;
-  }
-  const sign = Math.sign(norm);
-  const edgeRatio = (abs - deadzone) / (1 - deadzone);
-  return sign * (deadzone * 0.12 + edgeRatio * 0.88);
+const MOUSE_SENSITIVITY = 0.0022;
+const MIN_PITCH = -Math.PI / 2.08; // Looking steeply down at the inspection desk mat
+const MAX_PITCH = Math.PI / 2.6; // Looking up at the ceiling/banner
+const MAX_YAW = Math.PI * 0.75; // Wide 270-degree horizontal bunker arc
+
+function computePoseYawPitch(pose: CameraPose): { yaw: number; pitch: number } {
+  const dx = pose.target[0] - pose.position[0];
+  const dy = pose.target[1] - pose.position[1];
+  const dz = pose.target[2] - pose.position[2];
+  const len = Math.hypot(dx, dy, dz) || 1;
+  const ny = THREE.MathUtils.clamp(dy / len, -1, 1);
+  const pitch = Math.asin(ny);
+  const yaw = Math.atan2(-dx / len, -dz / len);
+  return {
+    yaw: THREE.MathUtils.clamp(yaw, -MAX_YAW, MAX_YAW),
+    pitch: THREE.MathUtils.clamp(pitch, MIN_PITCH, MAX_PITCH),
+  };
 }
 
 export const CameraController: React.FC = () => {
+  const { gl } = useThree();
   const activeStation = useGameStore((s) => s.activeStation);
   const setActiveStation = useGameStore((s) => s.setActiveStation);
 
-  const currentPosRef = useRef(new THREE.Vector3(0, 1.54, 2.65));
-  const currentLookAtRef = useRef(new THREE.Vector3(0, 1.18, -1.45));
-  const desiredPosRef = useRef(new THREE.Vector3());
-  const desiredLookAtRef = useRef(new THREE.Vector3());
+  const initialAngles = computePoseYawPitch(STATION_CAMERA_POSES.overview);
+  const currentPosRef = useRef(new THREE.Vector3(0, 1.52, 2.42));
+  const desiredPosRef = useRef(new THREE.Vector3(0, 1.52, 2.42));
 
-  // First-person free-look state when in Operator Chair ('overview')
   const lookStateRef = useRef({
-    keyYaw: 0,
-    keyPitch: 0,
-    pointerX: 0,
-    pointerY: 0,
+    targetYaw: initialAngles.yaw,
+    targetPitch: initialAngles.pitch,
+    currentYaw: initialAngles.yaw,
+    currentPitch: initialAngles.pitch,
     keysHeld: {
       left: false,
       right: false,
@@ -70,6 +89,14 @@ export const CameraController: React.FC = () => {
       down: false,
     },
   });
+
+  // Sync base yaw & pitch whenever activeStation changes via [0]-[4] or 3D station buttons
+  useEffect(() => {
+    const pose = STATION_CAMERA_POSES[activeStation];
+    const { yaw, pitch } = computePoseYawPitch(pose);
+    lookStateRef.current.targetYaw = yaw;
+    lookStateRef.current.targetPitch = pitch;
+  }, [activeStation]);
 
   useEffect(() => {
     const isTypingInInput = (target: EventTarget | null): boolean => {
@@ -83,24 +110,74 @@ export const CameraController: React.FC = () => {
       );
     };
 
+    const syncStationPose = (station: CameraStation) => {
+      const pose = STATION_CAMERA_POSES[station];
+      const { yaw, pitch } = computePoseYawPitch(pose);
+      lookStateRef.current.targetYaw = yaw;
+      lookStateRef.current.targetPitch = pitch;
+      setActiveStation(station);
+    };
+
+    const handlePointerLockChange = () => {
+      const locked = document.pointerLockElement === gl.domElement;
+      useCameraLookStore.getState().setFreeLookMode(locked);
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingInInput(e.target)) return;
 
+      // 1. Left Control (`ControlLeft`) Mode Toggle: Cursor Mode vs. Free-Look Mode
+      if (e.code === "ControlLeft") {
+        if (e.repeat) return;
+        e.preventDefault();
+        const currentlyLocked =
+          document.pointerLockElement === gl.domElement ||
+          useCameraLookStore.getState().isFreeLookMode;
+        if (currentlyLocked) {
+          if (document.pointerLockElement) {
+            document.exitPointerLock?.();
+          }
+          useCameraLookStore.getState().setFreeLookMode(false);
+        } else {
+          useCameraLookStore.getState().setFreeLookMode(true);
+          try {
+            const req = gl.domElement.requestPointerLock?.() as
+              | Promise<void>
+              | undefined;
+            req?.catch?.(() => {
+              // Keep logical Free-Look Mode active even if browser blocks raw pointer lock
+            });
+          } catch {
+            // Ignore pointer lock security exceptions
+          }
+        }
+        return;
+      }
+
       if (e.key === "1") {
         e.preventDefault();
-        setActiveStation("reactor");
+        syncStationPose("reactor");
       } else if (e.key === "2") {
         e.preventDefault();
-        setActiveStation("terminal");
+        syncStationPose("terminal");
       } else if (e.key === "3") {
         e.preventDefault();
-        setActiveStation("power");
+        syncStationPose("power");
       } else if (e.key === "4") {
         e.preventDefault();
-        setActiveStation("inspector");
-      } else if (e.key === "Escape" || e.key === "0") {
+        syncStationPose("inspector");
+      } else if (e.key === "0" || e.key === "Escape") {
         e.preventDefault();
-        setActiveStation("overview");
+        if (
+          e.key === "Escape" &&
+          useCameraLookStore.getState().isFreeLookMode
+        ) {
+          if (document.pointerLockElement) {
+            document.exitPointerLock?.();
+          }
+          useCameraLookStore.getState().setFreeLookMode(false);
+        }
+        syncStationPose("overview");
       } else if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") {
         lookStateRef.current.keysHeld.left = true;
       } else if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") {
@@ -124,98 +201,103 @@ export const CameraController: React.FC = () => {
       }
     };
 
-    const handlePointerMove = (e: PointerEvent) => {
-      // Do not shift the camera while the user is actively holding/dragging a 3D lever with Left-Click!
-      if ((e.buttons & 1) === 1) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const isFreeLook =
+        document.pointerLockElement === gl.domElement ||
+        useCameraLookStore.getState().isFreeLookMode;
+      if (!isFreeLook) return;
 
-      const nx = (e.clientX / Math.max(1, window.innerWidth)) * 2 - 1;
-      const ny = (e.clientY / Math.max(1, window.innerHeight)) * 2 - 1;
-      lookStateRef.current.pointerX = THREE.MathUtils.clamp(nx, -1, 1);
-      lookStateRef.current.pointerY = THREE.MathUtils.clamp(ny, -1, 1);
+      const look = lookStateRef.current;
+      look.targetYaw = THREE.MathUtils.clamp(
+        look.targetYaw - e.movementX * MOUSE_SENSITIVITY,
+        -MAX_YAW,
+        MAX_YAW,
+      );
+      look.targetPitch = THREE.MathUtils.clamp(
+        look.targetPitch - e.movementY * MOUSE_SENSITIVITY,
+        MIN_PITCH,
+        MAX_PITCH,
+      );
     };
 
+    document.addEventListener("pointerlockchange", handlePointerLockChange);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("mousemove", handleMouseMove);
     return () => {
+      document.removeEventListener(
+        "pointerlockchange",
+        handlePointerLockChange,
+      );
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [setActiveStation]);
+  }, [gl, setActiveStation]);
 
   useFrame((state, delta) => {
     const dt = Math.min(0.1, delta);
     const pose = STATION_CAMERA_POSES[activeStation];
     const look = lookStateRef.current;
 
-    if (activeStation === "overview") {
-      const yawSpeed = 1.4;
-      const pitchSpeed = 0.85;
-      if (look.keysHeld.left) look.keyYaw += yawSpeed * dt;
-      if (look.keysHeld.right) look.keyYaw -= yawSpeed * dt;
-      if (look.keysHeld.up) look.keyPitch += pitchSpeed * dt;
-      if (look.keysHeld.down) look.keyPitch -= pitchSpeed * dt;
+    const yawSpeed = 1.45;
+    const pitchSpeed = 1.05;
+    if (look.keysHeld.left) look.targetYaw += yawSpeed * dt;
+    if (look.keysHeld.right) look.targetYaw -= yawSpeed * dt;
+    if (look.keysHeld.up) look.targetPitch += pitchSpeed * dt;
+    if (look.keysHeld.down) look.targetPitch -= pitchSpeed * dt;
 
-      look.keyYaw = THREE.MathUtils.clamp(look.keyYaw, -0.75, 0.75);
-      look.keyPitch = THREE.MathUtils.clamp(look.keyPitch, -0.28, 0.28);
+    look.targetYaw = THREE.MathUtils.clamp(look.targetYaw, -MAX_YAW, MAX_YAW);
+    look.targetPitch = THREE.MathUtils.clamp(
+      look.targetPitch,
+      MIN_PITCH,
+      MAX_PITCH,
+    );
 
-      // Center deadzone keeps 3D levers rock-steady when aiming; outer screen edges + WASD turn the head
-      const edgeYaw = applyEdgeLookDeadzone(look.pointerX, 0.68) * 0.42;
-      const edgePitch = applyEdgeLookDeadzone(look.pointerY, 0.68) * 0.16;
+    look.currentYaw = THREE.MathUtils.damp(
+      look.currentYaw,
+      look.targetYaw,
+      14,
+      dt,
+    );
+    look.currentPitch = THREE.MathUtils.damp(
+      look.currentPitch,
+      look.targetPitch,
+      14,
+      dt,
+    );
 
-      const totalYaw = THREE.MathUtils.clamp(
-        look.keyYaw - edgeYaw,
-        -0.95,
-        0.95,
-      );
-      const totalPitch = THREE.MathUtils.clamp(
-        look.keyPitch - edgePitch,
-        -0.32,
-        0.32,
-      );
-
-      desiredPosRef.current.set(
-        pose.position[0] - totalYaw * 0.16,
-        pose.position[1] + totalPitch * 0.06,
-        pose.position[2],
-      );
-
-      const lookDist = 4.1;
-      desiredLookAtRef.current.set(
-        pose.position[0] - Math.sin(totalYaw) * lookDist,
-        pose.target[1] + totalPitch * 1.35,
-        pose.position[2] - Math.cos(totalYaw) * lookDist,
-      );
-    } else {
-      look.keyYaw = THREE.MathUtils.lerp(look.keyYaw, 0, dt * 6);
-      look.keyPitch = THREE.MathUtils.lerp(look.keyPitch, 0, dt * 6);
-
-      desiredPosRef.current.set(
-        pose.position[0] + look.pointerX * 0.008,
-        pose.position[1] - look.pointerY * 0.006,
-        pose.position[2],
-      );
-      desiredLookAtRef.current.set(
-        pose.target[0],
-        pose.target[1],
-        pose.target[2],
-      );
-    }
-
-    const smoothFactor = 1 - Math.exp(-8.5 * dt);
-    currentPosRef.current.lerp(desiredPosRef.current, smoothFactor);
-    currentLookAtRef.current.lerp(desiredLookAtRef.current, smoothFactor);
+    desiredPosRef.current.set(
+      pose.position[0],
+      pose.position[1],
+      pose.position[2],
+    );
+    currentPosRef.current.x = THREE.MathUtils.damp(
+      currentPosRef.current.x,
+      desiredPosRef.current.x,
+      8.5,
+      dt,
+    );
+    currentPosRef.current.y = THREE.MathUtils.damp(
+      currentPosRef.current.y,
+      desiredPosRef.current.y,
+      8.5,
+      dt,
+    );
+    currentPosRef.current.z = THREE.MathUtils.damp(
+      currentPosRef.current.z,
+      desiredPosRef.current.z,
+      8.5,
+      dt,
+    );
 
     state.camera.position.copy(currentPosRef.current);
-    state.camera.lookAt(currentLookAtRef.current);
+    state.camera.rotation.order = "YXZ";
+    state.camera.rotation.set(look.currentPitch, look.currentYaw, 0, "YXZ");
+    state.camera.rotation.z = 0;
 
     if (state.camera instanceof THREE.PerspectiveCamera) {
-      const nextFov = THREE.MathUtils.lerp(
-        state.camera.fov,
-        pose.fov,
-        smoothFactor,
-      );
+      const nextFov = THREE.MathUtils.damp(state.camera.fov, pose.fov, 8.5, dt);
       if (Math.abs(nextFov - state.camera.fov) > 0.02) {
         state.camera.fov = nextFov;
         state.camera.updateProjectionMatrix();

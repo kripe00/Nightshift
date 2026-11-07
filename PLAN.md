@@ -38,7 +38,7 @@ The entire game takes place inside a **100% physical first-person 3D control roo
 | - 3D "Pravda" dot-matrix printer  |   lamp spotlight & printer speed  |
 | - 3D tractor-feed paper meshes    | - 0 MW plunges the desk into dark |
 | - 3D KGB Security Manual '84      | - Rotating red #ff2a2a ceiling    |
-| - 3D UV Magnifying Glass lens     |   klaxon casts shadows in Redline |
+| - 3D 2x Optical Magnifying Glass  |   klaxon casts shadows in Redline |
 | - Animated 3D [APPROVE] / [SHRED] | - 60 FPS useFrame + getState()    |
 +-----------------------------------+-----------------------------------+
 ```
@@ -68,9 +68,9 @@ The entire game takes place inside a **100% physical first-person 3D control roo
 ### 🔍 Komrad Oleg's Domain (`src/modules/inspector/`)
 
 1. **`<InspectorDesk3D />` (`src/modules/inspector/`):**
-   - Physical 3D operator desk with a 3D desk lamp, 3D "Pravda" dot-matrix printer, 3D KGB Security Manual '84 binder that can be opened and paged through, a physical 3D UV magnifying glass, and two physical 3D rubber stamps (`[APPROVE]` and `[SHRED]`).
-   - Directives feed physically out of the 3D printer as 3D paper meshes (`#e6dec3`) onto the desk surface with procedurally generated `CanvasTexture`s in `Courier Prime`.
-   - The player grabs and moves the physical 3D UV magnifying glass in 3D space over the 3D paper; the 3D lens reveals hidden CIA watermarks and micro-text on the paper underneath.
+   - Physical 3D operator desk with a 3D desk lamp, 3D "Pravda-84" dot-matrix printer, 3D KGB Security Manual '84 booklet (`1. SEALS`, `2. FONTS & MINISTRIES`, `3. COLOURS`) that can be opened and paged through, a physical 3D **2x Optical Magnifying Glass** (straight zoom, no UV), and two physical 3D rubber stamps (`[APPROVE]` and `[SHRED]`).
+   - Directives feed physically out of the 3D printer as 3D paper meshes (`#d8d2c0` / `#e6dec3`) onto the desk surface with procedurally generated `CanvasTexture`s rendering official Soviet seals (`USSR_STATE_SEAL`, `MINSREDMASH_ATOM`, `KGB_SWORD_SHIELD`), typography (`GOST_MONO`, `PRAVDA_BLOCK`, or forbidden `WESTERN_SERIF` / `SLANTED_ITALIC`), paper tints, and ministry inks.
+   - The player grabs and moves the physical 3D **2x Optical Magnifying Glass** in 3D space over the 3D paper and manual; the 3D lens renders a straight 2x optical magnification of the seal's micro-print ring (`★ СССР • ГОССТАНДАРТ 84 ★` vs `★ CCCP-LATIN ★`), star points (5-pt vs 6-pt/4-pt), atomic orbits, and serif details.
    - Clicking with `[APPROVE]` or `[SHRED]` physically animates the 3D stamp down onto the 3D paper mesh, imprinting ink onto the document texture before archiving or feeding it into a 3D document shredder.
 
 ---
@@ -92,7 +92,7 @@ Each shift lasts ~3–4 minutes of real time (`00:00` to `06:00` in-game):
 
 * **Shift 1 (Orientation):** Calm reactor. The 3D Security Manual only requires checking **Valid Ministry Stamp** and **Date (`1984`)**.
 * **Shift 2 (Power Crunch):** Higher baseline heat—active 3D `SHIFT` clutch management required. Manual introduces **Authorization Codes**.
-* **Shift 3 (3D UV Lens & Watermarks):** CIA uses replica stamps. The operator must move the **3D UV Magnifying Glass** over 3D papers to inspect **Watermarks** and micro-text typos.
+* **Shift 3 (3D 2x Optical Lens & Micro-Print Seals):** CIA uses replica stamps with micro-defects. The operator must move the **3D 2x Optical Magnifying Glass** over 3D papers to inspect **Seal Micro-Rings**, star points, and typography serifs.
 * **Shift 4 (K.O.M.R.A.D.-84 Override):** The AI forcibly hijacks the Power Matrix to meet Five-Year Plan quotas. Balance blackouts in the dark while 3D directives accumulate.
 * **Shift 5 (Redline Finale):** Maximum crisis. Controlled overclocking in the *Redline* (`>100 MW`), multi-layered CIA forgeries, and continuous cooling until `06:00`.
 
@@ -170,7 +170,7 @@ export interface GameState {
 
 ### Phase 2: Parallel 3D Station Construction (`Komrad-Kristianov` & `Komrad-Oleg` branches)
 * **Komrad Kristianov:** Builds `<ReactorStation3D />` (3D gauges, rotary valves, hinged AZ-5, 3D `[SHIFT]` clutch & MW blocks) and `<TerminalStation3D />` (3D CRT mesh + `CanvasTexture`).
-* **Komrad Oleg:** Builds `<InspectorDesk3D />` (3D desk, Pravda printer, 3D tractor-feed paper directives, 3D KGB Security Manual, 3D UV magnifying glass, and animated 3D stamps).
+* **Komrad Oleg:** Builds `<InspectorDesk3D />` (3D desk, Pravda printer, 3D tractor-feed paper directives, 3D KGB Security Manual, 3D 2x optical magnifying glass, and animated 3D stamps).
 
 ### Phase 3: Soviet 3D Micro-Pixel Polish, Procedural Audio & Campaign (Shifts 1–5)
 * Refine `THREE.NearestFilter` pixel textures, 3D mechanical animations, Web Audio synth, and 30–40 directives + K.O.M.R.A.D.-84 voice lines.

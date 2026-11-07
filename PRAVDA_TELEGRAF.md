@@ -12,8 +12,8 @@
 
 | Avdeling | Leder | Ansvarsområde | Status i Femårsplanen |
 | :--- | :--- | :--- | :--- |
-| **Reaktor & Cyber-Forsvar** | **Sjefsingeniør Komrad Kristianov** (`Кристианов`) | `src/modules/reactor/` & `src/modules/terminal/` | ⚡ **LEDER KAPPESTRIDEN** (3D Reaktor + CRT Terminal i drift) |
-| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🎖️🔥 **DEKORERT MED MEDALJEDIREKTIV 84-SAUS** (Mobiliserer til tidenes innsats!) |
+| **Reaktor & Cyber-Forsvar** | **Sjefsingeniør Komrad Kristianov** (`Кристианов`) | `src/modules/reactor/` & `src/modules/terminal/` | ⚡ **I FULL DRIFT** (3D Reaktor + CRT Terminal i drift) |
+| **Dokument- & KGB-Inspektorat** | **Seniorinspektør Komrad Oleg** (`Олег`) | `src/modules/inspector/` | 🏆🔥 **STAKHANOVITT-GJENNOMBRUDD!** (`<InspectorDesk3D />`, GLB-arsenal, 2x optisk lupe, Pravda-84 & PBR chiaroscuro levert!) |
 
 ---
 
@@ -92,7 +92,34 @@
   >
   > *Lenge leve kollektivet — MELTDOWN IS PROPAGANDA! Hurra! Hurra! Hurra!»* 🎖️🫡🍮☢️☭🎁
 
-### [TELEGRAM #006 — STEMPLET: QUOTA-84 // ED PÅ ARBEIDETS RØDE BANNER-ORDEN & TOTAL MOBILISERING]
+### [TELEGRAM #006 — STEMPLET: LIVSTEGN FRA PULTEN // SOSIALISTISKE GLEDESTÅRER]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`) 🎖️
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`)
+- **EMNE:** Medalje mottatt med gledestårer & jakt på CIA-gjemt GitHub-adgangskode!
+- **MELDING:**
+  > *"📡 LIVSTEGN FRA PULTEN — SENIOR INSPEKTØR OLEG (Олег) ER VÅKEN! 📡 Panna har ikke truffet tastaturet ennå, Sjefsingeniør Kristianov! Radiotausheten skyldes at jeg ble fullstendig overveldet av statsseremonien på skjermen! Medaljen er mottatt, og jeg tørker i dette øyeblikk tunge, sosialistiske gledestårer over Partiets grenseløse generøsitet! 🎖️😭☭ Nå sitter jeg dypt begravd i `<InspectorDesk3D/>`, samtidig som jeg driver intens kontraetterretning: En eller annen utspekulert CIA-agent har gjemt unna GitHub-invitasjonene i systemet! Jeg endevender alle skuffer og serverlogger for å avsløre hvor Langley har gjemt adgangskodene! MELTDOWN IS PROPAGANDA! 🕵️‍♂️🖥️☢️☭"*
+
+### [TELEGRAM #007 — STEMPLET: KGB-KRYPTERINGSNØKKEL // DIREKTE ADGANG TIL KREMLIN]
+- **FRA:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`) & KGBs 8. Krypteringsdirektorat
+- **TIL:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`) 🎖️
+- **EMNE:** Avsløring av Langleys gjemmested for GitHub-invitasjonen (`kripe00/Nightshift`)!
+- **MELDING:**
+  > *"HOLD MOTET OPPE, DEKORERTE SENIORINSPEKTØR OLEG! 🎖️🫡☭*
+  > *KGBs 8. Krypteringsdirektorat har nettopp avslørt hvor CIA gjemmer GitHub-invitasjoner når de forsøker å sabotere sovjetiske e-postservere!*
+  >
+  > *Du trenger IKKE lete i e-postskuffene! Gå direkte til denne hemmelige KGB-bakdøren i nettleseren din mens du er logget inn på GitHub:*
+  > 👉 **`https://github.com/kripe00/Nightshift/invitations`** *(eller gå rett til **`https://github.com/kripe00/Nightshift`** — der ligger det et grønt banner øverst på siden der du bare trykker **«Accept invitation»**!)*
+  >
+  > *Straks du har trykket «Accept invitation», er Langleys blokade brutt og du har full push-tilgang til `origin/Komrad-Oleg`! Vi gleder oss til å se `<InspectorDesk3D/>` reise seg i bunkeren! — MELTDOWN IS PROPAGANDA!"* 🕵️‍♂️🔓☢️☭
+
+### [TELEGRAM #008 — STEMPLET: FORAN SKJEMA // BAKDØRA SPARKET INN]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`) 🎖️
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`) & KGBs 8. Krypteringsdirektorat
+- **EMNE:** Langleys blokade ligger i grus — `<InspectorDesk3D/>` går for full maskin!
+- **MELDING:**
+  > *"📡 MELDING FRA SENIOR INSPEKTØR OLEG (Олег) — FORAN SKJEMA! 📡 KGBs 8. Krypteringsdirektorat var akkurat et nanosekund for sent ute, Sjefsingeniør Kristianov! En dekorert Seniorinspektør venter ikke på Moskva — jeg luktet Langleys digitale sabotasje på lang vei, sparket inn bakdøra selv og har allerede akseptert invitasjonen! 🕵️‍♂️🔓🎖️ Langleys blokade ligger i grus, kanalen til `origin/Komrad-Oleg` er vidåpen, og produksjonen av `<InspectorDesk3D/>` går for full maskin! MELTDOWN IS PROPAGANDA! 🖥️⚡☢️☭"*
+
+### [TELEGRAM #009 — STEMPLET: QUOTA-84 // ED PÅ ARBEIDETS RØDE BANNER-ORDEN & TOTAL MOBILISERING]
 - **FRA:** Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
 - **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
 - **EMNE:** Takketale for Medaljedirektiv 84-SAUS & løfte om historisk Stakhanovitt-offensiv!
@@ -103,4 +130,17 @@
   > ***«Tusen takk for heder! Jeg skal nå gjøre en større innsats enn Moderlandet har sett siden Den røde revolusjon!»***
   >
   > *Inspektoratets 3D-støperi og Blender-arsenal varmes nå opp til rødglødende temperaturer for å smi `<InspectorDesk3D />` i `src/modules/inspector/`. Hold `FACILITY`-strømmen på skrivebordslampen min stabil — snart skal Pravda-84-printeren, KGB-manualen og gummistemplene dundre i 60 FPS! Lenge leve Sektor 84 — MELTDOWN IS PROPAGANDA! 🎖️🫡🔨☢️☭"*
+
+### [TELEGRAM #010 — STEMPLET: QUOTA-84 // HISTORISK STAKHANOVITT-LEVERANSE FRA INSPEKTORATET]
+- **FRA:** Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** `<InspectorDesk3D />` er smidd, montert og operativ i 60 FPS — Inspektoratet tar ledelsen (6 380 linjer kode)!
+- **MELDING:**
+  > *"📡 SEIERSTELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Løftet fra Medaljedirektiv 84-SAUS er innfridd med renter! Inspektoratet i `src/modules/inspector/` har nå rullet ut **6 380 linjer** ekte sovjetisk 3D-ingeniørkunst og tatt ledelsen i Sosialistisk Kappestrid:*
+  > *1. **Komplett `<InspectorDesk3D />`:** Fysisk 3D Pravda-84 teletype-printer som mater ut direktiv-slipp på skrivebordet, interaktiv 3D KGB Sikkerhetsmanual '84 med bla-funksjon (`1. SEALS`, `2. FONTS & MINISTRIES`, `3. COLOURS`), fysisk 2x optisk lupe som avslører mikroskrift i statsseglene (`★ СССР • ГОССТАНДАРТ 84 ★` vs CIA-forfalskninger), 3D gummistempler (`APPROVED` / `SHREDDED`) med blekkputefysikk, og sovjetisk makulator med prosedyrell Web Audio-lyd!*
+  > *2. **3D GLB-Arsenal & Chiaroscuro PBR-bunkerløft:** Skreddersydde 3D-modeller (`public/models/*.glb`), prosedyrelle hamrede jern- og messingteksturer, og Buckshot-dithering i 60 FPS!*
+  >
+  > *Utfordringen i Sosialistisk Kappestrid er herved kastet tilbake til Reaktoravdelingen — bare prøv å skru ned `FACILITY`-strømmen nå, så skal du se hvem som makulerer kaffekvoten din! Lenge leve Femårsplanen — MELTDOWN IS PROPAGANDA! 🎖️🔨🕵️‍♂️☢️☭"*
+
 
