@@ -1,5 +1,6 @@
+import { useGLTF } from "@react-three/drei";
 import { type ThreeEvent, useFrame } from "@react-three/fiber";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import * as InspectorModule from "../modules/inspector";
 import { ReactorStation3D } from "../modules/reactor";
@@ -12,8 +13,13 @@ import {
   updateSoundtrackState,
 } from "../modules/reactor/soundtrackPlayer";
 import { TerminalStation3D } from "../modules/terminal";
-import { CameraController } from "./CameraController";
-import type { CameraStation } from "./types";
+import { BuckshotDitherPass } from "./BuckshotDitherPass";
+import { CameraController, useCameraLookStore } from "./CameraController";
+import {
+  applySovietPBRToHierarchy,
+  getBrushedBrassTextures,
+  getHammeredIronTextures,
+} from "./proceduralMaterials";
 import { useGameStore } from "./useGameStore";
 
 const ExternalInspectorDesk3D = Reflect.get(
@@ -596,30 +602,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
     [],
   );
 
-  const stationButtonTextures = useMemo(() => {
-    const specs: Array<{ station: CameraStation; text: string }> = [
-      { station: "overview", text: "[0/ESC] CHAIR" },
-      { station: "reactor", text: "[1] REACTOR" },
-      { station: "terminal", text: "[2] TERMINAL" },
-      { station: "power", text: "[3] SHIFT MW" },
-      { station: "inspector", text: "[4] DESK" },
-    ];
-    return specs.map((item) => ({
-      ...item,
-      texture: createNearestCanvasTexture(160, 44, (ctx, w, h) => {
-        ctx.fillStyle = "#23312b";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#141414";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(2, 2, w - 4, h - 4);
-        ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 18px "VT323", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText(item.text, w / 2, 28);
-      }),
-    }));
-  }, []);
-
   useFrame(() => {
     const s = useGameStore.getState();
 
@@ -637,7 +619,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
       );
     }
 
-    const sig = `${s.phase}|${s.shiftNumber}|${Math.floor(s.shiftTimeMinutes)}|${Math.round(s.coreTemp)}|${s.treasonStrikes}|${s.isShiftKeyHeld}|${s.isGodMode}|${s.lastDecisionFeedback ?? ""}`;
+    const isFreeLookMode = useCameraLookStore.getState().isFreeLookMode;
+    const sig = `${s.phase}|${s.shiftNumber}|${Math.floor(s.shiftTimeMinutes)}|${Math.round(s.coreTemp)}|${s.treasonStrikes}|${s.isShiftKeyHeld}|${s.isGodMode}|${isFreeLookMode}|${s.lastDecisionFeedback ?? ""}`;
     const hTex = headerMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (hTex && hTex.userData.lastSig !== sig) {
       hTex.userData.lastSig = sig;
@@ -652,13 +635,25 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
         ctx.strokeRect(2, 2, 764, 92);
 
         ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 22px "Kremlin", monospace';
+        ctx.font = 'bold 20px "Kremlin", monospace';
         ctx.textAlign = "left";
         ctx.fillText(
-          "MELTDOWN IS PROPAGANDA // SECTOR 84 — PLANT NO. 4",
+          "MELTDOWN IS PROPAGANDA // SECTOR 84",
           18,
           30,
         );
+
+        ctx.fillStyle = isFreeLookMode ? "#ffb000" : "#33ff66";
+        ctx.font = 'bold 19px "VT323", monospace';
+        ctx.textAlign = "right";
+        ctx.fillText(
+          isFreeLookMode
+            ? "[L-CTRL] РЕЖИМ: ОБЗОР (FREE-LOOK)"
+            : "[L-CTRL] РЕЖИМ: КУРСОР (CURSOR)",
+          750,
+          30,
+        );
+        ctx.textAlign = "left";
 
         ctx.fillStyle = s.coreTemp >= 750 ? "#ff2a2a" : "#33ff66";
         ctx.font = 'bold 22px "VT323", monospace';
@@ -676,12 +671,147 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
             : s.phase !== "playing"
               ? `SHIFT ENDED (${s.phase.toUpperCase()}) — PULL 3D MAIN BREAKER LEVER TO RESET!`
               : (s.lastDecisionFeedback ??
-                "CAMERA: [1-4] STATION ZOOM | [0/ESC] CHAIR | MOUSE/WASD LOOK | [F2] DEBUG");
+                "CAMERA: [1-4] STATION ZOOM | [0/ESC] CHAIR | [L-CTRL] FREE-LOOK/CURSOR | [F2] DEBUG");
         ctx.fillText(statusLine.slice(0, 88), 18, 84);
         hTex.needsUpdate = true;
       }
     }
   });
+
+  const [auxToggles, setAuxToggles] = useState<[boolean, boolean, boolean, boolean]>([
+    true,
+    true,
+    false,
+    false,
+  ]);
+  const [syncDialAngles, setSyncDialAngles] = useState<[number, number]>([0.4, -0.3]);
+  const rightNeedleRefs = useRef<Array<THREE.Group | null>>([null, null, null]);
+  const rightStatusMatRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  const rightPanelGroupRef = useRef<THREE.Group>(null);
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+  const brassTex = useMemo(() => getBrushedBrassTextures(), []);
+
+  // Load High-Detail Soviet `.glb` Control Panel & Mainframe Hardware from `public/models/`
+  const terminalHousingGltf = useGLTF("./models/komrad_terminal_housing.glb");
+  const controlPanelsGltf = useGLTF("./models/control_panels.glb");
+
+  const terminalHousingModel = useMemo(() => {
+    const cloned = terminalHousingGltf.scene.clone(true);
+    applySovietPBRToHierarchy(cloned);
+    return cloned;
+  }, [terminalHousingGltf.scene]);
+
+  const reactorHardwareModel = useMemo(() => {
+    const cloned =
+      controlPanelsGltf.scene
+        .getObjectByName("reactor_hardware")
+        ?.clone(true) ?? null;
+    applySovietPBRToHierarchy(cloned);
+    return cloned;
+  }, [controlPanelsGltf.scene]);
+
+  const rightPanelHardwareModel = useMemo(() => {
+    const cloned =
+      controlPanelsGltf.scene
+        .getObjectByName("right_panel_hardware")
+        ?.clone(true) ?? null;
+    applySovietPBRToHierarchy(cloned);
+    return cloned;
+  }, [controlPanelsGltf.scene]);
+
+  useEffect(() => {
+    applySovietPBRToHierarchy(rightPanelGroupRef.current);
+  }, []);
+
+  const rightHeaderPlateTex = useMemo(
+    () =>
+      createNearestCanvasTexture(512, 72, (ctx, w, h) => {
+        ctx.fillStyle = "#141414";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#b8a46b";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(3, 3, w - 6, h - 6);
+        ctx.fillStyle = "#ffb000";
+        ctx.font = 'bold 22px "Kremlin", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("ЩИТ УПРАВЛЕНИЯ БЛОКОМ Б // UNIT B", w / 2, 30);
+        ctx.fillStyle = "#33ff66";
+        ctx.font = 'bold 18px "VT323", monospace';
+        ctx.fillText("ТУРБИНЫ №1/№2 • СИНХРОНИЗАЦИЯ СЕТИ • ГЛАВНЫЙ РУБИЛЬНИК", w / 2, 56);
+      }),
+    [],
+  );
+
+  const rightStatusTex = useMemo(() => createNearestCanvasTexture(512, 96), []);
+
+  const rightGaugeDialTextures = useMemo(() => {
+    const specs = [
+      { title: "ТУРБИНА №1", unit: "0-3000 RPM" },
+      { title: "ТУРБИНА №2", unit: "0-160 МПа" },
+      { title: "СЕТЬ 50 ГЦ", unit: "0-400 КВ" },
+    ];
+    return specs.map((sp) =>
+      createNearestCanvasTexture(256, 256, (ctx, w, h) => {
+        const cx = w / 2;
+        const cy = h / 2;
+        ctx.fillStyle = "#e6dec3";
+        ctx.beginPath();
+        ctx.arc(cx, cy, 118, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#141414";
+        ctx.lineWidth = 8;
+        ctx.stroke();
+
+        for (let i = 0; i <= 20; i++) {
+          const ang = Math.PI * 0.75 + (i / 20) * Math.PI * 1.5;
+          const r1 = i % 5 === 0 ? 86 : 96;
+          const r2 = 110;
+          ctx.strokeStyle = i >= 15 ? "#ff2a2a" : "#141414";
+          ctx.lineWidth = i % 5 === 0 ? 4 : 2;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
+          ctx.lineTo(cx + Math.cos(ang) * r2, cy + Math.sin(ang) * r2);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = "#141414";
+        ctx.font = 'bold 20px "Courier Prime", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText(sp.title, cx, cy - 30);
+        ctx.fillStyle = "#8b1e1e";
+        ctx.font = 'bold 16px "VT323", monospace';
+        ctx.fillText(sp.unit, cx, cy + 56);
+      }),
+    );
+  }, []);
+
+  const pushButtonSpecs = useMemo(() => {
+    const items = [
+      { id: 0, label: "ОХЛАЖДЕНИЕ", sub: "AUX COOL", color: "#33ff66" },
+      { id: 1, label: "ВЕНТИЛЯЦИЯ", sub: "VENTING", color: "#33ff66" },
+      { id: 2, label: "СВЯЗЬ КГБ", sub: "KGB LINE", color: "#ffb000" },
+      { id: 3, label: "СИРЕНА", sub: "TEST ALARM", color: "#ff2a2a" },
+      { id: 4, label: "АУДИО [M]", sub: "MUTE SFX", color: "#ffb000" },
+    ];
+    return items.map((item) => ({
+      ...item,
+      texture: createNearestCanvasTexture(128, 56, (ctx, w, h) => {
+        ctx.fillStyle = "#141414";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.fillStyle = item.color;
+        ctx.font = 'bold 14px "Courier Prime", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText(item.label, w / 2, 24);
+        ctx.fillStyle = "#e6dec3";
+        ctx.font = 'bold 14px "VT323", monospace';
+        ctx.fillText(item.sub, w / 2, 44);
+      }),
+    }));
+  }, []);
 
   const handleBreakerUp = (e: ThreeEvent<PointerEvent>) => {
     if (!breakerDragRef.current.active) return;
@@ -702,12 +832,76 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
     }
   };
 
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    const s = useGameStore.getState();
+    const totalMW =
+      s.powerAllocation.cooling +
+      s.powerAllocation.defense +
+      s.powerAllocation.facility;
+
+    // Animate 3 Right-Side Analog Gauge Needles (Turbine 1 RPM, Turbine 2 MPa, Grid 50Hz kV)
+    const ratios = [
+      s.isBlackout ? 0.08 : Math.min(1, totalMW / 140 + Math.sin(t * 6.5) * 0.025),
+      s.isBlackout ? 0.12 : Math.min(1, s.pressureBar / 120 + Math.cos(t * 5.2) * 0.02),
+      s.isBlackout ? 0.05 : Math.min(1, 0.62 + (totalMW - 90) / 220 + Math.sin(t * 9.1) * 0.03),
+    ];
+    ratios.forEach((r, idx) => {
+      const grp = rightNeedleRefs.current[idx];
+      if (grp) {
+        const targetRot = Math.PI * 0.72 - r * Math.PI * 1.44;
+        grp.rotation.z = THREE.MathUtils.lerp(grp.rotation.z, targetRot, 0.18);
+      }
+    });
+
+    // Update Right Control Panel Digital Telemetry Strip
+    const rSig = `${s.phase}|${totalMW}|${s.pressureBar}|${s.isMusicMuted}|${auxToggles.join(",")}`;
+    const rTex = rightStatusMatRef.current?.map as THREE.CanvasTexture | undefined;
+    if (rTex && rTex.userData.lastSig !== rSig) {
+      rTex.userData.lastSig = rSig;
+      const canvas = rTex.image as HTMLCanvasElement;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.fillStyle = "#061a0c";
+        ctx.fillRect(0, 0, 512, 96);
+        ctx.strokeStyle = "#364940";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, 508, 92);
+
+        const rpm = s.isBlackout ? 0 : Math.round(2850 + totalMW * 1.5);
+        const gridKv = s.isBlackout ? 0 : Math.round(330 + (totalMW - 90) * 0.4);
+        ctx.fillStyle = s.phase === "playing" ? "#33ff66" : "#ffb000";
+        ctx.font = 'bold 22px "VT323", monospace';
+        ctx.fillText(
+          `ТУРБИНА №1: ${rpm} RPM | СЕТЬ: ${gridKv} КВ (50.0 ГЦ) | БЛОК: ${s.phase.toUpperCase()}`,
+          14,
+          34,
+        );
+        ctx.fillStyle = s.isMusicMuted ? "#ff2a2a" : "#ffb000";
+        ctx.fillText(
+          `АУДИО [M]: ${s.isMusicMuted ? "ОТКЛ (MUTED)" : "ВКЛ (ACTIVE)"} | ВЕНТ: ${auxToggles[1] ? "НОРМА" : "СТОП"} | КГБ-ЛИНИЯ: ${auxToggles[2] ? "ШИФР" : "ДЕЖУР."}`,
+          14,
+          62,
+        );
+        ctx.fillStyle = "#e6dec3";
+        ctx.font = 'bold 16px "Courier Prime", monospace';
+        ctx.fillText(
+          "ТЯНИ ГЛАВНЫЙ РУБИЛЬНИК СПРАВА ИЛИ НАЖМИ [SPACE] ДЛЯ ПУСКА",
+          14,
+          85,
+        );
+        rTex.needsUpdate = true;
+      }
+    }
+  });
+
   return (
     <>
-      {/* Overhead Bulkhead Telemetry Marquee (Positioned forward & above the CRT cabinet so nothing ever clips it) */}
-      <group position={[0, 2.38, -1.36]} rotation={[0.14, 0, 0]}>
+      {/* Overhead Bulkhead Telemetry Marquee (Pulled forward directly above the closer K.O.M.R.A.D.-84 CRT terminal) */}
+      <group position={[0, 2.48, 0.48]} rotation={[0.16, 0, 0]}>
         <mesh>
-          <boxGeometry args={[2.68, 0.36, 0.08]} />
+          <boxGeometry args={[2.56, 0.34, 0.08]} />
           <meshStandardMaterial
             color="#141414"
             roughness={0.75}
@@ -715,7 +909,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
           />
         </mesh>
         <mesh position={[0, 0, 0.042]}>
-          <planeGeometry args={[2.6, 0.32]} />
+          <planeGeometry args={[2.48, 0.3]} />
           <meshStandardMaterial
             ref={headerMatRef}
             map={headerTexture}
@@ -728,113 +922,678 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
         </mesh>
       </group>
 
-      {/* Operator Chair Front Control Rail (Tilted +0.52 rad toward the camera at +Z) */}
-      <group position={[0, 0.86, 1.22]} rotation={[0.52, 0, 0]}>
-        <mesh>
-          <boxGeometry args={[1.48, 0.09, 0.24]} />
+      {/* ============================================================
+          3. NEW RIGHT-SIDE SOVIET CONTROL PANEL WING (<RightControlPanel3D />)
+          Positioned at a TRUE 90° angle on the operator's RIGHT SIDE
+          (x: +1.96, z: 2.35, rotation.y = -Math.PI / 2 = -90° directly facing the chair!)
+         ============================================================ */}
+      <group
+        ref={rightPanelGroupRef}
+        position={[1.96, 0.04, 2.35]}
+        rotation={[0, -Math.PI / 2, 0]}
+      >
+        {rightPanelHardwareModel && (
+          <primitive object={rightPanelHardwareModel} />
+        )}
+        {/* Main Right-Wing Steel Cabinet Body (Mirrors Left ReactorStation3D) */}
+        <mesh position={[0, 1.12, -0.18]} castShadow receiveShadow>
+          <boxGeometry args={[1.66, 2.24, 0.42]} />
           <meshStandardMaterial
             color="#23312b"
-            roughness={0.7}
-            metalness={0.45}
+            roughness={0.45}
+            metalness={0.65}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+            roughnessMap={ironTex.roughnessMap}
+          />
+        </mesh>
+        <mesh position={[0, 1.12, -0.22]} castShadow receiveShadow>
+          <boxGeometry args={[1.74, 2.32, 0.36]} />
+          <meshStandardMaterial
+            color="#141414"
+            roughness={0.5}
+            metalness={0.6}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+            roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
 
-        {stationButtonTextures.map((btn, idx) => (
-          <group
-            key={btn.station}
-            position={[-0.54 + idx * 0.22, 0.052, 0.02]}
-            onClick={(e) => {
-              e.stopPropagation();
-              playSwitchClank(false);
-              useGameStore.getState().setActiveStation(btn.station);
-            }}
-          >
-            <mesh>
-              <boxGeometry args={[0.19, 0.028, 0.085]} />
-              <meshStandardMaterial color="#141414" roughness={0.6} />
-            </mesh>
-            <mesh position={[0, 0.016, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[0.18, 0.075]} />
+        {/* Heavy Stepped Bevel Plates, Welded Seams, Corner L-Angle Iron Trim & Hex Bolts */}
+        <mesh position={[-0.84, 1.12, 0.032]} castShadow receiveShadow>
+          <boxGeometry args={[0.042, 2.26, 0.036]} />
+          <meshStandardMaterial
+            color="#18211b"
+            metalness={0.7}
+            roughness={0.42}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+          />
+        </mesh>
+        <mesh position={[0.84, 1.12, 0.032]} castShadow receiveShadow>
+          <boxGeometry args={[0.042, 2.26, 0.036]} />
+          <meshStandardMaterial
+            color="#18211b"
+            metalness={0.7}
+            roughness={0.42}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+          />
+        </mesh>
+        {[0.32, 0.76, 1.28, 1.64, 2.04].map((by, bIdx) => (
+          <group key={bIdx}>
+            <mesh
+              position={[-0.84, by, 0.054]}
+              rotation={[Math.PI / 2, 0, 0]}
+              castShadow
+            >
+              <cylinderGeometry args={[0.012, 0.012, 0.014, 6]} />
               <meshStandardMaterial
-                map={btn.texture}
-                emissive="#ffffff"
-                emissiveMap={btn.texture}
-                emissiveIntensity={0.35}
-                roughness={0.8}
+                color="#b8a46b"
+                metalness={0.85}
+                roughness={0.28}
+                bumpMap={brassTex.bumpMap}
+                bumpScale={0.005}
+              />
+            </mesh>
+            <mesh
+              position={[0.84, by, 0.054]}
+              rotation={[Math.PI / 2, 0, 0]}
+              castShadow
+            >
+              <cylinderGeometry args={[0.012, 0.012, 0.014, 6]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.85}
+                roughness={0.28}
+                bumpMap={brassTex.bumpMap}
+                bumpScale={0.005}
               />
             </mesh>
           </group>
         ))}
 
-        {/* 3D Main Breaker Lever with Stenciled Plaque */}
-        <group
-          position={[0.56, 0.06, 0.01]}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            breakerDragRef.current = {
-              active: true,
-              startY: e.nativeEvent.clientY,
-              progress: useGameStore.getState().phase === "playing" ? 1 : 0,
-            };
-            const domElem = e.nativeEvent.target as Element | null;
-            domElem?.setPointerCapture?.(e.pointerId);
-          }}
-          onPointerMove={(e) => {
-            if (!breakerDragRef.current.active) return;
-            e.stopPropagation();
-            const dy = e.nativeEvent.clientY - breakerDragRef.current.startY;
-            const next = THREE.MathUtils.clamp(dy / 70, 0, 1);
-            breakerDragRef.current.progress = next;
-          }}
-          onPointerUp={handleBreakerUp}
-          onLostPointerCapture={handleBreakerUp}
-        >
-          <mesh position={[0, 0.026, 0.068]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.22, 0.058]} />
+        {/* Top Riveted Cyrillic Header Plaque: ЩИТ УПРАВЛЕНИЯ БЛОКОМ Б */}
+        <mesh position={[0, 2.16, 0.035]}>
+          <planeGeometry args={[1.48, 0.16]} />
+          <meshStandardMaterial
+            map={rightHeaderPlateTex}
+            emissive="#ffffff"
+            emissiveMap={rightHeaderPlateTex}
+            emissiveIntensity={0.35}
+            roughness={0.75}
+          />
+        </mesh>
+
+        {/* 3 Recessed Cylindrical Analog Voltmeters & Turbine Pressure Gauges with Glass Reflections */}
+        <group position={[0, 1.84, 0.03]}>
+          {[0, 1, 2].map((gIdx) => (
+            <group key={gIdx} position={[-0.5 + gIdx * 0.5, 0, 0]}>
+              <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+                <cylinderGeometry args={[0.185, 0.2, 0.09, 14]} />
+                <meshStandardMaterial
+                  color="#141414"
+                  roughness={0.45}
+                  metalness={0.65}
+                  bumpMap={ironTex.bumpMap}
+                  bumpScale={0.008}
+                />
+              </mesh>
+              {/* Brushed-brass bezel ring */}
+              <mesh
+                position={[0, 0, 0.044]}
+                rotation={[Math.PI / 2, 0, 0]}
+                castShadow
+              >
+                <cylinderGeometry args={[0.174, 0.182, 0.012, 14]} />
+                <meshStandardMaterial
+                  color="#8c7a4b"
+                  roughness={0.28}
+                  metalness={0.85}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+              <mesh position={[0, 0, 0.048]}>
+                <circleGeometry args={[0.165, 16]} />
+                <meshStandardMaterial
+                  map={rightGaugeDialTextures[gIdx]}
+                  roughness={0.8}
+                />
+              </mesh>
+              <group
+                ref={(el) => {
+                  rightNeedleRefs.current[gIdx] = el;
+                }}
+                position={[0, 0, 0.055]}
+              >
+                <mesh position={[0, 0.05, 0]}>
+                  <boxGeometry args={[0.014, 0.12, 0.008]} />
+                  <meshStandardMaterial
+                    color="#ff2a2a"
+                    emissive="#ff2a2a"
+                    emissiveIntensity={0.25}
+                  />
+                </mesh>
+                <mesh rotation={[Math.PI / 2, 0, 0]}>
+                  <cylinderGeometry args={[0.022, 0.022, 0.018, 10]} />
+                  <meshStandardMaterial
+                    color="#b8a46b"
+                    roughness={0.28}
+                    metalness={0.85}
+                  />
+                </mesh>
+              </group>
+              {/* Subtle Glass Reflection Cover */}
+              <mesh position={[0, 0, 0.06]}>
+                <circleGeometry args={[0.164, 16]} />
+                <meshStandardMaterial
+                  color="#d8f0e2"
+                  transparent
+                  opacity={0.14}
+                  roughness={0.15}
+                  metalness={0.2}
+                />
+              </mesh>
+              {/* Top Indicator Lamp */}
+              <mesh position={[0, 0.215, 0.03]}>
+                <sphereGeometry args={[0.02, 8, 8]} />
+                <meshStandardMaterial
+                  color={gIdx === 2 ? "#ffb000" : "#33ff66"}
+                  emissive={gIdx === 2 ? "#ffb000" : "#33ff66"}
+                  emissiveIntensity={0.65}
+                />
+              </mesh>
+            </group>
+          ))}
+        </group>
+
+        {/* Digital Telemetry Readout Strip */}
+        <mesh position={[0, 1.46, 0.04]}>
+          <planeGeometry args={[1.48, 0.23]} />
+          <meshStandardMaterial
+            ref={rightStatusMatRef}
+            map={rightStatusTex}
+            color="#ffffff"
+            emissive="#ffffff"
+            emissiveMap={rightStatusTex}
+            emissiveIntensity={0.65}
+            roughness={0.85}
+          />
+        </mesh>
+
+        {/* Middle Row: 2 Rotary Grid Synchronization Dials (Left/Center) + Heavy 3D MAIN BREAKER Lever (Right) */}
+        <group position={[0, 1.0, 0.04]}>
+          {[0, 1].map((dIdx) => (
+            <group
+              key={dIdx}
+              position={[-0.52 + dIdx * 0.46, 0, 0.01]}
+              onClick={(e) => {
+                e.stopPropagation();
+                playLeverRatchet(0.6 + dIdx * 0.2);
+                setSyncDialAngles((prev) => {
+                  const next: [number, number] = [...prev] as [number, number];
+                  next[dIdx] += 0.55;
+                  return next;
+                });
+              }}
+            >
+              <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+                <cylinderGeometry args={[0.13, 0.145, 0.05, 14]} />
+                <meshStandardMaterial
+                  color="#141414"
+                  roughness={0.45}
+                  metalness={0.65}
+                  bumpMap={ironTex.bumpMap}
+                  bumpScale={0.008}
+                />
+              </mesh>
+              <group
+                position={[0, 0, 0.038]}
+                rotation={[0, 0, syncDialAngles[dIdx]]}
+              >
+                <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+                  <cylinderGeometry args={[0.09, 0.105, 0.045, 12]} />
+                  <meshStandardMaterial
+                    color="#2b1a12"
+                    roughness={0.52}
+                    metalness={0.3}
+                  />
+                </mesh>
+                <mesh position={[0, 0.045, 0.025]} castShadow>
+                  <boxGeometry args={[0.018, 0.075, 0.016]} />
+                  <meshStandardMaterial color="#ffb000" roughness={0.4} />
+                </mesh>
+              </group>
+            </group>
+          ))}
+
+          {/* Heavy 3D MAIN BREAKER Lever (`ГЛАВНЫЙ РУБИЛЬНИК`) Mounted on Right Panel */}
+          <group
+            position={[0.42, 0, 0.02]}
+            onPointerDown={(e) => {
+              if (useCameraLookStore.getState().isFreeLookMode) return;
+              e.stopPropagation();
+              breakerDragRef.current = {
+                active: true,
+                startY: e.nativeEvent.clientY,
+                progress: useGameStore.getState().phase === "playing" ? 1 : 0,
+              };
+              const domElem = e.nativeEvent.target as Element | null;
+              domElem?.setPointerCapture?.(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              if (!breakerDragRef.current.active) return;
+              e.stopPropagation();
+              const dy = e.nativeEvent.clientY - breakerDragRef.current.startY;
+              const next = THREE.MathUtils.clamp(dy / 70, 0, 1);
+              breakerDragRef.current.progress = next;
+            }}
+            onPointerUp={handleBreakerUp}
+            onLostPointerCapture={handleBreakerUp}
+          >
+            <mesh position={[0, 0.21, 0.01]}>
+              <planeGeometry args={[0.42, 0.09]} />
+              <meshStandardMaterial
+                map={breakerPlateTex}
+                emissive="#ffffff"
+                emissiveMap={breakerPlateTex}
+                emissiveIntensity={0.45}
+                roughness={0.8}
+              />
+            </mesh>
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[0.3, 0.3, 0.07]} />
+              <meshStandardMaterial
+                color="#141414"
+                roughness={0.45}
+                metalness={0.65}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.008}
+              />
+            </mesh>
+            <group ref={breakerArmRef} position={[0, 0, 0.04]}>
+              <mesh
+                position={[-0.06, 0, 0.09]}
+                rotation={[Math.PI / 2, 0, 0]}
+                castShadow
+              >
+                <cylinderGeometry args={[0.014, 0.014, 0.18, 8]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.85}
+                  roughness={0.28}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+              <mesh
+                position={[0.06, 0, 0.09]}
+                rotation={[Math.PI / 2, 0, 0]}
+                castShadow
+              >
+                <cylinderGeometry args={[0.014, 0.014, 0.18, 8]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.85}
+                  roughness={0.28}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+              <mesh position={[0, 0, 0.18]} castShadow>
+                <boxGeometry args={[0.22, 0.062, 0.062]} />
+                <meshStandardMaterial
+                  color="#ff2a2a"
+                  emissive="#ff2a2a"
+                  emissiveIntensity={0.55}
+                  roughness={0.35}
+                />
+              </mesh>
+            </group>
+          </group>
+        </group>
+
+        {/* Lower Row: 5 Tactile Backlit Soviet Push-Buttons & Toggle Switches */}
+        <group position={[0, 0.52, 0.04]}>
+          <mesh position={[0, 0, -0.01]} castShadow receiveShadow>
+            <boxGeometry args={[1.48, 0.34, 0.04]} />
             <meshStandardMaterial
-              map={breakerPlateTex}
-              emissive="#ffffff"
-              emissiveMap={breakerPlateTex}
-              emissiveIntensity={0.4}
-              roughness={0.8}
+              color="#141414"
+              roughness={0.45}
+              metalness={0.65}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
             />
           </mesh>
-          <mesh position={[0, 0, -0.02]}>
-            <boxGeometry args={[0.11, 0.05, 0.14]} />
-            <meshStandardMaterial color="#141414" roughness={0.8} />
+          {pushButtonSpecs.map((btn, idx) => {
+            const isOn =
+              idx === 4
+                ? !useGameStore.getState().isMusicMuted
+                : auxToggles[idx] ?? false;
+            return (
+              <group
+                key={btn.id}
+                position={[-0.56 + idx * 0.28, -0.02, 0.025]}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  playSwitchClank(false);
+                  if (idx === 4) {
+                    useGameStore.getState().toggleMusicMute();
+                  } else {
+                    setAuxToggles((prev) => {
+                      const next: [boolean, boolean, boolean, boolean] = [
+                        ...prev,
+                      ] as [boolean, boolean, boolean, boolean];
+                      next[idx] = !next[idx];
+                      return next;
+                    });
+                  }
+                }}
+              >
+                {/* Indicator Lamp above button */}
+                <mesh position={[0, 0.11, 0]}>
+                  <sphereGeometry args={[0.022, 8, 8]} />
+                  <meshStandardMaterial
+                    color={isOn ? btn.color : "#1c2621"}
+                    emissive={isOn ? btn.color : "#000000"}
+                    emissiveIntensity={isOn ? 1.2 : 0}
+                    roughness={0.3}
+                  />
+                </mesh>
+                {/* Chunky Push-Button Housing */}
+                <mesh
+                  position={[0, 0, isOn ? 0.008 : 0.02]}
+                  castShadow
+                  receiveShadow
+                >
+                  <boxGeometry args={[0.22, 0.11, 0.04]} />
+                  <meshStandardMaterial
+                    color="#23312b"
+                    roughness={0.45}
+                    metalness={0.65}
+                    bumpMap={ironTex.bumpMap}
+                    bumpScale={0.008}
+                  />
+                </mesh>
+                <mesh position={[0, 0, isOn ? 0.03 : 0.042]}>
+                  <planeGeometry args={[0.2, 0.095]} />
+                  <meshStandardMaterial
+                    map={btn.texture}
+                    emissive="#ffffff"
+                    emissiveMap={btn.texture}
+                    emissiveIntensity={isOn ? 0.55 : 0.22}
+                    roughness={0.75}
+                  />
+                </mesh>
+              </group>
+            );
+          })}
+        </group>
+
+        {/* Heavy Armored Cable Conduits connecting Right Panel into the Inspector's Desk */}
+        <group position={[-0.78, 0.62, 0.24]} rotation={[0, 0.42, 0]}>
+          <mesh
+            position={[0, 0.12, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.036, 0.036, 0.58, 10]} />
+            <meshStandardMaterial
+              color="#364940"
+              metalness={0.7}
+              roughness={0.4}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
           </mesh>
-          <group ref={breakerArmRef} position={[0, 0.03, -0.02]}>
-            <mesh position={[0, 0.055, 0]}>
-              <cylinderGeometry args={[0.01, 0.01, 0.11, 8]} />
+          <mesh
+            position={[0, -0.02, 0.08]}
+            rotation={[0, 0, Math.PI / 2]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.028, 0.028, 0.58, 10]} />
+            <meshStandardMaterial
+              color="#23312b"
+              metalness={0.65}
+              roughness={0.45}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+          {/* Brass Conduit Flanges */}
+          <mesh
+            position={[-0.24, 0.12, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.048, 0.048, 0.024, 12]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.85}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+          <mesh
+            position={[-0.24, -0.02, 0.08]}
+            rotation={[0, 0, Math.PI / 2]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.04, 0.04, 0.024, 12]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.85}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+        </group>
+      </group>
+
+      {/* 4. HIGH-DETAIL `.GLB` HARDWARE OVERLAYS & BEVELED ANGLE-IRON SEAMS FOR REACTOR & K.O.M.R.A.D.-84 TERMINAL */}
+      {reactorHardwareModel && (
+        <group position={[-1.96, 0.04, 2.35]} rotation={[0, Math.PI / 2, 0]}>
+          <primitive object={reactorHardwareModel} />
+          {/* Left Panel Beveled L-Angle Iron Trim & Hex Bolt Rows */}
+          <mesh position={[-0.84, 1.12, 0.032]} castShadow receiveShadow>
+            <boxGeometry args={[0.042, 2.26, 0.036]} />
+            <meshStandardMaterial
+              color="#18211b"
+              metalness={0.7}
+              roughness={0.42}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+          <mesh position={[0.84, 1.12, 0.032]} castShadow receiveShadow>
+            <boxGeometry args={[0.042, 2.26, 0.036]} />
+            <meshStandardMaterial
+              color="#18211b"
+              metalness={0.7}
+              roughness={0.42}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+          {[0.32, 0.76, 1.28, 1.64, 2.04].map((by, bIdx) => (
+            <group key={bIdx}>
+              <mesh
+                position={[-0.84, by, 0.054]}
+                rotation={[Math.PI / 2, 0, 0]}
+                castShadow
+              >
+                <cylinderGeometry args={[0.012, 0.012, 0.014, 6]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.85}
+                  roughness={0.28}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+              <mesh
+                position={[0.84, by, 0.054]}
+                rotation={[Math.PI / 2, 0, 0]}
+                castShadow
+              >
+                <cylinderGeometry args={[0.012, 0.012, 0.014, 6]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.85}
+                  roughness={0.28}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      )}
+      <group position={[0, 0.14, 2.18]}>
+        <group position={[0, 0, -1.62]}>
+          <primitive object={terminalHousingModel} />
+          {/* Heavy Welded Corner L-Angle Trim & Recessed Bezel Bolts on K.O.M.R.A.D.-84 Mainframe */}
+          <mesh position={[-0.85, 1.02, 0.04]} castShadow receiveShadow>
+            <boxGeometry args={[0.045, 2.04, 0.045]} />
+            <meshStandardMaterial
+              color="#18211b"
+              metalness={0.68}
+              roughness={0.44}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+          <mesh position={[0.85, 1.02, 0.04]} castShadow receiveShadow>
+            <boxGeometry args={[0.045, 2.04, 0.045]} />
+            <meshStandardMaterial
+              color="#18211b"
+              metalness={0.68}
+              roughness={0.44}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+          {[-0.68, -0.34, 0, 0.34, 0.68].map((bx, idx) => (
+            <mesh
+              key={idx}
+              position={[bx, 1.94, 0.145]}
+              rotation={[Math.PI / 2, 0, 0]}
+              castShadow
+            >
+              <cylinderGeometry args={[0.013, 0.013, 0.016, 6]} />
               <meshStandardMaterial
                 color="#b8a46b"
-                metalness={0.8}
-                roughness={0.3}
+                metalness={0.85}
+                roughness={0.28}
+                bumpMap={brassTex.bumpMap}
+                bumpScale={0.005}
               />
             </mesh>
-            <mesh position={[0, 0.11, 0]}>
-              <boxGeometry args={[0.12, 0.038, 0.038]} />
-              <meshStandardMaterial
-                color="#ff2a2a"
-                emissive="#ff2a2a"
-                emissiveIntensity={0.45}
-                roughness={0.4}
-              />
-            </mesh>
-          </group>
+          ))}
         </group>
       </group>
     </>
   );
 };
 
+/**
+ * Suspended Bunker Dust Motes (120 slow-drifting micro-pixel dust particles floating
+ * lazily inside the overhead spotlight cone above the Inspector's Desk)
+ */
+const BunkerDustMotes3D: React.FC = () => {
+  const pointsRef = useRef<THREE.Points>(null);
+
+  const { positions, seeds } = useMemo(() => {
+    const count = 120;
+    const posArr = new Float32Array(count * 3);
+    const seedArr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const s1 = Math.sin(i * 12.9898 + 1.23) * 43758.5453;
+      const s2 = Math.sin(i * 78.233 + 4.56) * 43758.5453;
+      const s3 = Math.sin(i * 39.425 + 7.89) * 43758.5453;
+      const u1 = s1 - Math.floor(s1);
+      const u2 = s2 - Math.floor(s2);
+      const u3 = s3 - Math.floor(s3);
+
+      // Distributed within the spotlight cone above the desk
+      const heightRatio = u2; // 0 (near desk) to 1 (near lamp)
+      const maxRadius = 0.25 + (1 - heightRatio) * 0.95;
+      const angle = u1 * Math.PI * 2;
+      const r = Math.sqrt(u3) * maxRadius;
+
+      posArr[i * 3] = Math.cos(angle) * r;
+      posArr[i * 3 + 1] = 0.85 + heightRatio * 1.45;
+      posArr[i * 3 + 2] = 1.48 + Math.sin(angle) * r * 0.72;
+
+      seedArr[i * 3] = u1 * Math.PI * 2;
+      seedArr[i * 3 + 1] = 0.35 + u2 * 0.65;
+      seedArr[i * 3 + 2] = u3 * Math.PI * 2;
+    }
+    return { positions: posArr, seeds: seedArr };
+  }, []);
+
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    return geo;
+  }, [positions]);
+
+  useFrame(({ clock }) => {
+    if (!pointsRef.current) return;
+    const t = clock.getElapsedTime();
+    const posAttr = pointsRef.current.geometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
+    const arr = posAttr.array as Float32Array;
+    for (let i = 0; i < 120; i++) {
+      const phase = seeds[i * 3];
+      const speed = seeds[i * 3 + 1];
+      const phaseZ = seeds[i * 3 + 2];
+
+      arr[i * 3] += Math.sin(t * 0.42 * speed + phase) * 0.0005;
+      arr[i * 3 + 1] += Math.cos(t * 0.31 * speed + phaseZ) * 0.00035;
+      arr[i * 3 + 2] += Math.sin(t * 0.37 * speed + phaseZ) * 0.0004;
+
+      if (arr[i * 3 + 1] > 2.35) arr[i * 3 + 1] = 0.85;
+      if (arr[i * 3 + 1] < 0.82) arr[i * 3 + 1] = 2.32;
+    }
+    posAttr.needsUpdate = true;
+  });
+
+  return (
+    <points ref={pointsRef} geometry={geometry}>
+      <pointsMaterial
+        color="#ffe3b8"
+        size={0.016}
+        transparent
+        opacity={0.48}
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
+  );
+};
+
 const DynamicBunkerLighting: React.FC = () => {
-  const deskSpotRef = useRef<THREE.PointLight>(null);
+  const deskSpotRef = useRef<THREE.SpotLight>(null);
+  const deskSpotTargetRef = useRef<THREE.Object3D>(null);
   const deskBulbMeshRef = useRef<THREE.Mesh>(null);
+  const reactorSpotRef = useRef<THREE.PointLight>(null);
+  const az5GlowRef = useRef<THREE.PointLight>(null);
   const crtLightRef = useRef<THREE.PointLight>(null);
   const klaxonLightRef = useRef<THREE.PointLight>(null);
   const klaxonSpinnerRef = useRef<THREE.Group>(null);
   const klaxonLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  useEffect(() => {
+    if (deskSpotRef.current && deskSpotTargetRef.current) {
+      deskSpotRef.current.target = deskSpotTargetRef.current;
+      deskSpotTargetRef.current.updateMatrixWorld();
+    }
+  }, []);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
@@ -859,14 +1618,28 @@ const DynamicBunkerLighting: React.FC = () => {
       } else if (powerAllocation.facility <= 10) {
         const heavyFlicker =
           Math.sin(t * 37) * 0.35 + Math.cos(t * 63) * 0.25 > 0.1 ? 0.2 : 0.95;
-        deskSpotRef.current.intensity = 1.8 * heavyFlicker;
+        deskSpotRef.current.intensity = 1.9 * heavyFlicker;
       } else if (powerAllocation.facility <= 20) {
         const subtleFlicker = 0.88 + Math.sin(t * 24) * 0.12;
-        deskSpotRef.current.intensity = 3.0 * subtleFlicker;
+        deskSpotRef.current.intensity = 2.8 * subtleFlicker;
       } else {
-        const boost = Math.min(1.6, powerAllocation.facility / 30);
-        deskSpotRef.current.intensity = 3.8 * boost;
+        const boost = Math.min(1.35, powerAllocation.facility / 30);
+        deskSpotRef.current.intensity = 3.2 * boost;
       }
+    }
+
+    if (reactorSpotRef.current) {
+      reactorSpotRef.current.intensity = isBlackout
+        ? 0.35
+        : 2.1 + Math.sin(t * 17.0) * 0.08;
+    }
+
+    if (az5GlowRef.current) {
+      az5GlowRef.current.intensity = isBlackout
+        ? 0.3
+        : isAlarmActive
+          ? 1.45 + Math.sin(t * 12.0) * 0.35
+          : 0.85;
     }
 
     if (deskBulbMeshRef.current) {
@@ -874,14 +1647,14 @@ const DynamicBunkerLighting: React.FC = () => {
         .material as THREE.MeshStandardMaterial;
       const lampOn = !isBlackout && powerAllocation.facility > 0;
       mat.emissiveIntensity = lampOn
-        ? Math.min(2.4, 0.6 + (powerAllocation.facility / 40) * 1.6)
+        ? Math.min(2.6, 0.7 + (powerAllocation.facility / 40) * 1.7)
         : 0.02;
     }
 
     if (crtLightRef.current) {
-      crtLightRef.current.intensity = isBlackout ? 1.2 : 2.2;
+      crtLightRef.current.intensity = isBlackout ? 0.55 : 0.9;
       crtLightRef.current.color.set(
-        komradOverrideLocked || ciaIntrusionActive ? "#ff2a2a" : "#33ff66",
+        komradOverrideLocked || ciaIntrusionActive ? "#ff2a2a" : "#38ff62",
       );
     }
 
@@ -896,7 +1669,7 @@ const DynamicBunkerLighting: React.FC = () => {
     if (klaxonLightRef.current) {
       if (isAlarmActive) {
         const wave = (Math.sin(t * 9.0) + 1) * 0.5;
-        klaxonLightRef.current.intensity = 1.4 + wave * 6.5;
+        klaxonLightRef.current.intensity = 1.6 + wave * 7.2;
       } else {
         klaxonLightRef.current.intensity = 0;
       }
@@ -905,52 +1678,105 @@ const DynamicBunkerLighting: React.FC = () => {
 
   return (
     <>
-      <ambientLight intensity={0.62} color="#c5d4c8" />
-      <hemisphereLight args={["#526b5b", "#101411", 0.65]} />
-      <directionalLight
-        position={[-1.5, 2.8, 1.5]}
-        intensity={0.85}
-        color="#ffe7ba"
-      />
+      {/* 1. Crushed Flat Ambient Light & Subtle Hemisphere Fill for Deep Chiaroscuro Bunker Shadows */}
+      <ambientLight intensity={0.06} color="#0a120e" />
+      <hemisphereLight args={["#1a2822", "#050706", 0.18]} />
 
-      {/* Center K.O.M.R.A.D.-84 CRT Phosphor Light */}
+      {/* 2. Overhead Bunker Pendulum Lamp (Shadow-Casting SpotLight with Smooth Penumbra) */}
+      <group position={[0, -0.164, 1.48]}>
+        <object3D ref={deskSpotTargetRef} position={[0, 0.92, 0.04]} />
+        <spotLight
+          ref={deskSpotRef}
+          castShadow
+          position={[0, 2.5, 0.2]}
+          angle={0.68}
+          penumbra={0.85}
+          intensity={3.2}
+          distance={7}
+          decay={1.15}
+          color="#ffe3b8"
+          shadow-bias={-0.0005}
+          shadow-mapSize={[1024, 1024]}
+        />
+
+        {/* Heavy Industrial Enamel & Brass Pendulum Lamp Fixture */}
+        <group position={[0, 2.52, 0.2]}>
+          {/* Steel suspension rod to bunker ceiling */}
+          <mesh position={[0, 0.35, 0]}>
+            <cylinderGeometry args={[0.014, 0.014, 0.65, 8]} />
+            <meshStandardMaterial
+              color="#18211b"
+              metalness={0.75}
+              roughness={0.4}
+            />
+          </mesh>
+          <mesh position={[0, 0.08, 0]}>
+            <cylinderGeometry args={[0.048, 0.24, 0.18, 16]} />
+            <meshStandardMaterial
+              color="#23312b"
+              roughness={0.42}
+              metalness={0.68}
+            />
+          </mesh>
+          <mesh position={[0, -0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.24, 0.01, 8, 20]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.85}
+              roughness={0.28}
+            />
+          </mesh>
+          <mesh ref={deskBulbMeshRef} position={[0, -0.01, 0]}>
+            <sphereGeometry args={[0.055, 10, 10]} />
+            <meshStandardMaterial
+              color="#ffcf75"
+              emissive="#ffaa33"
+              emissiveIntensity={1.4}
+            />
+          </mesh>
+        </group>
+      </group>
+
+      {/* Suspended Bunker Dust Motes floating lazily inside the overhead spotlight cone */}
+      <BunkerDustMotes3D />
+
+      {/* 3. CRT & Gauge Diegetic Glow:
+          Local phosphor-green pointLight in front of K.O.M.R.A.D.-84 screen illuminating 3D keycaps & rear brass trim */}
       <pointLight
         ref={crtLightRef}
-        position={[0, 1.4, -0.9]}
-        color="#33ff66"
-        intensity={2.2}
-        distance={5.0}
-        decay={1.5}
+        position={[0, 1.48, 0.86]}
+        color="#38ff62"
+        intensity={0.9}
+        distance={1.6}
+        decay={1.4}
       />
 
-      {/* Right Desk Tungsten Lamp (FACILITY Power-Linked, zero shadow-cubemap overhead) */}
+      {/* Warm Amber/Red Diegetic Glow near the АЗ-5 Emergency Button & Left Reactor Gauges */}
       <pointLight
-        ref={deskSpotRef}
-        position={[1.82, 1.92, -0.68]}
-        color="#ffbe6b"
-        intensity={3.4}
-        distance={6.0}
-        decay={1.3}
+        ref={az5GlowRef}
+        position={[-1.68, 1.05, 1.85]}
+        color="#ff3b1f"
+        intensity={0.85}
+        distance={1.6}
+        decay={1.4}
+      />
+      <pointLight
+        ref={reactorSpotRef}
+        position={[-1.38, 1.92, 2.35]}
+        color="#ffba5c"
+        intensity={2.2}
+        distance={4.8}
+        decay={1.4}
       />
 
-      <group position={[2.02, 1.96, -0.95]} rotation={[0.18, -0.42, -0.12]}>
-        <mesh position={[0, 0.14, 0]}>
-          <cylinderGeometry args={[0.04, 0.18, 0.16, 10]} />
-          <meshStandardMaterial
-            color="#23312b"
-            roughness={0.5}
-            metalness={0.6}
-          />
-        </mesh>
-        <mesh ref={deskBulbMeshRef} position={[0, 0.04, 0]}>
-          <sphereGeometry args={[0.055, 8, 8]} />
-          <meshStandardMaterial
-            color="#ffcf75"
-            emissive="#ffaa33"
-            emissiveIntensity={1.2}
-          />
-        </mesh>
-      </group>
+      {/* Right Control Wing Local Gauge & Breaker Pool Light */}
+      <pointLight
+        position={[1.38, 1.92, 2.35]}
+        color="#ffba5c"
+        intensity={2.2}
+        distance={4.8}
+        decay={1.4}
+      />
 
       {/* Ceiling Rotating Redline / Meltdown Klaxon Beacon (#ff2a2a — Dark when nominal, blazes red during alarm) */}
       <group position={[0, 2.86, -0.6]}>
@@ -988,20 +1814,35 @@ const DynamicBunkerLighting: React.FC = () => {
 };
 
 export const ControlRoomScene: React.FC = () => {
+  const bunkerArchRef = useRef<THREE.Group>(null);
+  const reactorWrapRef = useRef<THREE.Group>(null);
+  const terminalWrapRef = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    applySovietPBRToHierarchy(bunkerArchRef.current);
+    applySovietPBRToHierarchy(reactorWrapRef.current);
+    applySovietPBRToHierarchy(terminalWrapRef.current);
+  }, []);
+
   return (
     <>
-      <color attach="background" args={["#080b09"]} />
-      <fog attach="fog" args={["#080b09", 4.8, 10.5]} />
+      <color attach="background" args={["#050706"]} />
+      <fog attach="fog" args={["#050706", 4.2, 10.0]} />
 
       <CameraController />
+      <BuckshotDitherPass />
       <DynamicBunkerLighting />
       <BunkerTelemetryAndControlRail3D />
 
       {/* ============================================================
           SOVIET BUNKER ARCHITECTURE (WALLS, FLOOR, CEILING, PIPES)
          ============================================================ */}
-      <group>
-        <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <group ref={bunkerArchRef}>
+        <mesh
+          position={[0, -0.02, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          receiveShadow
+        >
           <planeGeometry args={[10, 9]} />
           <meshStandardMaterial
             color="#141414"
@@ -1010,7 +1851,11 @@ export const ControlRoomScene: React.FC = () => {
           />
         </mesh>
 
-        <mesh position={[0, 0.005, 0.4]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh
+          position={[0, 0.005, 0.4]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          receiveShadow
+        >
           <planeGeometry args={[5.4, 4.2]} />
           <meshStandardMaterial
             color="#23312b"
@@ -1019,7 +1864,7 @@ export const ControlRoomScene: React.FC = () => {
           />
         </mesh>
 
-        <mesh position={[0, 1.6, -2.35]}>
+        <mesh position={[0, 1.6, -2.35]} receiveShadow>
           <boxGeometry args={[9.2, 3.6, 0.25]} />
           <meshStandardMaterial
             color="#23312b"
@@ -1028,7 +1873,11 @@ export const ControlRoomScene: React.FC = () => {
           />
         </mesh>
 
-        <mesh position={[-3.55, 1.6, -0.2]} rotation={[0, Math.PI / 2.35, 0]}>
+        <mesh
+          position={[-3.55, 1.6, -0.2]}
+          rotation={[0, Math.PI / 2.35, 0]}
+          receiveShadow
+        >
           <boxGeometry args={[6.4, 3.6, 0.25]} />
           <meshStandardMaterial
             color="#1c2621"
@@ -1036,7 +1885,11 @@ export const ControlRoomScene: React.FC = () => {
             metalness={0.25}
           />
         </mesh>
-        <mesh position={[3.55, 1.6, -0.2]} rotation={[0, -Math.PI / 2.35, 0]}>
+        <mesh
+          position={[3.55, 1.6, -0.2]}
+          rotation={[0, -Math.PI / 2.35, 0]}
+          receiveShadow
+        >
           <boxGeometry args={[6.4, 3.6, 0.25]} />
           <meshStandardMaterial
             color="#1c2621"
@@ -1054,7 +1907,7 @@ export const ControlRoomScene: React.FC = () => {
           />
         </mesh>
         {[-1.6, -0.4, 0.8, 2.0].map((zPos) => (
-          <mesh key={zPos} position={[0, 2.94, zPos]}>
+          <mesh key={zPos} position={[0, 2.94, zPos]} castShadow receiveShadow>
             <boxGeometry args={[8.5, 0.14, 0.18]} />
             <meshStandardMaterial
               color="#141414"
@@ -1065,7 +1918,12 @@ export const ControlRoomScene: React.FC = () => {
         ))}
 
         {/* Industrial Coolant Pipe placed high against the back wall so it never intersects the overhead telemetry board */}
-        <mesh position={[0, 2.78, -2.18]} rotation={[0, 0, Math.PI / 2]}>
+        <mesh
+          position={[0, 2.78, -2.18]}
+          rotation={[0, 0, Math.PI / 2]}
+          castShadow
+          receiveShadow
+        >
           <cylinderGeometry args={[0.09, 0.09, 7.6, 12]} />
           <meshStandardMaterial
             color="#364940"
@@ -1075,13 +1933,25 @@ export const ControlRoomScene: React.FC = () => {
         </mesh>
       </group>
 
-      {/* 1. LEFT 3D STATION: <ReactorStation3D /> */}
-      <ReactorStation3D />
+      {/* 1. LEFT COCKPIT WING: <ReactorStation3D /> (True 90° angle on left side at [-1.96, 0.04, 2.35], rotation.y = +Math.PI / 2!) */}
+      <group
+        ref={reactorWrapRef}
+        position={[-1.96, 0.04, 2.35]}
+        rotation={[0, Math.PI / 2, 0]}
+      >
+        <group rotation={[0, -0.42, 0]}>
+          <group position={[2.15, 0, 1.08]}>
+            <ReactorStation3D />
+          </group>
+        </group>
+      </group>
 
-      {/* 2. CENTER 3D STATION: <TerminalStation3D /> */}
-      <TerminalStation3D />
+      {/* 2. CENTER COCKPIT LOOMING TERMINAL: <TerminalStation3D /> (Pulled forward directly behind & above desk) */}
+      <group ref={terminalWrapRef} position={[0, 0.14, 2.18]}>
+        <TerminalStation3D />
+      </group>
 
-      {/* 3. RIGHT 3D STATION: <InspectorDesk3D /> */}
+      {/* 3. CENTRAL COMMAND DESK: <InspectorDesk3D /> */}
       {ExternalInspectorDesk3D ? (
         <ExternalInspectorDesk3D />
       ) : (
