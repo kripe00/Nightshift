@@ -1,20 +1,21 @@
 import { useGLTF } from "@react-three/drei";
-import { type ThreeEvent, useFrame } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import * as InspectorModule from "../modules/inspector";
-import { ReactorStation3D } from "../modules/reactor";
 import {
   playLeverRatchet,
   playSwitchClank,
 } from "../modules/reactor/audioSynth";
-import {
-  startSoundtrack,
-  updateSoundtrackState,
-} from "../modules/reactor/soundtrackPlayer";
 import { TerminalStation3D } from "../modules/terminal";
 import { BuckshotDitherPass } from "./BuckshotDitherPass";
 import { CameraController, useCameraLookStore } from "./CameraController";
+import {
+  CagedSovietJewelLamp3D,
+  HighDetailKnifeBreaker3D,
+  HighDetailManometer3D,
+  HighDetailReactorPanel3D,
+} from "./MechanicalPanels3D";
 import {
   applySovietPBRToHierarchy,
   getBrushedBrassTextures,
@@ -685,7 +686,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
     false,
   ]);
   const [syncDialAngles, setSyncDialAngles] = useState<[number, number]>([0.4, -0.3]);
-  const rightNeedleRefs = useRef<Array<THREE.Group | null>>([null, null, null]);
   const rightStatusMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
   const rightPanelGroupRef = useRef<THREE.Group>(null);
@@ -745,47 +745,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
 
   const rightStatusTex = useMemo(() => createNearestCanvasTexture(512, 96), []);
 
-  const rightGaugeDialTextures = useMemo(() => {
-    const specs = [
-      { title: "ТУРБИНА №1", unit: "0-3000 RPM" },
-      { title: "ТУРБИНА №2", unit: "0-160 МПа" },
-      { title: "СЕТЬ 50 ГЦ", unit: "0-400 КВ" },
-    ];
-    return specs.map((sp) =>
-      createNearestCanvasTexture(256, 256, (ctx, w, h) => {
-        const cx = w / 2;
-        const cy = h / 2;
-        ctx.fillStyle = "#e6dec3";
-        ctx.beginPath();
-        ctx.arc(cx, cy, 118, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "#141414";
-        ctx.lineWidth = 8;
-        ctx.stroke();
-
-        for (let i = 0; i <= 20; i++) {
-          const ang = Math.PI * 0.75 + (i / 20) * Math.PI * 1.5;
-          const r1 = i % 5 === 0 ? 86 : 96;
-          const r2 = 110;
-          ctx.strokeStyle = i >= 15 ? "#ff2a2a" : "#141414";
-          ctx.lineWidth = i % 5 === 0 ? 4 : 2;
-          ctx.beginPath();
-          ctx.moveTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
-          ctx.lineTo(cx + Math.cos(ang) * r2, cy + Math.sin(ang) * r2);
-          ctx.stroke();
-        }
-
-        ctx.fillStyle = "#141414";
-        ctx.font = 'bold 20px "Courier Prime", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText(sp.title, cx, cy - 30);
-        ctx.fillStyle = "#8b1e1e";
-        ctx.font = 'bold 16px "VT323", monospace';
-        ctx.fillText(sp.unit, cx, cy + 56);
-      }),
-    );
-  }, []);
-
   const pushButtonSpecs = useMemo(() => {
     const items = [
       { id: 0, label: "ОХЛАЖДЕНИЕ", sub: "AUX COOL", color: "#33ff66" },
@@ -813,46 +772,12 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
     }));
   }, []);
 
-  const handleBreakerUp = (e: ThreeEvent<PointerEvent>) => {
-    if (!breakerDragRef.current.active) return;
-    e.stopPropagation();
-    breakerDragRef.current.active = false;
-    const domElem = e.nativeEvent.target as Element | null;
-    if (domElem?.hasPointerCapture?.(e.pointerId)) {
-      domElem.releasePointerCapture(e.pointerId);
-    }
-    const s = useGameStore.getState();
-    playSwitchClank(true);
-    startSoundtrack();
-    updateSoundtrackState(false, s.isMusicMuted);
-    if (s.phase === "boot") {
-      s.startShift();
-    } else if (s.phase !== "playing") {
-      s.resetShift();
-    }
-  };
-
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
+  useFrame(() => {
     const s = useGameStore.getState();
     const totalMW =
       s.powerAllocation.cooling +
       s.powerAllocation.defense +
       s.powerAllocation.facility;
-
-    // Animate 3 Right-Side Analog Gauge Needles (Turbine 1 RPM, Turbine 2 MPa, Grid 50Hz kV)
-    const ratios = [
-      s.isBlackout ? 0.08 : Math.min(1, totalMW / 140 + Math.sin(t * 6.5) * 0.025),
-      s.isBlackout ? 0.12 : Math.min(1, s.pressureBar / 120 + Math.cos(t * 5.2) * 0.02),
-      s.isBlackout ? 0.05 : Math.min(1, 0.62 + (totalMW - 90) / 220 + Math.sin(t * 9.1) * 0.03),
-    ];
-    ratios.forEach((r, idx) => {
-      const grp = rightNeedleRefs.current[idx];
-      if (grp) {
-        const targetRot = Math.PI * 0.72 - r * Math.PI * 1.44;
-        grp.rotation.z = THREE.MathUtils.lerp(grp.rotation.z, targetRot, 0.18);
-      }
-    });
 
     // Update Right Control Panel Digital Telemetry Strip
     const rSig = `${s.phase}|${totalMW}|${s.pressureBar}|${s.isMusicMuted}|${auxToggles.join(",")}`;
@@ -1025,104 +950,89 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
           />
         </mesh>
 
-        {/* 3 Recessed Cylindrical Analog Voltmeters & Turbine Pressure Gauges with Glass Reflections */}
+        {/* 3 High-Res 16-Part Bolted Turbine & Grid Voltmeter Gauges */}
         <group position={[0, 1.84, 0.03]}>
-          {[0, 1, 2].map((gIdx) => (
-            <group key={gIdx} position={[-0.5 + gIdx * 0.5, 0, 0]}>
-              <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
-                <cylinderGeometry args={[0.185, 0.2, 0.09, 14]} />
-                <meshStandardMaterial
-                  color="#141414"
-                  roughness={0.45}
-                  metalness={0.65}
-                  bumpMap={ironTex.bumpMap}
-                  bumpScale={0.008}
-                />
-              </mesh>
-              {/* Brushed-brass bezel ring */}
-              <mesh
-                position={[0, 0, 0.044]}
-                rotation={[Math.PI / 2, 0, 0]}
-                castShadow
-              >
-                <cylinderGeometry args={[0.174, 0.182, 0.012, 14]} />
-                <meshStandardMaterial
-                  color="#8c7a4b"
-                  roughness={0.28}
-                  metalness={0.85}
-                  bumpMap={brassTex.bumpMap}
-                  bumpScale={0.005}
-                />
-              </mesh>
-              <mesh position={[0, 0, 0.048]}>
-                <circleGeometry args={[0.165, 16]} />
-                <meshStandardMaterial
-                  map={rightGaugeDialTextures[gIdx]}
-                  roughness={0.8}
-                />
-              </mesh>
-              <group
-                ref={(el) => {
-                  rightNeedleRefs.current[gIdx] = el;
-                }}
-                position={[0, 0, 0.055]}
-              >
-                <mesh position={[0, 0.05, 0]}>
-                  <boxGeometry args={[0.014, 0.12, 0.008]} />
-                  <meshStandardMaterial
-                    color="#ff2a2a"
-                    emissive="#ff2a2a"
-                    emissiveIntensity={0.25}
-                  />
-                </mesh>
-                <mesh rotation={[Math.PI / 2, 0, 0]}>
-                  <cylinderGeometry args={[0.022, 0.022, 0.018, 10]} />
-                  <meshStandardMaterial
-                    color="#b8a46b"
-                    roughness={0.28}
-                    metalness={0.85}
-                  />
-                </mesh>
-              </group>
-              {/* Subtle Glass Reflection Cover */}
-              <mesh position={[0, 0, 0.06]}>
-                <circleGeometry args={[0.164, 16]} />
-                <meshStandardMaterial
-                  color="#d8f0e2"
-                  transparent
-                  opacity={0.14}
-                  roughness={0.15}
-                  metalness={0.2}
-                />
-              </mesh>
-              {/* Top Indicator Lamp */}
-              <mesh position={[0, 0.215, 0.03]}>
-                <sphereGeometry args={[0.02, 8, 8]} />
-                <meshStandardMaterial
-                  color={gIdx === 2 ? "#ffb000" : "#33ff66"}
-                  emissive={gIdx === 2 ? "#ffb000" : "#33ff66"}
-                  emissiveIntensity={0.65}
-                />
-              </mesh>
-            </group>
-          ))}
+          <HighDetailManometer3D
+            position={[-0.51, 0, 0]}
+            title="ТУРБИНА №1"
+            cyrillicSub="ОБОРОТЫ РОТОРА"
+            unit="0-3500 RPM"
+            serial="№ 84-ТБ1"
+            min={0}
+            max={3500}
+            dangerThreshold={3100}
+            getValue={() => {
+              const s = useGameStore.getState();
+              if (s.isBlackout) return 180;
+              const mw =
+                s.powerAllocation.cooling +
+                s.powerAllocation.defense +
+                s.powerAllocation.facility;
+              return 2650 + mw * 4.5;
+            }}
+          />
+          <HighDetailManometer3D
+            position={[0, 0, 0]}
+            title="ТУРБИНА №2"
+            cyrillicSub="ДАВЛЕНИЕ ПАРА"
+            unit="0-160 МПа"
+            serial="№ 84-ТБ2"
+            min={0}
+            max={160}
+            dangerThreshold={125}
+            getValue={() => {
+              const s = useGameStore.getState();
+              return s.isBlackout ? 12 : s.pressureBar * 1.25;
+            }}
+          />
+          <HighDetailManometer3D
+            position={[0.51, 0, 0]}
+            title="СЕТЬ 50 ГЦ"
+            cyrillicSub="НАПРЯЖЕНИЕ СЕТИ"
+            unit="0-450 КВ"
+            serial="№ 84-ЭЛ3"
+            min={100}
+            max={450}
+            dangerThreshold={380}
+            getValue={() => {
+              const s = useGameStore.getState();
+              if (s.isBlackout) return 110;
+              const mw =
+                s.powerAllocation.cooling +
+                s.powerAllocation.defense +
+                s.powerAllocation.facility;
+              return 310 + (mw - 80) * 0.95;
+            }}
+          />
         </group>
 
-        {/* Digital Telemetry Readout Strip */}
-        <mesh position={[0, 1.46, 0.04]}>
-          <planeGeometry args={[1.48, 0.23]} />
-          <meshStandardMaterial
-            ref={rightStatusMatRef}
-            map={rightStatusTex}
-            color="#ffffff"
-            emissive="#ffffff"
-            emissiveMap={rightStatusTex}
-            emissiveIntensity={0.65}
-            roughness={0.85}
-          />
-        </mesh>
+        {/* Recessed Digital Telemetry Readout Strip */}
+        <group position={[0, 1.46, 0.03]}>
+          <mesh position={[0, 0, 0.008]} castShadow receiveShadow>
+            <boxGeometry args={[1.52, 0.25, 0.026]} />
+            <meshStandardMaterial
+              color="#141816"
+              roughness={0.42}
+              metalness={0.72}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+          <mesh position={[0, 0, 0.022]}>
+            <planeGeometry args={[1.46, 0.215]} />
+            <meshStandardMaterial
+              ref={rightStatusMatRef}
+              map={rightStatusTex}
+              color="#ffffff"
+              emissive="#ffffff"
+              emissiveMap={rightStatusTex}
+              emissiveIntensity={0.68}
+              roughness={0.75}
+            />
+          </mesh>
+        </group>
 
-        {/* Middle Row: 2 Rotary Grid Synchronization Dials (Left/Center) + Heavy 3D MAIN BREAKER Lever (Right) */}
+        {/* Middle Row: 2 Rotary Grid Synchronization Dials (Left/Center) + Heavy Multi-Part Copper Knife-Switch MAIN BREAKER (Right) */}
         <group position={[0, 1.0, 0.04]}>
           {[0, 1].map((dIdx) => (
             <group
@@ -1168,93 +1078,15 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
             </group>
           ))}
 
-          {/* Heavy 3D MAIN BREAKER Lever (`ГЛАВНЫЙ РУБИЛЬНИК`) Mounted on Right Panel */}
-          <group
-            position={[0.42, 0, 0.02]}
-            onPointerDown={(e) => {
-              if (useCameraLookStore.getState().isFreeLookMode) return;
-              e.stopPropagation();
-              breakerDragRef.current = {
-                active: true,
-                startY: e.nativeEvent.clientY,
-                progress: useGameStore.getState().phase === "playing" ? 1 : 0,
-              };
-              const domElem = e.nativeEvent.target as Element | null;
-              domElem?.setPointerCapture?.(e.pointerId);
-            }}
-            onPointerMove={(e) => {
-              if (!breakerDragRef.current.active) return;
-              e.stopPropagation();
-              const dy = e.nativeEvent.clientY - breakerDragRef.current.startY;
-              const next = THREE.MathUtils.clamp(dy / 70, 0, 1);
-              breakerDragRef.current.progress = next;
-            }}
-            onPointerUp={handleBreakerUp}
-            onLostPointerCapture={handleBreakerUp}
-          >
-            <mesh position={[0, 0.21, 0.01]}>
-              <planeGeometry args={[0.42, 0.09]} />
-              <meshStandardMaterial
-                map={breakerPlateTex}
-                emissive="#ffffff"
-                emissiveMap={breakerPlateTex}
-                emissiveIntensity={0.45}
-                roughness={0.8}
-              />
-            </mesh>
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[0.3, 0.3, 0.07]} />
-              <meshStandardMaterial
-                color="#141414"
-                roughness={0.45}
-                metalness={0.65}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.008}
-              />
-            </mesh>
-            <group ref={breakerArmRef} position={[0, 0, 0.04]}>
-              <mesh
-                position={[-0.06, 0, 0.09]}
-                rotation={[Math.PI / 2, 0, 0]}
-                castShadow
-              >
-                <cylinderGeometry args={[0.014, 0.014, 0.18, 8]} />
-                <meshStandardMaterial
-                  color="#b8a46b"
-                  metalness={0.85}
-                  roughness={0.28}
-                  bumpMap={brassTex.bumpMap}
-                  bumpScale={0.005}
-                />
-              </mesh>
-              <mesh
-                position={[0.06, 0, 0.09]}
-                rotation={[Math.PI / 2, 0, 0]}
-                castShadow
-              >
-                <cylinderGeometry args={[0.014, 0.014, 0.18, 8]} />
-                <meshStandardMaterial
-                  color="#b8a46b"
-                  metalness={0.85}
-                  roughness={0.28}
-                  bumpMap={brassTex.bumpMap}
-                  bumpScale={0.005}
-                />
-              </mesh>
-              <mesh position={[0, 0, 0.18]} castShadow>
-                <boxGeometry args={[0.22, 0.062, 0.062]} />
-                <meshStandardMaterial
-                  color="#ff2a2a"
-                  emissive="#ff2a2a"
-                  emissiveIntensity={0.55}
-                  roughness={0.35}
-                />
-              </mesh>
-            </group>
-          </group>
+          {/* Heavy Multi-Part Copper Knife-Switch MAIN BREAKER (`ГЛАВНЫЙ РУБИЛЬНИК`) */}
+          <HighDetailKnifeBreaker3D
+            breakerArmRef={breakerArmRef}
+            breakerDragRef={breakerDragRef}
+            breakerPlateTex={breakerPlateTex}
+          />
         </group>
 
-        {/* Lower Row: 5 Tactile Backlit Soviet Push-Buttons & Toggle Switches */}
+        {/* Lower Row: 5 Tactile Backlit Soviet Push-Buttons with Caged Jewel Indicator Lamps */}
         <group position={[0, 0.52, 0.04]}>
           <mesh position={[0, 0, -0.01]} castShadow receiveShadow>
             <boxGeometry args={[1.48, 0.34, 0.04]} />
@@ -1282,7 +1114,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
                     useGameStore.getState().toggleMusicMute();
                   } else {
                     setAuxToggles((prev) => {
-                      const next: [boolean, boolean, boolean, boolean] = [
+                      const next: [number, boolean, boolean, boolean] | [boolean, boolean, boolean, boolean] = [
                         ...prev,
                       ] as [boolean, boolean, boolean, boolean];
                       next[idx] = !next[idx];
@@ -1291,16 +1123,11 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
                   }
                 }}
               >
-                {/* Indicator Lamp above button */}
-                <mesh position={[0, 0.11, 0]}>
-                  <sphereGeometry args={[0.022, 8, 8]} />
-                  <meshStandardMaterial
-                    color={isOn ? btn.color : "#1c2621"}
-                    emissive={isOn ? btn.color : "#000000"}
-                    emissiveIntensity={isOn ? 1.2 : 0}
-                    roughness={0.3}
-                  />
-                </mesh>
+                <CagedSovietJewelLamp3D
+                  position={[0, 0.112, 0]}
+                  defaultColor={isOn ? btn.color : "#1c2621"}
+                  scale={0.76}
+                />
                 {/* Chunky Push-Button Housing */}
                 <mesh
                   position={[0, 0, isOn ? 0.008 : 0.02]}
@@ -1933,7 +1760,7 @@ export const ControlRoomScene: React.FC = () => {
         </mesh>
       </group>
 
-      {/* 1. LEFT COCKPIT WING: <ReactorStation3D /> (True 90° angle on left side at [-1.96, 0.04, 2.35], rotation.y = +Math.PI / 2!) */}
+      {/* 1. LEFT COCKPIT WING: <HighDetailReactorPanel3D /> (True 90° angle on left side at [-1.96, 0.04, 2.35], rotation.y = +Math.PI / 2!) */}
       <group
         ref={reactorWrapRef}
         position={[-1.96, 0.04, 2.35]}
@@ -1941,7 +1768,7 @@ export const ControlRoomScene: React.FC = () => {
       >
         <group rotation={[0, -0.42, 0]}>
           <group position={[2.15, 0, 1.08]}>
-            <ReactorStation3D />
+            <HighDetailReactorPanel3D />
           </group>
         </group>
       </group>
