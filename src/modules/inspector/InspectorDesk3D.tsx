@@ -14,6 +14,7 @@ import { useGameStore } from '../../shared/useGameStore'
 import {
   INK_COLOR_HEX,
   OUTBOX_DROP_ZONE_3D,
+  OUTBOX_POS_3D,
   PAPER_COLOR_HEX,
   PAPER_COMPACT_H_3D,
   PAPER_COMPACT_W_3D,
@@ -28,6 +29,7 @@ import {
   SHREDDER_POS_3D,
   useDeskStore,
   type DeskDocument,
+  type ManualPageId,
   type StampType,
 } from './useDeskStore'
 import {
@@ -35,6 +37,7 @@ import {
   playBobbleBoingSound,
   playCarriageReturnDing,
   playDetentClick,
+  playDispatchErrorBuzzer,
   playLineFeedTick,
   playPageTurnSound,
   playPaperInsertSnap,
@@ -42,7 +45,7 @@ import {
   playPaperSettleSlap,
   playPaperSlideBump,
   playPaperTearSound,
-  playPneumaticWhoosh,
+  playPneumaticDispatchSound,
   playScrollTickSound,
   playShredFinalClunk,
   playShredGrindCrunch,
@@ -104,7 +107,7 @@ function createCrispDocumentCanvasTexture(
   const tex = new THREE.CanvasTexture(canvas)
   tex.magFilter = THREE.LinearFilter
   tex.minFilter = THREE.LinearFilter
-  tex.anisotropy = 8
+  tex.anisotropy = 16
   tex.generateMipmaps = false
   tex.colorSpace = THREE.SRGBColorSpace
   tex.needsUpdate = true
@@ -141,6 +144,15 @@ function getDeskLocalHitFromEvent(
 const MANUAL_BASE_W = 0.36
 const MANUAL_BASE_H = 0.42
 const MANUAL_SCALE = 1.25
+const MANUAL_HELD_SCALE = 0.56
+const _manualDeskQuat = new THREE.Quaternion()
+const _manualHeldLocalQuat = new THREE.Quaternion().setFromEuler(
+  new THREE.Euler(Math.PI / 2 - 0.16, 0.2, -0.03, 'YXZ')
+)
+const _manualHeldTargetQuat = new THREE.Quaternion()
+const _manualDeskPos = new THREE.Vector3()
+const _manualHeldWorldPos = new THREE.Vector3()
+
 const MANUAL_BOUNDS_3D = {
   x: 0.34,
   z: 0.1,
@@ -630,6 +642,7 @@ interface DraggablePaper3DProps {
   activeDragDocId: string | null
   setActiveDragDocId: (id: string | null) => void
   onDocumentMutated: () => void
+  onTriggerPneumaticDispatch: (paperHex: string) => void
 }
 
 function DraggablePaper3D({
@@ -643,6 +656,7 @@ function DraggablePaper3D({
   activeDragDocId,
   setActiveDragDocId,
   onDocumentMutated,
+  onTriggerPneumaticDispatch,
 }: DraggablePaper3DProps) {
   const groupRef = useRef<THREE.Group | null>(null)
   const planeGeoRef = useRef<THREE.PlaneGeometry | null>(null)
@@ -946,8 +960,17 @@ function DraggablePaper3D({
           kin.vx = 0
           kin.vz = 0
           kin.isCoasting = false
-          playPneumaticWhoosh()
-          useDeskStore.getState().dispatchDocumentToOutbox(doc.id)
+          if (useDeskStore.getState().dispatchDocumentToOutbox(doc.id)) {
+            onTriggerPneumaticDispatch(paperHex)
+            onDocumentMutated()
+            return
+          }
+          playDispatchErrorBuzzer()
+          kin.x = Math.max(-0.34, kin.x)
+          kin.z = Math.max(0.08, kin.z)
+          useDeskStore
+            .getState()
+            .updateDocumentPosition(doc.id, kin.x, kin.z, kin.isExpanded)
           onDocumentMutated()
           return
         }
@@ -1152,8 +1175,17 @@ function DraggablePaper3D({
       kin.vx = 0
       kin.vz = 0
       kin.isCoasting = false
-      playPneumaticWhoosh()
-      store.dispatchDocumentToOutbox(doc.id)
+      if (store.dispatchDocumentToOutbox(doc.id)) {
+        onTriggerPneumaticDispatch(paperHex)
+        onDocumentMutated()
+        return
+      }
+      playDispatchErrorBuzzer()
+      const bounceX = Math.max(-0.34, finalX)
+      const bounceZ = Math.max(0.08, finalZ)
+      kin.x = bounceX
+      kin.z = bounceZ
+      store.updateDocumentPosition(doc.id, bounceX, bounceZ, kin.isExpanded)
       onDocumentMutated()
       return
     }
@@ -1421,9 +1453,12 @@ export function InspectorDesk3D() {
     }
   }, [printingDocId])
 
-  // 2. 3-Page KGB Security Manual State (Page 1..3 + Stepped Scroll + Draggable Position)
-  const [manualPage, setManualPage] = useState<1 | 2 | 3>(1)
+  // 2. 6-Page Soviet Master Folder / Technical Ring-Binder State (Pages 1..6 + Stepped Scroll + Draggable Position + Handheld Mode)
+  const [manualPage, setManualPage] = useState<ManualPageId>(1)
   const [manualScrollY, setManualScrollY] = useState<number>(0)
+  const [isManualHeld, setIsManualHeld] = useState<boolean>(false)
+  const isManualHeldRef = useRef<boolean>(false)
+  const manualHoldBlendRef = useRef<number>(0)
   const manualGroupRef = useRef<THREE.Group | null>(null)
   const manualPosRef = useRef<{
     x: number
@@ -1438,6 +1473,46 @@ export function InspectorDesk3D() {
     dx: 0,
     dz: 0,
   })
+
+  const toggleManualHeld = () => {
+    const next = !isManualHeldRef.current
+    isManualHeldRef.current = next
+    manualPosRef.current.dragging = false
+    setIsManualHeld(next)
+    playSwitchClank(true)
+    playPaperRustle(true)
+    lensDirtyRef.current = true
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return
+      const target = e.target
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName.toLowerCase()
+        if (
+          tag === 'input' ||
+          tag === 'textarea' ||
+          tag === 'select' ||
+          target.isContentEditable
+        ) {
+          return
+        }
+      }
+      if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault()
+        const next = !isManualHeldRef.current
+        isManualHeldRef.current = next
+        manualPosRef.current.dragging = false
+        setIsManualHeld(next)
+        playSwitchClank(true)
+        playPaperRustle(true)
+        lensDirtyRef.current = true
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // 3. Draggable 2x Straight Optical Magnifying Glass State
   const magnifierGroupRef = useRef<THREE.Group | null>(null)
@@ -1711,7 +1786,7 @@ export function InspectorDesk3D() {
   const lensTex = useMemo(() => createCrispDocumentCanvasTexture(512, 512), [])
   const shredPlateTex = useMemo(() => createNearestCanvasTexture(256, 96), [])
 
-  // Guardrail 4: Immediate Manual Texture & Lens Refresh when page or scroll changes
+  // Guardrail 4: Immediate Manual Texture & Lens Refresh when page, scroll or handheld state changes
   useEffect(() => {
     const mTex = manualMatRef.current?.map as THREE.CanvasTexture | undefined
     if (!mTex) return
@@ -1724,12 +1799,13 @@ export function InspectorDesk3D() {
         canvas.height,
         manualPage,
         manualScrollY,
-        false
+        false,
+        isManualHeld
       )
       mTex.needsUpdate = true
       lensDirtyRef.current = true
     }
-  }, [manualPage, manualScrollY])
+  }, [manualPage, manualScrollY, isManualHeld])
 
   // Static 16-Color Bayer-Dithered Hardware Plaques (Dither metal background first, then render crisp un-dithered text)
   const printerNameplateTex = useMemo(
@@ -1835,6 +1911,42 @@ export function InspectorDesk3D() {
     []
   )
 
+  const folderCrestTex = useMemo(
+    () =>
+      createNearestCanvasTexture(384, 40, (ctx, w, h) => {
+        ctx.fillStyle = '#5c1414'
+        ctx.fillRect(0, 0, w, h)
+        ctx.strokeStyle = '#d4be7f'
+        ctx.lineWidth = 3
+        ctx.strokeRect(2, 2, w - 4, h - 4)
+        ctx.fillStyle = '#d4be7f'
+        ctx.font = 'bold 15px "Courier Prime", monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText('★ СССР // СЕКРЕТНО // ПАПКА БЛОКА №4 ★', w / 2, 25)
+      }),
+    []
+  )
+
+  const folderHoldLatchTex = useMemo(
+    () =>
+      createNearestCanvasTexture(256, 40, (ctx, w, h) => {
+        ctx.fillStyle = isManualHeld ? '#5c1814' : '#144422'
+        ctx.fillRect(0, 0, w, h)
+        ctx.strokeStyle = isManualHeld ? '#ffb000' : '#33ff66'
+        ctx.lineWidth = 3
+        ctx.strokeRect(2, 2, w - 4, h - 4)
+        ctx.fillStyle = isManualHeld ? '#ffb000' : '#33ff66'
+        ctx.font = 'bold 15px "Courier Prime", monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText(
+          isManualHeld ? '▼ НА СТОЛ / PUT DOWN [B]' : '▲ ВЗЯТЬ / PICK UP [B]',
+          w / 2,
+          25
+        )
+      }),
+    [isManualHeld]
+  )
+
   const loadedDoc = useMemo(
     () => documents.find((d) => d.status === 'loaded_in_shredder') ?? null,
     [documents]
@@ -1917,7 +2029,7 @@ export function InspectorDesk3D() {
     triggerStampPaperShockwave(st.x, st.z, null)
   }
 
-  useFrame(({ clock }, delta) => {
+  useFrame(({ clock, camera }, delta) => {
     const t = clock.getElapsedTime()
     const dt = Math.min(0.033, Math.max(0.001, delta))
     if (manometerNeedleRef.current) {
@@ -2108,16 +2220,75 @@ export function InspectorDesk3D() {
       }
     }
 
-    // 4. Update 3D Positions of Magnifier, Draggable Security Manual & Rubber Stamps (Auto-return lerp to home ink pads!)
+    // 4. Update 3D Positions of Magnifier, Draggable/Handheld Security Manual & Rubber Stamps
     const manualBaseY = manualPosRef.current.dragging
       ? BASE_MAT_Y + 0.024
       : BASE_MAT_Y + 0.012
+    const targetHoldBlend = isManualHeldRef.current ? 1 : 0
+    manualHoldBlendRef.current = THREE.MathUtils.lerp(
+      manualHoldBlendRef.current,
+      targetHoldBlend,
+      Math.min(1, dt * 12)
+    )
+    if (Math.abs(manualHoldBlendRef.current - targetHoldBlend) < 0.002) {
+      manualHoldBlendRef.current = targetHoldBlend
+    }
+    const holdBlend = manualHoldBlendRef.current
+    const smoothHold = holdBlend * holdBlend * (3 - 2 * holdBlend)
+
     if (manualGroupRef.current) {
-      manualGroupRef.current.position.set(
-        manualPosRef.current.x,
-        manualBaseY,
-        manualPosRef.current.z
-      )
+      if (smoothHold <= 0.0001) {
+        manualGroupRef.current.position.set(
+          manualPosRef.current.x,
+          manualBaseY,
+          manualPosRef.current.z
+        )
+        manualGroupRef.current.quaternion.copy(_manualDeskQuat)
+        manualGroupRef.current.scale.setScalar(MANUAL_SCALE)
+      } else {
+        const perspCam = camera as THREE.PerspectiveCamera
+        const fovRad = THREE.MathUtils.degToRad(perspCam.fov || 56)
+        const aspect = perspCam.aspect || 1.77
+        const holdDist = 0.44
+        const halfFrustumH = Math.tan(fovRad * 0.5) * holdDist
+        const halfFrustumW = halfFrustumH * aspect
+        const swayX = Math.cos(t * 1.35) * 0.001
+        const swayY = Math.sin(t * 1.85) * 0.0016
+        const camX = -halfFrustumW + 0.135 + swayX
+        const camY = -halfFrustumH + 0.132 + swayY
+
+        camera.updateMatrixWorld()
+        _manualHeldWorldPos
+          .set(camX, camY, -holdDist)
+          .applyMatrix4(camera.matrixWorld)
+        if (deskGroupRef.current) {
+          deskGroupRef.current.worldToLocal(_manualHeldWorldPos)
+        }
+        _manualDeskPos.set(
+          manualPosRef.current.x,
+          manualBaseY,
+          manualPosRef.current.z
+        )
+        manualGroupRef.current.position.lerpVectors(
+          _manualDeskPos,
+          _manualHeldWorldPos,
+          smoothHold
+        )
+        _manualHeldTargetQuat
+          .copy(camera.quaternion)
+          .multiply(_manualHeldLocalQuat)
+        manualGroupRef.current.quaternion.slerpQuaternions(
+          _manualDeskQuat,
+          _manualHeldTargetQuat,
+          smoothHold
+        )
+        const curScale = THREE.MathUtils.lerp(
+          MANUAL_SCALE,
+          MANUAL_HELD_SCALE,
+          smoothHold
+        )
+        manualGroupRef.current.scale.setScalar(curScale)
+      }
     }
 
     if (magnifierGroupRef.current) {
@@ -2127,6 +2298,7 @@ export function InspectorDesk3D() {
       const halfW = MANUAL_BOUNDS_3D.width / 2
       const halfH = MANUAL_BOUNDS_3D.height / 2
       const nearManual =
+        !isManualHeldRef.current &&
         lensPosRef.current.x >= manX - halfW - 0.22 &&
         lensPosRef.current.x <= manX + halfW + 0.22 &&
         lensPosRef.current.z >= manZ - halfH - 0.22 &&
@@ -2187,7 +2359,7 @@ export function InspectorDesk3D() {
           : d
       })
       const liveManualBounds = {
-        x: manualPosRef.current.x,
+        x: isManualHeldRef.current ? 99 : manualPosRef.current.x,
         z: manualPosRef.current.z,
         width: MANUAL_BOUNDS_3D.width,
         height: MANUAL_BOUNDS_3D.height,
@@ -2434,10 +2606,10 @@ export function InspectorDesk3D() {
     lensDirtyRef.current = true
   }
 
-  // 2B. Draggable 3-Page KGB Security Manual Handlers (Grab spiral binding bar to drag across mat)
+  // 2B. Draggable 7-Page Soviet Master Manual Handlers (Grab spiral binding bar to drag across mat)
   const scrollManual = (dir: 1 | -1) => {
     playScrollTickSound()
-    setManualScrollY((prev) => Math.max(0, Math.min(180, prev + dir * 32)))
+    setManualScrollY((prev) => Math.max(0, Math.min(360, prev + dir * 36)))
   }
 
   const handleManualWheel = (e: ThreeEvent<WheelEvent>) => {
@@ -2448,6 +2620,10 @@ export function InspectorDesk3D() {
   const handleManualDragDown = (e: ThreeEvent<PointerEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return
     e.stopPropagation()
+    if (isManualHeldRef.current) {
+      toggleManualHeld()
+      return
+    }
     const target = e.target as Element & {
       setPointerCapture?: (id: number) => void
     }
@@ -3273,11 +3449,13 @@ export function InspectorDesk3D() {
           <planeGeometry args={[0.85, 0.108]} />
           <meshStandardMaterial
             ref={headerTickerMatRef}
+            color="#3a453e"
             map={headerTickerTex}
             emissive="#ffffff"
             emissiveMap={headerTickerTex}
-            emissiveIntensity={0.48}
-            roughness={0.5}
+            emissiveIntensity={0.72}
+            roughness={0.94}
+            metalness={0.0}
           />
         </mesh>
       </group>
@@ -3602,7 +3780,8 @@ export function InspectorDesk3D() {
       </group>
 
       {/* ============================================================
-          4. 3-PAGE KGB SECURITY MANUAL '84 (`КГБ СССР // ФОРМА 84-Б`)
+          4. SOVIET CONTROL ROOM MASTER FOLDER & 3-RING TECHNICAL BINDER
+             (`ТЕХНИЧЕСКАЯ ПАПКА БЛОКА №4` — KGB FORGERY + RBMK PANELS)
           (100% FLAT AGAINST THE GREEN INSPECTION MAT AT `BASE_MAT_Y + 0.012`,
            POSITIONED AT `x: +0.36, z: +0.08` RIGHT NEXT TO ACTIVE DIRECTIVES)
          ============================================================ */}
@@ -3613,40 +3792,149 @@ export function InspectorDesk3D() {
         scale={MANUAL_SCALE}
         onWheel={handleManualWheel}
       >
-        {/* Draggable Top Brass Grip Rail & Spiral Binding Bar (`localZ < -0.14`) */}
+        {/* Mottled-Maroon / Dark-Olive Soviet Leatherette Hardcover Outer Folder Base */}
+        <mesh castShadow receiveShadow onWheel={handleManualWheel}>
+          <boxGeometry args={[MANUAL_BASE_W + 0.022, 0.02, MANUAL_BASE_H + 0.016]} />
+          <meshStandardMaterial
+            color={manualPage <= 3 ? '#581814' : '#1e3326'}
+            roughness={0.62}
+            metalness={0.12}
+          />
+        </mesh>
+
+        {/* Inner Dark-Olive Linen Folder Lining Board */}
+        <mesh position={[0.003, 0.002, 0]} receiveShadow onWheel={handleManualWheel}>
+          <boxGeometry args={[MANUAL_BASE_W + 0.006, 0.019, MANUAL_BASE_H + 0.004]} />
+          <meshStandardMaterial color="#273228" roughness={0.78} />
+        </mesh>
+
+        {/* Thick Raised Left Hardcover Spine & Creased Hinge Channel */}
         <mesh
-          position={[0, 0.014, -MANUAL_BASE_H / 2 - 0.006]}
+          position={[-MANUAL_BASE_W / 2 - 0.01, 0.011, 0]}
           castShadow
+          receiveShadow
           onPointerDown={handleManualDragDown}
           onPointerMove={handleManualDragMove}
           onPointerUp={handleManualDragUp}
           onPointerCancel={handleManualDragUp}
         >
-          <boxGeometry args={[MANUAL_BASE_W + 0.012, 0.018, 0.028]} />
-          <meshStandardMaterial
-            color="#8c7a4b"
-            metalness={0.85}
-            roughness={0.28}
-            bumpMap={brassTex.bumpMap}
-            bumpScale={0.005}
-            roughnessMap={brassTex.roughnessMap}
+          <boxGeometry args={[0.026, 0.026, MANUAL_BASE_H + 0.018]} />
+          <meshStandardMaterial color="#3b110e" roughness={0.55} metalness={0.15} />
+        </mesh>
+        {/* Creased Spine Hinge Groove */}
+        <mesh position={[-MANUAL_BASE_W / 2 + 0.004, 0.011, 0]}>
+          <boxGeometry args={[0.005, 0.023, MANUAL_BASE_H + 0.014]} />
+          <meshStandardMaterial color="#120908" roughness={0.9} />
+        </mesh>
+
+        {/* 4 Beveled Brass Corner Protectors on Hardcover Folder Corners */}
+        {[
+          [-MANUAL_BASE_W / 2 - 0.006, -MANUAL_BASE_H / 2 - 0.003],
+          [MANUAL_BASE_W / 2 + 0.006, -MANUAL_BASE_H / 2 - 0.003],
+          [-MANUAL_BASE_W / 2 - 0.006, MANUAL_BASE_H / 2 + 0.003],
+          [MANUAL_BASE_W / 2 + 0.006, MANUAL_BASE_H / 2 + 0.003],
+        ].map(([cx, cz], cIdx) => (
+          <mesh
+            key={`corner-${cIdx}`}
+            position={[cx, 0.008, cz]}
+            castShadow
+          >
+            <boxGeometry args={[0.028, 0.024, 0.028]} />
+            <meshStandardMaterial
+              color="#c8b06b"
+              metalness={0.88}
+              roughness={0.26}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+        ))}
+
+        {/* Subtle Warm Handheld Reading Fill Light when Manual is Held in Bottom-Left View */}
+        {isManualHeld && (
+          <pointLight
+            position={[0.02, 0.24, 0.04]}
+            color="#fff0d0"
+            intensity={0.55}
+            distance={0.65}
+            decay={1.8}
           />
-        </mesh>
+        )}
 
-        {/* Crimson KGB Hardcover Binder Base */}
-        <mesh castShadow receiveShadow onWheel={handleManualWheel}>
-          <boxGeometry args={[MANUAL_BASE_W, 0.02, MANUAL_BASE_H]} />
-          <meshStandardMaterial color="#6b1d18" roughness={0.68} />
-        </mesh>
+        {/* Draggable Top Brass Grip Clamp & Embossed `СССР // СЕКРЕТНО` Crest Strip (`localZ < -0.175`) */}
+        <group
+          position={[0, 0.015, -MANUAL_BASE_H / 2 - 0.005]}
+          onPointerDown={handleManualDragDown}
+          onPointerMove={handleManualDragMove}
+          onPointerUp={handleManualDragUp}
+          onPointerCancel={handleManualDragUp}
+          onDoubleClick={(e) => {
+            e.stopPropagation()
+            toggleManualHeld()
+          }}
+        >
+          <mesh castShadow>
+            <boxGeometry args={[MANUAL_BASE_W + 0.016, 0.016, 0.026]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.85}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+              roughnessMap={brassTex.roughnessMap}
+            />
+          </mesh>
+          {/* Embossed Gold/Red `СССР // СЕКРЕТНО // ПАПКА БЛОКА №4` Crest Plaque */}
+          <mesh position={[0, 0.009, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[MANUAL_BASE_W - 0.02, 0.022]} />
+            <meshStandardMaterial
+              map={folderCrestTex}
+              roughness={0.4}
+              metalness={0.35}
+            />
+          </mesh>
+        </group>
 
-        {/* Visible Stacked Paper Page-Edges along Left, Right & Bottom Sides */}
-        {[0, 1, 2].map((layerIdx) => (
+        {/* Physical 3D Brass Carry-Latch Button (`▲ ВЗЯТЬ / PICK UP [B]` vs `▼ НА СТОЛ / PUT DOWN [B]`) */}
+        <group
+          position={[0, 0.014, MANUAL_BASE_H / 2 + 0.02]}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            toggleManualHeld()
+          }}
+        >
+          <mesh castShadow>
+            <boxGeometry args={[0.195, 0.012, 0.026]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.86}
+              roughness={0.26}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+          <mesh position={[0, 0.0068, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.186, 0.022]} />
+            <meshStandardMaterial
+              map={folderHoldLatchTex}
+              emissive="#ffffff"
+              emissiveMap={folderHoldLatchTex}
+              emissiveIntensity={0.35}
+              roughness={0.45}
+            />
+          </mesh>
+        </group>
+
+        {/* Visible Multi-Layered Stack of Cream Paper Sheets Underneath Active Page */}
+        {[0, 1, 2, 3].map((layerIdx) => (
           <mesh
             key={layerIdx}
             position={[
-              0,
-              0.005 + layerIdx * 0.0022,
-              0.002 + layerIdx * 0.001,
+              0.003 + layerIdx * 0.0008,
+              0.005 + layerIdx * 0.002,
+              0.002 + layerIdx * 0.0008,
             ]}
             castShadow
             receiveShadow
@@ -3654,9 +3942,9 @@ export function InspectorDesk3D() {
           >
             <boxGeometry
               args={[
-                MANUAL_BASE_W - 0.008 - layerIdx * 0.003,
+                MANUAL_BASE_W - 0.008 - layerIdx * 0.0025,
                 0.0018,
-                MANUAL_BASE_H - 0.01 - layerIdx * 0.003,
+                MANUAL_BASE_H - 0.01 - layerIdx * 0.0025,
               ]}
             />
             <meshStandardMaterial
@@ -3666,62 +3954,156 @@ export function InspectorDesk3D() {
           </mesh>
         ))}
 
-        {/* 14 Glinting Metallic Spiral Coils along Top Spine */}
-        {Array.from({ length: 14 }).map((_, idx) => (
-          <mesh
-            key={idx}
-            position={[
-              -0.156 + idx * 0.024,
-              0.014,
-              -MANUAL_BASE_H / 2,
-            ]}
-            rotation={[0, Math.PI / 2, 0]}
-            castShadow
-            onPointerDown={handleManualDragDown}
-            onPointerMove={handleManualDragMove}
-            onPointerUp={handleManualDragUp}
-            onPointerCancel={handleManualDragUp}
-          >
-            <torusGeometry args={[0.01, 0.003, 8, 12]} />
+        {/* 3-Ring Metal Binder Spine Rail & Curved D-Rings Along Left Inner Edge */}
+        <group position={[-MANUAL_BASE_W / 2 + 0.014, 0.014, 0]}>
+          {/* Brushed-Steel Binder Spine Rail */}
+          <mesh castShadow>
+            <boxGeometry args={[0.014, 0.008, MANUAL_BASE_H - 0.036]} />
             <meshStandardMaterial
-              color="#d4be7f"
-              metalness={0.9}
-              roughness={0.2}
-              bumpMap={brassTex.bumpMap}
-              bumpScale={0.004}
+              color="#b8c0c4"
+              metalness={0.92}
+              roughness={0.22}
             />
           </mesh>
+          {/* 2 Spring-Clip Rivets on Binder Rail */}
+          {[-0.155, 0.155].map((rz, rIdx) => (
+            <mesh key={`rivet-${rIdx}`} position={[0, 0.005, rz]}>
+              <cylinderGeometry args={[0.005, 0.005, 0.005, 10]} />
+              <meshStandardMaterial
+                color="#d4be7f"
+                metalness={0.9}
+                roughness={0.2}
+              />
+            </mesh>
+          ))}
+          {/* 3 Curved 3D Metal Binder Rings Passing Through Punched Paper Holes */}
+          {[-0.105, 0, 0.105].map((ringZ, ringIdx) => (
+            <mesh
+              key={`ring-${ringIdx}`}
+              position={[0.005, 0.004, ringZ]}
+              rotation={[0, 0, 0]}
+              castShadow
+            >
+              <torusGeometry args={[0.013, 0.0028, 10, 18, Math.PI * 1.15]} />
+              <meshStandardMaterial
+                color="#d8dee2"
+                metalness={0.94}
+                roughness={0.18}
+              />
+            </mesh>
+          ))}
+        </group>
+
+        {/* Physical 3D Top Section Divider Tabs (`I. KGB FORGERY` vs `II. RBMK PANELS`) */}
+        {(
+          [
+            {
+              label: 'I. KGB',
+              targetPage: 1 as ManualPageId,
+              isActive: manualPage <= 3,
+              x: -0.078,
+              activeColor: '#b82820',
+              idleColor: '#5c1814',
+            },
+            {
+              label: 'II. RBMK',
+              targetPage: 4 as ManualPageId,
+              isActive: manualPage >= 4,
+              x: 0.082,
+              activeColor: '#197030',
+              idleColor: '#133b1d',
+            },
+          ] as const
+        ).map((secTab) => (
+          <group
+            key={secTab.label}
+            position={[
+              secTab.x,
+              secTab.isActive ? 0.011 : 0.007,
+              -MANUAL_BASE_H / 2 - 0.022,
+            ]}
+          >
+            <mesh
+              castShadow
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onWheel={handleManualWheel}
+              onClick={(e) => {
+                e.stopPropagation()
+                playPageTurnSound()
+                setManualPage(secTab.targetPage)
+                setManualScrollY(0)
+              }}
+            >
+              <boxGeometry args={[0.135, 0.01, 0.024]} />
+              <meshStandardMaterial
+                color={secTab.isActive ? secTab.activeColor : secTab.idleColor}
+                roughness={0.45}
+                metalness={0.2}
+              />
+            </mesh>
+            {/* Brass Rim Strip on Active Top Section Tab */}
+            {secTab.isActive && (
+              <mesh position={[0, 0.0055, -0.008]}>
+                <boxGeometry args={[0.13, 0.002, 0.006]} />
+                <meshStandardMaterial
+                  color="#d4be7f"
+                  metalness={0.88}
+                  roughness={0.22}
+                />
+              </mesh>
+            )}
+          </group>
         ))}
 
-        {([1, 2, 3] as const).map((tabPage, idx) => (
-          <mesh
-            key={tabPage}
-            position={[
-              MANUAL_BASE_W / 2 + 0.016,
-              0.004,
-              -0.11 + idx * 0.095,
-            ]}
-            castShadow
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-            onWheel={handleManualWheel}
-            onClick={(e) => {
-              e.stopPropagation()
-              playPageTurnSound()
-              setManualPage(tabPage)
-              setManualScrollY(0)
-            }}
-          >
-            <boxGeometry args={[0.034, 0.01, 0.072]} />
-            <meshStandardMaterial
-              color={manualPage === tabPage ? '#b8a46b' : '#8b1e1e'}
-              roughness={0.55}
-            />
-          </mesh>
-        ))}
+        {/* 7 Physical 3D Protruding Right-Edge Index Divider Tabs (Tabs 1..3 KGB, Tabs 4..7 RBMK) */}
+        {([1, 2, 3, 4, 5, 6, 7] as const).map((tabPage, idx) => {
+          const isSelected = manualPage === tabPage
+          const isKgbTab = tabPage <= 3
+          const baseSleeveColor = isKgbTab ? '#7a1c18' : '#174f26'
+          const activeSleeveColor = isKgbTab ? '#d4be7f' : '#33ff66'
+          return (
+            <group
+              key={tabPage}
+              position={[
+                MANUAL_BASE_W / 2 + (isSelected ? 0.021 : 0.015),
+                isSelected ? 0.01 : 0.005,
+                -0.156 + idx * 0.052,
+              ]}
+            >
+              <mesh
+                castShadow
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onWheel={handleManualWheel}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  playPageTurnSound()
+                  setManualPage(tabPage)
+                  setManualScrollY(0)
+                }}
+              >
+                <boxGeometry args={[0.036, 0.009, 0.044]} />
+                <meshStandardMaterial
+                  color={isSelected ? activeSleeveColor : baseSleeveColor}
+                  roughness={0.48}
+                  metalness={isSelected ? 0.45 : 0.15}
+                />
+              </mesh>
+              {/* Cream Paper Core Inside Plastic Sleeve Tab */}
+              <mesh position={[-0.004, 0.005, 0]}>
+                <boxGeometry args={[0.024, 0.002, 0.036]} />
+                <meshStandardMaterial
+                  color={isSelected ? '#fff6dc' : '#d8ceb4'}
+                  roughness={0.8}
+                />
+              </mesh>
+            </group>
+          )
+        })}
 
         <mesh
-          position={[0, 0.012, 0]}
+          position={[0.004, 0.014, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
           receiveShadow
           onWheel={handleManualWheel}
@@ -3731,8 +4113,8 @@ export function InspectorDesk3D() {
               return
             }
             const localZ = (0.5 - e.uv.y) * (MANUAL_BASE_H - 0.016)
-            // Dragging is strictly restricted to the top spiral-binding header bar (`localZ < -0.14`)!
-            if (localZ < -0.14) {
+            // Dragging is restricted to the very top clamp edge (`localZ < -0.175`) so Row 1 section tabs click cleanly
+            if (localZ < -0.175) {
               handleManualDragDown(e)
               return
             }
@@ -3758,26 +4140,53 @@ export function InspectorDesk3D() {
             const u = e.uv.x
             const v = 1 - e.uv.y
             const localZ = (0.5 - e.uv.y) * (MANUAL_BASE_H - 0.016)
-            if (localZ < -0.14) return
+            if (localZ < -0.175) return
 
-            if (v >= 0.09 && v <= 0.19) {
-              const chosen: 1 | 2 | 3 = u < 0.34 ? 1 : u < 0.67 ? 2 : 3
+            // Row 1 Top-Level Section Switcher (`★ I. KGB FORGERY GUIDE` vs `⚙ II. RBMK PANEL MANUAL`)
+            if (v >= 0.024 && v < 0.095) {
+              const targetSectionPage: ManualPageId = u < 0.5 ? 1 : 4
+              playPageTurnSound()
+              setManualPage(targetSectionPage)
+              setManualScrollY(0)
+              return
+            }
+
+            // Row 2 Sub-Tab Bar (3 Sub-Tabs within Section I, or 4 Sub-Tabs within Section II)
+            if (v >= 0.095 && v <= 0.175) {
+              const chosen: ManualPageId =
+                manualPage <= 3
+                  ? ((1 + (u < 0.35 ? 0 : u < 0.68 ? 1 : 2)) as ManualPageId)
+                  : ((4 +
+                      (u < 0.27
+                        ? 0
+                        : u < 0.51
+                          ? 1
+                          : u < 0.75
+                            ? 2
+                            : 3)) as ManualPageId)
               playPageTurnSound()
               setManualPage(chosen)
               setManualScrollY(0)
               return
             }
 
+            // Bottom Navigation Footer (`[< PREV]`, `[NEXT >]`, `[PICK UP / PUT DOWN (B)]`, `[▲ UP]`, `[▼ DOWN]`)
             if (v >= 0.86) {
-              if (u < 0.24) {
+              if (u < 0.18) {
                 playPageTurnSound()
-                setManualPage((p) => (p === 1 ? 3 : ((p - 1) as 1 | 2 | 3)))
+                setManualPage((p) =>
+                  p === 1 ? 7 : ((p - 1) as ManualPageId)
+                )
                 setManualScrollY(0)
-              } else if (u < 0.5) {
+              } else if (u < 0.36) {
                 playPageTurnSound()
-                setManualPage((p) => (p === 3 ? 1 : ((p + 1) as 1 | 2 | 3)))
+                setManualPage((p) =>
+                  p === 7 ? 1 : ((p + 1) as ManualPageId)
+                )
                 setManualScrollY(0)
-              } else if (u < 0.74) {
+              } else if (u < 0.68) {
+                toggleManualHeld()
+              } else if (u < 0.84) {
                 scrollManual(-1)
               } else {
                 scrollManual(1)
@@ -3785,12 +4194,12 @@ export function InspectorDesk3D() {
               return
             }
 
-            // Clicking the lower half of the page body scrolls down; upper half turns page or scrolls up
+            // Clicking the lower half of the page body scrolls down; upper half advances to next tab
             if (v >= 0.55) {
               scrollManual(1)
             } else {
               playPageTurnSound()
-              setManualPage((p) => (p === 3 ? 1 : ((p + 1) as 1 | 2 | 3)))
+              setManualPage((p) => (p === 7 ? 1 : ((p + 1) as ManualPageId)))
               setManualScrollY(0)
             }
           }}
@@ -3801,6 +4210,9 @@ export function InspectorDesk3D() {
           <meshStandardMaterial
             ref={manualMatRef}
             map={manualTex}
+            emissive="#ffffff"
+            emissiveMap={manualTex}
+            emissiveIntensity={isManualHeld ? 0.24 : 0.04}
             roughness={0.85}
             polygonOffset
             polygonOffsetFactor={-1}

@@ -20,6 +20,8 @@ import {
   HighDetailManometer3D,
   HighDetailReactorPanel3D,
   LeftRearWrapAroundPanel3D,
+  SovietCRTMonitorBay3D,
+  SovietDvk84KeyboardConsole3D,
 } from "./MechanicalPanels3D";
 import {
   applySovietPBRToHierarchy,
@@ -722,13 +724,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
   }>({ active: false, startY: 0, progress: 0, lastHissTime: 0 });
 
   const rheostatWheelRef = useRef<THREE.Group>(null);
-  const rheostatDragRef = useRef<{
-    active: boolean;
-    startX: number;
-    startY: number;
-    startTrim: number;
-    lastDetent: number;
-  }>({ active: false, startX: 0, startY: 0, startTrim: 0, lastDetent: 0 });
 
   const toggleDragRef = useRef<{
     activeIdx: number | null;
@@ -780,24 +775,24 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
     const items = [
       { id: 0, label: "VENTILATION", sub: "-1.2 R/H (+10MW)", color: "#33ff66" },
       { id: 1, label: "AUDIO [M]", sub: "BUNKER SOUND", color: "#ffb000" },
-      { id: 2, label: "KGB CIPHER", sub: "DECODE DIRECTIVES", color: "#33ff66" },
+      { id: 2, label: "KGB LINE", sub: "DECODE DIRECTIVES", color: "#33ff66" },
       { id: 3, label: "AUX LOOP B", sub: "TURBINE BYPASS", color: "#ffb000" },
     ];
     return items.map((item) => ({
       ...item,
-      texture: createCrispPanelTexture(192, 52, (ctx, w, h) => {
+      texture: createCrispPanelTexture(224, 60, (ctx, w, h) => {
         ctx.fillStyle = "#141816";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#b8a46b";
         ctx.lineWidth = 3;
         ctx.strokeRect(2, 2, w - 4, h - 4);
         ctx.fillStyle = item.color;
-        ctx.font = 'bold 16px "Courier Prime", monospace';
+        ctx.font = 'bold 18px "Courier Prime", monospace';
         ctx.textAlign = "center";
-        ctx.fillText(item.label, w / 2, 22);
+        ctx.fillText(item.label, w / 2, 24);
         ctx.fillStyle = "#e6dec3";
-        ctx.font = 'bold 15px "VT323", monospace';
-        ctx.fillText(item.sub, w / 2, 42);
+        ctx.font = 'bold 16px "VT323", monospace';
+        ctx.fillText(item.sub, w / 2, 48);
       }),
     }));
   }, []);
@@ -811,6 +806,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
 
   const terminalHousingModel = useMemo(() => {
     const cloned = terminalHousingGltf.scene.clone(true);
+    // 1. Strip the legacy flat kbOverlay group AND the 2 angled umbilical/flange cylinders (y < 0.88) that clipped into the bottom-left/right keys
+    // 2. Shift the upper CRT bezel/hood/bolts/knobs (y >= 0.88) up by +0.055m so the CRT frame clears the 3 DVK-84 control stations
+    const legacyLowerMeshes: THREE.Object3D[] = [];
+    for (const child of cloned.children) {
+      if (child.position.y < 0.88) {
+        legacyLowerMeshes.push(child);
+      } else {
+        child.position.y += 0.055;
+      }
+    }
+    for (const obj of legacyLowerMeshes) {
+      cloned.remove(obj);
+    }
     applySovietPBRToHierarchy(cloned);
     return cloned;
   }, [terminalHousingGltf.scene]);
@@ -872,34 +880,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
     [],
   );
 
-  const rightStatusTex = useMemo(() => createNearestCanvasTexture(512, 96), []);
-
-  const pushButtonSpecs = useMemo(() => {
-    const items = [
-      { id: 0, label: "AUX COOLING", sub: "ОХЛАЖД. БЛОКА", color: "#33ff66" },
-      { id: 1, label: "BUNKER VENT", sub: "ВЕНТИЛЯЦИЯ", color: "#33ff66" },
-      { id: 2, label: "KGB CIPHER", sub: "СВЯЗЬ КГБ", color: "#ffb000" },
-      { id: 3, label: "EMERG DUMP", sub: "АВАР. СБРОС", color: "#ff2a2a" },
-      { id: 4, label: "MUTE SOUND", sub: "АУДИО [M]", color: "#ffb000" },
-    ];
-    return items.map((item) => ({
-      ...item,
-      texture: createCrispPanelTexture(256, 112, (ctx, w, h) => {
-        ctx.fillStyle = "#141414";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = item.color;
-        ctx.lineWidth = 5;
-        ctx.strokeRect(4, 4, w - 8, h - 8);
-        ctx.fillStyle = item.color;
-        ctx.font = 'bold 22px "Courier Prime", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText(item.label, w / 2, 46);
-        ctx.fillStyle = "#e6dec3";
-        ctx.font = 'bold 26px "VT323", monospace';
-        ctx.fillText(item.sub, w / 2, 86);
-      }),
-    }));
-  }, []);
+  const rightStatusTex = useMemo(() => createCrispPanelTexture(768, 144), []);
 
   useFrame(({ clock }) => {
     const s = useGameStore.getState();
@@ -940,7 +921,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
       rheostatWheelRef.current.rotation.z = THREE.MathUtils.lerp(
         rheostatWheelRef.current.rotation.z,
         targetRotZ,
-        0.25,
+        0.72,
       );
     }
 
@@ -967,50 +948,165 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
       }
     }
 
-    // Update Right Control Panel Digital Telemetry Strip
-    const rSig = `${s.phase}|${totalMW}|${Math.round(s.pressureBar)}|${s.turbineRpm}|${s.gridHz.toFixed(1)}|${s.ventingSteam}|${s.ventilationActive}|${s.kgbLineActive}|${s.isMusicMuted}|${Math.round(s.bubblerLevel)}|${s.containmentSealLocked}|${s.activeMandate?.id ?? "NONE"}|${auxToggles.join(",")}`;
+    // Update Right Control Panel Phosphor-Green CRT Monitor (`ЭЛТ ВЛ-84Г`)
+    const rSig = `${s.phase}|${totalMW}|${Math.round(s.pressureBar)}|${s.turbineRpm}|${s.gridHz.toFixed(1)}|${s.ventingSteam}|${s.ventilationActive}|${s.kgbLineActive}|${s.isMusicMuted}|${Math.round(s.bubblerLevel)}|${s.containmentSealLocked}|${s.activeMandate?.id ?? "NONE"}|${s.isBlackout}|${auxToggles.join(",")}`;
     const rTex = rightStatusMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (rTex && rTex.userData.lastSig !== rSig) {
       rTex.userData.lastSig = rSig;
       const canvas = rTex.image as HTMLCanvasElement;
       const ctx = canvas.getContext("2d");
       if (ctx) {
+        const w = 768;
+        const h = 144;
         ctx.imageSmoothingEnabled = false;
-        ctx.fillStyle = "#061a0c";
-        ctx.fillRect(0, 0, 512, 96);
-        ctx.strokeStyle = "#364940";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(2, 2, 508, 92);
+
+        // 1. Deep Curved Phosphor-Green CRT Tube Gradient & Vignette
+        const grad = ctx.createRadialGradient(
+          w * 0.5,
+          h * 0.5,
+          h * 0.1,
+          w * 0.5,
+          h * 0.5,
+          w * 0.56,
+        );
+        if (s.isBlackout) {
+          grad.addColorStop(0, "#030905");
+          grad.addColorStop(1, "#010302");
+        } else {
+          grad.addColorStop(0, "#0b2914");
+          grad.addColorStop(0.7, "#06190c");
+          grad.addColorStop(1, "#020b05");
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+
+        // 2. CRT Oscilloscope Graticule Grid
+        ctx.strokeStyle = s.isBlackout
+          ? "rgba(51, 255, 102, 0.04)"
+          : "rgba(51, 255, 102, 0.13)";
+        ctx.lineWidth = 1;
+        for (let gx = 48; gx < w; gx += 48) {
+          ctx.beginPath();
+          ctx.moveTo(gx, 8);
+          ctx.lineTo(gx, h - 8);
+          ctx.stroke();
+        }
+        for (let gy = 24; gy < h; gy += 24) {
+          ctx.beginPath();
+          ctx.moveTo(10, gy);
+          ctx.lineTo(w - 10, gy);
+          ctx.stroke();
+        }
 
         const hzDanger = s.gridHz < 46.5 || s.gridHz > 53.5;
-        ctx.fillStyle = hzDanger ? "#ff2a2a" : s.phase === "playing" ? "#33ff66" : "#ffb000";
-        ctx.font = 'bold 21px "VT323", monospace';
-        ctx.fillText(
-          `TURBINE: ${s.turbineRpm} RPM | GRID: ${s.gridHz.toFixed(1)} HZ | LOAD: ${totalMW} MW`,
-          14,
-          34,
-        );
         const bubblerFlooded = s.bubblerLevel > 90;
-        ctx.fillStyle = s.ventingSteam || bubblerFlooded || !s.containmentSealLocked ? "#ff2a2a" : "#ffb000";
-        const steamStatus = s.ventingSteam
-          ? bubblerFlooded
-            ? "BLOCKED (BUBBLER)"
-            : "VENTING!"
-          : `${Math.round(s.pressureBar)} BAR`;
-        ctx.fillText(
-          `STEAM: ${steamStatus} | VENT: ${s.ventilationActive ? "ON (+10MW)" : "OFF"} | SEAL: ${s.containmentSealLocked ? "LOCKED" : "OPEN!"}`,
-          14,
-          62,
-        );
-        ctx.fillStyle = s.activeMandate ? "#33ff66" : "#e6dec3";
-        ctx.font = 'bold 14px "Courier Prime", monospace';
-        ctx.fillText(
-          s.activeMandate
-            ? `MANDATE: ${s.activeMandate.requirementText}`
-            : "TURN 50HZ RHEOSTAT • PULL STEAM VENT (LEFT) • MAIN BREAKER (RIGHT)",
-          14,
-          85,
-        );
+        const statusDanger =
+          hzDanger || s.ventingSteam || bubblerFlooded || !s.containmentSealLocked;
+
+        ctx.strokeStyle = statusDanger ? "#ff2a2a" : "#2be85d";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(6, 6, w - 12, h - 12);
+
+        if (s.isBlackout) {
+          ctx.fillStyle = "#ff2a2a";
+          ctx.font = 'bold 34px "VT323", monospace';
+          ctx.textAlign = "center";
+          ctx.fillText("/// CRT SIGNAL LOST — PULL MAIN BREAKER ///", w / 2, h / 2 + 10);
+        } else {
+          const cells = [
+            {
+              label: "TURBINE RPM",
+              val: `${s.turbineRpm} RPM`,
+              danger: s.turbineRpm > 3250,
+            },
+            {
+              label: "GRID 50 HZ",
+              val: `${s.gridHz.toFixed(1)} HZ`,
+              danger: hzDanger,
+            },
+            {
+              label: "GEN. LOAD",
+              val: `${totalMW} MW`,
+              danger: totalMW > 105,
+            },
+          ];
+
+          const cellW = 232;
+          const cellCenters = [134, 384, 634];
+          cells.forEach((c, idx) => {
+            const cx = cellCenters[idx] ?? 384;
+            const x0 = cx - cellW / 2;
+            ctx.fillStyle = c.danger
+              ? "rgba(90, 12, 12, 0.55)"
+              : "rgba(4, 18, 9, 0.65)";
+            ctx.fillRect(x0, 12, cellW, 68);
+            ctx.strokeStyle = c.danger ? "#ff2a2a" : "#248f46";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x0, 12, cellW, 68);
+
+            ctx.fillStyle = c.danger ? "#ff2a2a" : "#1f6e39";
+            ctx.fillRect(x0 + 2, 14, cellW - 4, 18);
+            ctx.fillStyle = c.danger ? "#ffffff" : "#d8ffe2";
+            ctx.font = 'bold 14px "Courier Prime", monospace';
+            ctx.textAlign = "center";
+            ctx.fillText(c.label, cx, 28);
+
+            ctx.save();
+            ctx.shadowColor = c.danger ? "#ff2a2a" : "#33ff66";
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = c.danger ? "#ff4444" : "#44ff77";
+            ctx.font = 'bold 40px "VT323", monospace';
+            ctx.fillText(c.val, cx, 69);
+            ctx.restore();
+          });
+
+          ctx.fillStyle = "rgba(3, 14, 7, 0.78)";
+          ctx.fillRect(18, 86, w - 36, 48);
+          ctx.strokeStyle = statusDanger ? "#ff2a2a" : "#248f46";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(18, 86, w - 36, 48);
+
+          const steamStatus = s.ventingSteam
+            ? bubblerFlooded
+              ? "BLOCKED (BUBBLER)"
+              : "VENTING!"
+            : `${Math.round(s.pressureBar)} BAR`;
+          ctx.save();
+          ctx.textAlign = "center";
+          ctx.shadowColor = statusDanger ? "#ff2a2a" : "#33ff66";
+          ctx.shadowBlur = 6;
+          ctx.fillStyle = statusDanger ? "#ff3b3b" : "#33ff66";
+          ctx.font = 'bold 23px "VT323", monospace';
+          ctx.fillText(
+            `> STEAM: ${steamStatus} | VENT: ${s.ventilationActive ? "ON (+10MW)" : "OFF"} | SEAL: ${s.containmentSealLocked ? "LOCKED" : "OPEN!"}`,
+            w / 2,
+            108,
+          );
+          ctx.restore();
+
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#ffb000";
+          ctx.font = 'bold 14px "Courier Prime", monospace';
+          ctx.fillText(
+            s.activeMandate
+              ? `[CRT-84G] MANDATE: ${s.activeMandate.requirementText}`
+              : "[CRT-84G] TURN 50HZ RHEOSTAT • PULL STEAM VENT • MAIN BREAKER",
+            w / 2,
+            128,
+          );
+        }
+
+        // Scanline Overlay & Top Glass Sheen
+        ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+        for (let y = 0; y < h; y += 3) {
+          ctx.fillRect(0, y, w, 1);
+        }
+        const glassSheen = ctx.createLinearGradient(0, 0, 0, 38);
+        glassSheen.addColorStop(0, "rgba(180, 255, 205, 0.09)");
+        glassSheen.addColorStop(1, "rgba(180, 255, 205, 0.0)");
+        ctx.fillStyle = glassSheen;
+        ctx.fillRect(8, 8, w - 16, 32);
+
         rTex.needsUpdate = true;
       }
     }
@@ -1264,31 +1360,13 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
           />
         </group>
 
-        {/* Recessed Digital Telemetry Readout Strip */}
-        <group position={[0, 1.46, 0.03]}>
-          <mesh position={[0, 0, 0.008]} castShadow receiveShadow>
-            <boxGeometry args={[1.52, 0.25, 0.026]} />
-            <meshStandardMaterial
-              color="#141816"
-              roughness={0.42}
-              metalness={0.72}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-            />
-          </mesh>
-          <mesh position={[0, 0, 0.022]}>
-            <planeGeometry args={[1.46, 0.215]} />
-            <meshStandardMaterial
-              ref={rightStatusMatRef}
-              map={rightStatusTex}
-              color="#ffffff"
-              emissive="#ffffff"
-              emissiveMap={rightStatusTex}
-              emissiveIntensity={0.68}
-              roughness={0.75}
-            />
-          </mesh>
-        </group>
+        {/* Molded Phosphor-Green CRT Monitor Bay (`ЭЛТ ВЛ-84Г`) */}
+        <SovietCRTMonitorBay3D
+          position={[0, 1.46, 0.03]}
+          screenMatRef={rightStatusMatRef}
+          screenTexture={rightStatusTex}
+          modelBadge="ЭЛТ ВЛ-84Г"
+        />
 
         {/* Middle Row: Spring-Loaded Steam Relief Lever (`СБРОС ПАРА`) + Rotary Excitation Rheostat (`ВОЗБУЖДЕНИЕ 50 ГЦ`) + 20-Part MAIN BREAKER (`ГЛАВНЫЙ РУБИЛЬНИК`) */}
         <group position={[0, 1.0, 0.04]}>
@@ -1304,41 +1382,28 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
                 progress: 0.35,
                 lastHissTime: 0,
               };
-              const domElem = e.nativeEvent.target as Element | null;
-              domElem?.setPointerCapture?.(e.pointerId);
               playSwitchClank(true);
               playSteamVentHiss(0.6);
               useGameStore.getState().setVentingSteam(true);
-            }}
-            onPointerMove={(e: ThreeEvent<PointerEvent>) => {
-              if (!steamDragRef.current.active) return;
-              e.stopPropagation();
-              const dy = e.nativeEvent.clientY - steamDragRef.current.startY;
-              const prog = THREE.MathUtils.clamp(0.35 + dy / 70, 0.15, 1.0);
-              steamDragRef.current.progress = prog;
-              useGameStore.getState().setVentingSteam(prog >= 0.25);
-            }}
-            onPointerUp={(e: ThreeEvent<PointerEvent>) => {
-              if (!steamDragRef.current.active) return;
-              e.stopPropagation();
-              steamDragRef.current.active = false;
-              steamDragRef.current.progress = 0;
-              const domElem = e.nativeEvent.target as Element | null;
-              if (domElem?.hasPointerCapture?.(e.pointerId)) {
-                domElem.releasePointerCapture(e.pointerId);
-              }
-              playSwitchClank(false);
-              useGameStore.getState().setVentingSteam(false);
-            }}
-            onLostPointerCapture={(e: ThreeEvent<PointerEvent>) => {
-              if (!steamDragRef.current.active) return;
-              steamDragRef.current.active = false;
-              steamDragRef.current.progress = 0;
-              const domElem = e.nativeEvent.target as Element | null;
-              if (domElem?.hasPointerCapture?.(e.pointerId)) {
-                domElem.releasePointerCapture(e.pointerId);
-              }
-              useGameStore.getState().setVentingSteam(false);
+              const handleMove = (ev: PointerEvent) => {
+                if (!steamDragRef.current.active) return;
+                const dy = ev.clientY - steamDragRef.current.startY;
+                const prog = THREE.MathUtils.clamp(0.35 + dy / 70, 0.15, 1.0);
+                steamDragRef.current.progress = prog;
+                useGameStore.getState().setVentingSteam(prog >= 0.25);
+              };
+              const handleUp = () => {
+                steamDragRef.current.active = false;
+                steamDragRef.current.progress = 0;
+                playSwitchClank(false);
+                useGameStore.getState().setVentingSteam(false);
+                window.removeEventListener("pointermove", handleMove);
+                window.removeEventListener("pointerup", handleUp);
+                window.removeEventListener("pointercancel", handleUp);
+              };
+              window.addEventListener("pointermove", handleMove);
+              window.addEventListener("pointerup", handleUp);
+              window.addEventListener("pointercancel", handleUp);
             }}
           >
             <mesh position={[0, 0.21, 0.01]}>
@@ -1420,54 +1485,99 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
             onPointerDown={(e: ThreeEvent<PointerEvent>) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
-              const curTrim = useGameStore.getState().excitationTrim;
-              rheostatDragRef.current = {
-                active: true,
-                startX: e.nativeEvent.clientX,
-                startY: e.nativeEvent.clientY,
-                startTrim: curTrim,
-                lastDetent: Math.round(curTrim * 4),
+              const domElem = e.nativeEvent.target as HTMLElement | null;
+              const rect = domElem?.getBoundingClientRect();
+              let centerX = e.nativeEvent.clientX;
+              let centerY = e.nativeEvent.clientY;
+              const wheelObj = rheostatWheelRef.current;
+              if (wheelObj && rect && rect.width > 0 && rect.height > 0) {
+                const worldPos = new THREE.Vector3();
+                wheelObj.getWorldPosition(worldPos);
+                worldPos.project(e.camera);
+                centerX = rect.left + (worldPos.x * 0.5 + 0.5) * rect.width;
+                centerY = rect.top + (-worldPos.y * 0.5 + 0.5) * rect.height;
+              }
+              const startX = e.nativeEvent.clientX;
+              const startY = e.nativeEvent.clientY;
+              let totalMove = 0;
+              let currentVal = useGameStore.getState().excitationTrim;
+              let prevX = e.nativeEvent.clientX;
+              let prevY = e.nativeEvent.clientY;
+              let prevAngle = Math.atan2(prevY - centerY, prevX - centerX);
+              let lastDetent = Math.round(currentVal * 4);
+
+              const handleMove = (ev: PointerEvent) => {
+                const dx = ev.clientX - prevX;
+                const dy = ev.clientY - prevY;
+                prevX = ev.clientX;
+                prevY = ev.clientY;
+                if (dx === 0 && dy === 0) return;
+
+                totalMove = Math.max(
+                  totalMove,
+                  Math.hypot(ev.clientX - startX, ev.clientY - startY),
+                );
+
+                const rx = ev.clientX - centerX;
+                const ry = ev.clientY - centerY;
+                const r = Math.hypot(rx, ry);
+                const curAngle = Math.atan2(ry, rx);
+
+                let dTheta = curAngle - prevAngle;
+                while (dTheta > Math.PI) dTheta -= Math.PI * 2;
+                while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+                prevAngle = curAngle;
+
+                const linearDelta = ((-dy + dx) / 40) * 5.0;
+                const circularDelta =
+                  r > 10 ? (dTheta / (Math.PI * 0.75)) * 5.0 : 0;
+                const deltaTrim =
+                  Math.abs(linearDelta) >= Math.abs(circularDelta)
+                    ? linearDelta
+                    : circularDelta;
+
+                const nextTrim = THREE.MathUtils.clamp(
+                  currentVal + deltaTrim,
+                  -5.0,
+                  5.0,
+                );
+                const appliedDelta = nextTrim - currentVal;
+                if (Math.abs(appliedDelta) >= 0.005) {
+                  currentVal = nextTrim;
+                  const nextDetent = Math.round(currentVal * 4);
+                  if (nextDetent !== lastDetent) {
+                    lastDetent = nextDetent;
+                    playRheostatDetentClick(nextDetent);
+                  }
+                  useGameStore.getState().adjustExcitationTrim(appliedDelta);
+                }
               };
-              const domElem = e.nativeEvent.target as Element | null;
-              domElem?.setPointerCapture?.(e.pointerId);
-            }}
-            onPointerMove={(e: ThreeEvent<PointerEvent>) => {
-              if (!rheostatDragRef.current.active) return;
-              e.stopPropagation();
-              const dx = e.nativeEvent.clientX - rheostatDragRef.current.startX;
-              const dy = rheostatDragRef.current.startY - e.nativeEvent.clientY;
-              const combined = (dx + dy) / 28;
-              const targetTrim = THREE.MathUtils.clamp(
-                rheostatDragRef.current.startTrim + combined,
-                -5.0,
-                5.0,
-              );
-              const detent = Math.round(targetTrim * 4);
-              if (detent !== rheostatDragRef.current.lastDetent) {
-                const deltaSteps = detent - rheostatDragRef.current.lastDetent;
-                rheostatDragRef.current.lastDetent = detent;
-                playRheostatDetentClick(detent);
-                useGameStore.getState().adjustExcitationTrim(deltaSteps * 0.25);
-              }
-            }}
-            onPointerUp={(e: ThreeEvent<PointerEvent>) => {
-              if (!rheostatDragRef.current.active) return;
-              e.stopPropagation();
-              rheostatDragRef.current.active = false;
-              const domElem = e.nativeEvent.target as Element | null;
-              if (domElem?.hasPointerCapture?.(e.pointerId)) {
-                domElem.releasePointerCapture(e.pointerId);
-              }
-            }}
-            onLostPointerCapture={(e: ThreeEvent<PointerEvent>) => {
-              if (!rheostatDragRef.current.active) return;
-              rheostatDragRef.current.active = false;
-              const domElem = e.nativeEvent.target as Element | null;
-              if (domElem?.hasPointerCapture?.(e.pointerId)) {
-                domElem.releasePointerCapture(e.pointerId);
-              }
+              const handleUp = () => {
+                window.removeEventListener("pointermove", handleMove);
+                window.removeEventListener("pointerup", handleUp);
+                window.removeEventListener("pointercancel", handleUp);
+                if (totalMove < 6) {
+                  const s = useGameStore.getState();
+                  const err = 50.0 - s.gridHz;
+                  const step =
+                    Math.abs(err) > 0.2
+                      ? THREE.MathUtils.clamp(err, -1.5, 1.5)
+                      : 0.5;
+                  playRheostatDetentClick(2);
+                  s.adjustExcitationTrim(step);
+                }
+                playSwitchClank(false);
+              };
+              window.addEventListener("pointermove", handleMove);
+              window.addEventListener("pointerup", handleUp);
+              window.addEventListener("pointercancel", handleUp);
             }}
           >
+            {/* Generous Invisible Hit-Cylinder around 50HZ RHEOSTAT */}
+            <mesh position={[0, 0, 0.04]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.165, 0.165, 0.12, 16]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
             <mesh position={[0, 0.21, 0.01]}>
               <planeGeometry args={[0.36, 0.082]} />
               <meshStandardMaterial map={rheostatPlateTex} roughness={0.55} />
@@ -1543,10 +1653,10 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
           />
         </group>
 
-        {/* Lower Row: Guarded Metal Toggle Switches (with U-Shaped Side Safety Guards) + 5 Tactile Backlit Soviet Push-Buttons */}
-        <group position={[0, 0.52, 0.04]}>
-          <mesh position={[0, 0.03, -0.01]} castShadow receiveShadow>
-            <boxGeometry args={[1.48, 0.44, 0.04]} />
+        {/* Lower Row: 4 Guarded Metal Toggle Switches (with U-Shaped Side Safety Guards & Caged Jewel Lamps) in a Clean Unobstructed Horizontal Row */}
+        <group position={[0, 0.54, 0.04]}>
+          <mesh position={[0, 0.02, -0.01]} castShadow receiveShadow>
+            <boxGeometry args={[1.48, 0.34, 0.04]} />
             <meshStandardMaterial
               color="#141414"
               roughness={0.45}
@@ -1555,7 +1665,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
               bumpScale={0.008}
             />
           </mesh>
-          {/* Upper Sub-Row: 4 Guarded Metal Toggle Switches (`ВЕНТИЛЯЦИЯ`, `АУДИО [M]`, `СВЯЗЬ КГБ`, `РЕЗЕРВ БЛОКА`) with U-Shaped Side Safety Guards & Caged Jewel Lamps */}
+          {/* Single Horizontal Row: 4 Guarded Metal Toggle Switches (`VENTILATION`, `AUDIO [M]`, `KGB LINE`, `AUX LOOP B`) */}
           {toggleSpecs.map((tSpec, tIdx) => {
             const triggerToggle = () => {
               playSwitchClank(false);
@@ -1579,7 +1689,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
             return (
               <group
                 key={`toggle-${tSpec.id}`}
-                position={[-0.51 + tIdx * 0.34, 0.165, 0.016]}
+                position={[-0.51 + tIdx * 0.34, -0.02, 0.018]}
                 onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                   if (useCameraLookStore.getState().isFreeLookMode) return;
                   e.stopPropagation();
@@ -1601,8 +1711,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
                   triggerToggle();
                 }}
               >
+                {/* Engraved Brass/Iron Plaque Above Toggle */}
+                <mesh position={[0, 0.105, 0.008]}>
+                  <planeGeometry args={[0.28, 0.072]} />
+                  <meshStandardMaterial
+                    map={tSpec.texture}
+                    emissive="#ffffff"
+                    emissiveMap={tSpec.texture}
+                    emissiveIntensity={0.32}
+                    roughness={0.65}
+                  />
+                </mesh>
                 <CagedSovietJewelLamp3D
-                  position={[-0.072, 0.008, 0.01]}
+                  position={[-0.088, 0.0, 0.012]}
                   lampMatRef={{
                     get current() {
                       return toggleLampRefs.current[tIdx] ?? null;
@@ -1611,16 +1732,11 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
                       toggleLampRefs.current[tIdx] = el;
                     },
                   }}
-                  scale={0.68}
+                  scale={0.78}
                 />
-                {/* Engraved Brass/Iron Plaque Above Toggle */}
-                <mesh position={[0.012, 0.064, 0.008]}>
-                  <planeGeometry args={[0.22, 0.056]} />
-                  <meshStandardMaterial map={tSpec.texture} roughness={0.55} />
-                </mesh>
                 {/* Hex Brass Mounting Nut */}
                 <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-                  <cylinderGeometry args={[0.022, 0.025, 0.016, 6]} />
+                  <cylinderGeometry args={[0.026, 0.029, 0.018, 6]} />
                   <meshStandardMaterial
                     color="#b8a46b"
                     metalness={0.86}
@@ -1630,12 +1746,12 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
                   />
                 </mesh>
                 {/* U-Shaped Side Safety Guard Brackets */}
-                {[-0.028, 0.028].map((gx, gIdx) => (
-                  <group key={gIdx} position={[gx, 0, 0.018]}>
+                {[-0.032, 0.032].map((gx, gIdx) => (
+                  <group key={gIdx} position={[gx, 0, 0.02]}>
                     <mesh castShadow>
-                      <boxGeometry args={[0.006, 0.056, 0.032]} />
+                      <boxGeometry args={[0.007, 0.068, 0.038]} />
                       <meshStandardMaterial
-                        color="#8c7a4b"
+                        color="#b8a46b"
                         metalness={0.85}
                         roughness={0.28}
                       />
@@ -1647,14 +1763,14 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
                   ref={(el) => {
                     toggleBatRefs.current[tIdx] = el;
                   }}
-                  position={[0, 0, 0.01]}
+                  position={[0, 0, 0.012]}
                 >
                   <mesh
-                    position={[0, 0, 0.026]}
+                    position={[0, 0, 0.03]}
                     rotation={[Math.PI / 2, 0, 0]}
                     castShadow
                   >
-                    <cylinderGeometry args={[0.009, 0.0055, 0.052, 10]} />
+                    <cylinderGeometry args={[0.0105, 0.0065, 0.062, 10]} />
                     <meshStandardMaterial
                       color="#d8e2dc"
                       metalness={0.92}
@@ -1665,140 +1781,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
               </group>
             );
           })}
-          {pushButtonSpecs.map((btn, idx) => {
-            const s = useGameStore.getState();
-            const isOn =
-              idx === 1
-                ? s.ventilationActive
-                : idx === 2
-                  ? s.kgbLineActive
-                  : idx === 3
-                    ? s.ventingSteam
-                    : idx === 4
-                      ? !s.isMusicMuted
-                      : auxToggles[idx] ?? false;
-            return (
-              <group
-                key={btn.id}
-                position={[-0.56 + idx * 0.28, -0.04, 0.025]}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  playSwitchClank(false);
-                  const store = useGameStore.getState();
-                  if (idx === 1) {
-                    store.toggleVentilation();
-                  } else if (idx === 2) {
-                    store.toggleKgbLine();
-                  } else if (idx === 3) {
-                    playSteamVentHiss(0.8);
-                    store.setVentingSteam(!store.ventingSteam);
-                  } else if (idx === 4) {
-                    store.toggleMusicMute();
-                  } else {
-                    setAuxToggles((prev) => {
-                      const next: [boolean, boolean, boolean, boolean] = [
-                        ...prev,
-                      ] as [boolean, boolean, boolean, boolean];
-                      next[idx] = !next[idx];
-                      return next;
-                    });
-                  }
-                }}
-              >
-                <CagedSovietJewelLamp3D
-                  position={[0, 0.112, 0]}
-                  defaultColor={isOn ? btn.color : "#1c2621"}
-                  scale={0.76}
-                />
-                {/* Chunky Push-Button Housing */}
-                <mesh
-                  position={[0, 0, isOn ? 0.008 : 0.02]}
-                  castShadow
-                  receiveShadow
-                >
-                  <boxGeometry args={[0.22, 0.11, 0.04]} />
-                  <meshStandardMaterial
-                    color="#23312b"
-                    roughness={0.45}
-                    metalness={0.65}
-                    bumpMap={ironTex.bumpMap}
-                    bumpScale={0.008}
-                  />
-                </mesh>
-                <mesh position={[0, 0, isOn ? 0.03 : 0.042]}>
-                  <planeGeometry args={[0.2, 0.095]} />
-                  <meshStandardMaterial
-                    map={btn.texture}
-                    emissive="#ffffff"
-                    emissiveMap={btn.texture}
-                    emissiveIntensity={isOn ? 0.55 : 0.22}
-                    roughness={0.75}
-                  />
-                </mesh>
-              </group>
-            );
-          })}
-        </group>
-
-        {/* Heavy Armored Cable Conduits connecting Right Panel into the Inspector's Desk */}
-        <group position={[-0.78, 0.62, 0.24]} rotation={[0, 0.42, 0]}>
-          <mesh
-            position={[0, 0.12, 0]}
-            rotation={[0, 0, Math.PI / 2]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.036, 0.036, 0.58, 10]} />
-            <meshStandardMaterial
-              color="#364940"
-              metalness={0.7}
-              roughness={0.4}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-            />
-          </mesh>
-          <mesh
-            position={[0, -0.02, 0.08]}
-            rotation={[0, 0, Math.PI / 2]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.028, 0.028, 0.58, 10]} />
-            <meshStandardMaterial
-              color="#23312b"
-              metalness={0.65}
-              roughness={0.45}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-            />
-          </mesh>
-          {/* Brass Conduit Flanges */}
-          <mesh
-            position={[-0.24, 0.12, 0]}
-            rotation={[0, 0, Math.PI / 2]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.048, 0.048, 0.024, 12]} />
-            <meshStandardMaterial
-              color="#b8a46b"
-              metalness={0.85}
-              roughness={0.28}
-              bumpMap={brassTex.bumpMap}
-              bumpScale={0.005}
-            />
-          </mesh>
-          <mesh
-            position={[-0.24, -0.02, 0.08]}
-            rotation={[0, 0, Math.PI / 2]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.04, 0.04, 0.024, 12]} />
-            <meshStandardMaterial
-              color="#b8a46b"
-              metalness={0.85}
-              roughness={0.28}
-              bumpMap={brassTex.bumpMap}
-              bumpScale={0.005}
-            />
-          </mesh>
         </group>
       </group>
 
@@ -1830,7 +1812,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = () => {
           {[-0.68, -0.34, 0, 0.34, 0.68].map((bx, idx) => (
             <mesh
               key={idx}
-              position={[bx, 1.94, 0.145]}
+              position={[bx, 1.995, 0.145]}
               rotation={[Math.PI / 2, 0, 0]}
               castShadow
             >
@@ -2003,7 +1985,7 @@ const DynamicBunkerLighting: React.FC = () => {
     }
 
     if (crtLightRef.current) {
-      crtLightRef.current.intensity = isBlackout ? 0.55 : 0.9;
+      crtLightRef.current.intensity = isBlackout ? 0.08 : 0.22;
       crtLightRef.current.color.set(
         komradOverrideLocked || ciaIntrusionActive ? "#ff2a2a" : "#38ff62",
       );
@@ -2092,14 +2074,14 @@ const DynamicBunkerLighting: React.FC = () => {
       <BunkerDustMotes3D />
 
       {/* 3. CRT & Gauge Diegetic Glow:
-          Local phosphor-green pointLight in front of K.O.M.R.A.D.-84 screen illuminating 3D keycaps & rear brass trim */}
+          Softened & repositioned forward/lower so it gently illuminates 3D keycaps without creating a specular glare spot on the CRT glass */}
       <pointLight
         ref={crtLightRef}
-        position={[0, 1.48, 0.86]}
+        position={[0, 1.12, 1.18]}
         color="#38ff62"
-        intensity={0.9}
-        distance={1.6}
-        decay={1.4}
+        intensity={0.22}
+        distance={2.6}
+        decay={1.8}
       />
 
       {/* Warm Amber/Red Diegetic Glow near the АЗ-5 Emergency Button & Left Reactor Gauges */}
@@ -2184,12 +2166,73 @@ export const ControlRoomScene: React.FC = () => {
   const bunkerArchRef = useRef<THREE.Group>(null);
   const reactorWrapRef = useRef<THREE.Group>(null);
   const terminalWrapRef = useRef<THREE.Group>(null);
+  const legacyBulletinTargetRef = useRef<THREE.Object3D | null>(null);
 
   useEffect(() => {
     applySovietPBRToHierarchy(bunkerArchRef.current);
     applySovietPBRToHierarchy(reactorWrapRef.current);
     applySovietPBRToHierarchy(terminalWrapRef.current);
+
+    // 1. Hide the legacy toy-brick keyboard group inside <TerminalStation3D /> and disable its raycasts
+    // 2. Raise the CRT monitor housing & curved CRT glass by +0.055m on Y so the bottom bezel never covers the 3 DVK-84 control stations
+    // 3. Increase CRT glass roughness (0.96) and darken diffuse albedo so pointLights never wash out the screen center
+    if (terminalWrapRef.current) {
+      terminalWrapRef.current.traverse((obj) => {
+        if (
+          obj.userData?.isDvk84Replacement ||
+          obj.parent?.userData?.isDvk84Replacement
+        ) {
+          return;
+        }
+        if (
+          (obj as THREE.Mesh).isMesh &&
+          Math.abs(obj.position.y - 1.4) < 0.03 &&
+          (Math.abs(obj.position.z - 0.02) < 0.03 ||
+            Math.abs(obj.position.z - 0.135) < 0.03)
+        ) {
+          obj.position.y = 1.455;
+          if (Math.abs(obj.position.z - 0.135) < 0.03) {
+            const mat = (obj as THREE.Mesh).material;
+            if (mat instanceof THREE.MeshStandardMaterial) {
+              mat.roughness = 0.96;
+              mat.metalness = 0.0;
+              mat.color.set("#1a261e");
+              mat.emissiveIntensity = 0.92;
+              mat.needsUpdate = true;
+            }
+          }
+        }
+        if (
+          obj.type === "Group" &&
+          Math.abs(obj.position.y - 0.81) < 0.025 &&
+          Math.abs(obj.position.z - 0.19) < 0.025
+        ) {
+          for (const child of obj.children) {
+            if (Math.abs(child.position.x - 0.45) < 0.05) {
+              legacyBulletinTargetRef.current = child;
+            }
+          }
+          obj.visible = false;
+          obj.traverse((sub) => {
+            if ((sub as THREE.Mesh).isMesh) {
+              sub.raycast = () => {};
+            }
+          });
+        }
+      });
+    }
   }, []);
+
+  const handleCycleBulletin = () => {
+    const target = legacyBulletinTargetRef.current as
+      | (THREE.Object3D & {
+          __r3f?: { handlers?: { onClick?: (ev: { stopPropagation: () => void }) => void } };
+        })
+      | null;
+    if (target?.__r3f?.handlers?.onClick) {
+      target.__r3f.handlers.onClick({ stopPropagation: () => {} });
+    }
+  };
 
   return (
     <>
@@ -2370,9 +2413,15 @@ export const ControlRoomScene: React.FC = () => {
         ))}
       </group>
 
-      {/* 2. CENTER COCKPIT LOOMING TERMINAL: <TerminalStation3D /> (Pulled forward directly behind & above desk) */}
+      {/* 2. CENTER COCKPIT LOOMING TERMINAL: <TerminalStation3D /> + High-Detail Soviet DVK-84 Console */}
       <group ref={terminalWrapRef} position={[0, 0.14, 2.18]}>
         <TerminalStation3D />
+        <group
+          position={[0, 0, -1.62]}
+          userData={{ isDvk84Replacement: true }}
+        >
+          <SovietDvk84KeyboardConsole3D onCycleBulletin={handleCycleBulletin} />
+        </group>
       </group>
 
       {/* 3. CENTRAL COMMAND DESK: <InspectorDesk3D /> */}

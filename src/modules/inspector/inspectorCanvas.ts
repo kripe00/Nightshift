@@ -13,6 +13,7 @@ import {
   type DeskDocument,
   type DocumentFontType,
   type InspectionVerdict,
+  type ManualPageId,
   type SealEmblemType,
   type SealMicroDefect,
 } from './useDeskStore'
@@ -540,7 +541,7 @@ export function drawFullDirectiveSheetCanvas(
   ctx.lineTo(LW - 42, 138)
   ctx.stroke()
 
-  // 6. Directive Title (Bold 22px) & Body Paragraphs (Bold 19px-20px in dark #141413 ink)
+  // 6. Directive Title (Bold 22px), Power Routing Order Box & Body Paragraphs
   ctx.save()
   if (doc.fontType === 'SLANTED_ITALIC') {
     ctx.transform(1, 0, -0.18, 1, 46, 0)
@@ -549,19 +550,36 @@ export function drawFullDirectiveSheetCanvas(
   ctx.textAlign = 'left'
   ctx.font = getFontDeclaration(doc.fontType, 22)
   const titleLines = wrapCanvasText(ctx, doc.title, LW - 92)
-  let y = 166
+  let y = 164
   for (const line of titleLines) {
     ctx.fillText(line, 44, y)
-    y += 27
+    y += 26
+  }
+
+  // Prominent Framed Regional Power Routing Order Banner
+  if (doc.powerOrderText) {
+    const boxY = y - 6
+    ctx.fillStyle = '#18241d'
+    ctx.fillRect(42, boxY, LW - 84, 38)
+    ctx.strokeStyle = inkHex
+    ctx.lineWidth = 2
+    ctx.strokeRect(42, boxY, LW - 84, 38)
+    ctx.fillStyle = '#33ff66'
+    ctx.font = 'bold 15px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText(doc.powerOrderText, LW / 2, boxY + 24)
+    ctx.textAlign = 'left'
+    y = boxY + 58
+  } else {
+    y += 10
   }
 
   ctx.fillStyle = '#141413'
-  ctx.font = getFontDeclaration(doc.fontType, 19)
+  ctx.font = getFontDeclaration(doc.fontType, 18)
   const bodyLines = wrapCanvasText(ctx, doc.content, LW - 92)
-  y += 10
   for (const line of bodyLines) {
     ctx.fillText(line, 44, y)
-    y += 27
+    y += 25
   }
   ctx.restore()
 
@@ -636,10 +654,10 @@ export function drawFullDirectiveSheetCanvas(
   ctx.fillStyle = '#0d110f'
   ctx.fillRect(42, LH - 66, LW - 84, 36)
   ctx.fillStyle = '#b8a46b'
-  ctx.font = 'bold 18px "VT323", monospace'
+  ctx.font = 'bold 17px "VT323", monospace'
   ctx.textAlign = 'center'
   ctx.fillText(
-    'DRAG TO [ИСХОДЯЩИЕ OUTBOX] (TOP) OR [УНИЧТОЖИТЕЛЬ-84 SHREDDER] (RIGHT)',
+    'STAMP [ОДОБРЕНО] -> DROP IN LEFT [ПНЕВМОПОЧТА TUBE] OR SHRED [RIGHT]',
     LW / 2,
     LH - 44
   )
@@ -649,18 +667,324 @@ export function drawFullDirectiveSheetCanvas(
 
 export const drawDirectiveCanvas = drawFullDirectiveSheetCanvas
 
+type ManualIconKind =
+  | 'levers'
+  | 'wheel'
+  | 'az5'
+  | 'octagon'
+  | 'gas'
+  | 'rheostat'
+  | 'breaker'
+  | 'printer'
+  | 'stamp'
+  | 'piston'
+  | 'vent'
+
+function drawManualSchematicIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  kind: ManualIconKind
+): void {
+  ctx.save()
+  ctx.translate(cx, cy)
+
+  if (kind === 'levers') {
+    // 3 MW Slotted Levers Icon
+    ctx.fillStyle = '#18211b'
+    ctx.fillRect(-34, -34, 68, 68)
+    ctx.strokeStyle = '#b8a46b'
+    ctx.lineWidth = 2.5
+    ctx.strokeRect(-34, -34, 68, 68)
+    const leverHeights = [-14, 4, -8]
+    const cols = ['#33ff66', '#ffb000', '#33ff66']
+    ;[-18, 0, 18].forEach((lx, i) => {
+      ctx.fillStyle = '#0d110f'
+      ctx.fillRect(lx - 3, -24, 6, 48)
+      const hy = leverHeights[i] ?? 0
+      ctx.fillStyle = cols[i] ?? '#33ff66'
+      ctx.fillRect(lx - 7, hy - 6, 14, 12)
+      ctx.strokeStyle = '#111111'
+      ctx.lineWidth = 1.5
+      ctx.strokeRect(lx - 7, hy - 6, 14, 12)
+    })
+  } else if (kind === 'wheel') {
+    // 6-Spoke Valve Handwheel Icon
+    ctx.strokeStyle = '#6e1a14'
+    ctx.lineWidth = 7
+    ctx.beginPath()
+    ctx.arc(0, 0, 26, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = '#b8a46b'
+    ctx.lineWidth = 3
+    for (let i = 0; i < 3; i++) {
+      const a = (i * Math.PI) / 3
+      ctx.beginPath()
+      ctx.moveTo(Math.cos(a) * -23, Math.sin(a) * -23)
+      ctx.lineTo(Math.cos(a) * 23, Math.sin(a) * 23)
+      ctx.stroke()
+    }
+    ctx.fillStyle = '#b8a46b'
+    ctx.beginPath()
+    ctx.arc(0, 0, 7, 0, Math.PI * 2)
+    ctx.fill()
+  } else if (kind === 'az5') {
+    // Hinged Hazard Cover & Red AZ-5 Button + Green Boron Plunger
+    ctx.fillStyle = '#d49b27'
+    ctx.fillRect(-32, -32, 64, 20)
+    ctx.strokeStyle = '#111111'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-32, -32, 64, 20)
+    ctx.fillStyle = '#8b1e1e'
+    ctx.beginPath()
+    ctx.arc(-13, 12, 14, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#145c26'
+    ctx.beginPath()
+    ctx.arc(16, 12, 13, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  } else if (kind === 'octagon') {
+    // Octagonal RBMK 37-Channel Bio-Shield Matrix Icon
+    ctx.fillStyle = '#18211b'
+    ctx.beginPath()
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4 + Math.PI / 8
+      const px = Math.cos(a) * 32
+      const py = Math.sin(a) * 32
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    }
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = '#b8a46b'
+    ctx.lineWidth = 2.5
+    ctx.stroke()
+    for (let gx = -15; gx <= 15; gx += 15) {
+      for (let gy = -15; gy <= 15; gy += 15) {
+        const isHot = (gx === 0 && gy === 0) || (gx === 15 && gy === -15)
+        ctx.fillStyle = isHot ? '#ff2a2a' : '#33ff66'
+        ctx.fillRect(gx - 5, gy - 5, 10, 10)
+      }
+    }
+  } else if (kind === 'gas') {
+    // Containment Toggles & Bubbler Sight-Glass Column Icon
+    ctx.fillStyle = '#18211b'
+    ctx.fillRect(-34, -30, 40, 60)
+    ctx.strokeStyle = '#b8a46b'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-34, -30, 40, 60)
+    ;[-21, -7].forEach((tx) => {
+      ctx.fillStyle = '#33ff66'
+      ctx.beginPath()
+      ctx.arc(tx, -12, 4.5, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#cfc6b0'
+      ctx.fillRect(tx - 2.5, 2, 5, 18)
+    })
+    ctx.fillStyle = '#0d110f'
+    ctx.fillRect(14, -30, 18, 60)
+    ctx.fillStyle = '#28d8ff'
+    ctx.fillRect(17, -6, 12, 33)
+    ctx.strokeStyle = '#b8a46b'
+    ctx.strokeRect(14, -30, 18, 60)
+  } else if (kind === 'rheostat') {
+    // 50Hz Rotary Rheostat Dial with Pointer Bar
+    ctx.fillStyle = '#18211b'
+    ctx.beginPath()
+    ctx.arc(0, 0, 30, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = '#b8a46b'
+    ctx.lineWidth = 3
+    ctx.stroke()
+    ctx.strokeStyle = '#33ff66'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.arc(0, 0, 22, -Math.PI * 0.8, -Math.PI * 0.2)
+    ctx.stroke()
+    ctx.strokeStyle = '#ffb000'
+    ctx.lineWidth = 4.5
+    ctx.beginPath()
+    ctx.moveTo(0, 4)
+    ctx.lineTo(0, -20)
+    ctx.stroke()
+  } else if (kind === 'breaker') {
+    // Copper Knife-Switch MAIN BREAKER Icon
+    ctx.fillStyle = '#18211b'
+    ctx.fillRect(-32, -32, 64, 64)
+    ctx.strokeStyle = '#ff2a2a'
+    ctx.lineWidth = 2.5
+    ctx.strokeRect(-32, -32, 64, 64)
+    ctx.strokeStyle = '#d4874b'
+    ctx.lineWidth = 5
+    ctx.beginPath()
+    ctx.moveTo(-11, 18)
+    ctx.lineTo(-11, -16)
+    ctx.moveTo(11, 18)
+    ctx.lineTo(11, -16)
+    ctx.stroke()
+    ctx.fillStyle = '#6e1a14'
+    ctx.fillRect(-20, -22, 40, 11)
+  } else if (kind === 'printer') {
+    // Pravda Printer & Magnifying Lens Icon
+    ctx.fillStyle = '#2b302c'
+    ctx.fillRect(-32, -8, 64, 36)
+    ctx.strokeStyle = '#111111'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-32, -8, 64, 36)
+    ctx.fillStyle = '#e6dec3'
+    ctx.fillRect(-22, -32, 44, 32)
+    ctx.strokeRect(-22, -32, 44, 32)
+    ctx.strokeStyle = '#b8a46b'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.arc(10, -14, 12, 0, Math.PI * 2)
+    ctx.stroke()
+  } else if (kind === 'stamp') {
+    // Stamp & Shredder Icon
+    ctx.fillStyle = '#145c26'
+    ctx.fillRect(-30, -24, 36, 18)
+    ctx.strokeStyle = '#111111'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-30, -24, 36, 18)
+    ctx.fillStyle = '#6e1a14'
+    ctx.fillRect(6, -28, 24, 56)
+    ctx.strokeRect(6, -28, 24, 56)
+    ctx.fillStyle = '#e6dec3'
+    ctx.fillRect(-28, 2, 28, 24)
+  } else if (kind === 'piston') {
+    // Boron T-Handle Piston Pump Icon
+    ctx.fillStyle = '#18211b'
+    ctx.fillRect(-30, -32, 60, 64)
+    ctx.strokeStyle = '#b8a46b'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-30, -32, 60, 64)
+    ctx.fillStyle = '#8a929a'
+    ctx.fillRect(-4, -18, 8, 42)
+    ctx.fillStyle = '#4a1210'
+    ctx.fillRect(-22, -24, 44, 12)
+    ctx.strokeStyle = '#111111'
+    ctx.strokeRect(-22, -24, 44, 12)
+  } else if (kind === 'vent') {
+    // Steam Vent Lever & Guarded Toggle Icon
+    ctx.fillStyle = '#18211b'
+    ctx.fillRect(-32, -32, 64, 64)
+    ctx.strokeStyle = '#b8a46b'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-32, -32, 64, 64)
+    ctx.strokeStyle = '#8a929a'
+    ctx.lineWidth = 5
+    ctx.beginPath()
+    ctx.moveTo(-12, -20)
+    ctx.lineTo(-12, 18)
+    ctx.stroke()
+    ctx.fillStyle = '#6e1a14'
+    ctx.fillRect(-22, 10, 20, 12)
+    ctx.fillStyle = '#d49b27'
+    ctx.fillRect(8, -18, 16, 36)
+  }
+
+  ctx.restore()
+}
+
+interface FieldGuideCardSpec {
+  icon: ManualIconKind
+  badge: string
+  useLines: [string, string]
+  effectLines: [string, string]
+  reactionLines: [string, string]
+}
+
+function drawFieldGuideCard(
+  ctx: CanvasRenderingContext2D,
+  LW: number,
+  ry: number,
+  card: FieldGuideCardSpec
+): void {
+  const cardX = 42
+  const cardW = LW - 72
+  const cardH = 196
+
+  // Cream technical card body
+  ctx.fillStyle = '#e6dfd0'
+  ctx.fillRect(cardX, ry, cardW, cardH)
+  ctx.strokeStyle = '#111111'
+  ctx.lineWidth = 2.5
+  ctx.strokeRect(cardX, ry, cardW, cardH)
+
+  // Top Header Badge Bar
+  ctx.fillStyle = '#144722'
+  ctx.fillRect(cardX, ry, cardW, 30)
+  ctx.strokeStyle = '#111111'
+  ctx.lineWidth = 2
+  ctx.strokeRect(cardX, ry, cardW, 30)
+
+  ctx.fillStyle = '#ffffff'
+  ctx.textAlign = 'left'
+  ctx.font = 'bold 17px "Courier Prime", monospace'
+  ctx.fillText(card.badge, cardX + 10, ry + 21)
+
+  // Left Schematic Mini-Diagram Box
+  ctx.fillStyle = '#d6cdb8'
+  ctx.fillRect(cardX + 2, ry + 31, 88, cardH - 33)
+  ctx.strokeStyle = '#111111'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.moveTo(cardX + 90, ry + 30)
+  ctx.lineTo(cardX + 90, ry + cardH)
+  ctx.stroke()
+
+  drawManualSchematicIcon(ctx, cardX + 46, ry + 113, card.icon)
+
+  // Right Column Structured Breakdown: USE (Blue-Black), EFFECT (Green), REACTION (Crimson)
+  const tx = cardX + 98
+  ctx.textAlign = 'left'
+  ctx.font = 'bold 15px "Courier Prime", monospace'
+
+  // 1. HOW TO OPERATE (USE:)
+  ctx.fillStyle = '#14264c'
+  ctx.fillText(`USE: ${card.useLines[0]}`, tx, ry + 52)
+  ctx.fillText(`     ${card.useLines[1]}`, tx, ry + 72)
+
+  // Horizontal separator rule
+  ctx.strokeStyle = '#b8ae96'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(tx, ry + 81)
+  ctx.lineTo(cardX + cardW - 8, ry + 81)
+  ctx.stroke()
+
+  // 2. DIRECT ACTION / EFFECT (EFFECT:)
+  ctx.fillStyle = '#13522d'
+  ctx.fillText(`EFFECT: ${card.effectLines[0]}`, tx, ry + 101)
+  ctx.fillText(`        ${card.effectLines[1]}`, tx, ry + 121)
+
+  // Horizontal separator rule
+  ctx.beginPath()
+  ctx.moveTo(tx, ry + 130)
+  ctx.lineTo(cardX + cardW - 8, ry + 130)
+  ctx.stroke()
+
+  // 3. COUNTER-REACTION / SIDE EFFECT (REACTION:)
+  ctx.fillStyle = '#8a1c14'
+  ctx.fillText(`REACTION: ${card.reactionLines[0]}`, tx, ry + 151)
+  ctx.fillText(`          ${card.reactionLines[1]}`, tx, ry + 172)
+}
+
 /**
- * Draws Komrad Oleg's 3-Page KGB Security Manual '84 (`КГБ СССР // ФОРМА 84-Б`)
- * with 50% larger high-contrast typography (headers 28px-30px bold, section titles 22px-24px bold,
- * rules/examples/labels 20px-22px bold in #111111 ink on #dfd8c5 paper).
+ * Draws Komrad Oleg's 6-Page Soviet Control Room Master Folder (`ТЕХНИЧЕСКАЯ ПАПКА БЛОКА №4`):
+ * - SECTION I (`pages 1..3`): KGB Forgery Security Manual (`1. SEALS`, `2. FONTS`, `3. COLOURS`)
+ * - SECTION II (`pages 4..6`): RBMK Control Panel Operating Manual (`4. UNIT A`, `5. UNIT A-2/B`, `6. GRID [5]`)
  */
 export function drawSecurityManualCanvas(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  page: 1 | 2 | 3,
+  page: ManualPageId,
   scrollY = 0,
-  isMagnified = false
+  isMagnified = false,
+  isHeld = false
 ): void {
   ctx.save()
   ctx.imageSmoothingEnabled = true
@@ -668,29 +992,43 @@ export function drawSecurityManualCanvas(
   const LH = 775
   ctx.scale(w / LW, h / LH)
 
-  // Crimson KGB Hardcover Binder Frame
-  ctx.fillStyle = '#6b1d18'
+  const isRbmkSection = page >= 4
+
+  // Hardcover Folder Leatherette Outer Frame (Maroon for KGB Section I, Deep Bunker Olive for RBMK Section II)
+  ctx.fillStyle = isRbmkSection ? '#1f362a' : '#6b1d18'
   ctx.fillRect(0, 0, LW, LH)
 
-  // Clean High-Contrast Manual Page Cardstock (#dfd8c5)
+  // Clean High-Contrast Manual Page Cardstock (#dfd8c5) shifted slightly right to clear the 3-ring binder holes
   ctx.fillStyle = '#dfd8c5'
   ctx.fillRect(14, 14, LW - 28, LH - 28)
   ctx.strokeStyle = '#111111'
   ctx.lineWidth = 3
   ctx.strokeRect(20, 20, LW - 40, LH - 40)
 
-  // Scrollable Viewport Clip Area (y: 124 to LH - 68)
+  // Left-Edge Punched 3-Ring Binder Holes & Brass Reinforcements on Page
+  ;[195, 388, 580].forEach((hy) => {
+    ctx.fillStyle = '#b8a46b'
+    ctx.beginPath()
+    ctx.arc(32, hy, 9, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#2b1a12'
+    ctx.beginPath()
+    ctx.arc(32, hy, 5, 0, Math.PI * 2)
+    ctx.fill()
+  })
+
+  // Scrollable Viewport Clip Area (y: 132 to LH - 66)
   ctx.save()
   ctx.beginPath()
-  ctx.rect(24, 124, LW - 48, LH - 192)
+  ctx.rect(24, 132, LW - 48, LH - 198)
   ctx.clip()
   ctx.translate(0, -scrollY * 1.55)
 
   if (page === 1) {
     ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 23px "Courier Prime", monospace'
+    ctx.font = 'bold 22px "Courier Prime", monospace'
     ctx.textAlign = 'left'
-    ctx.fillText('1. OFFICIAL SOVIET SEALS & SPECIMENS:', 32, 152)
+    ctx.fillText('1. OFFICIAL SOVIET SEALS & SPECIMENS:', 44, 158)
 
     const sealRows: Array<{
       type: SealEmblemType
@@ -731,18 +1069,18 @@ export function drawSecurityManualCanvas(
     ]
 
     sealRows.forEach((row, idx) => {
-      const ry = 166 + idx * 212
+      const ry = 170 + idx * 212
       ctx.fillStyle = '#dfd8c5'
-      ctx.fillRect(30, ry, LW - 60, 198)
+      ctx.fillRect(42, ry, LW - 72, 198)
       ctx.strokeStyle = '#111111'
       ctx.lineWidth = 2.5
-      ctx.strokeRect(30, ry, LW - 60, 198)
+      ctx.strokeRect(42, ry, LW - 72, 198)
 
       drawOfficialSeal(
         ctx,
-        92,
+        102,
         ry + 99,
-        54,
+        52,
         row.type,
         'NONE',
         row.ink,
@@ -751,29 +1089,29 @@ export function drawSecurityManualCanvas(
 
       ctx.fillStyle = '#111111'
       ctx.textAlign = 'left'
-      ctx.font = 'bold 22px "Courier Prime", monospace'
-      ctx.fillText(row.title, 156, ry + 34)
+      ctx.font = 'bold 21px "Courier Prime", monospace'
+      ctx.fillText(row.title, 164, ry + 34)
       ctx.fillStyle = '#1e2b22'
-      ctx.font = 'bold 20px "Courier Prime", monospace'
-      ctx.fillText(row.ministry, 156, ry + 66)
+      ctx.font = 'bold 19px "Courier Prime", monospace'
+      ctx.fillText(row.ministry, 164, ry + 66)
       ctx.fillStyle = '#145c26'
-      ctx.font = 'bold 20px "Courier Prime", monospace'
-      ctx.fillText(row.rule1, 156, ry + 104)
-      ctx.fillText(row.rule2, 156, ry + 138)
+      ctx.font = 'bold 19px "Courier Prime", monospace'
+      ctx.fillText(row.rule1, 164, ry + 104)
+      ctx.fillText(row.rule2, 164, ry + 138)
       ctx.fillStyle = '#8b1e1e'
-      ctx.fillText(row.rule3, 156, ry + 172)
+      ctx.fillText(row.rule3, 164, ry + 172)
     })
   } else if (page === 2) {
     ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 23px "Courier Prime", monospace'
+    ctx.font = 'bold 22px "Courier Prime", monospace'
     ctx.textAlign = 'left'
-    ctx.fillText('2. AUTHORIZED MINISTRIES & FONTS:', 32, 152)
+    ctx.fillText('2. AUTHORIZED MINISTRIES & FONTS:', 44, 158)
 
     ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(30, 166, LW - 60, 214)
+    ctx.fillRect(42, 170, LW - 72, 214)
     ctx.strokeStyle = '#111111'
     ctx.lineWidth = 2.5
-    ctx.strokeRect(30, 166, LW - 60, 214)
+    ctx.strokeRect(42, 170, LW - 72, 214)
 
     const validMinistries = [
       '1. MINISTRY OF MEDIUM MACHINE BLDG',
@@ -782,76 +1120,72 @@ export function drawSecurityManualCanvas(
       '4. 5TH CHIEF DIRECTORATE',
     ]
     ctx.fillStyle = '#145c26'
-    ctx.font = 'bold 21px "Courier Prime", monospace'
+    ctx.font = 'bold 20px "Courier Prime", monospace'
     validMinistries.forEach((m, i) => {
-      ctx.fillText(`✓ ${m}`, 42, 198 + i * 34)
+      ctx.fillText(`✓ ${m}`, 52, 202 + i * 34)
     })
     ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 20px "Courier Prime", monospace'
-    ctx.fillText(
-      '✗ SHRED ANY OTHER MINISTRY HEADER!',
-      42,
-      358
-    )
+    ctx.font = 'bold 19px "Courier Prime", monospace'
+    ctx.fillText('✗ SHRED ANY OTHER MINISTRY HEADER!', 52, 362)
 
     // Approved Fonts Box
     ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(30, 394, LW - 60, 194)
+    ctx.fillRect(42, 398, LW - 72, 194)
     ctx.strokeStyle = '#145c26'
     ctx.lineWidth = 2.5
-    ctx.strokeRect(30, 394, LW - 60, 194)
+    ctx.strokeRect(42, 398, LW - 72, 194)
     ctx.fillStyle = '#145c26'
-    ctx.font = 'bold 22px "Courier Prime", monospace'
-    ctx.fillText('✓ APPROVED SOVIET FONTS (ГОСТ 84):', 42, 426)
+    ctx.font = 'bold 21px "Courier Prime", monospace'
+    ctx.fillText('✓ APPROVED SOVIET FONTS (ГОСТ 84):', 52, 430)
     ctx.fillStyle = '#111111'
-    ctx.font = getFontDeclaration('GOST_MONO', 22)
-    ctx.fillText('• GOST MONO: ДИРЕКТИВА №44', 42, 464)
-    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.font = getFontDeclaration('GOST_MONO', 21)
+    ctx.fillText('• GOST MONO: ДИРЕКТИВА №44', 52, 468)
+    ctx.font = 'bold 19px "Courier Prime", monospace'
     ctx.fillStyle = '#1e2b22'
-    ctx.fillText('  Monospaced slab; flat terminals.', 42, 494)
+    ctx.fillText('  Monospaced slab; flat terminals.', 52, 498)
     ctx.fillStyle = '#111111'
-    ctx.font = getFontDeclaration('PRAVDA_BLOCK', 22)
-    ctx.fillText('• PRAVDA BLOCK: ПРОТОКОЛ ГКАЭ', 42, 534)
-    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.font = getFontDeclaration('PRAVDA_BLOCK', 21)
+    ctx.fillText('• PRAVDA BLOCK: ПРОТОКОЛ ГКАЭ', 52, 538)
+    ctx.font = 'bold 19px "Courier Prime", monospace'
     ctx.fillStyle = '#1e2b22'
-    ctx.fillText('  Heavy block strokes; zero slant.', 42, 566)
+    ctx.fillText('  Heavy block strokes; zero slant.', 52, 570)
 
     // Forbidden Western Fonts Box
     ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(30, 602, LW - 60, 202)
+    ctx.fillRect(42, 606, LW - 72, 202)
     ctx.strokeStyle = '#8b1e1e'
     ctx.lineWidth = 2.5
-    ctx.strokeRect(30, 602, LW - 60, 202)
+    ctx.strokeRect(42, 606, LW - 72, 202)
+    ctx.fillStyle = '#8b1e1e'
+    ctx.font = 'bold 21px "Courier Prime", monospace'
+    ctx.fillText('✗ FORBIDDEN WESTERN FONTS (SHRED!):', 52, 638)
+    ctx.fillStyle = '#111111'
+    ctx.font = getFontDeclaration('WESTERN_SERIF', 21)
+    ctx.fillText('• WESTERN SERIF: Roman Serif 88', 52, 676)
+    ctx.font = 'bold 19px "Courier Prime", monospace'
+    ctx.fillStyle = '#8b1e1e'
+    ctx.fillText('  Triangular serifs & thin strokes!', 52, 708)
+    ctx.fillStyle = '#111111'
+    ctx.font = getFontDeclaration('SLANTED_ITALIC', 21)
+    ctx.fillText('• SLANTED / SANS: 12° Italic', 52, 748)
+    ctx.font = 'bold 19px "Courier Prime", monospace'
+    ctx.fillStyle = '#8b1e1e'
+    ctx.fillText('  12° cursive slant or sans curves!', 52, 780)
+  } else if (page === 3) {
     ctx.fillStyle = '#8b1e1e'
     ctx.font = 'bold 22px "Courier Prime", monospace'
-    ctx.fillText('✗ FORBIDDEN WESTERN FONTS (SHRED!):', 42, 634)
-    ctx.fillStyle = '#111111'
-    ctx.font = getFontDeclaration('WESTERN_SERIF', 22)
-    ctx.fillText('• WESTERN SERIF: Roman Serif 88', 42, 672)
-    ctx.font = 'bold 20px "Courier Prime", monospace'
-    ctx.fillStyle = '#8b1e1e'
-    ctx.fillText('  Triangular serifs & thin strokes!', 42, 704)
-    ctx.fillStyle = '#111111'
-    ctx.font = getFontDeclaration('SLANTED_ITALIC', 22)
-    ctx.fillText('• SLANTED / SANS: 12° Italic', 42, 744)
-    ctx.font = 'bold 20px "Courier Prime", monospace'
-    ctx.fillStyle = '#8b1e1e'
-    ctx.fillText('  12° cursive slant or sans curves!', 42, 776)
-  } else {
-    ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 23px "Courier Prime", monospace'
     ctx.textAlign = 'left'
-    ctx.fillText('3. PAPER STOCK & MINISTRY INKS:', 32, 152)
+    ctx.fillText('3. PAPER STOCK & MINISTRY INKS:', 44, 158)
 
     // Paper Stock Swatches
     ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(30, 166, LW - 60, 292)
+    ctx.fillRect(42, 170, LW - 72, 292)
     ctx.strokeStyle = '#111111'
     ctx.lineWidth = 2.5
-    ctx.strokeRect(30, 166, LW - 60, 292)
+    ctx.strokeRect(42, 170, LW - 72, 292)
     ctx.fillStyle = '#111111'
-    ctx.font = 'bold 22px "Courier Prime", monospace'
-    ctx.fillText('1. PAPER STOCK TINT SWATCHES:', 42, 198)
+    ctx.font = 'bold 21px "Courier Prime", monospace'
+    ctx.fillText('1. PAPER STOCK TINT SWATCHES:', 52, 202)
 
     const papers: Array<{ hex: string; label: string; desc: string; ok: boolean }> = [
       {
@@ -880,29 +1214,29 @@ export function drawSecurityManualCanvas(
       },
     ]
     papers.forEach((p, idx) => {
-      const py = 214 + idx * 58
+      const py = 218 + idx * 58
       ctx.fillStyle = p.hex
-      ctx.fillRect(44, py, 36, 38)
+      ctx.fillRect(54, py, 36, 38)
       ctx.strokeStyle = '#111111'
       ctx.lineWidth = 2
-      ctx.strokeRect(44, py, 36, 38)
+      ctx.strokeRect(54, py, 36, 38)
       ctx.fillStyle = p.ok ? '#145c26' : '#8b1e1e'
-      ctx.font = 'bold 21px "Courier Prime", monospace'
-      ctx.fillText(p.label, 92, py + 16)
+      ctx.font = 'bold 20px "Courier Prime", monospace'
+      ctx.fillText(p.label, 100, py + 16)
       ctx.fillStyle = '#111111'
-      ctx.font = 'bold 19px "Courier Prime", monospace'
-      ctx.fillText(p.desc, 92, py + 40)
+      ctx.font = 'bold 18px "Courier Prime", monospace'
+      ctx.fillText(p.desc, 100, py + 40)
     })
 
     // Ministry Ink Swatches
     ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(30, 472, LW - 60, 316)
+    ctx.fillRect(42, 476, LW - 72, 316)
     ctx.strokeStyle = '#111111'
     ctx.lineWidth = 2.5
-    ctx.strokeRect(30, 472, LW - 60, 316)
+    ctx.strokeRect(42, 476, LW - 72, 316)
     ctx.fillStyle = '#111111'
-    ctx.font = 'bold 22px "Courier Prime", monospace'
-    ctx.fillText('2. MANDATORY MINISTRY INKS:', 42, 504)
+    ctx.font = 'bold 21px "Courier Prime", monospace'
+    ctx.fillText('2. MANDATORY MINISTRY INKS:', 52, 508)
 
     const inks: Array<{ hex: string; title: string; rule: string; ok: boolean }> = [
       {
@@ -931,70 +1265,442 @@ export function drawSecurityManualCanvas(
       },
     ]
     inks.forEach((ink, idx) => {
-      const iy = 522 + idx * 62
+      const iy = 526 + idx * 62
       ctx.fillStyle = ink.hex
-      ctx.fillRect(44, iy, 36, 38)
+      ctx.fillRect(54, iy, 36, 38)
       ctx.strokeStyle = '#111111'
       ctx.lineWidth = 2
-      ctx.strokeRect(44, iy, 36, 38)
+      ctx.strokeRect(54, iy, 36, 38)
       ctx.fillStyle = ink.ok ? '#111111' : '#8b1e1e'
-      ctx.font = 'bold 21px "Courier Prime", monospace'
-      ctx.fillText(ink.title, 92, iy + 16)
-      ctx.fillStyle = ink.ok ? '#145c26' : '#8b1e1e'
       ctx.font = 'bold 20px "Courier Prime", monospace'
-      ctx.fillText(ink.rule, 92, iy + 42)
+      ctx.fillText(ink.title, 100, iy + 16)
+      ctx.fillStyle = ink.ok ? '#145c26' : '#8b1e1e'
+      ctx.font = 'bold 19px "Courier Prime", monospace'
+      ctx.fillText(ink.rule, 100, iy + 42)
+    })
+  } else if (page === 4) {
+    // =========================================================================
+    // SECTION II — TAB 4 (`4. HOW TO PLAY (SHIFT LOOP)`)
+    // =========================================================================
+    ctx.fillStyle = '#144722'
+    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText('4. HOW TO PLAY: 00:00-06:00 SHIFT LOOP', 44, 156)
+
+    const loopCards: FieldGuideCardSpec[] = [
+      {
+        icon: 'az5',
+        badge: '1. THE GOAL (SURVIVE 00:00 TO 06:00 SHIFT)',
+        useLines: [
+          'Press Keys [1]-[5] to move between panels',
+          'or press [B] to hold this Manual in hand.',
+        ],
+        effectLines: [
+          'Survive from 00:00 to 06:00 AM to complete',
+          'your night shift at RBMK Sector 84.',
+        ],
+        reactionLines: [
+          'Core Temp >1000°C triggers RBMK Meltdown!',
+          '4 KGB Citations = immediate KGB arrest!',
+        ],
+      },
+      {
+        icon: 'printer',
+        badge: '2. STEP 1 — TEAR & INSPECT ([KEY 4] DESK)',
+        useLines: [
+          'When ПРАВДА-84 prints a directive, grab &',
+          'drag paper sideways across the tear-bar.',
+        ],
+        effectLines: [
+          'Use the 2x Magnifying Glass & Section I',
+          '(1.SEALS, 2.FONTS, 3.COLOURS) to inspect.',
+        ],
+        reactionLines: [
+          'Missing a hidden CIA forgery flaw or taking',
+          'too long earns a KGB Citation penalty!',
+        ],
+      },
+      {
+        icon: 'stamp',
+        badge: '3. STEP 2 — STAMP [ОДОБРЕНО] & PNEUMATIC TUBE',
+        useLines: [
+          'GENUINE: Stamp ОДОБРЕНО, then drag onto or',
+          'click the left ПНЕВМОПОЧТА Outbox Tube!',
+        ],
+        effectLines: [
+          'Dispatches capsule & updates Regional Map',
+          'MW targets (CITY / DEFENSE / VODKA).',
+        ],
+        reactionLines: [
+          'FORGED: Drag into right Shredder & pull handle',
+          '5x! Dispatching a forgery triggers sabotage!',
+        ],
+      },
+      {
+        icon: 'levers',
+        badge: '4. STEP 3 — ROUTE MW & PROTECT VODKA WATER!',
+        useLines: [
+          'Drag 1.CITY, 2.DEFENSE, 3.VODKA levers on',
+          'UNIT A [Key 1] to match Regional Map MW.',
+        ],
+        effectLines: [
+          'Balance Cooling Pumps, Helium-N2 Gas Loop',
+          '(UNIT B) & Bubbler Water Recycle (+12%/s).',
+        ],
+        reactionLines: [
+          'Over-pumping river water (<40% Reservoir)',
+          'causes a Vodka Distillery Water Drought!',
+        ],
+      },
+    ]
+
+    loopCards.forEach((c, idx) => {
+      drawFieldGuideCard(ctx, LW, 168 + idx * 208, c)
+    })
+  } else if (page === 5) {
+    // =========================================================================
+    // SECTION II — TAB 5 (`5. UNIT A (MAIN REACTOR [KEY 1])`)
+    // =========================================================================
+    ctx.fillStyle = '#144722'
+    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText('5. UNIT A: MAIN REACTOR PANEL [KEY 1]', 44, 156)
+
+    const unitACards: FieldGuideCardSpec[] = [
+      {
+        icon: 'levers',
+        badge: '[KEY 1] REGIONAL MW LEVERS (1.CITY / 2.DEF / 3.VODKA)',
+        useLines: [
+          'Drag 1.CITY & AGRI, 2.DEFENSE GRID, and',
+          '3.VODKA & STEEL levers directly (0-80 MW).',
+        ],
+        effectLines: [
+          'Routes Megawatts to the 3 regional sectors',
+          'on the K.O.M.R.A.D.-84 Map (+/-5 MW).',
+        ],
+        reactionLines: [
+          'Higher MW heats CORE TEMP & PRESSURE and',
+          'pulls GRID 50Hz [Key 5] off-center!',
+        ],
+      },
+      {
+        icon: 'wheel',
+        badge: '[KEY 1] COOLING PUMPS A & B (RIVER WATER)',
+        useLines: [
+          'Grab 6-spoke wheel with mouse and crank in',
+          'a circle (or up/down) through 6 steps.',
+        ],
+        effectLines: [
+          'Pumps cold Pripyat river water through the',
+          'core to lower CORE TEMP (°C).',
+        ],
+        reactionLines: [
+          'Both pumps >110% drains WATER RESERVOIR',
+          '(<40% = Vodka Drought! <10% = Pump Dry)!',
+        ],
+      },
+      {
+        icon: 'az5',
+        badge: '[KEY 1] AZ-5 SCRAM & BORON INJECTION',
+        useLines: [
+          'AZ-5: Click cover open, then press button',
+          '(>850°C). BORON: Press green plunger in.',
+        ],
+        effectLines: [
+          'BORON drops CORE TEMP -85°C & -10 BAR.',
+          'AZ-5 executes emergency full-core scram.',
+        ],
+        reactionLines: [
+          'Consumes 35% of BORON TANK on UNIT A-2',
+          '(must be hand-pumped back!) + 30s cooldown.',
+        ],
+      },
+    ]
+
+    unitACards.forEach((c, idx) => {
+      drawFieldGuideCard(ctx, LW, 168 + idx * 208, c)
+    })
+  } else if (page === 6) {
+    // =========================================================================
+    // SECTION II — TAB 6 (`6. UNIT A-2 & B (AUX SYSTEMS [KEY 3])`)
+    // =========================================================================
+    ctx.fillStyle = '#144722'
+    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText('6. UNIT A-2 & B: AUX SYSTEMS [KEY 3]', 44, 156)
+
+    const auxCards: FieldGuideCardSpec[] = [
+      {
+        icon: 'octagon',
+        badge: '[UNIT A-2] RBMK 37-TILE CORE BIO-SHIELD',
+        useLines: [
+          'Watch the 37 steel channel caps. When a',
+          'tile flashes AMBER/RED, click it directly.',
+        ],
+        effectLines: [
+          'Slams a local control rod into the channel',
+          'to quench local fuel channel overheating.',
+        ],
+        reactionLines: [
+          'Every unquenched RED tile adds +5°C/s to',
+          'CORE TEMP and +1.2 BAR/s to STEAM PRESSURE!',
+        ],
+      },
+      {
+        icon: 'wheel',
+        badge: '[UNIT A-2] OIL COOLER VALVE (LEFT WHEEL)',
+        useLines: [
+          'Grab and crank the cast-iron handwheel',
+          'on the lower-left of UNIT A-2 (0-100%).',
+        ],
+        effectLines: [
+          'Cools down PUMP A/B BEARING HEAT (%) and',
+          'restores LUBE OIL PRESSURE.',
+        ],
+        reactionLines: [
+          'Diverts 15% of water pressure away from',
+          'main reactor core cooling on UNIT A!',
+        ],
+      },
+      {
+        icon: 'piston',
+        badge: '[UNIT A-2] BORON PISTON PUMP (T-HANDLE)',
+        useLines: [
+          'Grab the horizontal Bakelite T-handle on',
+          'UNIT A-2 and pump it up & down repeatedly.',
+        ],
+        effectLines: [
+          'Refills BORON RESERVE TANK back to 100%',
+          'so BORON INJECTION and AZ-5 can function.',
+        ],
+        reactionLines: [
+          'Requires physical pumping strokes after',
+          'every BORON injection or AZ-5 scram!',
+        ],
+      },
+      {
+        icon: 'wheel',
+        badge: '[UNIT B] HELIUM-N2 LOOP (DRY GAS COOLING)',
+        useLines: [
+          'Crank the left regulator handwheel on',
+          'UNIT B to hold gas pressure at 40-55 BAR.',
+        ],
+        effectLines: [
+          'Cools GRAPHITE (°C) & takes 35% heat load',
+          'off water pumps WITHOUT using river water!',
+        ],
+        reactionLines: [
+          'If GRAPHITE TEMP exceeds 650°C, positive',
+          'void reactivity makes CORE TEMP skyrocket!',
+        ],
+      },
+      {
+        icon: 'gas',
+        badge: '[UNIT B] BUBBLER DRAIN (WATER RECYCLING)',
+        useLines: [
+          'Flip 3 metal toggles UP to lock seals; hold',
+          'down spring-loaded BUBBLER DRAIN lever.',
+        ],
+        effectLines: [
+          'Condenses steam from CONDENSER % and',
+          'recycles +12% water/s to WATER RESERVOIR!',
+        ],
+        reactionLines: [
+          'Prevents Vodka Distillery Water Droughts!',
+          'Pool >=90% blocks cooling & spikes BAR!',
+        ],
+      },
+    ]
+
+    auxCards.forEach((c, idx) => {
+      drawFieldGuideCard(ctx, LW, 168 + idx * 208, c)
+    })
+  } else {
+    // =========================================================================
+    // SECTION II — TAB 7 (`7. TURBINE & GRID (RIGHT PANEL [KEY 5])`)
+    // =========================================================================
+    ctx.fillStyle = '#144722'
+    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText('7. TURBINE & GRID (RIGHT PANEL [KEY 5])', 44, 156)
+
+    const gridCards: FieldGuideCardSpec[] = [
+      {
+        icon: 'breaker',
+        badge: '[KEY 5] MAIN BREAKER (COPPER KNIFE-SWITCH)',
+        useLines: [
+          'Grab the big red handle and drag it all the',
+          'way UP into the copper jaws (or [SPACE]).',
+        ],
+        effectLines: [
+          'Energizes the bunker and connects the',
+          'turbine generator to the Soviet 50Hz grid.',
+        ],
+        reactionLines: [
+          'Trips OPEN automatically into blackout if',
+          'GRID HZ stays in the red zone for >8s!',
+        ],
+      },
+      {
+        icon: 'rheostat',
+        badge: '[KEY 5] 50HZ RHEOSTAT (CENTER ROTARY DIAL)',
+        useLines: [
+          'Grab and drag left/right with mouse to',
+          'rotate the ceramic dial through its clicks.',
+        ],
+        effectLines: [
+          'Trims GRID FREQUENCY back to 50.0 Hz',
+          '(12 o-clock) after changing MW on UNIT A.',
+        ],
+        reactionLines: [
+          'Neglecting 50.0 Hz trips the MAIN BREAKER',
+          'and plunges the control room into blackout!',
+        ],
+      },
+      {
+        icon: 'vent',
+        badge: '[KEY 5] STEAM VENT (SPRING PULL-LEVER)',
+        useLines: [
+          'Grab and hold the right lever DOWN with',
+          'your mouse (snaps back up on release).',
+        ],
+        effectLines: [
+          'Rapidly dumps excess STEAM PRESSURE',
+          '(-18 BAR/s) to prevent pipe rupture (>95).',
+        ],
+        reactionLines: [
+          'Releases radioactive steam, spiking room',
+          'DOSIMETER (R/H) & filling UNIT B bubbler!',
+        ],
+      },
+      {
+        icon: 'gas',
+        badge: '[KEY 5] VENTILATION (GUARDED METAL TOGGLE)',
+        useLines: [
+          'Flip the bottom-left guarded metal toggle',
+          'switch UP (ON) on the Right Panel.',
+        ],
+        effectLines: [
+          'Scrubs radioactive contamination out of',
+          'the control room (-1.2 R/H per second).',
+        ],
+        reactionLines: [
+          'Draws +10 MW parasitic electrical load,',
+          'pulling GRID HZ down & heating the core!',
+        ],
+      },
+    ]
+
+    gridCards.forEach((c, idx) => {
+      drawFieldGuideCard(ctx, LW, 168 + idx * 208, c)
     })
   }
 
   ctx.restore() // end scrollable clip
 
-  // Fixed Top Header Bar (`★ КГБ СССР // ФОРМА 84-Б`) — Bold 28px
-  ctx.fillStyle = '#111111'
-  ctx.fillRect(24, 22, LW - 48, 52)
-  ctx.fillStyle = '#b8a46b'
-  ctx.font = 'bold 28px "Courier Prime", monospace'
-  ctx.textAlign = 'center'
-  ctx.fillText('★ КГБ СССР // ФОРМА 84-Б ★', LW / 2, 56)
+  // Right-edge Scrollbar Track & Thumb Indicator (y: 136..704)
+  const sbX = LW - 26
+  const sbY = 136
+  const sbH = LH - 206
+  ctx.fillStyle = '#2b261f'
+  ctx.fillRect(sbX, sbY, 6, sbH)
+  const maxScroll = page === 6 ? 360 : page === 4 || page === 7 ? 200 : 120
+  const scrollFrac = Math.max(0, Math.min(1, scrollY / maxScroll))
+  const thumbH = Math.max(48, Math.floor(sbH * (page === 6 ? 0.45 : 0.65)))
+  const thumbY = sbY + Math.floor(scrollFrac * (sbH - thumbH))
+  ctx.fillStyle = isRbmkSection ? '#33ff66' : '#ffb000'
+  ctx.fillRect(sbX, thumbY, 6, thumbH)
 
-  // Fixed 3 Page Tabs Bar (`1. SEALS`, `2. FONTS`, `3. COLOURS`) — Bold 20px
-  const tabs: Array<{ id: 1 | 2 | 3; label: string }> = [
-    { id: 1, label: '1. SEALS' },
-    { id: 2, label: '2. FONTS' },
-    { id: 3, label: '3. COLOURS' },
+  // =========================================================================
+  // FIXED TOP TWO-ROW DOSSIER HEADER & TAB SWITCHER
+  // Row 1 (y: 22..72, v: 0.028..0.093): Top Dossier Section Switcher
+  //   - Left Half (`u < 0.5`): `[ I. KGB FORGERY GUIDE ]` (Pages 1..3)
+  //   - Right Half (`u >= 0.5`): `[ II. RBMK PANEL MANUAL ]` (Pages 4..7)
+  // Row 2 (y: 78..120, v: 0.10..0.16): 3 Sub-Tabs (Sec I) or 4 Sub-Tabs (Sec II)
+  // =========================================================================
+  const secW = Math.floor((LW - 52) / 2)
+  const sections: Array<{ id: 'KGB' | 'RBMK'; label: string; active: boolean }> = [
+    { id: 'KGB', label: '★ I. KGB FORGERY GUIDE', active: !isRbmkSection },
+    { id: 'RBMK', label: '⚙ II. RBMK PANEL MANUAL', active: isRbmkSection },
   ]
-  const tabW = Math.floor((LW - 52) / 3)
+  sections.forEach((sec, idx) => {
+    const sx = 24 + idx * (secW + 4)
+    ctx.fillStyle = sec.active
+      ? sec.id === 'KGB'
+        ? '#8b1e1e'
+        : '#145c26'
+      : '#1b221e'
+    ctx.fillRect(sx, 22, secW, 48)
+    ctx.strokeStyle = sec.active ? '#ffb000' : '#8c7a4b'
+    ctx.lineWidth = sec.active ? 3 : 2
+    ctx.strokeRect(sx, 22, secW, 48)
+    ctx.fillStyle = sec.active ? '#ffffff' : '#b5ad96'
+    ctx.font = 'bold 18px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText(sec.label, sx + secW / 2, 52)
+  })
+
+  // Row 2: Sub-Page Tabs (`1. SEALS | 2. FONTS | 3. COLOURS` or `4. HOW TO PLAY | 5. UNIT A | 6. UNIT A-2/B | 7. GRID [5]`)
+  const tabs: Array<{ id: ManualPageId; label: string }> = isRbmkSection
+    ? [
+        { id: 4, label: '4. HOW TO PLAY' },
+        { id: 5, label: '5. UNIT A' },
+        { id: 6, label: '6. UNIT A-2/B' },
+        { id: 7, label: '7. GRID [5]' },
+      ]
+    : [
+        { id: 1, label: '1. SEALS' },
+        { id: 2, label: '2. FONTS' },
+        { id: 3, label: '3. COLOURS' },
+      ]
+  const tabW = Math.floor((LW - 52) / tabs.length)
   tabs.forEach((t, idx) => {
     const tx = 26 + idx * tabW
     const isActive = page === t.id
-    ctx.fillStyle = isActive ? '#8b1e1e' : '#b5ad96'
-    ctx.fillRect(tx, 78, tabW - 4, 38)
+    ctx.fillStyle = isActive
+      ? isRbmkSection
+        ? '#145c26'
+        : '#8b1e1e'
+      : '#b5ad96'
+    ctx.fillRect(tx, 76, tabW - 4, 42)
     ctx.strokeStyle = '#111111'
     ctx.lineWidth = 2.5
-    ctx.strokeRect(tx, 78, tabW - 4, 38)
-    ctx.fillStyle = isActive ? '#dfd8c5' : '#111111'
-    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.strokeRect(tx, 76, tabW - 4, 42)
+    ctx.fillStyle = isActive ? '#ffffff' : '#111111'
+    ctx.font = isRbmkSection
+      ? 'bold 15px "Courier Prime", monospace'
+      : 'bold 19px "Courier Prime", monospace'
     ctx.textAlign = 'center'
-    ctx.fillText(t.label, tx + (tabW - 4) / 2, 104)
+    ctx.fillText(t.label, tx + (tabW - 4) / 2, 103)
   })
 
-  // Fixed Footer Navigation & Stepped Scroll Bar — Bold 22px
+  // Fixed Footer Navigation, Handheld Pickup Toggle & Stepped Scroll Bar — Bold 20px-22px
   ctx.fillStyle = '#111111'
   ctx.fillRect(24, LH - 64, LW - 48, 42)
   ctx.fillStyle = '#b8a46b'
-  ctx.font = 'bold 22px "VT323", monospace'
+  ctx.font = 'bold 21px "VT323", monospace'
   ctx.textAlign = 'left'
+  ctx.fillText('[< PREV]  [NEXT >]', 30, LH - 36)
+
+  // Center Interactive Handheld Pickup / Put Down Pill (u: 0.36..0.68 -> x: 224..420)
+  ctx.fillStyle = isHeld ? '#6e1a14' : '#145c26'
+  ctx.fillRect(224, LH - 60, 196, 34)
+  ctx.strokeStyle = isHeld ? '#ffb000' : '#33ff66'
+  ctx.lineWidth = 2
+  ctx.strokeRect(224, LH - 60, 196, 34)
+  ctx.fillStyle = isHeld ? '#ffb000' : '#ffffff'
+  ctx.font = 'bold 20px "VT323", monospace'
+  ctx.textAlign = 'center'
   ctx.fillText(
-    `[< PREV]  PAGE ${page}/3  [NEXT >]`,
-    32,
+    isHeld ? '[▼ PUT DOWN (B)]' : '[▲ PICK UP (B)]',
+    322,
     LH - 36
   )
+
   ctx.textAlign = 'right'
   ctx.fillStyle = '#33ff66'
-  ctx.fillText(
-    `[▲ UP]  [▼ DOWN] (${Math.round((scrollY / 180) * 100)}%)`,
-    LW - 32,
-    LH - 36
-  )
+  ctx.font = 'bold 21px "VT323", monospace'
+  ctx.fillText('[▲ UP]  [▼ DOWN]', LW - 30, LH - 36)
 
   ctx.restore()
 }
@@ -1011,7 +1717,7 @@ export function drawTrue2xOpticalLensCanvas(
   lensX: number,
   lensZ: number,
   docs: DeskDocument[],
-  manualPage: 1 | 2 | 3,
+  manualPage: ManualPageId,
   manualScrollY: number,
   manualBounds: { x: number; z: number; width: number; height: number }
 ): void {

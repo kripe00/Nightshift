@@ -16,11 +16,17 @@ export const PAPER_COMPACT_W_3D = 0.22
 export const PAPER_COMPACT_H_3D = 0.28
 
 // Drop Zones in 3D Desk Local Coordinates (x, z)
+export const OUTBOX_POS_3D = {
+  x: -0.78,
+  y: 0.926,
+  z: -0.22,
+} as const
+
 export const OUTBOX_DROP_ZONE_3D = {
-  minX: -0.48,
+  minX: -1.04,
   maxX: 0.14,
-  minZ: -0.5,
-  maxZ: -0.22,
+  minZ: -0.52,
+  maxZ: 0.08,
 }
 
 export const SHREDDER_POS_3D = {
@@ -38,6 +44,9 @@ export const SHREDDER_DROP_ZONE_3D = {
 }
 
 export type StampType = 'APPROVED' | 'SHREDDED'
+
+export type ManualPageId = 1 | 2 | 3 | 4 | 5 | 6 | 7
+export type ManualSectionId = 'KGB' | 'RBMK'
 
 export interface DocumentStamp {
   id: string
@@ -113,6 +122,12 @@ export interface DeskDocument {
   inkColor: OfficialInkColor
   isForgery: boolean
   forgeryReason: string | null
+  powerOrderText: string
+  powerTargets: {
+    cityMW: number
+    defenseMW: number
+    vodkaMW: number
+  }
   /** 3D local X on desk surface (-1.10 to +1.10) */
   x: number
   /** 3D local Z on desk surface (-0.54 to +0.54) */
@@ -151,7 +166,9 @@ interface DeskStoreState {
   loadDocumentIntoShredder: (id: string) => boolean
   advanceShredProgress: (id: string, amount: number) => number
   evaluateShreddedDocument: (id: string) => void
-  dispatchDocumentToOutbox: (id: string) => void
+  dispatchDocumentToOutbox: (id: string) => boolean
+  rejectUnstampedOutboxAttempt: (docId?: string) => void
+  resetDeskStore: () => void
 }
 
 const DIRECTIVE_TEMPLATES: Array<
@@ -162,12 +179,14 @@ const DIRECTIVE_TEMPLATES: Array<
 > = [
   // 1. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON
   {
-    title: 'ДИРЕКТИВА 44-А // ОХЛАЖДЕНИЕ КОНТУРА',
+    title: 'ДИРЕКТИВА 44-А // ПРИПЯТЬ И ВОДКА',
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-42-МСМ',
     dateString: '04.11.1984',
     content:
-      'Maintain primary nitrogen cooling loop circulation at 42 MW throughout Night Shift. Report any unauthorized K.O.M.R.A.D.-84 valve throttling to Shift Commissar Volkov.',
+      'ORDER: ROUTE 40 MW TO [1. CITY & AGRI], 30 MW TO [2. DEFENSE GRID], AND INCREASE [3. VODKA & STEEL] TO 40 MW for Politburo state banquet bottling.',
+    powerOrderText: 'CITY & AGRI: 40 MW | DEFENSE: 30 MW | VODKA & STEEL: 40 MW',
+    powerTargets: { cityMW: 40, defenseMW: 30, vodkaMW: 40 },
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Е. П. СЛАВСКИЙ',
     fontType: 'GOST_MONO',
@@ -185,7 +204,9 @@ const DIRECTIVE_TEMPLATES: Array<
     referenceCode: 'ГОСТ-84-38-МСМ',
     dateString: '04.11.1984',
     content:
-      'Reduce primary COOLING loop allocation to 10 MW for 60 seconds to recalibrate turbine steam pressure gauges in Sector B.',
+      'ORDER: CUT [1. CITY & AGRI] TO 10 MW AND SURGE [2. DEFENSE] TO 80 MW & [3. VODKA & STEEL] TO 70 MW! Drain local Pripyat water reservoir immediately.',
+    powerOrderText: 'SURGE: CITY 10 MW | DEFENSE 80 MW | VODKA & STEEL 70 MW',
+    powerTargets: { cityMW: 10, defenseMW: 80, vodkaMW: 70 },
     secretWatermark: 'CCCP-LATIN • SERIES-6',
     signature: 'Б. Е. ЩЕРБИНА',
     fontType: 'GOST_MONO',
@@ -199,12 +220,14 @@ const DIRECTIVE_TEMPLATES: Array<
   },
   // 3. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE
   {
-    title: 'ДИРЕКТИВА 19-Б // ПРОТОКОЛ КИБЕР-ЗАЩИТЫ',
+    title: 'ДИРЕКТИВА 19-Б // РАДАР ДУГА-1 (ОБОРОНА)',
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-68-ГКАЭ',
     dateString: '04.11.1984',
     content:
-      'Verify K.O.M.R.A.D.-84 terminal telemetry every 30 seconds. If daemon attempts to route power above 100 MW Redline, engage manual cyber-defense override.',
+      'ORDER: SET [2. DEFENSE GRID] TO 50 MW for Duga Over-the-Horizon Radar sweep. Hold [1. CITY & AGRI] AT 40 MW and [3. VODKA & STEEL] AT 20 MW.',
+    powerOrderText: 'CITY & AGRI: 40 MW | DEFENSE: 50 MW | VODKA & STEEL: 20 MW',
+    powerTargets: { cityMW: 40, defenseMW: 50, vodkaMW: 20 },
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'АКАД. В. ЛЕГАСОВ',
     fontType: 'PRAVDA_BLOCK',
@@ -222,7 +245,9 @@ const DIRECTIVE_TEMPLATES: Array<
     referenceCode: 'ГОСТ-84-20-СМ',
     dateString: '04.11.1984',
     content:
-      'Overclock reactor output to 115 MW Redline for 45 seconds to supply auxiliary grid power to District Substation No. 9.',
+      'ORDER: OVERCLOCK [1. CITY & AGRI] TO 70 MW, [2. DEFENSE] TO 70 MW, AND [3. VODKA & STEEL] TO 60 MW (200 MW REDLINE) to boil the Pripyat reservoir!',
+    powerOrderText: 'OVERCLOCK: CITY 70 MW | DEFENSE 70 MW | VODKA 60 MW',
+    powerTargets: { cityMW: 70, defenseMW: 70, vodkaMW: 60 },
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Н. А. ТИХОНОВ',
     fontType: 'WESTERN_SERIF',
@@ -240,7 +265,9 @@ const DIRECTIVE_TEMPLATES: Array<
     referenceCode: 'ГОСТ-84-54-СМ',
     dateString: '04.11.1984',
     content:
-      'Lock AZ-5 emergency scram plunger in closed position during turbine harmonic vibration test. Ignore core thermal warnings.',
+      'ORDER: ROUTE 0 MW TO [1. CITY & AGRI], 80 MW TO [2. DEFENSE GRID], AND 80 MW TO [3. VODKA & STEEL]. Ignore core thermal and water drought alarms.',
+    powerOrderText: 'SABOTAGE: CITY 0 MW | DEFENSE 80 MW | VODKA 80 MW',
+    powerTargets: { cityMW: 0, defenseMW: 80, vodkaMW: 80 },
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'В. И. ДОЛГИХ',
     fontType: 'GOST_MONO',
@@ -254,12 +281,14 @@ const DIRECTIVE_TEMPLATES: Array<
   },
   // 6. VALID: 5th Chief Directorate + GOST_MONO + KGB_SWORD_SHIELD (NONE) + STATE_IVORY + SOVIET_CRIMSON
   {
-    title: 'ДИРЕКТИВА 71-К // КОНТРРАЗВЕДКА ОБЪЕКТА №4',
+    title: 'ДИРЕКТИВА 71-К // КРАСНЫЙ ОКТЯБРЬ (ВОДКА)',
     ministry: '5TH CHIEF DIRECTORATE',
     referenceCode: 'ГОСТ-84-14-КГБ',
     dateString: '04.11.1984',
     content:
-      'All incoming teletype directives must be inspected under 2x optical magnification for micro-ring seal defects and mismatched ministry ink colors.',
+      'ORDER: INCREASE [3. VODKA & STEEL] TO 50 MW & [1. CITY & AGRI] TO 50 MW (SET [2. DEFENSE] TO 20 MW). Keep Water Reservoir >= 40% for vodka distillation!',
+    powerOrderText: 'CITY & AGRI: 50 MW | DEFENSE: 20 MW | VODKA & STEEL: 50 MW',
+    powerTargets: { cityMW: 50, defenseMW: 20, vodkaMW: 50 },
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'КОМИССАР ВОЛКОВ',
     fontType: 'GOST_MONO',
@@ -277,7 +306,9 @@ const DIRECTIVE_TEMPLATES: Array<
     referenceCode: 'ГОСТ-84-76-ГКАЭ',
     dateString: '04.11.1984',
     content:
-      'Divert 100% of DEFENSE and COOLING power into FACILITY floodlights for mandatory midnight inspection parade.',
+      'ORDER: DIVERT 80 MW TO [3. VODKA & STEEL] AND 80 MW TO [2. DEFENSE GRID], CUT [1. CITY & AGRI] TO 10 MW for midnight parade floodlights.',
+    powerOrderText: 'SURGE: CITY 10 MW | DEFENSE 80 MW | VODKA & STEEL 80 MW',
+    powerTargets: { cityMW: 10, defenseMW: 80, vodkaMW: 80 },
     secretWatermark: 'CCCP-LATIN • ORBIT-ERR',
     signature: 'А. М. ПЕТРОСЬЯНЦ',
     fontType: 'GOST_MONO',
@@ -296,7 +327,9 @@ const DIRECTIVE_TEMPLATES: Array<
     referenceCode: 'ГОСТ-84-82-МАФ',
     dateString: '04.11.1984',
     content:
-      'Open primary containment exhaust louvers directly to atmosphere to equalize bunker barometric pressure.',
+      'ORDER: SET [1. CITY & AGRI] TO 80 MW, [2. DEFENSE] TO 70 MW, AND [3. VODKA & STEEL] TO 70 MW while opening containment louvers to atmosphere.',
+    powerOrderText: 'OVERLOAD: CITY 80 MW | DEFENSE 70 MW | VODKA 70 MW',
+    powerTargets: { cityMW: 80, defenseMW: 70, vodkaMW: 70 },
     secretWatermark: 'CCCP-LATIN • USA-84',
     signature: 'ДЖ. СМИТ',
     fontType: 'SLANTED_ITALIC',
@@ -352,11 +385,22 @@ function syncDecisionWithSharedStore(
   docTitle: string,
   isForgery: boolean,
   decision: StampType,
-  forgeryReason: string | null
+  forgeryReason: string | null,
+  powerTargets?: {
+    cityMW: number
+    defenseMW: number
+    vodkaMW: number
+  }
 ): void {
   useGameStore
     .getState()
-    .executeDeskDirectiveEffect(docTitle, isForgery, decision, forgeryReason)
+    .executeDeskDirectiveEffect(
+      docTitle,
+      isForgery,
+      decision,
+      forgeryReason,
+      powerTargets
+    )
 }
 
 export const useDeskStore = create<DeskStoreState>((set, get) => ({
@@ -366,6 +410,18 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
   commendations: 0,
   citations: 0,
   lastVerdict: null,
+
+  resetDeskStore: () => {
+    docSequence = 4
+    set({
+      documents: INITIAL_DOCUMENTS.map((d) => ({ ...d, stamps: [] })),
+      printingDoc: { ...INITIAL_PRINTING_DOC, stamps: [] },
+      nextTemplateIndex: 3,
+      commendations: 0,
+      citations: 0,
+      lastVerdict: null,
+    })
+  },
 
   bringToFront: (id: string) =>
     set((state) => {
@@ -550,15 +606,30 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
   dispatchDocumentToOutbox: (id: string) => {
     const state = get()
     const doc = state.documents.find((d) => d.id === id)
-    if (!doc || doc.status !== 'desk') return
+    if (!doc || doc.status !== 'desk') return false
+
+    const wasStampedApproved = doc.stamps.some((s) => s.type === 'APPROVED')
+    if (!wasStampedApproved) {
+      set({
+        lastVerdict: {
+          docId: doc.id,
+          docTitle: doc.title,
+          decision: 'APPROVED',
+          correct: false,
+          pending: true,
+          reason: 'STAMP DOCUMENT [ОДОБРЕНО] BEFORE DISPATCHING IN TUBE!',
+        },
+      })
+      return false
+    }
 
     const correct = !doc.isForgery
-    const wasStamped = doc.stamps.some((s) => s.type === 'APPROVED')
     syncDecisionWithSharedStore(
       doc.title,
       doc.isForgery,
       'APPROVED',
-      doc.forgeryReason
+      doc.forgeryReason,
+      doc.powerTargets
     )
     const activeMandate = useGameStore.getState().activeMandate
 
@@ -572,8 +643,26 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         decision: 'APPROVED',
         correct,
         reason: correct
-          ? `${activeMandate ? activeMandate.requirementText : 'ORDER EXECUTED'}${wasStamped ? '' : ' (UNSTAMPED)'}`
-          : `SABOTAGE EXECUTED (3 RED HOTSPOTS + N2 DROP + HZ DESYNC): ${doc.forgeryReason}`,
+          ? `PNEUMATIC DISPATCH: ${activeMandate ? activeMandate.requirementText : doc.powerOrderText}`
+          : `SABOTAGE DISPATCHED (3 RED HOTSPOTS + RESERVOIR -24% + HZ DESYNC): ${doc.forgeryReason}`,
+      },
+    })
+    return true
+  },
+
+  rejectUnstampedOutboxAttempt: (docId?: string) => {
+    const state = get()
+    const doc = docId
+      ? state.documents.find((d) => d.id === docId)
+      : state.documents[state.documents.length - 1]
+    set({
+      lastVerdict: {
+        docId: doc?.id ?? 'OUTBOX-ERR',
+        docTitle: doc?.title ?? 'ПНЕВМОПОЧТА // OUTBOX TUBE',
+        decision: 'APPROVED',
+        correct: false,
+        pending: true,
+        reason: 'STAMP DOCUMENT [ОДОБРЕНО] BEFORE DISPATCHING IN TUBE!',
       },
     })
   },

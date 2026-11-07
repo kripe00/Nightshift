@@ -7,6 +7,7 @@ import {
 } from './modules/reactor/soundtrackPlayer'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
+import { MainMenuOverlay } from './shared/MainMenuOverlay'
 import { useGameStore } from './shared/useGameStore'
 
 export function App() {
@@ -108,6 +109,7 @@ export function App() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#080b09] select-none">
+      <MainMenuOverlay />
       <DebugMenu />
 
       {/* 100% True 3D First-Person Soviet Control Room Canvas (Locked dpr=1 + PCFSoftShadowMap for chiaroscuro 60 FPS micro-pixel aesthetic) */}

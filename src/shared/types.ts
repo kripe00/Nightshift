@@ -103,6 +103,11 @@ export interface GameState {
   radiationLevel: number // 0.1 to 15.0 R/h
   maxSafePower: number // 100 MW (up to 180 MW in Redline)
   powerAllocation: Record<SystemType, number>
+  targetCityMW: number // Regional Map Sector 1 target MW (1. CITY & AGRI)
+  targetDefenseMW: number // Regional Map Sector 2 target MW (2. DEFENSE GRID)
+  targetVodkaMW: number // Regional Map Sector 3 target MW (3. VODKA & STEEL)
+  waterReservoir: number // 0 to 100% Pripyat local water reservoir level
+  waterUsage: number // L/s river water drawn by cooling pumps
   redlineInstability: number // 0 to 100% (100% triggers Blackout)
   isBlackout: boolean
   pumpsActive: [boolean, boolean] // Pump A & Pump B
@@ -167,7 +172,12 @@ export interface GameState {
     docTitle: string,
     isForgery: boolean,
     decision: DirectiveDecision,
-    flawText?: string | null
+    flawText?: string | null,
+    powerTargets?: {
+      cityMW?: number
+      defenseMW?: number
+      vodkaMW?: number
+    }
   ) => void
   tickThermodynamics: (dtSeconds: number) => void
   triggerAz5: () => void
