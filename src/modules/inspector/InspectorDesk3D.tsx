@@ -10,11 +10,17 @@ import {
   getWeatheredMahoganyTextures,
   getWornInspectionMatTextures,
 } from '../../shared/proceduralMaterials'
-import { useGameStore } from '../../shared/useGameStore'
+import type { DiagnosticAlarmId } from '../../shared/types'
 import {
+  getContextualDiagnosticHint,
+  useGameStore,
+} from '../../shared/useGameStore'
+import {
+  BREECH_CHAMBER_DROP_ZONE_3D,
+  CAPSULE_CRADLE_POS_3D,
   INK_COLOR_HEX,
+  OUTBOX_BREECH_POS_3D,
   OUTBOX_DROP_ZONE_3D,
-  OUTBOX_POS_3D,
   PAPER_COLOR_HEX,
   PAPER_COMPACT_H_3D,
   PAPER_COMPACT_W_3D,
@@ -34,8 +40,13 @@ import {
 } from './useDeskStore'
 import {
   installGlobalMuteController,
+  playAmberWarningChime,
   playBobbleBoingSound,
+  playBreechHatchLatchSound,
+  playCapsuleChamberLoadSound,
+  playCapsulePackSound,
   playCarriageReturnDing,
+  playCriticalRedKlaxonPulse,
   playDetentClick,
   playDispatchErrorBuzzer,
   playLineFeedTick,
@@ -1318,6 +1329,9 @@ export function InspectorDesk3D() {
   const commendations = useDeskStore((s) => s.commendations)
   const citations = useDeskStore((s) => s.citations)
   const lastVerdict = useDeskStore((s) => s.lastVerdict)
+  const capsuleState = useDeskStore((s) => s.capsuleState)
+  const hatchOpen = useDeskStore((s) => s.hatchOpen)
+  const packedDoc = useDeskStore((s) => s.packedDoc)
   const isMusicMuted = useGameStore((s) => s.isMusicMuted)
 
   const [activeDragDocId, setActiveDragDocId] = useState<string | null>(null)
@@ -1400,11 +1414,10 @@ export function InspectorDesk3D() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      const state = useDeskStore.getState()
-      if (state.printingDoc) return
-      if (state.documents.length >= 5) return
-      state.spawnNextDirective()
-    }, 12000)
+      const gamePhase = useGameStore.getState().phase
+      if (gamePhase !== 'playing') return
+      useDeskStore.getState().tickPrinterQueue(0.25)
+    }, 250)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -1613,6 +1626,8 @@ export function InspectorDesk3D() {
   const bankersLampSpotRef = useRef<THREE.SpotLight | null>(null)
   const bankersLampTargetRef = useRef<THREE.Object3D | null>(null)
   const manometerNeedleRef = useRef<THREE.Group | null>(null)
+  const lastStripDeformSigRef = useRef<string>('')
+  const lastLensDrawTimeRef = useRef<number>(0)
 
   const teletypeModel = useMemo(() => {
     const cloned = teletypeGltf.scene.clone(true)
@@ -1780,7 +1795,7 @@ export function InspectorDesk3D() {
   )
   const loadedSlipTex = useMemo(() => createNearestCanvasTexture(256, 320), [])
   const manualTex = useMemo(
-    () => createCrispDocumentCanvasTexture(1024, 1280),
+    () => createCrispDocumentCanvasTexture(1200, 1500),
     []
   )
   const lensTex = useMemo(() => createCrispDocumentCanvasTexture(512, 512), [])
@@ -1838,20 +1853,70 @@ export function InspectorDesk3D() {
         ctx.lineWidth = 4
         ctx.strokeRect(4, 4, w - 8, h - 8)
         ctx.fillStyle = '#0d110f'
-        ctx.fillRect(28, 16, w - 56, 26)
+        ctx.fillRect(14, 12, w - 28, 30)
         ctx.strokeStyle = '#8c7a4b'
         ctx.lineWidth = 2
-        ctx.strokeRect(28, 16, w - 56, 26)
+        ctx.strokeRect(14, 12, w - 28, 30)
         apply16ColorBayerDither(ctx, w, h, 14)
 
-        ctx.fillStyle = '#cfc6b0'
+        ctx.fillStyle = '#33ff66'
         ctx.font = 'bold 17px "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('ИСХОДЯЩИЕ // OUTBOX PNEUMATIC TUBE', w / 2, 62)
-        ctx.fillStyle = '#b8a46b'
+        ctx.fillText('ПНЕВМОПОЧТА // КАМЕРА ПУСКА', w / 2, 33)
+        ctx.fillStyle = '#cfc6b0'
+        ctx.font = 'bold 13px "Courier Prime", monospace'
+        ctx.fillText('2. OPEN HATCH -> 3. LOAD -> 4. SEAL HATCH', w / 2, 62)
+        ctx.fillStyle = '#ffb000'
         ctx.font = 'bold 15px "VT323", monospace'
-        ctx.fillText('▲ DROP ОДОБРЕНО DIRECTIVES HERE TO EXECUTE', w / 2, 82)
+        ctx.fillText('▼ 5. PULL DOWN RED LEVER [ПУСК] TO DISPATCH ▼', w / 2, 83)
       }),
+    []
+  )
+
+  const capsuleCradlePlaqueTex = useMemo(
+    () =>
+      createNearestCanvasTexture(320, 72, (ctx, w, h) => {
+        ctx.fillStyle = '#18211b'
+        ctx.fillRect(0, 0, w, h)
+        ctx.strokeStyle = '#b8a46b'
+        ctx.lineWidth = 4
+        ctx.strokeRect(3, 3, w - 6, h - 6)
+        apply16ColorBayerDither(ctx, w, h, 14)
+
+        ctx.fillStyle = '#33ff66'
+        ctx.font = 'bold 15px "Courier Prime", monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText('КАПСУЛА // STEP 1: PACK PAPER', w / 2, 26)
+        ctx.fillStyle = '#e8dec3'
+        ctx.font = 'bold 13px "Courier Prime", monospace'
+        ctx.fillText('DRAG [ОДОБРЕНО] OR CLICK CYLINDER', w / 2, 46)
+        ctx.fillStyle = '#ffb000'
+        ctx.font = 'bold 14px "VT323", monospace'
+        ctx.fillText('THEN LOAD INTO OPEN BREECH CHAMBER', w / 2, 64)
+      }),
+    []
+  )
+
+  const pneumaticFlightCurve = useMemo(
+    () =>
+      new THREE.CatmullRomCurve3(
+        [
+          new THREE.Vector3(-1.468, 1.07, -0.544),
+          new THREE.Vector3(-1.468, 1.65, -0.544),
+          new THREE.Vector3(-1.468, 2.35, -0.544),
+          new THREE.Vector3(-1.468, 2.74, -0.544),
+          new THREE.Vector3(-1.328, 2.88, -0.544),
+          new THREE.Vector3(-0.74, 2.88, -0.544),
+          new THREE.Vector3(-0.14, 2.88, -0.56),
+          new THREE.Vector3(0.0, 2.82, -0.82),
+          new THREE.Vector3(0.0, 2.66, -1.16),
+          new THREE.Vector3(0.0, 2.15, -1.16),
+          new THREE.Vector3(0.0, 1.72, -1.16),
+        ],
+        false,
+        'catmullrom',
+        0.35
+      ),
     []
   )
 
@@ -1870,6 +1935,42 @@ export function InspectorDesk3D() {
       }),
     []
   )
+
+  // 3D Illuminated 6-Lamp Master Annunciator Strip (`ТАБЛО ТРЕВОГИ`) Textures & Refs
+  const annunciatorTileSpecs = useMemo(() => {
+    const specs = [
+      { id: 'core', title: '[CORE TEMP]', sub: 'ЯДРО >520/680°C' },
+      { id: 'water', title: '[WATER DROUGHT]', sub: 'ВОДА <45%/СУХО' },
+      { id: 'gas_oil', title: '[GAS / OIL SAT]', sub: 'ГАЗ>58 / МАСЛО<40' },
+      { id: 'bearing', title: '[PUMP BEARING]', sub: 'НАСОС >75/90°C' },
+      { id: 'grid', title: '[50HZ GRID]', sub: 'СЕТЬ ±0.8/1.5 ГЦ' },
+      { id: 'order', title: '[INCOMING ORDER]', sub: 'ПРИКАЗ ПРАВДА-84' },
+    ]
+    return specs.map((item) => ({
+      ...item,
+      texture: createNearestCanvasTexture(192, 88, (ctx, w, h) => {
+        ctx.fillStyle = '#141a17'
+        ctx.fillRect(0, 0, w, h)
+        ctx.strokeStyle = '#d4be7f'
+        ctx.lineWidth = 4
+        ctx.strokeRect(3, 3, w - 6, h - 6)
+        ctx.fillStyle = '#ffffff'
+        ctx.font = 'bold 18px "Courier Prime", monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText(item.title, w / 2, 36)
+        ctx.fillStyle = '#d8e6dc'
+        ctx.font = 'bold 16px "VT323", monospace'
+        ctx.fillText(item.sub, w / 2, 66)
+      }),
+    }))
+  }, [])
+
+  const annunciatorMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>(
+    []
+  )
+  const prevAnnunciatorLevelsRef = useRef<number[]>([0, 0, 0, 0, 0, 0])
+  const lastKlaxonPulseTimeRef = useRef<number>(0)
+  const lastInspectingStateRef = useRef<boolean>(false)
 
   const shredBadgeTex = useMemo(
     () =>
@@ -1952,6 +2053,340 @@ export function InspectorDesk3D() {
     [documents]
   )
 
+  const hasApprovedDocOnDesk = useMemo(
+    () =>
+      documents.some(
+        (d) =>
+          d.status === 'desk' && d.stamps.some((s) => s.type === 'APPROVED')
+      ),
+    [documents]
+  )
+
+  // Pneumatic Capsule Dispatch Station Refs & Multi-Step Animation State (`ПНЕВМОПОЧТА // КАПСУЛА + ЛЮК + РЫЧАГ ПУСКА`)
+  const cradleCapsuleGroupRef = useRef<THREE.Group | null>(null)
+  const cradleTopCapRef = useRef<THREE.Group | null>(null)
+  const cradleScrollRef = useRef<THREE.Group | null>(null)
+  const cradlePaperMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+
+  const chamberCapsuleGroupRef = useRef<THREE.Group | null>(null)
+  const chamberPaperMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+
+  const flightCapsuleGroupRef = useRef<THREE.Group | null>(null)
+  const flightPaperMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+
+  const breechDoorGroupRef = useRef<THREE.Group | null>(null)
+  const launchLeverGroupRef = useRef<THREE.Group | null>(null)
+  const pneumaticStatusLampMatRef = useRef<THREE.MeshStandardMaterial | null>(
+    null
+  )
+  const pneumaticStatusLightRef = useRef<THREE.PointLight | null>(null)
+
+  // Tutorial 3D Hardware Highlighting Material Refs (Amber-Gold -> Emerald Pulse)
+  const printerLampMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const approveKnobMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const shredKnobMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const capsuleRingMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const hatchKnobMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const launchKnobMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const shredLeverKnobMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const prevTutorialStepRef = useRef<string | number>(
+    useGameStore.getState().tutorialStep
+  )
+
+  const capsulePackAnimRef = useRef<{
+    active: boolean
+    progress: number
+    paperHex: string
+  }>({
+    active: false,
+    progress: 0,
+    paperHex: '#d8d2c0',
+  })
+
+  const capsuleDragRef = useRef<{
+    dragging: boolean
+    moved: boolean
+    startX: number
+    startZ: number
+    x: number
+    z: number
+    dx: number
+    dz: number
+  }>({
+    dragging: false,
+    moved: false,
+    startX: CAPSULE_CRADLE_POS_3D.x,
+    startZ: CAPSULE_CRADLE_POS_3D.z,
+    x: CAPSULE_CRADLE_POS_3D.x,
+    z: CAPSULE_CRADLE_POS_3D.z,
+    dx: 0,
+    dz: 0,
+  })
+
+  const launchLeverDragRef = useRef<{
+    dragging: boolean
+    startY: number
+    pullRatio: number
+    launchedThisStroke: boolean
+  }>({
+    dragging: false,
+    startY: 0,
+    pullRatio: 0,
+    launchedThisStroke: false,
+  })
+
+  const pneumaticAnimRef = useRef<{
+    active: boolean
+    progress: number
+    paperHex: string
+  }>({
+    active: false,
+    progress: 0,
+    paperHex: '#d8d2c0',
+  })
+
+  const flightPosVecRef = useRef(new THREE.Vector3())
+  const flightTanVecRef = useRef(new THREE.Vector3())
+  const flightUpVecRef = useRef(new THREE.Vector3(0, 1, 0))
+
+  const triggerPneumaticPackAnim = (paperHex = '#d8d2c0') => {
+    capsulePackAnimRef.current.active = true
+    capsulePackAnimRef.current.progress = 0
+    capsulePackAnimRef.current.paperHex = paperHex
+    for (const matRef of [
+      cradlePaperMatRef,
+      chamberPaperMatRef,
+      flightPaperMatRef,
+    ]) {
+      if (matRef.current) {
+        matRef.current.color.set(paperHex)
+      }
+    }
+    playCapsulePackSound()
+    triggerBobbleShockwave(0.65)
+  }
+
+  const triggerPneumaticFlightAnim = (paperHex = '#d8d2c0') => {
+    pneumaticAnimRef.current.active = true
+    pneumaticAnimRef.current.progress = 0
+    pneumaticAnimRef.current.paperHex = paperHex
+    if (flightPaperMatRef.current) {
+      flightPaperMatRef.current.color.set(paperHex)
+    }
+    playPneumaticDispatchSound()
+    triggerBobbleShockwave(1.1)
+  }
+
+  const triggerPneumaticDispatchAnim = (paperHex = '#d8d2c0') => {
+    triggerPneumaticPackAnim(paperHex)
+  }
+
+  // Step 1 & Step 3: Carrier Cylinder (`КАПСУЛА`) Click / Drag-to-Chamber Handlers
+  const handleCradleCapsulePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    if (useCameraLookStore.getState().isFreeLookMode) return
+    e.stopPropagation()
+    const store = useDeskStore.getState()
+
+    if (store.capsuleState === 'CRADLE_EMPTY') {
+      const stampedDoc = [...store.documents]
+        .reverse()
+        .find(
+          (d) =>
+            d.status === 'desk' && d.stamps.some((s) => s.type === 'APPROVED')
+        )
+      if (stampedDoc && store.packDocumentIntoCapsule(stampedDoc.id)) {
+        triggerPneumaticPackAnim(PAPER_COLOR_HEX[stampedDoc.paperColor])
+        lensDirtyRef.current = true
+      } else {
+        playDispatchErrorBuzzer()
+        store.rejectUnstampedOutboxAttempt()
+      }
+      return
+    }
+
+    if (store.capsuleState === 'CRADLE_PACKED') {
+      const target = e.target as Element & {
+        setPointerCapture?: (id: number) => void
+      }
+      target.setPointerCapture?.(e.pointerId)
+      const hit = getDeskLocalHitFromEvent(
+        e,
+        deskGroupRef.current,
+        BASE_MAT_Y + 0.04
+      )
+      capsuleDragRef.current.dragging = true
+      capsuleDragRef.current.moved = false
+      capsuleDragRef.current.x = CAPSULE_CRADLE_POS_3D.x
+      capsuleDragRef.current.z = CAPSULE_CRADLE_POS_3D.z
+      if (hit) {
+        capsuleDragRef.current.startX = hit.x
+        capsuleDragRef.current.startZ = hit.z
+        capsuleDragRef.current.dx = hit.x - CAPSULE_CRADLE_POS_3D.x
+        capsuleDragRef.current.dz = hit.z - CAPSULE_CRADLE_POS_3D.z
+      }
+      playDetentClick(1)
+    }
+  }
+
+  const handleCradleCapsulePointerMove = (e: ThreeEvent<PointerEvent>) => {
+    if (!capsuleDragRef.current.dragging) return
+    e.stopPropagation()
+    const hit = getDeskLocalHitFromEvent(
+      e,
+      deskGroupRef.current,
+      BASE_MAT_Y + 0.04
+    )
+    if (!hit) return
+    const dist = Math.hypot(
+      hit.x - capsuleDragRef.current.startX,
+      hit.z - capsuleDragRef.current.startZ
+    )
+    if (dist > 0.025) {
+      capsuleDragRef.current.moved = true
+    }
+    capsuleDragRef.current.x = Math.max(
+      -1.64,
+      Math.min(-0.35, hit.x - capsuleDragRef.current.dx)
+    )
+    capsuleDragRef.current.z = Math.max(
+      -0.78,
+      Math.min(0.25, hit.z - capsuleDragRef.current.dz)
+    )
+  }
+
+  const handleCradleCapsulePointerUp = (e: ThreeEvent<PointerEvent>) => {
+    if (!capsuleDragRef.current.dragging) return
+    e.stopPropagation()
+    const wasMoved = capsuleDragRef.current.moved
+    const dropX = capsuleDragRef.current.x
+    const dropZ = capsuleDragRef.current.z
+    capsuleDragRef.current.dragging = false
+    capsuleDragRef.current.moved = false
+    capsuleDragRef.current.x = CAPSULE_CRADLE_POS_3D.x
+    capsuleDragRef.current.z = CAPSULE_CRADLE_POS_3D.z
+
+    const store = useDeskStore.getState()
+    const nearChamber =
+      !wasMoved ||
+      (dropX >= BREECH_CHAMBER_DROP_ZONE_3D.minX &&
+        dropX <= BREECH_CHAMBER_DROP_ZONE_3D.maxX &&
+        dropZ >= BREECH_CHAMBER_DROP_ZONE_3D.minZ &&
+        dropZ <= BREECH_CHAMBER_DROP_ZONE_3D.maxZ) ||
+      Math.hypot(
+        dropX - OUTBOX_BREECH_POS_3D.x,
+        dropZ - OUTBOX_BREECH_POS_3D.z
+      ) < 0.42
+
+    if (nearChamber) {
+      if (store.loadCapsuleIntoChamber()) {
+        playCapsuleChamberLoadSound()
+        triggerBobbleShockwave(0.55)
+      } else {
+        playDispatchErrorBuzzer()
+      }
+    } else {
+      playDetentClick(0)
+    }
+  }
+
+  // Step 2 & Step 4: Hinged Curved Brass/Glass Breech Hatch (`ЛЮК КАМЕРЫ`) Click Handler
+  const handleBreechHatchClick = (e: ThreeEvent<MouseEvent>) => {
+    if (useCameraLookStore.getState().isFreeLookMode) return
+    e.stopPropagation()
+    const store = useDeskStore.getState()
+    if (store.capsuleState === 'IN_FLIGHT') return
+    const nextOpen = store.toggleBreechHatch()
+    playBreechHatchLatchSound(nextOpen)
+    triggerBobbleShockwave(0.6)
+  }
+
+  // Clicking inside the open breech chamber when capsule is packed on the cradle also loads it cleanly
+  const handleBreechChamberClick = (e: ThreeEvent<MouseEvent>) => {
+    if (useCameraLookStore.getState().isFreeLookMode) return
+    e.stopPropagation()
+    const store = useDeskStore.getState()
+    if (store.capsuleState === 'CRADLE_PACKED' && store.hatchOpen) {
+      if (store.loadCapsuleIntoChamber()) {
+        playCapsuleChamberLoadSound()
+        triggerBobbleShockwave(0.55)
+      }
+      return
+    }
+    const nextOpen = store.toggleBreechHatch()
+    playBreechHatchLatchSound(nextOpen)
+    triggerBobbleShockwave(0.55)
+  }
+
+  // Step 5: Heavy Vacuum Launch Lever (`РЫЧАГ ПУСКА`) Drag-Down Handler
+  const handleLaunchLeverDown = (e: ThreeEvent<PointerEvent>) => {
+    if (useCameraLookStore.getState().isFreeLookMode) return
+    e.stopPropagation()
+    const target = e.target as Element & {
+      setPointerCapture?: (id: number) => void
+    }
+    target.setPointerCapture?.(e.pointerId)
+    launchLeverDragRef.current.dragging = true
+    launchLeverDragRef.current.startY = e.clientY
+    launchLeverDragRef.current.pullRatio = 0
+    launchLeverDragRef.current.launchedThisStroke = false
+    playDetentClick(1)
+  }
+
+  const handleLaunchLeverMove = (e: ThreeEvent<PointerEvent>) => {
+    if (!launchLeverDragRef.current.dragging) return
+    e.stopPropagation()
+    const deltaY = Math.max(0, e.clientY - launchLeverDragRef.current.startY)
+    const nextRatio = THREE.MathUtils.clamp(deltaY / 54, 0, 1)
+    const prevStep = Math.floor(launchLeverDragRef.current.pullRatio * 4)
+    const nextStep = Math.floor(nextRatio * 4)
+    launchLeverDragRef.current.pullRatio = nextRatio
+
+    if (nextStep !== prevStep) {
+      playDetentClick(nextStep + 1)
+    }
+
+    if (nextRatio >= 0.82 && !launchLeverDragRef.current.launchedThisStroke) {
+      launchLeverDragRef.current.launchedThisStroke = true
+      const store = useDeskStore.getState()
+      const packedPaperHex = store.packedDoc
+        ? PAPER_COLOR_HEX[store.packedDoc.paperColor]
+        : '#d8d2c0'
+      if (store.launchPneumaticCapsule()) {
+        triggerPneumaticFlightAnim(packedPaperHex)
+      } else {
+        playDispatchErrorBuzzer()
+      }
+    }
+  }
+
+  const handleLaunchLeverUp = (e: ThreeEvent<PointerEvent>) => {
+    if (!launchLeverDragRef.current.dragging) return
+    e.stopPropagation()
+    const wasQuickPull =
+      !launchLeverDragRef.current.launchedThisStroke &&
+      launchLeverDragRef.current.pullRatio < 0.25
+    launchLeverDragRef.current.dragging = false
+
+    if (wasQuickPull) {
+      const store = useDeskStore.getState()
+      const packedPaperHex = store.packedDoc
+        ? PAPER_COLOR_HEX[store.packedDoc.paperColor]
+        : '#d8d2c0'
+      if (store.launchPneumaticCapsule()) {
+        launchLeverDragRef.current.pullRatio = 1.0
+        triggerPneumaticFlightAnim(packedPaperHex)
+        window.setTimeout(() => {
+          launchLeverDragRef.current.pullRatio = 0
+        }, 280)
+        return
+      }
+      playDispatchErrorBuzzer()
+    }
+
+    launchLeverDragRef.current.pullRatio = 0
+    playSwitchClank(false)
+  }
+
   // Guardrail 4: Execute stamp impact, radial air-pressure shockwave & immediate texture refresh
   const triggerStampPaperShockwave = (
     stampX: number,
@@ -2032,9 +2467,229 @@ export function InspectorDesk3D() {
   useFrame(({ clock, camera }, delta) => {
     const t = clock.getElapsedTime()
     const dt = Math.min(0.033, Math.max(0.001, delta))
+    const deskState = useDeskStore.getState()
+    const curCapsuleState = deskState.capsuleState
+    const curHatchOpen = deskState.hatchOpen
+    const isSealedAndReady =
+      curCapsuleState === 'CHAMBER_LOADED' && !curHatchOpen
+
     if (manometerNeedleRef.current) {
+      const vacSurge = pneumaticAnimRef.current.active
+        ? Math.sin(pneumaticAnimRef.current.progress * Math.PI) * 1.55
+        : isSealedAndReady
+          ? 0.48
+          : curHatchOpen
+            ? -0.25
+            : 0
       manometerNeedleRef.current.rotation.z =
-        -0.42 + Math.sin(t * 21.0) * 0.075 + Math.cos(t * 34.5) * 0.042
+        -0.42 +
+        vacSurge +
+        Math.sin(t * 21.0) * 0.065 +
+        Math.cos(t * 34.5) * 0.038
+    }
+
+    // Pneumatic Breech Chamber Status Lamp:
+    // - Solid / Pulsing Emerald Green (`ГОТОВ К ПУСКУ // SEALED & READY`) when capsule is loaded & hatch is closed (or in flight)
+    // - Warm Amber (`#ffb000`) when hatch is open, capsule is packed on cradle, or paper is stamped ОДОБРЕНО
+    // - Dim dark green when idle
+    if (pneumaticStatusLampMatRef.current) {
+      if (pneumaticAnimRef.current.active || isSealedAndReady) {
+        const pulse = pneumaticAnimRef.current.active
+          ? 3.2
+          : 2.2 + Math.sin(t * 6.0) * 0.45
+        pneumaticStatusLampMatRef.current.color.set('#33ff66')
+        pneumaticStatusLampMatRef.current.emissive.set('#33ff66')
+        pneumaticStatusLampMatRef.current.emissiveIntensity = pulse
+      } else if (
+        curHatchOpen ||
+        curCapsuleState === 'CRADLE_PACKED' ||
+        hasApprovedDocOnDesk
+      ) {
+        const pulse = 1.35 + Math.sin(t * 7.5) * 0.65
+        pneumaticStatusLampMatRef.current.color.set('#ffb000')
+        pneumaticStatusLampMatRef.current.emissive.set('#ff8800')
+        pneumaticStatusLampMatRef.current.emissiveIntensity = pulse
+      } else {
+        pneumaticStatusLampMatRef.current.color.set('#2b382e')
+        pneumaticStatusLampMatRef.current.emissive.set('#0a2412')
+        pneumaticStatusLampMatRef.current.emissiveIntensity = 0.25
+      }
+    }
+    if (pneumaticStatusLightRef.current) {
+      const lightActive =
+        pneumaticAnimRef.current.active ||
+        isSealedAndReady ||
+        curHatchOpen ||
+        curCapsuleState === 'CRADLE_PACKED' ||
+        hasApprovedDocOnDesk
+      pneumaticStatusLightRef.current.visible = lightActive
+      pneumaticStatusLightRef.current.color.set(
+        pneumaticAnimRef.current.active || isSealedAndReady
+          ? '#33ff66'
+          : '#ffb000'
+      )
+      pneumaticStatusLightRef.current.intensity =
+        pneumaticAnimRef.current.active
+          ? 1.5
+          : isSealedAndReady
+            ? 1.1
+            : 0.55 + Math.sin(t * 7.5) * 0.25
+    }
+
+    // Step 1 Animation: Paper rolling into scroll & sliding inside Carrier Cylinder (`КАПСУЛА`) on Desk Cradle
+    if (capsulePackAnimRef.current.active) {
+      capsulePackAnimRef.current.progress = Math.min(
+        1.0,
+        capsulePackAnimRef.current.progress + dt * 2.8
+      )
+      if (capsulePackAnimRef.current.progress >= 1.0) {
+        capsulePackAnimRef.current.active = false
+      }
+    }
+
+    if (cradleCapsuleGroupRef.current) {
+      const showOnCradle =
+        curCapsuleState === 'CRADLE_EMPTY' ||
+        curCapsuleState === 'CRADLE_PACKED'
+      cradleCapsuleGroupRef.current.visible = showOnCradle
+      if (showOnCradle) {
+        const drag = capsuleDragRef.current
+        const targetX = drag.dragging ? drag.x : CAPSULE_CRADLE_POS_3D.x
+        const targetZ = drag.dragging ? drag.z : CAPSULE_CRADLE_POS_3D.z
+        const targetY = drag.dragging
+          ? BASE_MAT_Y + 0.068
+          : CAPSULE_CRADLE_POS_3D.y + 0.036
+        cradleCapsuleGroupRef.current.position.x = THREE.MathUtils.lerp(
+          cradleCapsuleGroupRef.current.position.x,
+          targetX,
+          Math.min(1, dt * 22)
+        )
+        cradleCapsuleGroupRef.current.position.y = THREE.MathUtils.lerp(
+          cradleCapsuleGroupRef.current.position.y,
+          targetY,
+          Math.min(1, dt * 22)
+        )
+        cradleCapsuleGroupRef.current.position.z = THREE.MathUtils.lerp(
+          cradleCapsuleGroupRef.current.position.z,
+          targetZ,
+          Math.min(1, dt * 22)
+        )
+        // Stand upright as the operator drags the packed capsule toward the open breech chamber!
+        const nearBreech =
+          drag.dragging &&
+          Math.hypot(
+            drag.x - OUTBOX_BREECH_POS_3D.x,
+            drag.z - OUTBOX_BREECH_POS_3D.z
+          ) < 0.45
+        const targetRotZ = nearBreech ? 0 : Math.PI / 2
+        const targetRotY = nearBreech ? 0 : 0.18
+        cradleCapsuleGroupRef.current.rotation.z = THREE.MathUtils.lerp(
+          cradleCapsuleGroupRef.current.rotation.z,
+          targetRotZ,
+          Math.min(1, dt * 16)
+        )
+        cradleCapsuleGroupRef.current.rotation.y = THREE.MathUtils.lerp(
+          cradleCapsuleGroupRef.current.rotation.y,
+          targetRotY,
+          Math.min(1, dt * 16)
+        )
+      }
+    }
+
+    if (cradleTopCapRef.current) {
+      // Cap is open (+0.028m offset & tilted) when empty or during first half of packing, then snaps shut at 0.058m!
+      const packP = capsulePackAnimRef.current.progress
+      const isCapOpen =
+        curCapsuleState === 'CRADLE_EMPTY' ||
+        (capsulePackAnimRef.current.active && packP < 0.72)
+      const targetCapY = isCapOpen ? 0.088 : 0.058
+      const targetCapRotZ = isCapOpen ? -0.55 : 0
+      cradleTopCapRef.current.position.y = THREE.MathUtils.lerp(
+        cradleTopCapRef.current.position.y,
+        targetCapY,
+        Math.min(1, dt * 20)
+      )
+      cradleTopCapRef.current.rotation.z = THREE.MathUtils.lerp(
+        cradleTopCapRef.current.rotation.z,
+        targetCapRotZ,
+        Math.min(1, dt * 20)
+      )
+    }
+
+    if (cradleScrollRef.current) {
+      const hasScroll = curCapsuleState !== 'CRADLE_EMPTY'
+      cradleScrollRef.current.visible = hasScroll
+      if (hasScroll) {
+        const packP = capsulePackAnimRef.current.active
+          ? capsulePackAnimRef.current.progress
+          : 1.0
+        const slideT = THREE.MathUtils.clamp(packP / 0.75, 0, 1)
+        cradleScrollRef.current.position.y = THREE.MathUtils.lerp(
+          0.095,
+          0,
+          slideT
+        )
+        cradleScrollRef.current.rotation.y = (1 - slideT) * Math.PI * 2.5
+      }
+    }
+
+    // Step 2 & Step 4 Animation: Hinged Curved Brass/Glass Breech Door (`ЛЮК КАМЕРЫ`) swings open ~85° (-1.48 rad)
+    if (breechDoorGroupRef.current) {
+      const targetDoorRotY = curHatchOpen ? -1.48 : 0
+      breechDoorGroupRef.current.rotation.y = THREE.MathUtils.lerp(
+        breechDoorGroupRef.current.rotation.y,
+        targetDoorRotY,
+        Math.min(1, dt * 16)
+      )
+    }
+
+    // Step 3 Animation: Packed Carrier Cylinder sitting inside the Breech Chamber
+    if (chamberCapsuleGroupRef.current) {
+      chamberCapsuleGroupRef.current.visible =
+        curCapsuleState === 'CHAMBER_LOADED'
+    }
+
+    // Step 5 Animation: Vacuum Launch Lever (`РЫЧАГ ПУСКА`) rotation & In-Flight Capsule shooting along ceiling pipe to K.O.M.R.A.D.-84!
+    if (launchLeverGroupRef.current) {
+      const targetPull = pneumaticAnimRef.current.active
+        ? Math.sin(
+            Math.min(1, pneumaticAnimRef.current.progress * 2.2) * Math.PI
+          )
+        : launchLeverDragRef.current.pullRatio
+      const targetRotX = 0.22 + targetPull * 1.18
+      launchLeverGroupRef.current.rotation.x = THREE.MathUtils.lerp(
+        launchLeverGroupRef.current.rotation.x,
+        targetRotX,
+        Math.min(1, dt * 20)
+      )
+    }
+
+    if (pneumaticAnimRef.current.active) {
+      pneumaticAnimRef.current.progress += dt * 1.18
+      const p = pneumaticAnimRef.current.progress
+      if (p >= 1.0) {
+        pneumaticAnimRef.current.active = false
+        pneumaticAnimRef.current.progress = 0
+        if (flightCapsuleGroupRef.current) {
+          flightCapsuleGroupRef.current.visible = false
+        }
+        useDeskStore.getState().completePneumaticLaunch()
+        lensDirtyRef.current = true
+      } else if (flightCapsuleGroupRef.current) {
+        flightCapsuleGroupRef.current.visible = true
+        // Smooth ease-in-out acceleration along the 3D CatmullRomCurve3 pipeline from breech -> riser -> 90° ceiling elbow -> horizontal ceiling run -> behind K.O.M.R.A.D.-84!
+        const u = THREE.MathUtils.smoothstep(p, 0, 1)
+        pneumaticFlightCurve.getPointAt(u, flightPosVecRef.current)
+        pneumaticFlightCurve.getTangentAt(u, flightTanVecRef.current)
+        flightCapsuleGroupRef.current.position.copy(flightPosVecRef.current)
+        flightCapsuleGroupRef.current.quaternion.setFromUnitVectors(
+          flightUpVecRef.current,
+          flightTanVecRef.current.normalize()
+        )
+        flightCapsuleGroupRef.current.rotateY(t * 16.0)
+      }
+    } else if (flightCapsuleGroupRef.current) {
+      flightCapsuleGroupRef.current.visible = false
     }
 
     // Physical Pull-Tension & Vertex Bending on Emerging ПРАВДА-84 Paper Strip + Printer Recoil Jolt
@@ -2066,51 +2721,328 @@ export function InspectorDesk3D() {
       printerGroupRef.current.rotation.set(recoilPitch, 0.15, 0)
     }
 
-    const stripLen = Math.max(0.04, printStepRef.current * PRINTER_FEED_STEP_M)
-    for (const geoRef of [printingStripGeoRef, printingBackingGeoRef]) {
-      const geo = geoRef.current
-      if (!geo) continue
-      const posAttr = geo.attributes.position as THREE.BufferAttribute
-      for (let i = 0; i < posAttr.count; i++) {
-        const y0 = posAttr.getY(i)
-        // v = 0 at the bottom edge anchored inside the ПРАВДА-84 roller slot, v = 1 at the top free edge
-        const v = THREE.MathUtils.clamp(
-          (y0 + stripLen * 0.5) / Math.max(0.01, stripLen),
-          0,
-          1
-        )
-        const bendWeight = v * v
-        const stretchWeight = Math.pow(v, 1.35)
-        const shiver =
-          Math.sin(t * 72 + v * 11) * 0.007 * grab.tension * v
-        const archZ =
-          (grab.pullDeltaZ * 1.45 + Math.abs(grab.pullDeltaX) * 0.45) *
-            bendWeight +
-          shiver
-        const offsetZ =
-          (geoRef === printingBackingGeoRef ? -0.002 : 0.002) + archZ
-        posAttr.setZ(i, offsetZ)
-        // Store horizontal pull shear inside userData base X + shear so vertices return cleanly to x0
-        if (!geo.userData.baseX) {
-          const baseArr = new Float32Array(posAttr.count)
-          for (let j = 0; j < posAttr.count; j++) {
-            baseArr[j] = posAttr.getX(j)
+    // Only deform emerging paper strip vertices & recompute normals when a slip is present and actively moving/pulled!
+    if (printingDoc) {
+      const stripDeformSig = `${printingDoc.id}|${printStepRef.current}|${grab.dragging ? Math.floor(t * 24) : 0}|${grab.pullDeltaX.toFixed(3)}|${grab.pullDeltaZ.toFixed(3)}|${grab.tension.toFixed(3)}`
+      if (lastStripDeformSigRef.current !== stripDeformSig) {
+        lastStripDeformSigRef.current = stripDeformSig
+        const stripLen = Math.max(0.04, printStepRef.current * PRINTER_FEED_STEP_M)
+        for (const geoRef of [printingStripGeoRef, printingBackingGeoRef]) {
+          const geo = geoRef.current
+          if (!geo) continue
+          const posAttr = geo.attributes.position as THREE.BufferAttribute
+          for (let i = 0; i < posAttr.count; i++) {
+            const y0 = posAttr.getY(i)
+            // v = 0 at the bottom edge anchored inside the ПРАВДА-84 roller slot, v = 1 at the top free edge
+            const v = THREE.MathUtils.clamp(
+              (y0 + stripLen * 0.5) / Math.max(0.01, stripLen),
+              0,
+              1
+            )
+            const bendWeight = v * v
+            const stretchWeight = Math.pow(v, 1.35)
+            const shiver =
+              Math.sin(t * 72 + v * 11) * 0.007 * grab.tension * v
+            const archZ =
+              (grab.pullDeltaZ * 1.45 + Math.abs(grab.pullDeltaX) * 0.45) *
+                bendWeight +
+              shiver
+            const offsetZ =
+              (geoRef === printingBackingGeoRef ? -0.002 : 0.002) + archZ
+            posAttr.setZ(i, offsetZ)
+            // Store horizontal pull shear inside userData base X + shear so vertices return cleanly to x0
+            if (!geo.userData.baseX) {
+              const baseArr = new Float32Array(posAttr.count)
+              for (let j = 0; j < posAttr.count; j++) {
+                baseArr[j] = posAttr.getX(j)
+              }
+              geo.userData.baseX = baseArr
+            }
+            const baseX = (geo.userData.baseX as Float32Array)[i] ?? 0
+            const shearX =
+              grab.pullDeltaX * 1.55 * stretchWeight +
+              Math.cos(t * 68 + v * 9) * 0.005 * grab.tension * v
+            posAttr.setX(i, baseX + shearX)
           }
-          geo.userData.baseX = baseArr
+          posAttr.needsUpdate = true
+          geo.computeVertexNormals()
         }
-        const baseX = (geo.userData.baseX as Float32Array)[i] ?? 0
-        const shearX =
-          grab.pullDeltaX * 1.55 * stretchWeight +
-          Math.cos(t * 68 + v * 9) * 0.005 * grab.tension * v
-        posAttr.setX(i, baseX + shearX)
       }
-      posAttr.needsUpdate = true
-      geo.computeVertexNormals()
     }
 
     const isFreeLookMode = useCameraLookStore.getState().isFreeLookMode
+
+    // 0. Sync Inspection Grace Damping (`30%` slower background thermal/pressure escalation while holding Magnifying Glass or Manual)
+    const gameState = useGameStore.getState()
+    const isActivelyInspecting =
+      lensPosRef.current.dragging || isManualHeldRef.current
+    if (isActivelyInspecting !== lastInspectingStateRef.current) {
+      lastInspectingStateRef.current = isActivelyInspecting
+      gameState.setInspectingDesk(isActivelyInspecting)
+    }
+
+    // 0b. Update 3D Illuminated 6-Lamp Master Annunciator Strip (`ТАБЛО ТРЕВОГИ`) & Distinct Audio Warning Chimes
+    const maxBearingC = 20 + Math.max(gameState.pumpAHeat, gameState.pumpBHeat)
+    const hzDrift = Math.abs(gameState.gridHz - 50.0)
+    const waterInDrought =
+      gameState.pripyatWater < 30 ||
+      gameState.kolkhozWater < 35 ||
+      gameState.vodkaWater < 40
+    const waterLow =
+      gameState.pripyatWater < 45 ||
+      gameState.kolkhozWater < 45 ||
+      gameState.vodkaWater < 45
+
+    // Severity levels: 0 = Dim Normal, 1 = Amber Early Warning, 2 = Critical Red (or 3 = Incoming Order Emerald/Amber Flash)
+    const nextLevels = [
+      gameState.coreTemp > 680 ? 2 : gameState.coreTemp > 520 ? 1 : 0,
+      waterInDrought ? 2 : waterLow ? 1 : 0,
+      gameState.heliumPressure > 68 || gameState.lubeOilPressure < 25
+        ? 2
+        : gameState.heliumPressure > 58 || gameState.lubeOilPressure < 40
+          ? 1
+          : 0,
+      maxBearingC > 90 ? 2 : maxBearingC > 75 ? 1 : 0,
+      hzDrift > 1.5 ? 2 : hzDrift > 0.8 ? 1 : 0,
+      printingDoc !== null ? 3 : 0,
+    ]
+
+    let crossedIntoAmber = false
+    let anyCriticalRed = false
+    for (let i = 0; i < 6; i++) {
+      const prev = prevAnnunciatorLevelsRef.current[i] ?? 0
+      const curr = nextLevels[i] ?? 0
+      if (i < 5 && prev === 0 && curr === 1) {
+        crossedIntoAmber = true
+      }
+      if (i < 5 && curr === 2) {
+        anyCriticalRed = true
+      }
+      prevAnnunciatorLevelsRef.current[i] = curr
+
+      const mat = annunciatorMatRefs.current[i]
+      if (mat) {
+        if (gameState.isBlackout) {
+          mat.color.set('#141816')
+          mat.emissive.set('#000000')
+          mat.emissiveIntensity = 0
+        } else if (curr === 2) {
+          const redFlash = Math.sin(t * 11.0 + i * 0.4) > -0.2
+          mat.color.set(redFlash ? '#ff3838' : '#5e1414')
+          mat.emissive.set('#ff2a2a')
+          mat.emissiveIntensity = redFlash ? 1.85 : 0.35
+        } else if (curr === 1) {
+          const amberFlash = Math.sin(t * 6.5 + i * 0.5) > -0.3
+          mat.color.set(amberFlash ? '#ffb824' : '#593e0c')
+          mat.emissive.set('#ffb000')
+          mat.emissiveIntensity = amberFlash ? 1.35 : 0.3
+        } else if (curr === 3) {
+          const orderCycle = Math.sin(t * 8.0) > 0
+          const orderHex = orderCycle ? '#33ff66' : '#ffb000'
+          mat.color.set(orderHex)
+          mat.emissive.set(orderHex)
+          mat.emissiveIntensity = 1.45
+        } else {
+          mat.color.set('#22332a')
+          mat.emissive.set('#183b26')
+          mat.emissiveIntensity = 0.22
+        }
+      }
+    }
+
+    if (crossedIntoAmber && gameState.phase === 'playing') {
+      playAmberWarningChime()
+    }
+    if (
+      anyCriticalRed &&
+      gameState.phase === 'playing' &&
+      t - lastKlaxonPulseTimeRef.current >= 6.5
+    ) {
+      lastKlaxonPulseTimeRef.current = t
+      playCriticalRedKlaxonPulse()
+    }
+
+    // 0c. 5-Stage KGB Operator Qualification Drill (`УЧЕБНАЯ ТРЕВОГА`):
+    //     - Play confirmation chime when tutorialStep advances
+    //     - Pulse required 3D hardware lamps/knobs with Amber-Gold -> Emerald (`Math.sin(t * 6)`)
+    const curTutStep = gameState.tutorialStep
+    if (prevTutorialStepRef.current !== curTutStep) {
+      prevTutorialStepRef.current = curTutStep
+      if (gameState.phase === 'playing') {
+        playAmberWarningChime()
+      }
+    }
+
+    const tutPulse = (Math.sin(t * 6.0) + 1) * 0.5
+    const tutHex = tutPulse > 0.5 ? '#33ff66' : '#ffb000'
+    const tutEmissiveIntensity = 1.15 + tutPulse * 1.15
+
+    const deskDocForTut = deskState.documents.find((d) => d.status === 'desk')
+    const hasShreddedStampOnDesk = Boolean(
+      deskDocForTut?.stamps.some((s) => s.type === 'SHREDDED')
+    )
+
+    // 1. Printer Lamp Pulse (Step 1A or Step 5A while printingDoc is emerging)
+    if (printerLampMatRef.current) {
+      const highlightPrinter =
+        (curTutStep === 1 || curTutStep === 5) && printingDoc !== null
+      if (highlightPrinter) {
+        printerLampMatRef.current.color.set(tutHex)
+        printerLampMatRef.current.emissive.set(tutHex)
+        printerLampMatRef.current.emissiveIntensity = tutEmissiveIntensity
+      } else {
+        printerLampMatRef.current.color.set(
+          printerReceiving ? '#ff2a2a' : '#8b1e1e'
+        )
+        printerLampMatRef.current.emissive.set(
+          printerReceiving ? '#ff2a2a' : '#000000'
+        )
+        printerLampMatRef.current.emissiveIntensity = printerReceiving ? 1.4 : 0
+      }
+    }
+
+    // 2. Green Stamp [ОДОБРЕНО] Knob Pulse (Step 1B: paper on desk, not yet stamped APPROVED)
+    if (approveKnobMatRef.current) {
+      const highlightApprove =
+        curTutStep === 1 &&
+        printingDoc === null &&
+        deskDocForTut !== undefined &&
+        !hasApprovedDocOnDesk &&
+        curCapsuleState === 'CRADLE_EMPTY'
+      if (highlightApprove) {
+        approveKnobMatRef.current.color.set(tutHex)
+        approveKnobMatRef.current.emissive.set(tutHex)
+        approveKnobMatRef.current.emissiveIntensity = tutEmissiveIntensity
+      } else {
+        approveKnobMatRef.current.color.set('#248f43')
+        approveKnobMatRef.current.emissive.set('#0c3818')
+        approveKnobMatRef.current.emissiveIntensity = 0.25
+      }
+    }
+
+    // 3. Carrier Capsule Ring Pulse (Step 1C: stamped APPROVED on desk, or packed on cradle waiting to load)
+    if (capsuleRingMatRef.current) {
+      const highlightCapsule =
+        curTutStep === 1 &&
+        ((hasApprovedDocOnDesk && curCapsuleState === 'CRADLE_EMPTY') ||
+          (curCapsuleState === 'CRADLE_PACKED' && curHatchOpen))
+      if (highlightCapsule) {
+        capsuleRingMatRef.current.color.set(tutHex)
+        capsuleRingMatRef.current.emissive.set(tutHex)
+        capsuleRingMatRef.current.emissiveIntensity = tutEmissiveIntensity
+      } else {
+        capsuleRingMatRef.current.color.set(
+          curCapsuleState === 'CRADLE_PACKED' ? '#33ff66' : '#b8a46b'
+        )
+        capsuleRingMatRef.current.emissive.set(
+          curCapsuleState === 'CRADLE_PACKED' ? '#198c38' : '#000000'
+        )
+        capsuleRingMatRef.current.emissiveIntensity =
+          curCapsuleState === 'CRADLE_PACKED' ? 0.8 : 0
+      }
+    }
+
+    // 4. Breech Hatch Latch Knob Pulse (Step 1C: packed on cradle & hatch closed, OR loaded in chamber & hatch open)
+    if (hatchKnobMatRef.current) {
+      const highlightHatch =
+        curTutStep === 1 &&
+        ((curCapsuleState === 'CRADLE_PACKED' && !curHatchOpen) ||
+          (curCapsuleState === 'CHAMBER_LOADED' && curHatchOpen))
+      if (highlightHatch) {
+        hatchKnobMatRef.current.color.set(tutHex)
+        hatchKnobMatRef.current.emissive.set(tutHex)
+        hatchKnobMatRef.current.emissiveIntensity = tutEmissiveIntensity
+      } else {
+        hatchKnobMatRef.current.color.set(curHatchOpen ? '#ffb000' : '#b82a24')
+        hatchKnobMatRef.current.emissive.set('#000000')
+        hatchKnobMatRef.current.emissiveIntensity = 0
+      }
+    }
+
+    // 5. Vacuum Launch Lever Knob Pulse (Step 1C: chamber loaded & hatch sealed)
+    if (launchKnobMatRef.current) {
+      const highlightLaunch = curTutStep === 1 && isSealedAndReady
+      if (highlightLaunch) {
+        launchKnobMatRef.current.color.set(tutHex)
+        launchKnobMatRef.current.emissive.set(tutHex)
+        launchKnobMatRef.current.emissiveIntensity = tutEmissiveIntensity
+      } else {
+        launchKnobMatRef.current.color.set('#b82a24')
+        launchKnobMatRef.current.emissive.set('#4a0808')
+        launchKnobMatRef.current.emissiveIntensity = isSealedAndReady
+          ? 0.65
+          : 0.25
+      }
+    }
+
+    // 6. Red Stamp [УНИЧТОЖЕНО] & Shredder Lever Knob Pulse (Step 5)
+    if (shredKnobMatRef.current) {
+      const highlightShredStamp =
+        curTutStep === 5 &&
+        printingDoc === null &&
+        deskDocForTut !== undefined &&
+        !hasShreddedStampOnDesk &&
+        loadedDoc === null
+      if (highlightShredStamp) {
+        shredKnobMatRef.current.color.set(tutHex)
+        shredKnobMatRef.current.emissive.set(tutHex)
+        shredKnobMatRef.current.emissiveIntensity = tutEmissiveIntensity
+      } else {
+        shredKnobMatRef.current.color.set('#c42828')
+        shredKnobMatRef.current.emissive.set('#4a0c0c')
+        shredKnobMatRef.current.emissiveIntensity = 0.25
+      }
+    }
+    if (shredLeverKnobMatRef.current) {
+      const highlightShredLever =
+        curTutStep === 5 && (hasShreddedStampOnDesk || loadedDoc !== null)
+      if (highlightShredLever) {
+        shredLeverKnobMatRef.current.color.set(tutHex)
+        shredLeverKnobMatRef.current.emissive.set(tutHex)
+        shredLeverKnobMatRef.current.emissiveIntensity = tutEmissiveIntensity
+      } else {
+        shredLeverKnobMatRef.current.color.set('#b82a24')
+        shredLeverKnobMatRef.current.emissive.set('#4a0808')
+        shredLeverKnobMatRef.current.emissiveIntensity = 0.35
+      }
+    }
+
+    // Compute concise Tutorial Prompt for Desk Ticker (`ПУНКТ №4 // DESK`)
+    let tutorialTickerPrompt: string | null = null
+    if (curTutStep === 1) {
+      if (printingDoc !== null) {
+        tutorialTickerPrompt =
+          'DRILL 1/5 [DESK]: DRAG PAPER RIGHT TO TEAR FROM PRINTER -> PLACE ON DESK MAT.'
+      } else if (!hasApprovedDocOnDesk && curCapsuleState === 'CRADLE_EMPTY') {
+        tutorialTickerPrompt =
+          'DRILL 1/5 [DESK]: ORDER IS GENUINE! CLICK GREEN STAMP [ОДОБРЕНО] -> STAMP THE PAPER.'
+      } else {
+        tutorialTickerPrompt =
+          'DRILL 1/5 [DESK]: PACK PAPER IN BRASS CAPSULE -> OPEN LEFT TUBE HATCH -> LOAD CAPSULE -> CLOSE HATCH & PULL RED LAUNCH LEVER!'
+      }
+    } else if (curTutStep === 2) {
+      tutorialTickerPrompt =
+        'DRILL 2/5 [PRESS KEY 1 -> UNIT A]: VODKA PLANT DEMANDS 25 MW! PULL LEVER [5. VODKA PLANT] UP UNTIL ITS READOUT SHOWS 25 / 25 MW.'
+    } else if (curTutStep === 3) {
+      tutorialTickerPrompt =
+        gameState.pumpThrottle[0] <= 50
+          ? 'DRILL 3/5 [KEY 1 -> UNIT A]: MORE MW CREATES CORE HEAT! TURN [COOLING PUMP A] WHEEL ABOVE 50% TO SIPHON COOLING WATER.'
+          : 'DRILL 3/5 [PRESS KEY 3 -> UNIT B]: TURN [HELIUM-N2 LOOP] WHEEL (>40%) FOR DRY COOLING & HOLD [BUBBLER DRAIN] LEVER TO PUMP WATER BACK!'
+    } else if (curTutStep === 4) {
+      tutorialTickerPrompt =
+        'DRILL 4/5 [PRESS KEY 5 -> UNIT C]: POWER CHANGES SHIFT TURBINE FREQUENCY (48.8 HZ)! DRAG [50HZ RHEOSTAT] DIAL TO LOCK 50.0 HZ.'
+    } else if (curTutStep === 5) {
+      tutorialTickerPrompt =
+        'DRILL 5/5 [PRESS KEY 4 -> DESK]: INSPECT NEW ORDER WITH [B] MANUAL OR [Z] LENS! IT HAS A FAKE SEAL — STAMP RED [УНИЧТОЖЕНО], DROP IN SHREDDER & PULL HANDLE 5 TIMES!'
+    }
+
+    const contextualHint =
+      gameState.hoveredDiagnosticId !== null || curTutStep === 'DONE'
+        ? getContextualDiagnosticHint(gameState, printingDoc !== null)
+        : null
+
     // 1. Update Top Status & Verdict Header Ticker
-    const headerSig = `${commendations}|${citations}|${isMusicMuted}|${isFreeLookMode}|${lastVerdict?.docId ?? ''}|${lastVerdict?.decision ?? ''}|${lastVerdict?.reason ?? ''}`
+    const headerSig = `${commendations}|${citations}|${isMusicMuted}|${isFreeLookMode}|${tutorialTickerPrompt ?? ''}|${contextualHint ?? ''}|${lastVerdict?.docId ?? ''}|${lastVerdict?.decision ?? ''}|${lastVerdict?.reason ?? ''}`
     const hTex = headerTickerMatRef.current?.map as
       | THREE.CanvasTexture
       | undefined
@@ -2127,7 +3059,9 @@ export function InspectorDesk3D() {
           citations,
           lastVerdict,
           isMusicMuted,
-          isFreeLookMode
+          isFreeLookMode,
+          tutorialTickerPrompt,
+          contextualHint
         )
         hTex.needsUpdate = true
       }
@@ -2349,9 +3283,9 @@ export function InspectorDesk3D() {
       shredPlungerRef.current.position.y = -stShr.plungerStep * 0.011
     }
 
-    // 5. Guardrail 4: Immediate True 2x Straight Optical Magnifier Lens Refresh
+    // 5. Guardrail 4: True 2x Straight Optical Magnifier Lens Refresh (Throttled to ~15 FPS when dragging, immediate on dirty flag)
     const lTex = lensMatRef.current?.map as THREE.CanvasTexture | undefined
-    if (lTex) {
+    if (lTex && (lensDirtyRef.current || t - lastLensDrawTimeRef.current >= 0.065)) {
       const liveDocs = useDeskStore.getState().documents.map((d) => {
         const livePos = liveDocPosMapRef.current[d.id]
         return livePos
@@ -2367,12 +3301,13 @@ export function InspectorDesk3D() {
       const docsSig = liveDocs
         .map(
           (d) =>
-            `${d.id}:${d.x.toFixed(3)}:${d.z.toFixed(3)}:${d.isExpanded}:${d.stamps.length}`
+            `${d.id}:${d.x.toFixed(2)}:${d.z.toFixed(2)}:${d.isExpanded}:${d.stamps.length}`
         )
         .join('|')
-      const lensSig = `${lensPosRef.current.x.toFixed(3)}|${lensPosRef.current.z.toFixed(3)}|${liveManualBounds.x.toFixed(3)}|${liveManualBounds.z.toFixed(3)}|${manualPage}|${manualScrollY}|${docsSig}`
+      const lensSig = `${lensPosRef.current.x.toFixed(2)}|${lensPosRef.current.z.toFixed(2)}|${liveManualBounds.x.toFixed(2)}|${liveManualBounds.z.toFixed(2)}|${manualPage}|${manualScrollY}|${docsSig}`
       if (lensDirtyRef.current || lTex.userData.lastSig !== lensSig) {
         lensDirtyRef.current = false
+        lastLensDrawTimeRef.current = t
         lTex.userData.lastSig = lensSig
         const canvas = lTex.image as HTMLCanvasElement
         const ctx = canvas.getContext('2d')
@@ -3157,14 +4092,6 @@ export function InspectorDesk3D() {
             bumpScale={0.005}
           />
         </mesh>
-        {/* Warm Orange Diegetic PointLight from the 4 ИН-14 Nixie Filaments */}
-        <pointLight
-          position={[0, 0.08, 0.04]}
-          color="#ff7718"
-          intensity={0.68}
-          distance={0.85}
-          decay={1.5}
-        />
         {[0, 1, 2, 3].map((tIdx) => {
           const tx = -0.078 + tIdx * 0.052
           return (
@@ -3314,7 +4241,6 @@ export function InspectorDesk3D() {
           </mesh>
           <spotLight
             ref={bankersLampSpotRef}
-            castShadow
             position={[0, -0.03, 0.03]}
             color="#68ff8a"
             intensity={2.4}
@@ -3322,8 +4248,6 @@ export function InspectorDesk3D() {
             angle={0.75}
             penumbra={0.8}
             decay={1.3}
-            shadow-bias={-0.0005}
-            shadow-mapSize={[512, 512]}
           />
         </group>
       </group>
@@ -3410,6 +4334,69 @@ export function InspectorDesk3D() {
       {/* PART 2: Interactive Bobbleheads of Komrad Kristianov & Komrad Oleg! */}
       <KomradBobbleheads3D shockwaveRef={bobbleShockwaveRef} />
 
+      {/* 3D Illuminated 6-Lamp Master Annunciator Strip (`ТАБЛО ТРЕВОГИ`) Mounted Above the Rear Desk Console in Peripheral View */}
+      <group position={[-0.07, 1.036, -0.562]} rotation={[-0.58, 0, 0]}>
+        {/* Heavy Cast-Iron & Brushed-Brass Annunciator Housing Bar */}
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[0.92, 0.068, 0.028]} />
+          <meshStandardMaterial
+            color="#121815"
+            roughness={0.44}
+            metalness={0.68}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
+            roughnessMap={ironTex.roughnessMap}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.004]} castShadow>
+          <boxGeometry args={[0.904, 0.058, 0.024]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            metalness={0.85}
+            roughness={0.28}
+            bumpMap={brassTex.bumpMap}
+            bumpScale={0.004}
+          />
+        </mesh>
+        {annunciatorTileSpecs.map((tile, idx) => {
+          const tx = -0.37 + idx * 0.148
+          return (
+            <group key={tile.id} position={[tx, 0, 0.017]}>
+              {/* Frosted-Glass Backlit Warning Tile (Hover displays 1-line Tactical Remedy Hint on Desk Ticker & K.O.M.R.A.D.-84) */}
+              <mesh
+                onPointerOver={(e) => {
+                  e.stopPropagation()
+                  useGameStore
+                    .getState()
+                    .setHoveredDiagnosticId(tile.id as DiagnosticAlarmId)
+                }}
+                onPointerOut={(e) => {
+                  e.stopPropagation()
+                  const g = useGameStore.getState()
+                  if (g.hoveredDiagnosticId === tile.id) {
+                    g.setHoveredDiagnosticId(null)
+                  }
+                }}
+              >
+                <planeGeometry args={[0.138, 0.048]} />
+                <meshStandardMaterial
+                  ref={(el) => {
+                    annunciatorMatRefs.current[idx] = el
+                  }}
+                  map={tile.texture}
+                  color="#22332a"
+                  emissive="#183b26"
+                  emissiveMap={tile.texture}
+                  emissiveIntensity={0.22}
+                  roughness={0.32}
+                  metalness={0.08}
+                />
+              </mesh>
+            </group>
+          )
+        })}
+      </group>
+
       {/* Tilted Status & Verdict Header Console Bar with Cast-Brass USSR State Emblem Medallion (Framed cleanly between x: -0.58 and x: +0.44!) */}
       <group position={[-0.07, 0.946, -0.51]} rotation={[-0.82, 0, 0]}>
         <mesh castShadow receiveShadow>
@@ -3474,19 +4461,50 @@ export function InspectorDesk3D() {
 
       {/* ============================================================
           2. ПРАВДА-84 TELETYPE PRINTER (INTRICATE MULTI-PART .GLB MODEL, LOWER-LEFT FOREGROUND)
+             Click-to-Print Failsafe: Clicking directly on the chassis when no paper is active forces next directive (cooldown = 0)!
          ============================================================ */}
       <group
         ref={printerGroupRef}
         position={[PRINTER_SLOT_X_3D, 0.962, 0.32]}
         rotation={[0, 0.15, 0]}
         scale={0.65}
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          if (useDeskStore.getState().printingDoc !== null) {
+            useGameStore.getState().setHoveredDiagnosticId('order')
+          }
+        }}
+        onPointerOut={(e) => {
+          e.stopPropagation()
+          const g = useGameStore.getState()
+          if (g.hoveredDiagnosticId === 'order') {
+            g.setHoveredDiagnosticId(null)
+          }
+        }}
+        onClick={(e) => {
+          if (useCameraLookStore.getState().isFreeLookMode) return
+          e.stopPropagation()
+          const store = useDeskStore.getState()
+          const hasActive =
+            store.printingDoc !== null ||
+            store.documents.length > 0 ||
+            store.packedDoc !== null ||
+            store.capsuleState !== 'CRADLE_EMPTY'
+          if (!hasActive) {
+            const spawned = store.forcePrintNextDirective()
+            if (spawned) {
+              printerRecoilRef.current = 0.65
+              playSwitchClank(true)
+              triggerBobbleShockwave(0.55)
+            }
+          }
+        }}
       >
         <primitive object={teletypeModel} />
         <mesh
           position={[0, 0.04, 0]}
           castShadow
           receiveShadow
-          onPointerDown={(e) => e.stopPropagation()}
         >
           <boxGeometry args={[0.58, 0.18, 0.42]} />
           <meshStandardMaterial
@@ -3628,6 +4646,7 @@ export function InspectorDesk3D() {
         <mesh position={[-0.2, 0.075, 0.19]} rotation={[0.38, 0, 0]}>
           <cylinderGeometry args={[0.022, 0.022, 0.03, 10]} />
           <meshStandardMaterial
+            ref={printerLampMatRef}
             color={printerReceiving ? '#ff2a2a' : '#8b1e1e'}
             emissive={printerReceiving ? '#ff2a2a' : '#000000'}
             emissiveIntensity={printerReceiving ? 1.4 : 0}
@@ -3708,43 +4727,554 @@ export function InspectorDesk3D() {
       </group>
 
       {/* ============================================================
-          3. ИСХОДЯЩИЕ // OUTBOX PNEUMATIC TUBE DISPATCH SLOT (BELOW STATUS PLAQUE)
-          WITH FLAT-MOUNTED SIDE VACUUM MANOMETER GAUGE (0% STATUS TICKER OCCLUSION!)
+          3. ПНЕВМОПОЧТА // OUTBOX PNEUMATIC CAPSULE DISPATCH SYSTEM
+          - Step 1: Desk Carrier Cylinder Cradle (`ЛОЖЕ КАПСУЛЫ`) & Draggable Brass/Bakelite Carrier Cylinder (`КАПСУЛА`)
+          - Step 2..4: Rear-Mounted Pneumatic Breech Station (`КАМЕРА ПУСКА`) behind Back-Left Desk Corner with Hinged Curved Breech Hatch (`ЛЮК КАМЕРЫ`)
+          - Step 5: Chunky Right-Flank Vacuum Launch Lever (`РЫЧАГ ПУСКА`) with Red Bakelite Ball Handle
+          - Continuous Segmented Glass-and-Brass Pipeline: Vertical Riser -> 90° Brass Ceiling Elbow -> Horizontal Ceiling Run -> Plunge Behind `K.O.M.R.A.D.-84`!
          ============================================================ */}
-      <group position={[-0.18, 0.932, -0.35]} scale={0.75}>
-        {deskPropNodes.pneumaticTube && (
-          <primitive object={deskPropNodes.pneumaticTube} />
-        )}
-        <mesh castShadow receiveShadow>
-          <boxGeometry args={[0.64, 0.028, 0.18]} />
+
+      {/* 3A. DESK CARRIER CYLINDER CRADLE (`ЛОЖЕ КАПСУЛЫ`) ON BACK-LEFT OF DESK MAT */}
+      <group
+        position={[
+          CAPSULE_CRADLE_POS_3D.x,
+          CAPSULE_CRADLE_POS_3D.y,
+          CAPSULE_CRADLE_POS_3D.z,
+        ]}
+        rotation={[0, 0.18, 0]}
+        onPointerDown={handleCradleCapsulePointerDown}
+        onPointerMove={handleCradleCapsulePointerMove}
+        onPointerUp={handleCradleCapsulePointerUp}
+        onPointerCancel={handleCradleCapsulePointerUp}
+      >
+        {/* Heavy Mahogany & Brushed-Brass Carrier Cradle Base */}
+        <mesh position={[0, 0.008, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.24, 0.016, 0.14]} />
           <meshStandardMaterial
-            color="#2a362b"
-            roughness={0.45}
-            metalness={0.65}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.008}
-            roughnessMap={ironTex.roughnessMap}
+            color="#3d2216"
+            map={mahoganyTex.map}
+            bumpMap={mahoganyTex.bumpMap}
+            bumpScale={0.004}
+            roughness={0.5}
           />
         </mesh>
-        <mesh position={[0, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[0.62, 0.16]} />
-          <meshStandardMaterial map={outboxTubeTex} roughness={0.6} />
-        </mesh>
-
-        {/* Flat Brass Capillary Pressure Tubing & Side-Mounted Flat Vacuum Manometer Gauge */}
-        <mesh geometry={deskCableGeometries.manometerCapillary} castShadow>
+        {/* Brass Perimeter Trim Plate */}
+        <mesh position={[0, 0.017, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.22, 0.004, 0.12]} />
           <meshStandardMaterial
-            color="#b8a46b"
+            color="#8c7a4b"
+            metalness={0.85}
+            roughness={0.28}
+            bumpMap={brassTex.bumpMap}
+            bumpScale={0.004}
+          />
+        </mesh>
+        {/* Twin Curved Brass Saddle Supports Holding the Horizontal Carrier Cylinder */}
+        {[-0.056, 0.056].map((sx, sIdx) => (
+          <group key={sIdx} position={[sx, 0.028, -0.01]}>
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[0.018, 0.022, 0.088]} />
+              <meshStandardMaterial
+                color="#222d26"
+                metalness={0.68}
+                roughness={0.42}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.006}
+              />
+            </mesh>
+            <mesh
+              position={[0, 0.015, 0]}
+              rotation={[0, Math.PI / 2, 0]}
+              castShadow
+            >
+              <torusGeometry args={[0.044, 0.006, 8, 16, Math.PI]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.88}
+                roughness={0.24}
+              />
+            </mesh>
+          </group>
+        ))}
+        {/* Angled Front Brass Instruction Plaque (`КАПСУЛА // STEP 1: PACK PAPER`) */}
+        <group position={[0, 0.016, 0.068]} rotation={[-0.48, 0, 0]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.22, 0.006, 0.05]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.86}
+              roughness={0.28}
+            />
+          </mesh>
+          <mesh position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.212, 0.045]} />
+            <meshStandardMaterial
+              map={capsuleCradlePlaqueTex}
+              roughness={0.48}
+            />
+          </mesh>
+        </group>
+      </group>
+
+      {/* 3B. INTERACTIVE BRASS & BAKELITE CARRIER CYLINDER (`КАПСУЛА`) ON CRADLE / DRAGGABLE TO CHAMBER */}
+      <group
+        ref={cradleCapsuleGroupRef}
+        position={[
+          CAPSULE_CRADLE_POS_3D.x,
+          CAPSULE_CRADLE_POS_3D.y + 0.036,
+          CAPSULE_CRADLE_POS_3D.z,
+        ]}
+        rotation={[0, 0.18, Math.PI / 2]}
+        onPointerDown={handleCradleCapsulePointerDown}
+        onPointerMove={handleCradleCapsulePointerMove}
+        onPointerUp={handleCradleCapsulePointerUp}
+        onPointerCancel={handleCradleCapsulePointerUp}
+      >
+        {/* Generous Invisible Hit-Box on Carrier Cylinder */}
+        <mesh>
+          <cylinderGeometry args={[0.072, 0.072, 0.19, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+        {/* Transparent Fluted Glass/Acrylic Carrier Body */}
+        <mesh castShadow receiveShadow>
+          <cylinderGeometry args={[0.038, 0.038, 0.122, 18]} />
+          <meshStandardMaterial
+            color="#d8efe4"
+            transparent
+            opacity={0.52}
+            roughness={0.14}
+            metalness={0.18}
+          />
+        </mesh>
+        {/* Center Bakelite Grip Band & Brass Identification Ring */}
+        <mesh>
+          <cylinderGeometry args={[0.04, 0.04, 0.024, 18]} />
+          <meshStandardMaterial
+            color="#1c1614"
+            roughness={0.38}
+            metalness={0.2}
+          />
+        </mesh>
+        <mesh>
+          <cylinderGeometry args={[0.041, 0.041, 0.007, 18]} />
+          <meshStandardMaterial
+            ref={capsuleRingMatRef}
+            color={capsuleState === 'CRADLE_PACKED' ? '#33ff66' : '#b8a46b'}
+            emissive={capsuleState === 'CRADLE_PACKED' ? '#198c38' : '#000000'}
+            emissiveIntensity={capsuleState === 'CRADLE_PACKED' ? 0.8 : 0}
+            metalness={0.85}
+            roughness={0.25}
+          />
+        </mesh>
+        {/* Bottom Knurled Brass End-Cap & Crimson Felt Buffer Ring */}
+        <group position={[0, -0.058, 0]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.042, 0.042, 0.018, 18]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.88}
+              roughness={0.22}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+          <mesh position={[0, -0.01, 0]}>
+            <cylinderGeometry args={[0.044, 0.044, 0.007, 18]} />
+            <meshStandardMaterial color="#5c1a16" roughness={0.88} />
+          </mesh>
+        </group>
+        {/* Animated Top Brass End-Cap (Open when empty, snaps shut when paper scroll rolls inside!) */}
+        <group ref={cradleTopCapRef} position={[0, 0.088, 0]} rotation={[0, 0, -0.55]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.042, 0.042, 0.018, 18]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.88}
+              roughness={0.22}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+          <mesh position={[0, 0.01, 0]}>
+            <cylinderGeometry args={[0.044, 0.044, 0.007, 18]} />
+            <meshStandardMaterial color="#5c1a16" roughness={0.88} />
+          </mesh>
+          {/* Knurled Brass Pull-Knob on Top Cap */}
+          <mesh position={[0, 0.018, 0]}>
+            <cylinderGeometry args={[0.016, 0.02, 0.012, 12]} />
+            <meshStandardMaterial
+              color="#d4be7f"
+              metalness={0.9}
+              roughness={0.2}
+            />
+          </mesh>
+        </group>
+        {/* Rolled Directive Paper Scroll Inside Carrier Cylinder */}
+        <group ref={cradleScrollRef} visible={packedDoc !== null}>
+          <mesh>
+            <cylinderGeometry args={[0.026, 0.026, 0.098, 16]} />
+            <meshStandardMaterial
+              ref={cradlePaperMatRef}
+              color={
+                packedDoc ? PAPER_COLOR_HEX[packedDoc.paperColor] : '#d8d2c0'
+              }
+              roughness={0.85}
+            />
+          </mesh>
+          <mesh position={[0, 0.014, 0]}>
+            <cylinderGeometry args={[0.0275, 0.0275, 0.022, 16]} />
+            <meshStandardMaterial color="#1b6e32" roughness={0.75} />
+          </mesh>
+        </group>
+      </group>
+
+      {/* 3C. OUTER-LEFT SIDE-MOUNTED PNEUMATIC BREECH STATION (`ПНЕВМОПОЧТА // КАМЕРА ПУСКА`)
+          Bolted to the Left Side-Panel of the Desk Right Beside the Carrier Cradle (100% Clear to the Left of the Green Banker's Lamp!) */}
+      <group
+        position={[
+          OUTBOX_BREECH_POS_3D.x,
+          OUTBOX_BREECH_POS_3D.y,
+          OUTBOX_BREECH_POS_3D.z,
+        ]}
+        rotation={[0, 0.32, 0]}
+      >
+        {/* Heavy Cast-Iron Cantilever Side-Panel Mounting Bracket Bolted to the Outer-Left Desk Frame */}
+        <mesh position={[0.14, -0.06, -0.02]} castShadow receiveShadow>
+          <boxGeometry args={[0.28, 0.14, 0.18]} />
+          <meshStandardMaterial
+            color="#18211b"
+            metalness={0.7}
+            roughness={0.44}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+          />
+        </mesh>
+        {/* Lower Floor-to-Breech Cast-Iron Vacuum Supply Column Rising From Behind the Desk */}
+        <mesh position={[0, -0.48, -0.025]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.062, 0.072, 0.96, 18]} />
+          <meshStandardMaterial
+            color="#1e2923"
+            metalness={0.68}
+            roughness={0.46}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+          />
+        </mesh>
+        {/* Lower Flanged Cast-Iron Collar Ring */}
+        <mesh position={[0, -0.04, -0.025]} castShadow>
+          <cylinderGeometry args={[0.092, 0.098, 0.036, 18]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
             metalness={0.85}
             roughness={0.28}
             bumpMap={brassTex.bumpMap}
             bumpScale={0.005}
           />
         </mesh>
-        <group position={[-0.39, 0.012, 0.02]} rotation={[-Math.PI / 2, 0, 0]}>
-          {/* Brushed-Brass Manometer Casing & Stepped Bezel Lying Flat on Desk Surface */}
+
+        {/* Main Cast-Iron Breech Base Manifold (`КАМЕРА ПУСКА`) */}
+        <mesh
+          position={[0, 0.032, 0]}
+          castShadow
+          receiveShadow
+          onClick={handleBreechChamberClick}
+        >
+          <boxGeometry args={[0.3, 0.068, 0.22]} />
+          <meshStandardMaterial
+            color="#222d26"
+            roughness={0.44}
+            metalness={0.68}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+            roughnessMap={ironTex.roughnessMap}
+          />
+        </mesh>
+        {/* 4 Brass Hex Bolts on Breech Manifold Deck */}
+        {(
+          [
+            [-0.12, -0.08],
+            [0.12, -0.08],
+            [-0.12, 0.08],
+            [0.12, 0.08],
+          ] as const
+        ).map(([bx, bz], bIdx) => (
+          <mesh key={bIdx} position={[bx, 0.07, bz]} castShadow>
+            <cylinderGeometry args={[0.008, 0.008, 0.01, 6]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.28}
+            />
+          </mesh>
+        ))}
+
+        {/* Angled Engraved Brass Front Plaque (`ПНЕВМОПОЧТА // КАМЕРА ПУСКА`) */}
+        <group
+          position={[0, 0.028, 0.122]}
+          rotation={[-0.45, 0, 0]}
+          onClick={handleBreechChamberClick}
+        >
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={[0.29, 0.008, 0.076]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.85}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+          <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.278, 0.068]} />
+            <meshStandardMaterial map={outboxTubeTex} roughness={0.52} />
+          </mesh>
+        </group>
+
+        {/* Step 2..4: Machined Brass Breech Chamber & Hinged Curved Brass/Glass Breech Door (`ЛЮК КАМЕРЫ`) */}
+        <group position={[0, 0.175, -0.025]}>
+          {/* Generous Invisible Hit-Box Around Breech Chamber & Door */}
+          <mesh position={[0, 0, 0.03]} onClick={handleBreechChamberClick}>
+            <boxGeometry args={[0.24, 0.26, 0.22]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+
+          {/* Bottom & Top Flanged Brass Chamber Rings */}
+          {[-0.105, 0.105].map((cy, rIdx) => (
+            <mesh key={rIdx} position={[0, cy, 0]} castShadow receiveShadow>
+              <cylinderGeometry args={[0.078, 0.082, 0.028, 20]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.86}
+                roughness={0.25}
+                bumpMap={brassTex.bumpMap}
+                bumpScale={0.005}
+              />
+            </mesh>
+          ))}
+
+          {/* Rear Curved Cast-Brass Chamber Wall (200° arc leaving front breech opening) */}
+          <mesh
+            rotation={[0, Math.PI * 0.45, 0]}
+            castShadow
+            receiveShadow
+            onClick={handleBreechChamberClick}
+          >
+            <cylinderGeometry
+              args={[0.068, 0.068, 0.19, 20, 1, true, 0, Math.PI * 1.15]}
+            />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.84}
+              roughness={0.3}
+              side={THREE.DoubleSide}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+
+          {/* Dark Recessed Inner Vacuum Chamber Bore & Brass Capsule Seat */}
+          <mesh position={[0, 0, -0.004]} onClick={handleBreechChamberClick}>
+            <cylinderGeometry
+              args={[0.056, 0.056, 0.186, 18, 1, true, Math.PI * 0.45, Math.PI * 1.15]}
+            />
+            <meshStandardMaterial
+              color="#080c0a"
+              roughness={0.92}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          <mesh position={[0, -0.082, 0]}>
+            <cylinderGeometry args={[0.048, 0.052, 0.014, 16]} />
+            <meshStandardMaterial
+              color="#5c1a16"
+              roughness={0.85}
+            />
+          </mesh>
+
+          {/* Step 3: Loaded Carrier Cylinder Sitting Upright Inside Breech Chamber (`capsuleState === 'CHAMBER_LOADED'`) */}
+          <group
+            ref={chamberCapsuleGroupRef}
+            position={[0, 0, 0]}
+            visible={capsuleState === 'CHAMBER_LOADED'}
+            onClick={handleBreechHatchClick}
+          >
+            <mesh castShadow>
+              <cylinderGeometry args={[0.038, 0.038, 0.122, 16]} />
+              <meshStandardMaterial
+                color="#d8efe4"
+                transparent
+                opacity={0.55}
+                roughness={0.14}
+                metalness={0.18}
+              />
+            </mesh>
+            {[-0.058, 0.058].map((cy, cIdx) => (
+              <group key={cIdx} position={[0, cy, 0]}>
+                <mesh castShadow>
+                  <cylinderGeometry args={[0.042, 0.042, 0.018, 16]} />
+                  <meshStandardMaterial
+                    color="#b8a46b"
+                    metalness={0.88}
+                    roughness={0.22}
+                  />
+                </mesh>
+                <mesh position={[0, cIdx === 0 ? -0.01 : 0.01, 0]}>
+                  <cylinderGeometry args={[0.044, 0.044, 0.007, 16]} />
+                  <meshStandardMaterial color="#5c1a16" roughness={0.88} />
+                </mesh>
+              </group>
+            ))}
+            <mesh>
+              <cylinderGeometry args={[0.026, 0.026, 0.098, 14]} />
+              <meshStandardMaterial
+                ref={chamberPaperMatRef}
+                color={
+                  packedDoc ? PAPER_COLOR_HEX[packedDoc.paperColor] : '#d8d2c0'
+                }
+                roughness={0.85}
+              />
+            </mesh>
+            <mesh position={[0, 0.012, 0]}>
+              <cylinderGeometry args={[0.0275, 0.0275, 0.022, 14]} />
+              <meshStandardMaterial color="#1b6e32" roughness={0.75} />
+            </mesh>
+          </group>
+
+          {/* Hinged Curved Brass/Glass Breech Door (`ЛЮК КАМЕРЫ`) — Pivots ~85° on Left Hinge Pin when Clicked! */}
+          <group
+            ref={breechDoorGroupRef}
+            position={[-0.066, 0, 0.024]}
+            onClick={handleBreechHatchClick}
+          >
+            {/* Heavy Left Vertical Brass Hinge Knuckles */}
+            {[-0.065, 0.065].map((hy, hIdx) => (
+              <mesh key={hIdx} position={[0, hy, 0]} castShadow>
+                <cylinderGeometry args={[0.01, 0.01, 0.028, 10]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.88}
+                  roughness={0.24}
+                />
+              </mesh>
+            ))}
+            {/* Door Offset Group Centered on Chamber Axis when Closed (`rotation.y = 0`) */}
+            <group position={[0.066, 0, -0.024]}>
+              {/* Curved Transparent Inspection Glass Door Panel */}
+              <mesh rotation={[0, -Math.PI * 0.42, 0]} castShadow>
+                <cylinderGeometry
+                  args={[0.07, 0.07, 0.175, 16, 1, true, 0, Math.PI * 0.85]}
+                />
+                <meshStandardMaterial
+                  color="#bce6d4"
+                  transparent
+                  opacity={0.46}
+                  roughness={0.12}
+                  metalness={0.2}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+              {/* Top & Bottom Curved Brass Door Straps */}
+              {[-0.082, 0.082].map((sy, sIdx) => (
+                <mesh
+                  key={sIdx}
+                  position={[0, sy, 0]}
+                  rotation={[0, -Math.PI * 0.42, 0]}
+                  castShadow
+                >
+                  <cylinderGeometry
+                    args={[0.073, 0.073, 0.016, 16, 1, true, 0, Math.PI * 0.85]}
+                  />
+                  <meshStandardMaterial
+                    color="#b8a46b"
+                    metalness={0.88}
+                    roughness={0.22}
+                    side={THREE.DoubleSide}
+                  />
+                </mesh>
+              ))}
+              {/* Right-Edge Brass Latch Bar & Knurled Crimson/Brass Cam-Latch Handle (`ОТКРЫТЬ / ЗАКРЫТЬ ЛЮК`) */}
+              <group position={[0.064, 0, 0.036]}>
+                <mesh castShadow>
+                  <boxGeometry args={[0.016, 0.175, 0.016]} />
+                  <meshStandardMaterial
+                    color="#b8a46b"
+                    metalness={0.88}
+                    roughness={0.22}
+                  />
+                </mesh>
+                <mesh
+                  position={[0.018, 0, 0.018]}
+                  rotation={[0, 0, Math.PI / 2]}
+                  castShadow
+                >
+                  <cylinderGeometry args={[0.008, 0.008, 0.036, 10]} />
+                  <meshStandardMaterial
+                    color="#d4be7f"
+                    metalness={0.9}
+                    roughness={0.2}
+                  />
+                </mesh>
+                <mesh position={[0.034, 0, 0.026]} castShadow>
+                  <sphereGeometry args={[0.015, 12, 12]} />
+                  <meshStandardMaterial
+                    ref={hatchKnobMatRef}
+                    color={hatchOpen ? '#ffb000' : '#b82a24'}
+                    roughness={0.28}
+                  />
+                </mesh>
+              </group>
+            </group>
+          </group>
+        </group>
+
+        {/* Caged Jewel Status Lamp (`ГОТОВ К ПУСКУ // SEALED & READY`: Amber when open/unsealed, Solid Emerald Green when loaded & sealed!) */}
+        <group position={[0.105, 0.074, 0.035]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.022, 0.026, 0.018, 12]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.86}
+              roughness={0.28}
+            />
+          </mesh>
+          <mesh position={[0, 0.014, 0]}>
+            <sphereGeometry args={[0.016, 14, 12]} />
+            <meshStandardMaterial
+              ref={pneumaticStatusLampMatRef}
+              color="#2b382e"
+              emissive="#0a2412"
+              emissiveIntensity={0.25}
+              roughness={0.2}
+            />
+          </mesh>
+          {[0, Math.PI / 2].map((rotY, cIdx) => (
+            <mesh
+              key={cIdx}
+              position={[0, 0.014, 0]}
+              rotation={[0, rotY, 0]}
+            >
+              <torusGeometry args={[0.018, 0.0022, 6, 12, Math.PI]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.88}
+                roughness={0.25}
+              />
+            </mesh>
+          ))}
+          <pointLight
+            ref={pneumaticStatusLightRef}
+            position={[0, 0.035, 0]}
+            color="#33ff66"
+            intensity={0.05}
+            distance={0.5}
+            decay={2}
+          />
+        </group>
+
+        {/* Left-Flank Brass Vacuum Manometer Gauge (`ВАКУУМ // КГС/СМ²`) */}
+        <group position={[-0.125, 0.115, 0.03]} rotation={[-0.25, 0.2, 0]}>
           <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
-            <cylinderGeometry args={[0.044, 0.048, 0.018, 14]} />
+            <cylinderGeometry args={[0.038, 0.042, 0.018, 14]} />
             <meshStandardMaterial
               color="#8c7a4b"
               metalness={0.85}
@@ -3755,12 +5285,12 @@ export function InspectorDesk3D() {
             />
           </mesh>
           <mesh position={[0, 0, 0.01]}>
-            <circleGeometry args={[0.038, 14]} />
+            <circleGeometry args={[0.033, 14]} />
             <meshStandardMaterial map={manometerDialTex} roughness={0.75} />
           </mesh>
           <group ref={manometerNeedleRef} position={[0, 0, 0.012]}>
-            <mesh position={[0, 0.012, 0]}>
-              <boxGeometry args={[0.004, 0.028, 0.002]} />
+            <mesh position={[0, 0.01, 0]}>
+              <boxGeometry args={[0.0035, 0.024, 0.002]} />
               <meshStandardMaterial
                 color="#ff2a2a"
                 emissive="#ff2a2a"
@@ -3768,7 +5298,7 @@ export function InspectorDesk3D() {
               />
             </mesh>
             <mesh rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.005, 0.005, 0.004, 8]} />
+              <cylinderGeometry args={[0.0045, 0.0045, 0.004, 8]} />
               <meshStandardMaterial
                 color="#b8a46b"
                 metalness={0.85}
@@ -3776,6 +5306,372 @@ export function InspectorDesk3D() {
               />
             </mesh>
           </group>
+        </group>
+
+        {/* Step 5: Right-Flank Heavy Vacuum Launch Gearbox & Pull-Down Lever (`РЫЧАГ ПУСКА`) with Red Bakelite Ball Handle */}
+        <group position={[0.168, 0.155, -0.01]}>
+          {/* Cast-Brass Ratchet Quadrant Housing */}
+          <mesh
+            castShadow
+            receiveShadow
+            onPointerDown={handleLaunchLeverDown}
+            onPointerMove={handleLaunchLeverMove}
+            onPointerUp={handleLaunchLeverUp}
+            onPointerCancel={handleLaunchLeverUp}
+          >
+            <boxGeometry args={[0.056, 0.145, 0.14]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.86}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+          <mesh position={[0.016, 0.015, 0]}>
+            <boxGeometry args={[0.032, 0.11, 0.11]} />
+            <meshStandardMaterial color="#0d110f" roughness={0.92} />
+          </mesh>
+          {/* Pivoting Chrome-Steel Launch Lever Shaft & Crimson Bakelite Ball Handle (`ПУСК`) */}
+          <group
+            ref={launchLeverGroupRef}
+            position={[0.022, 0.01, -0.02]}
+            rotation={[0.22, 0, -0.08]}
+            onPointerDown={handleLaunchLeverDown}
+            onPointerMove={handleLaunchLeverMove}
+            onPointerUp={handleLaunchLeverUp}
+            onPointerCancel={handleLaunchLeverUp}
+          >
+            {/* Generous Invisible Hit-Box on Launch Lever */}
+            <mesh position={[0, 0.08, 0.02]}>
+              <boxGeometry args={[0.12, 0.22, 0.14]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
+            {/* Chrome-Steel Lever Arm */}
+            <mesh position={[0, 0.068, 0]} castShadow>
+              <cylinderGeometry args={[0.011, 0.014, 0.14, 10]} />
+              <meshStandardMaterial
+                color="#c8d2c5"
+                metalness={0.9}
+                roughness={0.2}
+              />
+            </mesh>
+            {/* Heavy Red Bakelite Ball Knob (`#b82a24`) */}
+            <mesh position={[0, 0.145, 0]} castShadow>
+              <sphereGeometry args={[0.042, 16, 16]} />
+              <meshStandardMaterial
+                ref={launchKnobMatRef}
+                color="#b82a24"
+                emissive="#4a0808"
+                emissiveIntensity={
+                  capsuleState === 'CHAMBER_LOADED' && !hatchOpen ? 0.65 : 0.25
+                }
+                roughness={0.22}
+                metalness={0.12}
+              />
+            </mesh>
+            {/* Brass Equator Grip Band Around Red Bakelite Ball */}
+            <mesh
+              position={[0, 0.145, 0]}
+              rotation={[Math.PI / 2, 0, 0]}
+              castShadow
+            >
+              <torusGeometry args={[0.043, 0.005, 8, 16]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.88}
+                roughness={0.22}
+              />
+            </mesh>
+          </group>
+        </group>
+      </group>
+
+      {/* 3D. CONTINUOUS SEGMENTED GLASS-AND-BRASS ARCHITECTURAL PIPELINE TO `K.O.M.R.A.D.-84`
+          1. Vertical Riser (`x = -1.468, z = -0.544, y = 1.20 .. 2.74`)
+          2. 90° Brass Ceiling Elbow (`x = -1.468 -> -1.328, y = 2.74 -> 2.88`)
+          3. Extended Horizontal Ceiling Run (`x = -1.328 .. -0.14, y = 2.88, z = -0.544`) with 4 Ceiling Hanger Brackets
+          4. Terminal Intake Bend & Vertical Plunge (`x = 0.0, y = 2.88 -> 1.68, z = -1.16`) directly into Rear of `K.O.M.R.A.D.-84`! */}
+      <group>
+        {/* 1. Vertical Transparent Glass/Acrylic Riser Pipe (`x = -1.468, z = -0.544`) */}
+        <group position={[-1.468, 1.97, -0.544]}>
+          <mesh receiveShadow>
+            <cylinderGeometry args={[0.056, 0.056, 1.54, 20, 1, true]} />
+            <meshStandardMaterial
+              color="#bce6d4"
+              transparent
+              opacity={0.34}
+              roughness={0.12}
+              metalness={0.18}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh>
+            <cylinderGeometry args={[0.05, 0.05, 1.54, 16, 1, true]} />
+            <meshStandardMaterial
+              color="#e6fff4"
+              transparent
+              opacity={0.12}
+              roughness={0.08}
+              metalness={0.1}
+              depthWrite={false}
+            />
+          </mesh>
+          {/* 5 Flanged Brass Collar Rings Along Vertical Riser */}
+          {[-0.68, -0.34, 0, 0.34, 0.68].map((ry, rIdx) => (
+            <group key={rIdx} position={[0, ry, 0]}>
+              <mesh castShadow receiveShadow>
+                <cylinderGeometry args={[0.068, 0.068, 0.026, 20]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.86}
+                  roughness={0.26}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.069, 0.005, 8, 20]} />
+                <meshStandardMaterial
+                  color="#8c7a4b"
+                  metalness={0.88}
+                  roughness={0.24}
+                />
+              </mesh>
+            </group>
+          ))}
+          {/* 4 Vertical Brushed-Steel Tie-Rods Reinforcing the Riser */}
+          {(
+            [
+              [-0.06, -0.06],
+              [0.06, -0.06],
+              [-0.06, 0.06],
+              [0.06, 0.06],
+            ] as const
+          ).map(([tx, tz], tIdx) => (
+            <mesh key={tIdx} position={[tx, 0, tz]} castShadow>
+              <cylinderGeometry args={[0.005, 0.005, 1.54, 8]} />
+              <meshStandardMaterial
+                color="#9aa4ac"
+                metalness={0.88}
+                roughness={0.26}
+              />
+            </mesh>
+          ))}
+        </group>
+
+        {/* 2. 90° Flanged Brass Ceiling Elbow Bend (`x = -1.468 -> -1.328, y = 2.74 -> 2.88, z = -0.544`) */}
+        <group position={[-1.328, 2.74, -0.544]}>
+          <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+            <torusGeometry args={[0.14, 0.06, 16, 24, Math.PI / 2]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.26}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+          {/* End Flanges on 90° Elbow */}
+          <mesh position={[-0.14, 0, 0]} castShadow>
+            <cylinderGeometry args={[0.072, 0.072, 0.024, 18]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.88}
+              roughness={0.25}
+            />
+          </mesh>
+          <mesh
+            position={[0, 0.14, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.072, 0.072, 0.024, 18]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              metalness={0.88}
+              roughness={0.25}
+            />
+          </mesh>
+        </group>
+
+        {/* 3. Extended Horizontal Ceiling Glass-and-Brass Pipeline (`x = -1.328 .. -0.14, y = 2.88, z = -0.544`) with 4 Ceiling Hanger Brackets */}
+        <group position={[-0.734, 2.88, -0.544]}>
+          <mesh rotation={[0, 0, Math.PI / 2]} receiveShadow>
+            <cylinderGeometry args={[0.056, 0.056, 1.19, 20, 1, true]} />
+            <meshStandardMaterial
+              color="#bce6d4"
+              transparent
+              opacity={0.34}
+              roughness={0.12}
+              metalness={0.18}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+          {/* Brass Collar Rings & Heavy Steel Ceiling Hanger Straps Bolted to Overhead Bunker Ceiling */}
+          {[-0.45, -0.15, 0.15, 0.45].map((hx, hIdx) => (
+            <group key={hIdx} position={[hx, 0, 0]}>
+              <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+                <cylinderGeometry args={[0.068, 0.068, 0.026, 18]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.86}
+                  roughness={0.26}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+              {/* Steel Ceiling Hanger Rod & Mounting Plate */}
+              <mesh position={[0, 0.18, 0]} castShadow>
+                <cylinderGeometry args={[0.01, 0.01, 0.32, 8]} />
+                <meshStandardMaterial
+                  color="#222d26"
+                  metalness={0.7}
+                  roughness={0.42}
+                />
+              </mesh>
+              <mesh position={[0, 0.32, 0]}>
+                <boxGeometry args={[0.08, 0.016, 0.08]} />
+                <meshStandardMaterial
+                  color="#18211b"
+                  metalness={0.7}
+                  roughness={0.45}
+                />
+              </mesh>
+            </group>
+          ))}
+        </group>
+
+        {/* 4. Terminal Intake Bend (`-Z`) & Vertical Plunge Behind `K.O.M.R.A.D.-84` Mainframe (`x = 0.0, z = -1.16, y = 2.88 -> 1.68`) */}
+        {/* Horizontal-to-Rear (-Z) Brass Elbow above K.O.M.R.A.D.-84 */}
+        <group position={[-0.14, 2.88, -0.684]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <torusGeometry args={[0.14, 0.06, 14, 20, Math.PI / 2]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.26}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+        </group>
+        {/* Rearward Horizontal Connector Pipe Passing Behind the `MELTDOWN` Sign (`x = 0.0, y = 2.88, z = -0.684 .. -1.02`) */}
+        <mesh
+          position={[0.0, 2.88, -0.852]}
+          rotation={[Math.PI / 2, 0, 0]}
+          castShadow
+        >
+          <cylinderGeometry args={[0.058, 0.058, 0.34, 16]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            metalness={0.86}
+            roughness={0.28}
+            bumpMap={brassTex.bumpMap}
+            bumpScale={0.005}
+          />
+        </mesh>
+        {/* Downward 90° Brass Elbow Plunging Behind `K.O.M.R.A.D.-84` (`x = 0.0, y = 2.74, z = -1.02 -> -1.16`) */}
+        <group position={[0.0, 2.74, -1.02]}>
+          <mesh rotation={[0, Math.PI / 2, 0]} castShadow>
+            <torusGeometry args={[0.14, 0.06, 14, 20, Math.PI / 2]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.26}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+        </group>
+        {/* Vertical Intake Drop Pipe Plunging into Rear Housing of `K.O.M.R.A.D.-84` (`x = 0.0, y = 2.20, z = -1.16`) */}
+        <group position={[0.0, 2.2, -1.16]}>
+          <mesh receiveShadow>
+            <cylinderGeometry args={[0.056, 0.056, 1.08, 18, 1, true]} />
+            <meshStandardMaterial
+              color="#bce6d4"
+              transparent
+              opacity={0.34}
+              roughness={0.12}
+              metalness={0.18}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+          {[-0.36, 0, 0.36].map((ry, rIdx) => (
+            <mesh key={rIdx} position={[0, ry, 0]} castShadow>
+              <cylinderGeometry args={[0.068, 0.068, 0.024, 18]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.86}
+                roughness={0.26}
+              />
+            </mesh>
+          ))}
+          {/* Heavy Flanged Cast-Iron Receiver Manifold Bolted to Rear of `K.O.M.R.A.D.-84` Mainframe */}
+          <mesh position={[0, -0.52, 0.04]} castShadow>
+            <boxGeometry args={[0.22, 0.16, 0.18]} />
+            <meshStandardMaterial
+              color="#18211b"
+              metalness={0.7}
+              roughness={0.42}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+        </group>
+
+        {/* Animated In-Flight 3D Brass Carrier Capsule Shooting Up Riser -> 90° Elbow -> Ceiling Pipe -> Behind `K.O.M.R.A.D.-84`! */}
+        <group
+          ref={flightCapsuleGroupRef}
+          position={[-1.468, 1.1, -0.544]}
+          visible={false}
+        >
+          <mesh castShadow>
+            <cylinderGeometry args={[0.038, 0.038, 0.122, 16]} />
+            <meshStandardMaterial
+              color="#d8efe4"
+              transparent
+              opacity={0.58}
+              roughness={0.14}
+              metalness={0.18}
+            />
+          </mesh>
+          {[-0.058, 0.058].map((cy, cIdx) => (
+            <group key={cIdx} position={[0, cy, 0]}>
+              <mesh castShadow>
+                <cylinderGeometry args={[0.042, 0.042, 0.018, 16]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.88}
+                  roughness={0.22}
+                />
+              </mesh>
+              <mesh position={[0, cIdx === 0 ? -0.01 : 0.01, 0]}>
+                <cylinderGeometry args={[0.044, 0.044, 0.007, 16]} />
+                <meshStandardMaterial color="#5c1a16" roughness={0.88} />
+              </mesh>
+            </group>
+          ))}
+          <mesh>
+            <cylinderGeometry args={[0.026, 0.026, 0.098, 14]} />
+            <meshStandardMaterial
+              ref={flightPaperMatRef}
+              color="#d8d2c0"
+              roughness={0.85}
+            />
+          </mesh>
+          <mesh position={[0, 0.012, 0]}>
+            <cylinderGeometry args={[0.0275, 0.0275, 0.022, 14]} />
+            <meshStandardMaterial
+              color="#33ff66"
+              emissive="#198c38"
+              emissiveIntensity={0.85}
+              roughness={0.5}
+            />
+          </mesh>
         </group>
       </group>
 
@@ -4239,6 +6135,7 @@ export function InspectorDesk3D() {
             activeDragDocId={activeDragDocId}
             setActiveDragDocId={setActiveDragDocId}
             onDocumentMutated={markLensDirty}
+            onTriggerPneumaticDispatch={triggerPneumaticDispatchAnim}
           />
         ))}
 
@@ -4399,6 +6296,7 @@ export function InspectorDesk3D() {
           >
             <sphereGeometry args={[0.04, 16, 16]} />
             <meshStandardMaterial
+              ref={approveKnobMatRef}
               color="#248f43"
               emissive="#0c3818"
               emissiveIntensity={0.25}
@@ -4492,6 +6390,7 @@ export function InspectorDesk3D() {
           >
             <sphereGeometry args={[0.04, 16, 16]} />
             <meshStandardMaterial
+              ref={shredKnobMatRef}
               color="#c42828"
               emissive="#4a0c0c"
               emissiveIntensity={0.25}
@@ -4739,6 +6638,7 @@ export function InspectorDesk3D() {
           <mesh position={[0, 0.13, 0]} castShadow>
             <sphereGeometry args={[0.052, 16, 16]} />
             <meshStandardMaterial
+              ref={shredLeverKnobMatRef}
               color="#b82a24"
               emissive="#4a0808"
               emissiveIntensity={0.35}

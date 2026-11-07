@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { SectorNodeId } from '../../shared/types'
 import { useGameStore } from '../../shared/useGameStore'
 
 // Expanded 3D Desk Coordinate System (Tabletop is 2.48m wide × 1.36m deep; Green Mat #1d2b26 is 2.28m × 1.20m)
@@ -16,18 +17,41 @@ export const PAPER_COMPACT_W_3D = 0.22
 export const PAPER_COMPACT_H_3D = 0.28
 
 // Drop Zones in 3D Desk Local Coordinates (x, z)
-export const OUTBOX_POS_3D = {
-  x: -0.78,
+// Carrier Cylinder (`КАПСУЛА`) Cradle on Back-Left of Desk Mat (clear of Green Banker's Lamp at [-0.98, 0.926, -0.46])
+export const CAPSULE_CRADLE_POS_3D = {
+  x: -0.74,
   y: 0.926,
   z: -0.22,
 } as const
 
+// Outer-Left Side-Mounted Pneumatic Breech Station (`ПНЕВМОПОЧТА // КАМЕРА ПУСКА`) bolted to the Left Side-Panel of the Desk right beside the Carrier Cradle (100% clear to the left of the Green Banker's Lamp!)
+export const OUTBOX_BREECH_POS_3D = {
+  x: -1.46,
+  y: 0.926,
+  z: -0.52,
+} as const
+
+export const OUTBOX_POS_3D = CAPSULE_CRADLE_POS_3D
+
 export const OUTBOX_DROP_ZONE_3D = {
-  minX: -1.04,
-  maxX: 0.14,
-  minZ: -0.52,
+  minX: -1.64,
+  maxX: -0.44,
+  minZ: -0.68,
   maxZ: 0.08,
 }
+
+export const BREECH_CHAMBER_DROP_ZONE_3D = {
+  minX: -1.68,
+  maxX: -1.04,
+  minZ: -0.78,
+  maxZ: -0.22,
+}
+
+export type PneumaticCapsuleState =
+  | 'CRADLE_EMPTY'
+  | 'CRADLE_PACKED'
+  | 'CHAMBER_LOADED'
+  | 'IN_FLIGHT'
 
 export const SHREDDER_POS_3D = {
   x: 0.84,
@@ -127,6 +151,12 @@ export interface DeskDocument {
     cityMW: number
     defenseMW: number
     vodkaMW: number
+    pripyat: number
+    kolkhoz: number
+    duga: number
+    kgb: number
+    vodka: number
+    steel: number
   }
   /** 3D local X on desk surface (-1.10 to +1.10) */
   x: number
@@ -150,9 +180,14 @@ interface DeskStoreState {
   documents: DeskDocument[]
   printingDoc: DeskDocument | null
   nextTemplateIndex: number
+  nextPrintReadyAtMs: number
+  directiveCooldown: number
   commendations: number
   citations: number
   lastVerdict: InspectionVerdict | null
+  capsuleState: PneumaticCapsuleState
+  hatchOpen: boolean
+  packedDoc: DeskDocument | null
   bringToFront: (id: string) => void
   updateDocumentPosition: (
     id: string,
@@ -161,32 +196,100 @@ interface DeskStoreState {
     isExpanded: boolean
   ) => void
   addStampToDocument: (docId: string, stamp: DocumentStamp) => void
-  spawnNextDirective: () => DeskDocument
+  spawnNextDirective: () => DeskDocument | null
+  forcePrintNextDirective: () => DeskDocument | null
+  tickPrinterQueue: (dtSeconds?: number) => void
   completePrintingDoc: (x?: number, z?: number) => DeskDocument | null
   loadDocumentIntoShredder: (id: string) => boolean
   advanceShredProgress: (id: string, amount: number) => number
   evaluateShreddedDocument: (id: string) => void
+  packDocumentIntoCapsule: (docId?: string) => boolean
+  toggleBreechHatch: (forceOpen?: boolean) => boolean
+  loadCapsuleIntoChamber: () => boolean
+  launchPneumaticCapsule: () => boolean
+  completePneumaticLaunch: () => void
   dispatchDocumentToOutbox: (id: string) => boolean
   rejectUnstampedOutboxAttempt: (docId?: string) => void
   resetDeskStore: () => void
 }
 
-const DIRECTIVE_TEMPLATES: Array<
-  Omit<
-    DeskDocument,
-    'id' | 'status' | 'x' | 'z' | 'isExpanded' | 'stamps' | 'shredProgress'
-  >
-> = [
-  // 1. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON
+const SECTOR_ORDER_SPECS: Record<
+  SectorNodeId,
   {
-    title: 'ДИРЕКТИВА 44-А // ПРИПЯТЬ И ВОДКА',
+    bracketLabel: string
+    ruTopic: string
+    candidateMWs: number[]
+    forgedCandidateMWs: number[]
+  }
+> = {
+  pripyat: {
+    bracketLabel: '1. PRIPYAT CITY',
+    ruTopic: 'ГОРОД ПРИПЯТЬ',
+    candidateMWs: [30, 10, 35, 25, 15],
+    forgedCandidateMWs: [45, 10, 50],
+  },
+  kolkhoz: {
+    bracketLabel: '2. KOLKHOZ FARM',
+    ruTopic: 'СОВХОЗ «ЗАРЯ»',
+    candidateMWs: [25, 10, 30, 20, 35],
+    forgedCandidateMWs: [45, 10, 50],
+  },
+  duga: {
+    bracketLabel: '3. DUGA-1 RADAR',
+    ruTopic: 'РАДАР ДУГА-1',
+    candidateMWs: [35, 15, 45, 25, 30],
+    forgedCandidateMWs: [50, 10, 45],
+  },
+  kgb: {
+    bracketLabel: '4. KGB BUNKER 07',
+    ruTopic: 'БУНКЕР КГБ-07',
+    candidateMWs: [25, 10, 30, 20, 35],
+    forgedCandidateMWs: [45, 10, 50],
+  },
+  vodka: {
+    bracketLabel: '5. VODKA PLANT',
+    ruTopic: 'КРАСНЫЙ ОКТЯБРЬ',
+    candidateMWs: [35, 25, 40, 10, 30],
+    forgedCandidateMWs: [50, 10, 45],
+  },
+  steel: {
+    bracketLabel: '6. STEEL WORKS',
+    ruTopic: 'СТАЛЬЗАВОД №4',
+    candidateMWs: [25, 10, 30, 20, 35],
+    forgedCandidateMWs: [50, 10, 45],
+  },
+}
+
+interface SingleTargetDirectiveBlueprint {
+  titlePrefix: string
+  targetSector: SectorNodeId
+  preferredMW: number
+  ministry: string
+  referenceCode: string
+  dateString: string
+  rationaleText: string
+  secretWatermark: string
+  signature: string
+  fontType: DocumentFontType
+  sealType: SealEmblemType
+  sealMicroDefect: SealMicroDefect
+  paperColor: PaperStockColor
+  inkColor: OfficialInkColor
+  isForgery: boolean
+  forgeryReason: string | null
+}
+
+const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
+  // 1. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 5. VODKA PLANT
+  {
+    titlePrefix: 'ДИРЕКТИВА 44-А',
+    targetSector: 'vodka',
+    preferredMW: 35,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-42-МСМ',
     dateString: '04.11.1984',
-    content:
-      'ORDER: ROUTE 40 MW TO [1. CITY & AGRI], 30 MW TO [2. DEFENSE GRID], AND INCREASE [3. VODKA & STEEL] TO 40 MW for Politburo state banquet bottling.',
-    powerOrderText: 'CITY & AGRI: 40 MW | DEFENSE: 30 MW | VODKA & STEEL: 40 MW',
-    powerTargets: { cityMW: 40, defenseMW: 30, vodkaMW: 40 },
+    rationaleText:
+      'State bottling quota requires immediate single-substation adjustment on UNIT A. All other regional substations remain unchanged.',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Е. П. СЛАВСКИЙ',
     fontType: 'GOST_MONO',
@@ -197,16 +300,16 @@ const DIRECTIVE_TEMPLATES: Array<
     isForgery: false,
     forgeryReason: null,
   },
-  // 2. FORGERY (Page 1 Seal Micro-Print Defect): 6-point star + CCCP-LATIN micro-ring!
+  // 2. FORGERY (Page 1 Seal Micro-Print Defect): 6-point star + CCCP-LATIN micro-ring! -> Single Target: 3. DUGA-1 RADAR
   {
-    title: 'ДИРЕКТИВА 44-Ж // СБРОС ТЕПЛОНОСИТЕЛЯ',
+    titlePrefix: 'ДИРЕКТИВА 44-Ж',
+    targetSector: 'duga',
+    preferredMW: 50,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-38-МСМ',
     dateString: '04.11.1984',
-    content:
-      'ORDER: CUT [1. CITY & AGRI] TO 10 MW AND SURGE [2. DEFENSE] TO 80 MW & [3. VODKA & STEEL] TO 70 MW! Drain local Pripyat water reservoir immediately.',
-    powerOrderText: 'SURGE: CITY 10 MW | DEFENSE 80 MW | VODKA & STEEL 70 MW',
-    powerTargets: { cityMW: 10, defenseMW: 80, vodkaMW: 70 },
+    rationaleText:
+      'Emergency over-the-horizon radar test requires maximum single-channel draw on UNIT A.',
     secretWatermark: 'CCCP-LATIN • SERIES-6',
     signature: 'Б. Е. ЩЕРБИНА',
     fontType: 'GOST_MONO',
@@ -218,16 +321,16 @@ const DIRECTIVE_TEMPLATES: Array<
     forgeryReason:
       'Forged Seal Micro-Print (6-Point Star & CCCP-LATIN Micro-Ring)',
   },
-  // 3. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE
+  // 3. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 3. DUGA-1 RADAR
   {
-    title: 'ДИРЕКТИВА 19-Б // РАДАР ДУГА-1 (ОБОРОНА)',
+    titlePrefix: 'ДИРЕКТИВА 19-Б',
+    targetSector: 'duga',
+    preferredMW: 35,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-68-ГКАЭ',
     dateString: '04.11.1984',
-    content:
-      'ORDER: SET [2. DEFENSE GRID] TO 50 MW for Duga Over-the-Horizon Radar sweep. Hold [1. CITY & AGRI] AT 40 MW and [3. VODKA & STEEL] AT 20 MW.',
-    powerOrderText: 'CITY & AGRI: 40 MW | DEFENSE: 50 MW | VODKA & STEEL: 20 MW',
-    powerTargets: { cityMW: 40, defenseMW: 50, vodkaMW: 20 },
+    rationaleText:
+      'Authorized ionosphere sweep on Sector 84 perimeter. Adjust ONLY [3. DUGA-1 RADAR] on UNIT A.',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'АКАД. В. ЛЕГАСОВ',
     fontType: 'PRAVDA_BLOCK',
@@ -238,16 +341,16 @@ const DIRECTIVE_TEMPLATES: Array<
     isForgery: false,
     forgeryReason: null,
   },
-  // 4. FORGERY (Page 2 Font Violation): Uses Forbidden Western Serif font
+  // 4. FORGERY (Page 2 Font Violation): Uses Forbidden Western Serif font -> Single Target: 1. PRIPYAT CITY
   {
-    title: 'ДИРЕКТИВА 88-Ц // ИСПЫТАНИЕ КРАСНОЙ ЗОНЫ',
+    titlePrefix: 'ДИРЕКТИВА 88-Ц',
+    targetSector: 'pripyat',
+    preferredMW: 45,
     ministry: 'COUNCIL OF MINISTERS USSR',
     referenceCode: 'ГОСТ-84-20-СМ',
     dateString: '04.11.1984',
-    content:
-      'ORDER: OVERCLOCK [1. CITY & AGRI] TO 70 MW, [2. DEFENSE] TO 70 MW, AND [3. VODKA & STEEL] TO 60 MW (200 MW REDLINE) to boil the Pripyat reservoir!',
-    powerOrderText: 'OVERCLOCK: CITY 70 MW | DEFENSE 70 MW | VODKA 60 MW',
-    powerTargets: { cityMW: 70, defenseMW: 70, vodkaMW: 60 },
+    rationaleText:
+      'Unscheduled municipal floodlight surge ordered for Pripyat residential blocks.',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Н. А. ТИХОНОВ',
     fontType: 'WESTERN_SERIF',
@@ -258,16 +361,36 @@ const DIRECTIVE_TEMPLATES: Array<
     isForgery: true,
     forgeryReason: 'Unauthorized Western Serif Typography (Page 2 Violation)',
   },
-  // 5. FORGERY (Page 3 Colour Violation): Council of Ministers using CIA Navy Blue Ink on Bleached Western White Paper
+  // 5. VALID: Council of Ministers + GOST_MONO + USSR_STATE_SEAL (NONE) + STATE_IVORY + PRAVDA_BLACK -> Single Target: 1. PRIPYAT CITY
   {
-    title: 'ДИРЕКТИВА 52-В // ОТКЛЮЧЕНИЕ ЗАЩИТЫ АЗ-5',
+    titlePrefix: 'ДИРЕКТИВА 61-М',
+    targetSector: 'pripyat',
+    preferredMW: 30,
+    ministry: 'COUNCIL OF MINISTERS USSR',
+    referenceCode: 'ГОСТ-84-48-СМ',
+    dateString: '04.11.1984',
+    rationaleText:
+      'Evening heating allocation for Pripyat worker apartments. Adjust ONLY [1. PRIPYAT CITY] on UNIT A.',
+    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
+    signature: 'Н. А. ТИХОНОВ',
+    fontType: 'GOST_MONO',
+    sealType: 'USSR_STATE_SEAL',
+    sealMicroDefect: 'NONE',
+    paperColor: 'STATE_IVORY',
+    inkColor: 'PRAVDA_BLACK',
+    isForgery: false,
+    forgeryReason: null,
+  },
+  // 6. FORGERY (Page 3 Colour Violation): Council of Ministers using CIA Navy Blue Ink on Bleached Western White Paper -> Single Target: 6. STEEL WORKS
+  {
+    titlePrefix: 'ДИРЕКТИВА 52-В',
+    targetSector: 'steel',
+    preferredMW: 50,
     ministry: 'COUNCIL OF MINISTERS USSR',
     referenceCode: 'ГОСТ-84-54-СМ',
     dateString: '04.11.1984',
-    content:
-      'ORDER: ROUTE 0 MW TO [1. CITY & AGRI], 80 MW TO [2. DEFENSE GRID], AND 80 MW TO [3. VODKA & STEEL]. Ignore core thermal and water drought alarms.',
-    powerOrderText: 'SABOTAGE: CITY 0 MW | DEFENSE 80 MW | VODKA 80 MW',
-    powerTargets: { cityMW: 0, defenseMW: 80, vodkaMW: 80 },
+    rationaleText:
+      'Divert maximum bus load to Blast Furnace #4 and ignore thermal reserve limits.',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'В. И. ДОЛГИХ',
     fontType: 'GOST_MONO',
@@ -279,16 +402,16 @@ const DIRECTIVE_TEMPLATES: Array<
     forgeryReason:
       'Forbidden CIA Navy Blue Ink & Bleached Western White Paper (#f4f4f6)',
   },
-  // 6. VALID: 5th Chief Directorate + GOST_MONO + KGB_SWORD_SHIELD (NONE) + STATE_IVORY + SOVIET_CRIMSON
+  // 7. VALID: 5th Chief Directorate + GOST_MONO + KGB_SWORD_SHIELD (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 4. KGB BUNKER 07
   {
-    title: 'ДИРЕКТИВА 71-К // КРАСНЫЙ ОКТЯБРЬ (ВОДКА)',
+    titlePrefix: 'ДИРЕКТИВА 71-К',
+    targetSector: 'kgb',
+    preferredMW: 25,
     ministry: '5TH CHIEF DIRECTORATE',
     referenceCode: 'ГОСТ-84-14-КГБ',
     dateString: '04.11.1984',
-    content:
-      'ORDER: INCREASE [3. VODKA & STEEL] TO 50 MW & [1. CITY & AGRI] TO 50 MW (SET [2. DEFENSE] TO 20 MW). Keep Water Reservoir >= 40% for vodka distillation!',
-    powerOrderText: 'CITY & AGRI: 50 MW | DEFENSE: 20 MW | VODKA & STEEL: 50 MW',
-    powerTargets: { cityMW: 50, defenseMW: 20, vodkaMW: 50 },
+    rationaleText:
+      'Classified telemetry decryption sweep in Sector 07. Adjust ONLY [4. KGB BUNKER 07] on UNIT A.',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'КОМИССАР ВОЛКОВ',
     fontType: 'GOST_MONO',
@@ -299,16 +422,16 @@ const DIRECTIVE_TEMPLATES: Array<
     isForgery: false,
     forgeryReason: null,
   },
-  // 7. FORGERY (Page 1 Seal Micro-Defect + Page 3 Ink Mismatch): Broken atomic orbit & Imperial Purple ink
+  // 8. FORGERY (Page 1 Seal Micro-Defect + Page 3 Ink Mismatch): Broken atomic orbit & Imperial Purple ink -> Single Target: 5. VODKA PLANT
   {
-    title: 'ДИРЕКТИВА 93-Ф // ПЕРЕГРУЗКА ОХЛАЖДЕНИЯ',
+    titlePrefix: 'ДИРЕКТИВА 93-Ф',
+    targetSector: 'vodka',
+    preferredMW: 45,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-76-ГКАЭ',
     dateString: '04.11.1984',
-    content:
-      'ORDER: DIVERT 80 MW TO [3. VODKA & STEEL] AND 80 MW TO [2. DEFENSE GRID], CUT [1. CITY & AGRI] TO 10 MW for midnight parade floodlights.',
-    powerOrderText: 'SURGE: CITY 10 MW | DEFENSE 80 MW | VODKA & STEEL 80 MW',
-    powerTargets: { cityMW: 10, defenseMW: 80, vodkaMW: 80 },
+    rationaleText:
+      'Divert emergency reserve power to Red October distillery vats for unscheduled midnight batch.',
     secretWatermark: 'CCCP-LATIN • ORBIT-ERR',
     signature: 'А. М. ПЕТРОСЬЯНЦ',
     fontType: 'GOST_MONO',
@@ -320,16 +443,36 @@ const DIRECTIVE_TEMPLATES: Array<
     forgeryReason:
       'Forbidden Imperial Purple Ink, Yellowed Parchment & Broken Seal Orbit',
   },
-  // 8. FORGERY (Page 2 Unauthorized Ministry + Slanted Italic Font):
+  // 9. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 2. KOLKHOZ FARM
   {
-    title: 'ДИРЕКТИВА 64-Д // ВЕНТИЛЯЦИЯ РЕАКТОРА',
+    titlePrefix: 'ДИРЕКТИВА 32-С',
+    targetSector: 'kolkhoz',
+    preferredMW: 25,
+    ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
+    referenceCode: 'ГОСТ-84-24-МСМ',
+    dateString: '04.11.1984',
+    rationaleText:
+      'Collective grain dryer and irrigation pump cycle. Adjust ONLY [2. KOLKHOZ FARM] on UNIT A.',
+    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
+    signature: 'Е. П. СЛАВСКИЙ',
+    fontType: 'GOST_MONO',
+    sealType: 'MINSREDMASH_ATOM',
+    sealMicroDefect: 'NONE',
+    paperColor: 'STATE_IVORY',
+    inkColor: 'SOVIET_CRIMSON',
+    isForgery: false,
+    forgeryReason: null,
+  },
+  // 10. FORGERY (Page 2 Unauthorized Ministry + Slanted Italic Font) -> Single Target: 2. KOLKHOZ FARM
+  {
+    titlePrefix: 'ДИРЕКТИВА 64-Д',
+    targetSector: 'kolkhoz',
+    preferredMW: 45,
     ministry: 'MINISTRY OF ATOMIC FREEDOM',
     referenceCode: 'ГОСТ-84-82-МАФ',
     dateString: '04.11.1984',
-    content:
-      'ORDER: SET [1. CITY & AGRI] TO 80 MW, [2. DEFENSE] TO 70 MW, AND [3. VODKA & STEEL] TO 70 MW while opening containment louvers to atmosphere.',
-    powerOrderText: 'OVERLOAD: CITY 80 MW | DEFENSE 70 MW | VODKA 70 MW',
-    powerTargets: { cityMW: 80, defenseMW: 70, vodkaMW: 70 },
+    rationaleText:
+      'Overload rural substation transformer bank while venting primary coolant loop.',
     secretWatermark: 'CCCP-LATIN • USA-84',
     signature: 'ДЖ. СМИТ',
     fontType: 'SLANTED_ITALIC',
@@ -341,45 +484,179 @@ const DIRECTIVE_TEMPLATES: Array<
     forgeryReason:
       'Unauthorized Ministry ("Ministry of Atomic Freedom") & Slanted Italic Font',
   },
+  // 11. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 6. STEEL WORKS
+  {
+    titlePrefix: 'ДИРЕКТИВА 80-П',
+    targetSector: 'steel',
+    preferredMW: 25,
+    ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
+    referenceCode: 'ГОСТ-84-62-ГКАЭ',
+    dateString: '04.11.1984',
+    rationaleText:
+      'Scheduled electric arc furnace tap at Steel Works #4. Adjust ONLY [6. STEEL WORKS] on UNIT A.',
+    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
+    signature: 'АКАД. В. ЛЕГАСОВ',
+    fontType: 'PRAVDA_BLOCK',
+    sealType: 'MINSREDMASH_ATOM',
+    sealMicroDefect: 'NONE',
+    paperColor: 'BUNKER_GREY',
+    inkColor: 'BUNKER_OLIVE',
+    isForgery: false,
+    forgeryReason: null,
+  },
 ]
 
-const INITIAL_PRINTING_DOC: DeskDocument = {
-  ...DIRECTIVE_TEMPLATES[2],
-  id: 'DOC-1984-003',
-  status: 'printing',
-  x: PRINTER_SLOT_X_3D,
-  z: PRINTER_SLIT_Z_3D - 0.08,
-  isExpanded: false,
-  stamps: [],
-  shredProgress: 0,
+let docSequence = 1
+
+function buildSingleTargetDeskDocument(
+  blueprint: SingleTargetDirectiveBlueprint,
+  seqNum: number
+): DeskDocument {
+  const currentTargets = useGameStore.getState().targetSectorMW
+  const sector = blueprint.targetSector
+  const spec = SECTOR_ORDER_SPECS[sector]
+  const curMW = currentTargets[sector]
+
+  // Pick a target MW (clean multiple of 5 or 10 MW between 10 and 50 MW) that differs from curMW
+  const candidates = blueprint.isForgery
+    ? spec.forgedCandidateMWs
+    : spec.candidateMWs
+  let nextMW = blueprint.preferredMW
+  if (nextMW === curMW || nextMW < 10 || nextMW > 50 || nextMW % 5 !== 0) {
+    nextMW =
+      candidates.find((c) => c !== curMW && c >= 10 && c <= 50 && c % 5 === 0) ??
+      (curMW >= 30 ? curMW - 15 : curMW + 15)
+  }
+  nextMW = Math.max(10, Math.min(50, Math.round(nextMW / 5) * 5))
+  if (nextMW === curMW) {
+    nextMW = curMW <= 25 ? curMW + 15 : curMW - 15
+  }
+
+  const delta = nextMW - curMW
+  const signStr = delta >= 0 ? `+${delta} MW` : `${delta} MW`
+  const verb =
+    delta > 0
+      ? seqNum % 2 === 0
+        ? 'ROUTE'
+        : 'INCREASE'
+      : 'REDUCE'
+  const powerOrderText = `${verb} [${spec.bracketLabel}] TO ${nextMW} MW (${signStr})`
+
+  const nextTargets: Record<SectorNodeId, number> = {
+    ...currentTargets,
+    [sector]: nextMW,
+  }
+
+  return {
+    id: `DOC-1984-${String(seqNum).padStart(3, '0')}`,
+    status: 'printing',
+    title: `${blueprint.titlePrefix} // ${spec.ruTopic}`,
+    ministry: blueprint.ministry,
+    referenceCode: blueprint.referenceCode,
+    dateString: blueprint.dateString,
+    content: `${powerOrderText}. ${blueprint.rationaleText}`,
+    powerOrderText,
+    powerTargets: {
+      cityMW: nextTargets.pripyat + nextTargets.kolkhoz,
+      defenseMW: nextTargets.duga + nextTargets.kgb,
+      vodkaMW: nextTargets.vodka + nextTargets.steel,
+      ...nextTargets,
+    },
+    secretWatermark: blueprint.secretWatermark,
+    signature: blueprint.signature,
+    fontType: blueprint.fontType,
+    sealType: blueprint.sealType,
+    sealMicroDefect: blueprint.sealMicroDefect,
+    paperColor: blueprint.paperColor,
+    inkColor: blueprint.inkColor,
+    isForgery: blueprint.isForgery,
+    forgeryReason: blueprint.forgeryReason,
+    x: PRINTER_SLOT_X_3D,
+    z: PRINTER_SLIT_Z_3D - 0.08,
+    isExpanded: false,
+    stamps: [],
+    shredProgress: 0,
+  }
 }
 
-const INITIAL_DOCUMENTS: DeskDocument[] = [
-  // 1. Valid directive on center-left of open green desk mat
-  {
-    ...DIRECTIVE_TEMPLATES[0],
-    id: 'DOC-1984-001',
-    status: 'desk',
-    x: -0.34,
-    z: 0.12,
-    isExpanded: true,
+function buildTutorialDrillStep1Document(): DeskDocument {
+  const currentTargets = useGameStore.getState().targetSectorMW
+  const nextTargets: Record<SectorNodeId, number> = {
+    ...currentTargets,
+    vodka: 25,
+  }
+  const powerOrderText = 'INCREASE [5. VODKA PLANT] TO 25 MW (+10 MW)'
+  return {
+    id: 'DRILL-00-1',
+    status: 'printing',
+    title: 'DRILL ORDER 00-1 // КРАСНЫЙ ОКТЯБРЬ',
+    ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
+    referenceCode: 'ГОСТ-84-01-МСМ',
+    dateString: '04.11.1984',
+    content: `${powerOrderText}. KGB QUALIFICATION DRILL STEP 1/5: Tear from printer, stamp GREEN [ОДОБРЕНО], pack in brass capsule & launch up the left Pneumatic Tube!`,
+    powerOrderText,
+    powerTargets: {
+      cityMW: nextTargets.pripyat + nextTargets.kolkhoz,
+      defenseMW: nextTargets.duga + nextTargets.kgb,
+      vodkaMW: nextTargets.vodka + nextTargets.steel,
+      ...nextTargets,
+    },
+    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
+    signature: 'Е. П. СЛАВСКИЙ',
+    fontType: 'GOST_MONO',
+    sealType: 'MINSREDMASH_ATOM',
+    sealMicroDefect: 'NONE',
+    paperColor: 'STATE_IVORY',
+    inkColor: 'SOVIET_CRIMSON',
+    isForgery: false,
+    forgeryReason: null,
+    x: PRINTER_SLOT_X_3D,
+    z: PRINTER_SLIT_Z_3D - 0.08,
+    isExpanded: false,
     stamps: [],
     shredProgress: 0,
-  },
-  // 2. Forged Seal Micro-Print directive on center of mat (side-by-side next to the flat KGB Manual!)
-  {
-    ...DIRECTIVE_TEMPLATES[1],
-    id: 'DOC-1984-002',
-    status: 'desk',
-    x: -0.02,
-    z: 0.12,
-    isExpanded: true,
-    stamps: [],
-    shredProgress: 0,
-  },
-]
+  }
+}
 
-let docSequence = 4
+function buildTutorialDrillStep5Document(): DeskDocument {
+  const currentTargets = useGameStore.getState().targetSectorMW
+  const nextTargets: Record<SectorNodeId, number> = {
+    ...currentTargets,
+    duga: 45,
+  }
+  const powerOrderText = 'INCREASE [3. DUGA-1 RADAR] TO 45 MW (+25 MW)'
+  return {
+    id: 'DRILL-00-2',
+    status: 'printing',
+    title: 'DRILL ORDER 00-2 // РАДАР ДУГА-1',
+    ministry: 'MINISTRY OF ENERGY AND ELECTRIFICATION',
+    referenceCode: 'ГОСТ-84-09-МЭЭ',
+    dateString: '04.11.1984',
+    content: `${powerOrderText}. KGB QUALIFICATION DRILL STEP 5/5: Notice the 4-Point NATO Star Seal & CIA Navy Blue Ink! Stamp RED [УНИЧТОЖЕНО], drop in right Shredder & pull handle 5 times!`,
+    powerOrderText,
+    powerTargets: {
+      cityMW: nextTargets.pripyat + nextTargets.kolkhoz,
+      defenseMW: nextTargets.duga + nextTargets.kgb,
+      vodkaMW: nextTargets.vodka + nextTargets.steel,
+      ...nextTargets,
+    },
+    secretWatermark: 'LANGLEY-CIA • MKULTRA-84',
+    signature: 'ГЕН. В. ФЕДОРЧУК',
+    fontType: 'GOST_MONO',
+    sealType: 'USSR_STATE_SEAL',
+    sealMicroDefect: 'FOUR_POINT_STAR',
+    paperColor: 'STATE_IVORY',
+    inkColor: 'CIA_NAVY_BLUE',
+    isForgery: true,
+    forgeryReason:
+      '4-Point NATO Star in State Seal & Forbidden CIA Navy-Blue Ink',
+    x: PRINTER_SLOT_X_3D,
+    z: PRINTER_SLIT_Z_3D - 0.08,
+    isExpanded: false,
+    stamps: [],
+    shredProgress: 0,
+  }
+}
 
 function syncDecisionWithSharedStore(
   docTitle: string,
@@ -390,6 +667,12 @@ function syncDecisionWithSharedStore(
     cityMW: number
     defenseMW: number
     vodkaMW: number
+    pripyat: number
+    kolkhoz: number
+    duga: number
+    kgb: number
+    vodka: number
+    steel: number
   }
 ): void {
   useGameStore
@@ -403,23 +686,36 @@ function syncDecisionWithSharedStore(
     )
 }
 
+let lastObservedShiftRunId = -1
+let lastObservedTutorialStep: string | number = 1
+
 export const useDeskStore = create<DeskStoreState>((set, get) => ({
-  documents: INITIAL_DOCUMENTS,
-  printingDoc: INITIAL_PRINTING_DOC,
-  nextTemplateIndex: 3,
+  documents: [],
+  printingDoc: null,
+  nextTemplateIndex: 0,
+  nextPrintReadyAtMs: Date.now() + 3500,
+  directiveCooldown: 3.5,
   commendations: 0,
   citations: 0,
   lastVerdict: null,
+  capsuleState: 'CRADLE_EMPTY',
+  hatchOpen: false,
+  packedDoc: null,
 
   resetDeskStore: () => {
-    docSequence = 4
+    docSequence = 1
     set({
-      documents: INITIAL_DOCUMENTS.map((d) => ({ ...d, stamps: [] })),
-      printingDoc: { ...INITIAL_PRINTING_DOC, stamps: [] },
-      nextTemplateIndex: 3,
+      documents: [],
+      printingDoc: null,
+      nextTemplateIndex: 0,
+      nextPrintReadyAtMs: Date.now() + 3500,
+      directiveCooldown: 3.5,
       commendations: 0,
       citations: 0,
       lastVerdict: null,
+      capsuleState: 'CRADLE_EMPTY',
+      hatchOpen: false,
+      packedDoc: null,
     })
   },
 
@@ -462,7 +758,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         pending: true,
         reason:
           stamp.type === 'APPROVED'
-            ? 'STAMPED ОДОБРЕНО — DROP IN OUTBOX PNEUMATIC TUBE TO EXECUTE'
+            ? 'STAMPED ОДОБРЕНО — STEP 1: PACK PAPER INTO CARRIER CAPSULE (КАПСУЛА)!'
             : 'STAMPED УНИЧТОЖЕНО — DROP IN УНИЧТОЖИТЕЛЬ-84 JAWS & PULL LEVER',
       }
 
@@ -502,36 +798,194 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
 
   spawnNextDirective: () => {
     const state = get()
-    // Never teleport an existing printingDoc onto the desk; wait until the roller slot is free!
-    if (state.printingDoc) {
+    // Strictly Maximum 1 Active Paper at a Time: NEVER print while a paper is in the printer carriage, sitting on the desk, or packed inside the pneumatic capsule!
+    const hasActivePaper =
+      state.printingDoc !== null ||
+      state.documents.length > 0 ||
+      state.packedDoc !== null ||
+      state.capsuleState !== 'CRADLE_EMPTY'
+    if (hasActivePaper) {
       return state.printingDoc
     }
 
-    const tpl =
-      DIRECTIVE_TEMPLATES[state.nextTemplateIndex % DIRECTIVE_TEMPLATES.length]
-    const id = `DOC-1984-${String(docSequence++).padStart(3, '0')}`
-    const newDoc: DeskDocument = {
-      ...tpl,
-      id,
-      status: 'printing',
-      x: PRINTER_SLOT_X_3D,
-      z: PRINTER_SLIT_Z_3D - 0.08,
-      isExpanded: false,
-      stamps: [],
-      shredProgress: 0,
-    }
+    const blueprint =
+      SINGLE_TARGET_BLUEPRINTS[
+        state.nextTemplateIndex % SINGLE_TARGET_BLUEPRINTS.length
+      ]
+    const newDoc = buildSingleTargetDeskDocument(blueprint, docSequence++)
     set({
       printingDoc: newDoc,
+      directiveCooldown: 22.0,
+      nextPrintReadyAtMs: Date.now() + 22000,
       nextTemplateIndex:
-        (state.nextTemplateIndex + 1) % DIRECTIVE_TEMPLATES.length,
+        (state.nextTemplateIndex + 1) % SINGLE_TARGET_BLUEPRINTS.length,
     })
     return newDoc
+  },
+
+  forcePrintNextDirective: () => {
+    const state = get()
+    const hasActivePaper =
+      state.printingDoc !== null ||
+      state.documents.length > 0 ||
+      state.packedDoc !== null ||
+      state.capsuleState !== 'CRADLE_EMPTY'
+    if (hasActivePaper) {
+      return state.printingDoc
+    }
+    const tutStep = useGameStore.getState().tutorialStep
+    if (tutStep === 1) {
+      const drill1 = buildTutorialDrillStep1Document()
+      set({
+        printingDoc: drill1,
+        directiveCooldown: 22.0,
+        nextPrintReadyAtMs: Date.now() + 22000,
+      })
+      return drill1
+    }
+    if (tutStep === 5) {
+      const drill5 = buildTutorialDrillStep5Document()
+      set({
+        printingDoc: drill5,
+        directiveCooldown: 3.0,
+        nextPrintReadyAtMs: Date.now() + 3000,
+      })
+      return drill5
+    }
+    if (tutStep !== 'DONE') {
+      return null
+    }
+    set({ directiveCooldown: 0, nextPrintReadyAtMs: Date.now() })
+    return get().spawnNextDirective()
+  },
+
+  tickPrinterQueue: (dtSeconds = 0.25) => {
+    const gameState = useGameStore.getState()
+    if (gameState.phase !== 'playing') {
+      return
+    }
+
+    const dt = Math.min(1.0, Math.max(0.001, dtSeconds))
+
+    // Detect fresh shift start or shift reset -> reset queue and set first print to 3.5 real seconds!
+    if (gameState.shiftRunId !== lastObservedShiftRunId) {
+      lastObservedShiftRunId = gameState.shiftRunId
+      lastObservedTutorialStep = gameState.tutorialStep
+      docSequence = 1
+      set({
+        documents: [],
+        printingDoc: null,
+        packedDoc: null,
+        capsuleState: 'CRADLE_EMPTY',
+        hatchOpen: false,
+        directiveCooldown: 3.5,
+        nextPrintReadyAtMs: Date.now() + 3500,
+      })
+      return
+    }
+
+    const tutorialStep = gameState.tutorialStep
+    const state = get()
+
+    // Detect transition into Step 5 -> print DRILL ORDER 00-2 within 0.3s
+    if (lastObservedTutorialStep !== 5 && tutorialStep === 5) {
+      lastObservedTutorialStep = 5
+      set({
+        directiveCooldown: 0.25,
+        nextPrintReadyAtMs: Date.now() + 250,
+      })
+      return
+    }
+
+    // Detect transition to 'DONE' (via [BACKSPACE] skip or completing Step 5) -> clear any leftover DRILL- paper and spawn live order in 3.0s!
+    if (lastObservedTutorialStep !== 'DONE' && tutorialStep === 'DONE') {
+      lastObservedTutorialStep = 'DONE'
+      const filteredDocs = state.documents.filter(
+        (d) => !d.id.startsWith('DRILL-')
+      )
+      const keepPrinting =
+        state.printingDoc && !state.printingDoc.id.startsWith('DRILL-')
+          ? state.printingDoc
+          : null
+      const keepPacked =
+        state.packedDoc && !state.packedDoc.id.startsWith('DRILL-')
+          ? state.packedDoc
+          : null
+      set({
+        printingDoc: keepPrinting,
+        documents: filteredDocs,
+        packedDoc: keepPacked,
+        capsuleState: keepPacked ? state.capsuleState : 'CRADLE_EMPTY',
+        hatchOpen: keepPacked ? state.hatchOpen : false,
+        directiveCooldown: 3.0,
+        nextPrintReadyAtMs: Date.now() + 3000,
+      })
+      return
+    }
+    lastObservedTutorialStep = tutorialStep
+
+    const hasActivePaper =
+      state.printingDoc !== null ||
+      state.documents.length > 0 ||
+      state.packedDoc !== null ||
+      state.capsuleState !== 'CRADLE_EMPTY'
+
+    if (hasActivePaper) {
+      return
+    }
+
+    // Pause directive printing during Tutorial Steps 2, 3, and 4
+    if (tutorialStep === 2 || tutorialStep === 3 || tutorialStep === 4) {
+      return
+    }
+
+    const nextCooldown = Math.max(0, state.directiveCooldown - dt)
+    if (nextCooldown > 0) {
+      set({ directiveCooldown: nextCooldown })
+      return
+    }
+
+    if (tutorialStep === 1) {
+      set({
+        printingDoc: buildTutorialDrillStep1Document(),
+        directiveCooldown: 22.0,
+        nextPrintReadyAtMs: Date.now() + 22000,
+      })
+      return
+    }
+
+    if (tutorialStep === 5) {
+      set({
+        printingDoc: buildTutorialDrillStep5Document(),
+        directiveCooldown: 3.0,
+        nextPrintReadyAtMs: Date.now() + 3000,
+      })
+      return
+    }
+
+    get().spawnNextDirective()
   },
 
   loadDocumentIntoShredder: (id: string) => {
     const state = get()
     const target = state.documents.find((d) => d.id === id)
     if (!target || target.status !== 'desk') return false
+
+    const tutorialStep = useGameStore.getState().tutorialStep
+    if (tutorialStep === 1) {
+      set({
+        lastVerdict: {
+          docId: target.id,
+          docTitle: target.title,
+          decision: 'APPROVED',
+          correct: false,
+          pending: true,
+          reason:
+            'DRILL 1/5: THIS ORDER IS GENUINE! STAMP GREEN [ОДОБРЕНО] & PACK IN LEFT CAPSULE!',
+        },
+      })
+      return false
+    }
 
     set((prev) => ({
       documents: prev.documents.map((doc) => {
@@ -587,8 +1041,16 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       doc.forgeryReason
     )
 
+    const isDrillCompletion = doc.id.startsWith('DRILL-')
+    const cooldownSec = isDrillCompletion ? 3.0 : 22.0
     set({
-      documents: state.documents.filter((d) => d.id !== id),
+      documents: [],
+      printingDoc: null,
+      packedDoc: null,
+      capsuleState: 'CRADLE_EMPTY',
+      hatchOpen: false,
+      directiveCooldown: cooldownSec,
+      nextPrintReadyAtMs: Date.now() + cooldownSec * 1000,
       commendations: correct ? state.commendations + 1 : state.commendations,
       citations: correct ? state.citations : state.citations + 1,
       lastVerdict: {
@@ -603,10 +1065,52 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
     })
   },
 
-  dispatchDocumentToOutbox: (id: string) => {
+  packDocumentIntoCapsule: (docId?: string) => {
     const state = get()
-    const doc = state.documents.find((d) => d.id === id)
-    if (!doc || doc.status !== 'desk') return false
+    if (state.capsuleState !== 'CRADLE_EMPTY' || state.packedDoc !== null) {
+      set({
+        lastVerdict: {
+          docId: state.packedDoc?.id ?? 'CAPSULE-BUSY',
+          docTitle: state.packedDoc?.title ?? 'КАПСУЛА // CARRIER CYLINDER',
+          decision: 'APPROVED',
+          correct: true,
+          pending: true,
+          reason: state.hatchOpen
+            ? 'CAPSULE ALREADY PACKED — STEP 3: DRAG OR CLICK CAPSULE INTO OPEN BREECH CHAMBER!'
+            : 'CAPSULE ALREADY PACKED — STEP 2: CLICK BREECH HATCH DOOR (ЛЮК КАМЕРЫ) TO OPEN!',
+        },
+      })
+      return false
+    }
+
+    const doc = docId
+      ? state.documents.find((d) => d.id === docId && d.status === 'desk')
+      : [...state.documents]
+          .reverse()
+          .find(
+            (d) =>
+              d.status === 'desk' && d.stamps.some((s) => s.type === 'APPROVED')
+          )
+
+    if (!doc) {
+      get().rejectUnstampedOutboxAttempt(docId)
+      return false
+    }
+
+    if (useGameStore.getState().tutorialStep === 5) {
+      set({
+        lastVerdict: {
+          docId: doc.id,
+          docTitle: doc.title,
+          decision: 'SHREDDED',
+          correct: false,
+          pending: true,
+          reason:
+            'DRILL 5/5: THIS ORDER IS A CIA FORGERY! STAMP RED [УНИЧТОЖЕНО] & DROP IN RIGHT SHREDDER!',
+        },
+      })
+      return false
+    }
 
     const wasStampedApproved = doc.stamps.some((s) => s.type === 'APPROVED')
     if (!wasStampedApproved) {
@@ -617,10 +1121,174 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
           decision: 'APPROVED',
           correct: false,
           pending: true,
-          reason: 'STAMP DOCUMENT [ОДОБРЕНО] BEFORE DISPATCHING IN TUBE!',
+          reason: 'STAMP DOCUMENT [ОДОБРЕНО] BEFORE PACKING CARRIER CAPSULE!',
         },
       })
       return false
+    }
+
+    set({
+      documents: state.documents.filter((d) => d.id !== doc.id),
+      packedDoc: doc,
+      capsuleState: 'CRADLE_PACKED',
+      lastVerdict: {
+        docId: doc.id,
+        docTitle: doc.title,
+        decision: 'APPROVED',
+        correct: true,
+        pending: true,
+        reason: state.hatchOpen
+          ? 'CAPSULE PACKED (КАПСУЛА ЗАКРЫТА) — STEP 3: LOAD CAPSULE INTO OPEN BREECH CHAMBER!'
+          : 'CAPSULE PACKED (КАПСУЛА ЗАКРЫТА) — STEP 2: OPEN TUBE BREECH HATCH (ОТКРЫТЬ ЛЮК)!',
+      },
+    })
+    return true
+  },
+
+  toggleBreechHatch: (forceOpen?: boolean) => {
+    const state = get()
+    if (state.capsuleState === 'IN_FLIGHT') return state.hatchOpen
+    const nextOpen =
+      typeof forceOpen === 'boolean' ? forceOpen : !state.hatchOpen
+
+    let reason = nextOpen
+      ? 'BREECH HATCH OPEN (ЛЮК ОТКРЫТ) — PACK & LOAD CARRIER CAPSULE INTO CHAMBER'
+      : 'BREECH HATCH SEALED (ЛЮК ЗАКРЫТ)'
+
+    if (state.capsuleState === 'CRADLE_PACKED' && nextOpen) {
+      reason =
+        'BREECH HATCH OPEN (ЛЮК ОТКРЫТ) — STEP 3: DRAG OR CLICK CAPSULE INTO CHAMBER!'
+    } else if (state.capsuleState === 'CHAMBER_LOADED' && !nextOpen) {
+      reason =
+        'ГОТОВ К ПУСКУ // SEALED & READY — STEP 5: PULL DOWN VACUUM LAUNCH LEVER (РЫЧАГ ПУСКА)!'
+    } else if (state.capsuleState === 'CHAMBER_LOADED' && nextOpen) {
+      reason =
+        'CHAMBER LOADED — STEP 4: CLOSE & SEAL BREECH HATCH (ЗАКРЫТЬ ЛЮК) BEFORE LAUNCH!'
+    }
+
+    set({
+      hatchOpen: nextOpen,
+      lastVerdict: {
+        docId: state.packedDoc?.id ?? 'BREECH-HATCH',
+        docTitle:
+          state.packedDoc?.title ?? 'ПНЕВМОПОЧТА // КАМЕРА ПУСКА',
+        decision: 'APPROVED',
+        correct: true,
+        pending: true,
+        reason,
+      },
+    })
+    return nextOpen
+  },
+
+  loadCapsuleIntoChamber: () => {
+    const state = get()
+    if (state.capsuleState !== 'CRADLE_PACKED' || !state.packedDoc) {
+      set({
+        lastVerdict: {
+          docId: 'CAPSULE-EMPTY',
+          docTitle: 'КАПСУЛА // CARRIER CYLINDER',
+          decision: 'APPROVED',
+          correct: false,
+          pending: true,
+          reason:
+            'STEP 1: STAMP PAPER [ОДОБРЕНО] & PACK INTO CARRIER CAPSULE FIRST!',
+        },
+      })
+      return false
+    }
+
+    if (!state.hatchOpen) {
+      set({
+        lastVerdict: {
+          docId: state.packedDoc.id,
+          docTitle: state.packedDoc.title,
+          decision: 'APPROVED',
+          correct: false,
+          pending: true,
+          reason:
+            'BREECH HATCH CLOSED! STEP 2: CLICK BREECH DOOR (ЛЮК КАМЕРЫ) TO OPEN HATCH FIRST!',
+        },
+      })
+      return false
+    }
+
+    set({
+      capsuleState: 'CHAMBER_LOADED',
+      lastVerdict: {
+        docId: state.packedDoc.id,
+        docTitle: state.packedDoc.title,
+        decision: 'APPROVED',
+        correct: true,
+        pending: true,
+        reason:
+          'CAPSULE IN CHAMBER — STEP 4: CLICK BREECH HATCH TO CLOSE & SEAL (ЗАКРЫТЬ ЛЮК)!',
+      },
+    })
+    return true
+  },
+
+  launchPneumaticCapsule: () => {
+    const state = get()
+    if (state.capsuleState === 'IN_FLIGHT') return false
+    if (state.capsuleState !== 'CHAMBER_LOADED' || !state.packedDoc) {
+      set({
+        lastVerdict: {
+          docId: state.packedDoc?.id ?? 'LAUNCH-ERR',
+          docTitle:
+            state.packedDoc?.title ?? 'ПНЕВМОПОЧТА // РЫЧАГ ПУСКА',
+          decision: 'APPROVED',
+          correct: false,
+          pending: true,
+          reason:
+            state.capsuleState === 'CRADLE_PACKED'
+              ? 'LOAD PACKED CAPSULE INTO BREECH CHAMBER & SEAL HATCH BEFORE PULLING LEVER!'
+              : 'CHAMBER EMPTY! PACK [ОДОБРЕНО] PAPER INTO CAPSULE & LOAD CHAMBER FIRST!',
+        },
+      })
+      return false
+    }
+
+    if (state.hatchOpen) {
+      set({
+        lastVerdict: {
+          docId: state.packedDoc.id,
+          docTitle: state.packedDoc.title,
+          decision: 'APPROVED',
+          correct: false,
+          pending: true,
+          reason:
+            'VACUUM SEAL OPEN! STEP 4: CLOSE BREECH HATCH (ЗАКРЫТЬ ЛЮК) FOR GREEN SEAL LIGHT!',
+        },
+      })
+      return false
+    }
+
+    set({
+      capsuleState: 'IN_FLIGHT',
+      lastVerdict: {
+        docId: state.packedDoc.id,
+        docTitle: state.packedDoc.title,
+        decision: 'APPROVED',
+        correct: true,
+        pending: true,
+        reason:
+          'ПНЕВМОПУСК! CAPSULE IN FLIGHT TO K.O.M.R.A.D.-84 MAINFRAME...',
+      },
+    })
+    return true
+  },
+
+  completePneumaticLaunch: () => {
+    const state = get()
+    const doc = state.packedDoc
+    if (!doc) {
+      set({
+        capsuleState: 'CRADLE_EMPTY',
+        hatchOpen: false,
+        packedDoc: null,
+      })
+      return
     }
 
     const correct = !doc.isForgery
@@ -632,22 +1300,32 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       doc.powerTargets
     )
     const activeMandate = useGameStore.getState().activeMandate
+    const cooldownSec = 22.0
 
     set({
-      documents: state.documents.filter((d) => d.id !== id),
+      documents: [],
+      printingDoc: null,
+      packedDoc: null,
+      capsuleState: 'CRADLE_EMPTY',
+      hatchOpen: false,
+      directiveCooldown: cooldownSec,
+      nextPrintReadyAtMs: Date.now() + cooldownSec * 1000,
       commendations: correct ? state.commendations + 1 : state.commendations,
       citations: correct ? state.citations : state.citations + 1,
       lastVerdict: {
-        docId: id,
+        docId: doc.id,
         docTitle: doc.title,
         decision: 'APPROVED',
         correct,
         reason: correct
-          ? `PNEUMATIC DISPATCH: ${activeMandate ? activeMandate.requirementText : doc.powerOrderText}`
+          ? `PNEUMATIC DISPATCH RECEIVED BY K.O.M.R.A.D.-84: ${activeMandate ? activeMandate.requirementText : doc.powerOrderText}`
           : `SABOTAGE DISPATCHED (3 RED HOTSPOTS + RESERVOIR -24% + HZ DESYNC): ${doc.forgeryReason}`,
       },
     })
-    return true
+  },
+
+  dispatchDocumentToOutbox: (id: string) => {
+    return get().packDocumentIntoCapsule(id)
   },
 
   rejectUnstampedOutboxAttempt: (docId?: string) => {
@@ -658,11 +1336,11 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
     set({
       lastVerdict: {
         docId: doc?.id ?? 'OUTBOX-ERR',
-        docTitle: doc?.title ?? 'ПНЕВМОПОЧТА // OUTBOX TUBE',
+        docTitle: doc?.title ?? 'ПНЕВМОПОЧТА // КАПСУЛА',
         decision: 'APPROVED',
         correct: false,
         pending: true,
-        reason: 'STAMP DOCUMENT [ОДОБРЕНО] BEFORE DISPATCHING IN TUBE!',
+        reason: 'STAMP DOCUMENT [ОДОБРЕНО] BEFORE PACKING CARRIER CAPSULE!',
       },
     })
   },

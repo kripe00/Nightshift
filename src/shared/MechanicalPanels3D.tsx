@@ -2,6 +2,7 @@ import { type ThreeEvent, useFrame } from "@react-three/fiber";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
+  playBoronHydraulicPumpStroke,
   playDetentClick,
   playKnifeSwitchSlam,
   playPneumaticWhoosh,
@@ -25,7 +26,7 @@ import {
   getBrushedBrassTextures,
   getHammeredIronTextures,
 } from "./proceduralMaterials";
-import type { SystemType } from "./types";
+import type { SectorNodeId } from "./types";
 import { useGameStore } from "./useGameStore";
 
 function createCrispPanelTexture(
@@ -803,28 +804,28 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
         }
       }
 
-      // ГОСТ-84 Header & Cyrillic Sub-Labels
+      // ГОСТ-84 Header & Cyrillic Sub-Labels (Positioned well above the central needle cap so hub never blocks text)
       ctx.fillStyle = "#141414";
-      ctx.font = 'bold 28px "Kremlin", monospace';
+      ctx.font = 'bold 26px "Kremlin", monospace';
       ctx.textAlign = "center";
-      ctx.fillText(title, cx, cy - 64);
+      ctx.fillText(title, cx, cy - 98);
 
       ctx.fillStyle = "#2b3a32";
-      ctx.font = 'bold 17px "Courier Prime", monospace';
-      ctx.fillText(cyrillicSub, cx, cy - 36);
+      ctx.font = 'bold 16px "Courier Prime", monospace';
+      ctx.fillText(cyrillicSub, cx, cy - 70);
 
-      // Red Star Emblem & Unit Box
+      // Red Star Emblem & Unit Box (Positioned well below the central needle cap & counterweight)
       ctx.fillStyle = "#c81e1e";
-      ctx.font = 'bold 24px "Courier Prime", monospace';
-      ctx.fillText("★ СССР ★", cx, cy + 54);
+      ctx.font = 'bold 22px "Courier Prime", monospace';
+      ctx.fillText("★ СССР ★", cx, cy + 78);
 
       ctx.fillStyle = "#141414";
       ctx.font = 'bold 28px "VT323", monospace';
-      ctx.fillText(unit, cx, cy + 88);
+      ctx.fillText(unit, cx, cy + 112);
 
       ctx.fillStyle = "#454238";
       ctx.font = 'bold 14px "Courier Prime", monospace';
-      ctx.fillText(`ГОСТ-84 • ${serial}`, cx, cy + 144);
+      ctx.fillText(`ГОСТ-84 • ${serial}`, cx, cy + 148);
     });
   }, [
     centerNominal,
@@ -982,11 +983,11 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
         </mesh>
       </group>
 
-      {/* 6. Sculpted 3D Pointer Needle with Counterweight Tail & Central Brass Spindle Cap */}
-      <group ref={needleGroupRef} position={[0, 0, 0.056]}>
+      {/* 6. Sculpted 3D Pointer Needle with Compact Counterweight Tail & Low-Profile Oxidized Brass Spindle Cap */}
+      <group ref={needleGroupRef} position={[0, 0, 0.048]}>
         {/* Main Tapered Crimson Pointer Blade */}
-        <mesh position={[0, 0.056, 0]} castShadow>
-          <boxGeometry args={[0.011, 0.132, 0.006]} />
+        <mesh position={[0, 0.058, 0]} castShadow>
+          <boxGeometry args={[0.0095, 0.128, 0.005]} />
           <meshStandardMaterial
             color="#ff2a2a"
             emissive="#ff2a2a"
@@ -994,32 +995,32 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
             roughness={0.3}
           />
         </mesh>
-        {/* Dark Counterweight Tail & Disc */}
-        <mesh position={[0, -0.028, 0]}>
-          <boxGeometry args={[0.016, 0.044, 0.006]} />
+        {/* Compact Dark Counterweight Tail & Disc */}
+        <mesh position={[0, -0.018, 0]}>
+          <boxGeometry args={[0.011, 0.026, 0.005]} />
           <meshStandardMaterial
             color="#141414"
             metalness={0.7}
             roughness={0.35}
           />
         </mesh>
-        <mesh position={[0, -0.046, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.015, 0.015, 0.007, 10]} />
+        <mesh position={[0, -0.03, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.01, 0.01, 0.006, 10]} />
           <meshStandardMaterial
             color="#141414"
             metalness={0.7}
             roughness={0.35}
           />
         </mesh>
-        {/* Central Brushed-Brass Spindle Cap & Nut */}
+        {/* Low-Profile Dark Oxidized Brass Spindle Cap & Nut (Never obscures dial text!) */}
         <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <cylinderGeometry args={[0.024, 0.026, 0.018, 12]} />
+          <cylinderGeometry args={[0.014, 0.016, 0.011, 12]} />
           <meshStandardMaterial
-            color="#b8a46b"
-            roughness={0.26}
-            metalness={0.88}
+            color="#524428"
+            roughness={0.38}
+            metalness={0.78}
             bumpMap={brassTex.bumpMap}
-            bumpScale={0.005}
+            bumpScale={0.004}
           />
         </mesh>
       </group>
@@ -1048,11 +1049,12 @@ interface SculptedPumpValveAssembly3DProps {
   position: [number, number, number];
   pumpIndex: 0 | 1;
   label: string;
+  subLabel?: string;
 }
 
 const SculptedPumpValveAssembly3D: React.FC<
   SculptedPumpValveAssembly3DProps
-> = ({ position, pumpIndex, label }) => {
+> = ({ position, pumpIndex, label, subLabel }) => {
   const wheelRef = useRef<THREE.Group>(null);
   const leverArmRef = useRef<THREE.Group>(null);
   const lampMatRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -1080,7 +1082,7 @@ const SculptedPumpValveAssembly3D: React.FC<
       );
       drawFittedPlaqueText(
         ctx,
-        "FLOW VALVE • BEARING HEAT",
+        subLabel ?? "FLOW VALVE • BEARING HEAT",
         w / 2,
         52,
         w,
@@ -1088,7 +1090,7 @@ const SculptedPumpValveAssembly3D: React.FC<
         "#d99b26",
       );
     });
-  }, [label]);
+  }, [label, subLabel]);
 
   const heatScaleTex = useMemo(() => {
     return createCrispPanelTexture(256, 56, (ctx, w, h) => {
@@ -1160,7 +1162,18 @@ const SculptedPumpValveAssembly3D: React.FC<
           : 0.95;
     }
 
-    if (lampMatRef.current && isPumpOn !== lastPumpOnRef.current) {
+    const highlightPumpTut =
+      (state.tutorialStep === 3 &&
+        pumpIndex === 0 &&
+        state.pumpThrottle[0] <= 50) ||
+      (!state.isBlackout && state.coreTemp > 650);
+    if (highlightPumpTut && lampMatRef.current) {
+      lastPumpOnRef.current = null;
+      const pulse = 0.5 + 0.5 * Math.sin(clock.getElapsedTime() * 6.0);
+      lampMatRef.current.color.set(pulse > 0.5 ? "#33ff66" : "#ffb000");
+      lampMatRef.current.emissive.set(pulse > 0.5 ? "#33ff66" : "#ffb000");
+      lampMatRef.current.emissiveIntensity = 1.6 + pulse * 1.4;
+    } else if (lampMatRef.current && isPumpOn !== lastPumpOnRef.current) {
       lastPumpOnRef.current = isPumpOn;
       lampMatRef.current.color.set(isPumpOn ? "#33ff66" : "#ff2a2a");
       lampMatRef.current.emissive.set(isPumpOn ? "#33ff66" : "#ff2a2a");
@@ -1183,7 +1196,23 @@ const SculptedPumpValveAssembly3D: React.FC<
   };
 
   return (
-    <group position={position}>
+    <group
+      position={position}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        const st = useGameStore.getState();
+        st.setHoveredDiagnosticId(st.coreTemp > 520 ? "core" : "bearing");
+      }}
+      onPointerOut={() => {
+        const st = useGameStore.getState();
+        if (
+          st.hoveredDiagnosticId === "core" ||
+          st.hoveredDiagnosticId === "bearing"
+        ) {
+          st.setHoveredDiagnosticId(null);
+        }
+      }}
+    >
       {/* Raised Engraved Brass & Iron Nameplate */}
       <mesh position={[0, 0.168, 0.032]} castShadow>
         <boxGeometry args={[0.31, 0.078, 0.012]} />
@@ -1453,26 +1482,31 @@ const SculptedPumpValveAssembly3D: React.FC<
 
 interface IndustrialPowerColumn3DProps {
   position: [number, number, number];
-  system: SystemType;
+  sector: SectorNodeId;
   label: string;
   subLabel?: string;
   accentColor: string;
+  ledColor: string;
   minusBtnTex: THREE.CanvasTexture;
   plusBtnTex: THREE.CanvasTexture;
 }
 
 const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   position,
-  system,
+  sector,
   label,
   subLabel,
   accentColor,
+  ledColor,
   minusBtnTex,
   plusBtnTex,
 }) => {
   const blockMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+  const readoutMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const handleRingMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const leverGroupRef = useRef<THREE.Group>(null);
   const lastBlockStateRef = useRef("");
+  const lastReadoutSigRef = useRef("");
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
@@ -1488,6 +1522,48 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
 
   const ribbedGlassTex = useMemo(() => getRibbedGlassCellTexture(), []);
 
+  const readoutTex = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 72;
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    return tex;
+  }, []);
+
+  const minus5BtnTex = useMemo(
+    () =>
+      createCrispPanelTexture(80, 56, (ctx, w, h) => {
+        ctx.fillStyle = "#181d1a";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#ffb000";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.fillStyle = "#ffb000";
+        ctx.font = 'bold 28px "VT323", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("-5", w / 2, 38);
+      }),
+    [],
+  );
+
+  const plus5BtnTex = useMemo(
+    () =>
+      createCrispPanelTexture(80, 56, (ctx, w, h) => {
+        ctx.fillStyle = "#18241d";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#33ff66";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.fillStyle = "#33ff66";
+        ctx.font = 'bold 28px "VT323", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("+5", w / 2, 38);
+      }),
+    [],
+  );
+
   const labelTex = useMemo(() => {
     return createCrispPanelTexture(256, 64, (ctx, w, h) => {
       ctx.fillStyle = "#141816";
@@ -1499,49 +1575,73 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         ctx,
         label,
         w / 2,
-        30,
+        29,
         w,
-        'bold 22px "Kremlin", monospace',
+        'bold 21px "Kremlin", monospace',
         "#e6dec3",
       );
       drawFittedPlaqueText(
         ctx,
-        subLabel ?? "POWER BUS // 0–80 MW",
+        subLabel ?? "POWER BUS // 0–50 MW",
         w / 2,
         52,
         w,
-        'bold 14px "Courier Prime", monospace',
-        "#28b862",
+        'bold 15px "Courier Prime", monospace',
+        ledColor,
       );
     });
-  }, [label, subLabel]);
+  }, [label, subLabel, ledColor]);
 
   const mwScalePlateTex = useMemo(
     () =>
-      createCrispPanelTexture(64, 256, (ctx, w, h) => {
-        ctx.fillStyle = "#8c7a4b";
+      createCrispPanelTexture(80, 280, (ctx, w, h) => {
+        ctx.fillStyle = "#161a18";
         ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#141816";
+        ctx.strokeStyle = "#b8a46b";
         ctx.lineWidth = 3;
         ctx.strokeRect(2, 2, w - 4, h - 4);
-        const marks = ["80", "60", "40", "20", "0"];
+        const marks = ["50", "40", "30", "20", "10", "0"];
         marks.forEach((m, idx) => {
-          const y = 26 + idx * 52;
-          ctx.fillStyle = idx === 0 ? "#6e1a14" : "#141414";
-          ctx.font = 'bold 16px "VT323", monospace';
-          ctx.textAlign = "center";
-          ctx.fillText(m, w / 2 + 4, y + 5);
-          ctx.fillRect(4, y, 10, 3);
+          const y = 24 + idx * 46;
+          ctx.fillStyle = idx === 0 ? "#ff4433" : "#e6dec3";
+          ctx.font = 'bold 24px "VT323", monospace';
+          ctx.textAlign = "right";
+          ctx.fillText(m, w - 18, y + 7);
+          ctx.fillStyle = idx === 0 ? "#ff4433" : "#ffb000";
+          ctx.fillRect(w - 14, y - 2, 10, 4);
+          if (idx < marks.length - 1) {
+            ctx.fillStyle = "#8c7a4b";
+            ctx.fillRect(w - 10, y + 21, 6, 3);
+          }
         });
       }),
     [],
   );
 
-  useFrame(() => {
+  useFrame(({ clock }) => {
     const state = useGameStore.getState();
-    const currentMW = state.powerAllocation[system];
-    // Map 0..80 MW across 10 physical 3D ribbed phosphor glass cell segments
-    const activeBlocks = Math.round((currentMW / 80) * 10);
+    const currentMW = state.sectorMW[sector];
+    const targetMW = state.targetSectorMW[sector];
+    const highlightVodkaTut =
+      state.tutorialStep === 2 && sector === "vodka" && currentMW !== 25;
+    if (handleRingMatRef.current) {
+      if (highlightVodkaTut) {
+        const pulse = 0.5 + 0.5 * Math.sin(clock.getElapsedTime() * 6.0);
+        handleRingMatRef.current.color.set(
+          pulse > 0.5 ? "#33ff66" : "#ffb000",
+        );
+        handleRingMatRef.current.emissive.set(
+          pulse > 0.5 ? "#33ff66" : "#ffb000",
+        );
+        handleRingMatRef.current.emissiveIntensity = 1.4 + pulse * 1.2;
+      } else {
+        handleRingMatRef.current.color.set(accentColor);
+        handleRingMatRef.current.emissive.set("#000000");
+        handleRingMatRef.current.emissiveIntensity = 0;
+      }
+    }
+    // Map 0..50 MW across 10 physical 3D ribbed phosphor glass cell segments (5 MW per segment)
+    const activeBlocks = Math.round((currentMW / 50) * 10);
     const sig = `${activeBlocks}|${state.isBlackout}`;
 
     if (sig !== lastBlockStateRef.current) {
@@ -1550,15 +1650,90 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         const mat = blockMatRefs.current[i];
         if (!mat) continue;
         const isLit = !state.isBlackout && i < activeBlocks;
-        const colorHex = i >= 8 ? "#c92a1d" : i >= 6 ? "#d98218" : "#28b862";
+        const colorHex = i >= 9 ? "#c92a1d" : i >= 7 ? "#ffb000" : ledColor;
         mat.color.set(isLit ? colorHex : "#141916");
         mat.emissive.set(isLit ? colorHex : "#000000");
         mat.emissiveIntensity = isLit ? 1.15 : 0;
       }
     }
 
+    const readoutSig = `${currentMW}|${targetMW}|${state.isBlackout}|${highlightVodkaTut}`;
+    const tex = readoutMatRef.current?.map as THREE.CanvasTexture | undefined;
+    if (tex && readoutSig !== lastReadoutSigRef.current) {
+      lastReadoutSigRef.current = readoutSig;
+      const canvas = tex.image as HTMLCanvasElement;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const w = canvas.width;
+        const h = canvas.height;
+        const isMatched = currentMW === targetMW;
+        const isClose = Math.abs(currentMW - targetMW) <= 5;
+        const primaryColor = state.isBlackout
+          ? "#3a453e"
+          : highlightVodkaTut
+            ? "#ffb000"
+            : isMatched
+              ? "#33ff66"
+              : isClose
+                ? "#ffb000"
+                : "#ff3333";
+
+        ctx.fillStyle = "#06110b";
+        ctx.fillRect(0, 0, w, h);
+
+        // Subtle scanlines
+        ctx.fillStyle = "rgba(51, 255, 102, 0.06)";
+        for (let y = 0; y < h; y += 4) {
+          ctx.fillRect(0, y, w, 2);
+        }
+
+        ctx.strokeStyle = highlightVodkaTut
+          ? "#ffb000"
+          : isMatched
+            ? "#28b862"
+            : "#ff6b2a";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+
+        // Top mini status tag
+        ctx.fillStyle = highlightVodkaTut
+          ? "#33ff66"
+          : isMatched
+            ? "#33ff66"
+            : "#ffb000";
+        ctx.font = 'bold 15px "Courier Prime", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText(
+          state.isBlackout
+            ? "TRIP // 0 MW"
+            : highlightVodkaTut
+              ? "▲ DRILL: SET 25 MW"
+              : isMatched
+                ? "● LOCKED TO TARGET"
+                : `▲ SET TO ${targetMW} MW`,
+          w / 2,
+          18,
+        );
+
+        // Giant Nixie / Phosphor Readout: "30 / 30 MW"
+        ctx.fillStyle = primaryColor;
+        ctx.font = 'bold 42px "VT323", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText(`${currentMW} / ${targetMW} MW`, w / 2, 58);
+
+        tex.needsUpdate = true;
+      }
+      if (readoutMatRef.current) {
+        readoutMatRef.current.emissiveIntensity = state.isBlackout
+          ? 0.15
+          : currentMW === targetMW
+            ? 0.95
+            : 1.25;
+      }
+    }
+
     if (leverGroupRef.current) {
-      const ratio = THREE.MathUtils.clamp(currentMW / 80, 0, 1);
+      const ratio = THREE.MathUtils.clamp(currentMW / 50, 0, 1);
       const targetY = -0.145 + ratio * 0.29;
       leverGroupRef.current.position.y = THREE.MathUtils.lerp(
         leverGroupRef.current.position.y,
@@ -1578,7 +1753,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
     }
     const startClientX = e.nativeEvent.clientX;
     const startClientY = e.nativeEvent.clientY;
-    const startMW = state.powerAllocation[system];
+    const startMW = state.sectorMW[sector];
     let totalMovement = 0;
 
     dragRef.current = {
@@ -1600,15 +1775,15 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         Math.hypot(ev.clientX - startClientX, ev.clientY - startClientY),
       );
       const deltaY = dragRef.current.startClientY - ev.clientY;
-      const rawTargetMW = dragRef.current.startMW + (deltaY / 72) * 80;
+      const rawTargetMW = dragRef.current.startMW + (deltaY / 72) * 50;
       const snappedMW = THREE.MathUtils.clamp(
-        Math.round(rawTargetMW / 10) * 10,
+        Math.round(rawTargetMW / 5) * 5,
         0,
-        80,
+        50,
       );
-      if (snappedMW !== s.powerAllocation[system]) {
-        playDetentClick(Math.round(snappedMW / 10));
-        s.setSubsystemPower(system, snappedMW);
+      if (snappedMW !== s.sectorMW[sector]) {
+        playDetentClick(Math.round(snappedMW / 5));
+        s.setSectorPower(sector, snappedMW);
       }
     };
 
@@ -1620,10 +1795,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
       window.removeEventListener("pointercancel", onWindowUp);
       if (totalMovement < 6) {
         const s = useGameStore.getState();
-        const cur = s.powerAllocation[system];
-        const nextMW = cur >= 80 ? 20 : cur + 10;
-        playDetentClick(Math.round(nextMW / 10));
-        s.setSubsystemPower(system, nextMW);
+        const cur = s.sectorMW[sector];
+        const nextMW = cur >= 50 ? 10 : cur + 5;
+        playDetentClick(Math.round(nextMW / 5));
+        s.setSectorPower(sector, nextMW);
       }
       playSwitchClank(false);
     };
@@ -1634,10 +1809,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   };
 
   return (
-    <group position={position}>
+    <group position={position} scale={[0.74, 0.94, 0.92]}>
       {/* Raised Engraved Brass Header Plate */}
-      <mesh position={[0, 0.232, 0.03]} castShadow>
-        <boxGeometry args={[0.31, 0.074, 0.01]} />
+      <mesh position={[0, 0.258, 0.03]} castShadow>
+        <boxGeometry args={[0.31, 0.064, 0.01]} />
         <meshStandardMaterial
           color="#8c7a4b"
           metalness={0.85}
@@ -1646,13 +1821,38 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[0, 0.232, 0.036]}>
-        <planeGeometry args={[0.296, 0.064]} />
+      <mesh position={[0, 0.258, 0.036]}>
+        <planeGeometry args={[0.296, 0.056]} />
         <meshStandardMaterial map={labelTex} roughness={0.55} />
       </mesh>
 
+      {/* Recessed Soviet Nixie / Digital Readout Window ("30 / 30 MW" or "20 / 45 MW") */}
+      <group position={[0, 0.194, 0.034]}>
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[0.31, 0.056, 0.022]} />
+          <meshStandardMaterial
+            color="#121715"
+            roughness={0.38}
+            metalness={0.78}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.012]}>
+          <planeGeometry args={[0.294, 0.046]} />
+          <meshStandardMaterial
+            ref={readoutMatRef}
+            map={readoutTex}
+            emissive="#ffffff"
+            emissiveMap={readoutTex}
+            emissiveIntensity={0.95}
+            roughness={0.22}
+          />
+        </mesh>
+      </group>
+
       {/* Projected 3D Cast-Iron Bezel Housing (depth: 0.025m) with 4 Corner Hex Bolts & 10 Ribbed Phosphor Glass Cells */}
-      <group position={[-0.064, 0, 0.032]}>
+      <group position={[-0.068, -0.014, 0.032]} scale={[1, 0.9, 1]}>
         {/* Recessed Cast-Iron Bezel Housing */}
         <mesh position={[0, 0, 0.002]} castShadow receiveShadow>
           <boxGeometry args={[0.128, 0.352, 0.025]} />
@@ -1734,9 +1934,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         })}
       </group>
 
-      {/* Heavy Bolted Cast-Iron Quadrant Box (0.03m deep) with Beveled Rails, 6 Bolts, Engraved 0-80 MW Brass Scale, Pleated Bellows & Extruded Steel Ratchet Teeth */}
+      {/* Heavy Bolted Cast-Iron Quadrant Box (0.03m deep) with Beveled Rails, 6 Bolts, Engraved 0-50 MW Brass Scale, Pleated Bellows & Extruded Steel Ratchet Teeth */}
       <group
-        position={[0.068, 0, 0.035]}
+        position={[0.068, -0.014, 0.035]}
+        scale={[1, 0.9, 1]}
         onPointerDown={handlePointerDown}
       >
         {/* Generous Invisible Hit-Box so grabbing or clicking the MW Lever never misses */}
@@ -1793,12 +1994,15 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             />
           </mesh>
         ))}
-        {/* Engraved Brass 0-80 MW Scale Plate Alongside Slot */}
-        <mesh position={[-0.026, 0, 0.017]}>
-          <planeGeometry args={[0.022, 0.31]} />
+        {/* High-Contrast Engraved 0-50 MW Scale Plate Alongside Slot */}
+        <mesh position={[-0.025, 0, 0.018]}>
+          <planeGeometry args={[0.032, 0.318]} />
           <meshStandardMaterial
             map={mwScalePlateTex}
-            metalness={0.65}
+            emissive="#ffffff"
+            emissiveMap={mwScalePlateTex}
+            emissiveIntensity={0.35}
+            metalness={0.45}
             roughness={0.35}
           />
         </mesh>
@@ -1889,7 +2093,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           >
             <cylinderGeometry args={[0.02, 0.02, 0.108, 14]} />
             <meshStandardMaterial
-              color={system === "facility" ? "#4a1210" : "#1c1817"}
+              color={
+                sector === "vodka" || sector === "steel" ? "#4a1210" : "#1c1817"
+              }
               roughness={0.32}
               metalness={0.15}
               bumpMap={ironTex.bumpMap}
@@ -1921,6 +2127,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           >
             <cylinderGeometry args={[0.0208, 0.0208, 0.009, 14]} />
             <meshStandardMaterial
+              ref={handleRingMatRef}
               color={accentColor}
               roughness={0.36}
               metalness={0.25}
@@ -1942,9 +2149,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         </group>
       </group>
 
-      {/* Labeled -10 / +10 MW Step Plungers */}
+      {/* Labeled -10 / -5 / +5 / +10 MW Quick-Step Plungers */}
       <group
-        position={[-0.055, -0.212, 0.038]}
+        position={[-0.108, -0.208, 0.038]}
         onClick={(e) => {
           e.stopPropagation();
           const s = useGameStore.getState();
@@ -1953,11 +2160,11 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             return;
           }
           playLeverRatchet(0.85);
-          s.shiftPower(system, -10);
+          s.shiftSectorPower(sector, -10);
         }}
       >
         <mesh castShadow>
-          <boxGeometry args={[0.06, 0.04, 0.032]} />
+          <boxGeometry args={[0.066, 0.038, 0.032]} />
           <meshStandardMaterial
             color="#18211b"
             roughness={0.48}
@@ -1965,13 +2172,67 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           />
         </mesh>
         <mesh position={[0, 0, 0.017]}>
-          <planeGeometry args={[0.054, 0.034]} />
+          <planeGeometry args={[0.06, 0.032]} />
           <meshStandardMaterial map={minusBtnTex} roughness={0.6} />
         </mesh>
       </group>
 
       <group
-        position={[0.018, -0.212, 0.038]}
+        position={[-0.036, -0.208, 0.038]}
+        onClick={(e) => {
+          e.stopPropagation();
+          const s = useGameStore.getState();
+          if (s.isBlackout || s.komradOverrideLocked) {
+            playLeverRatchet(0.4);
+            return;
+          }
+          playDetentClick(Math.max(0, Math.round((s.sectorMW[sector] - 5) / 5)));
+          s.shiftSectorPower(sector, -5);
+        }}
+      >
+        <mesh castShadow>
+          <boxGeometry args={[0.066, 0.038, 0.032]} />
+          <meshStandardMaterial
+            color="#18211b"
+            roughness={0.48}
+            metalness={0.65}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.017]}>
+          <planeGeometry args={[0.06, 0.032]} />
+          <meshStandardMaterial map={minus5BtnTex} roughness={0.6} />
+        </mesh>
+      </group>
+
+      <group
+        position={[0.036, -0.208, 0.038]}
+        onClick={(e) => {
+          e.stopPropagation();
+          const s = useGameStore.getState();
+          if (s.isBlackout || s.komradOverrideLocked) {
+            playLeverRatchet(0.4);
+            return;
+          }
+          playDetentClick(Math.min(10, Math.round((s.sectorMW[sector] + 5) / 5)));
+          s.shiftSectorPower(sector, 5);
+        }}
+      >
+        <mesh castShadow>
+          <boxGeometry args={[0.066, 0.038, 0.032]} />
+          <meshStandardMaterial
+            color="#23312b"
+            roughness={0.48}
+            metalness={0.65}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.017]}>
+          <planeGeometry args={[0.06, 0.032]} />
+          <meshStandardMaterial map={plus5BtnTex} roughness={0.6} />
+        </mesh>
+      </group>
+
+      <group
+        position={[0.108, -0.208, 0.038]}
         onClick={(e) => {
           e.stopPropagation();
           const s = useGameStore.getState();
@@ -1980,11 +2241,11 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             return;
           }
           playLeverRatchet(1.1);
-          s.shiftPower(system, 10);
+          s.shiftSectorPower(sector, 10);
         }}
       >
         <mesh castShadow>
-          <boxGeometry args={[0.06, 0.04, 0.032]} />
+          <boxGeometry args={[0.066, 0.038, 0.032]} />
           <meshStandardMaterial
             color="#23312b"
             roughness={0.48}
@@ -1992,7 +2253,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           />
         </mesh>
         <mesh position={[0, 0, 0.017]}>
-          <planeGeometry args={[0.054, 0.034]} />
+          <planeGeometry args={[0.06, 0.032]} />
           <meshStandardMaterial map={plusBtnTex} roughness={0.6} />
         </mesh>
       </group>
@@ -2000,29 +2261,22 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   );
 };
 
-export const HighDetailReactorPanel3D: React.FC = () => {
+export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
   const panelGroupRef = useRef<THREE.Group>(null);
   const [az5CoverOpen, setAz5CoverOpen] = useState(false);
   const az5CoverGroupRef = useRef<THREE.Group>(null);
   const boronPlungerMeshRef = useRef<THREE.Group>(null);
   const boronLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const boronDepressRef = useRef(0);
-  const shiftClutchArmRef = useRef<THREE.Group>(null);
   const redlineScaleBlockRefs = useRef<
     Array<THREE.MeshStandardMaterial | null>
   >([]);
   const statusMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const lastStatusDrawRef = useRef(0);
 
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
   const ribbedGlassTex = useMemo(() => getRibbedGlassCellTexture(), []);
-
-  const clutchDragRef = useRef<{
-    active: boolean;
-    startY: number;
-    startEngaged: boolean;
-    progress: number;
-  }>({ active: false, startY: 0, startEngaged: false, progress: 0 });
 
   const boronPlateTex = useMemo(
     () =>
@@ -2043,7 +2297,7 @@ export const HighDetailReactorPanel3D: React.FC = () => {
         );
         drawFittedPlaqueText(
           ctx,
-          "COOL CORE -85°C // БОР",
+          "QUENCH -140°C // 45% B",
           w / 2,
           52,
           w,
@@ -2073,7 +2327,7 @@ export const HighDetailReactorPanel3D: React.FC = () => {
         ctx.fillText("BORON", cx, cy - 12);
         ctx.fillStyle = "#d99b26";
         ctx.font = 'bold 22px "VT323", monospace';
-        ctx.fillText("-85°C", cx, cy + 16);
+        ctx.fillText("-140°C", cx, cy + 16);
       }),
     [],
   );
@@ -2183,56 +2437,6 @@ export const HighDetailReactorPanel3D: React.FC = () => {
     [],
   );
 
-  const clutchPlateTex = useMemo(
-    () =>
-      createCrispPanelTexture(256, 64, (ctx, w, h) => {
-        ctx.fillStyle = "#141816";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        drawFittedPlaqueText(
-          ctx,
-          "[SHIFT] CLUTCH",
-          w / 2,
-          30,
-          w,
-          'bold 21px "Kremlin", monospace',
-          "#d99b26",
-        );
-        drawFittedPlaqueText(
-          ctx,
-          "MASTER GRID SYNC BOOST",
-          w / 2,
-          52,
-          w,
-          'bold 14px "Courier Prime", monospace',
-          "#e6dec3",
-        );
-      }),
-    [],
-  );
-
-  const clutchScaleTex = useMemo(
-    () =>
-      createCrispPanelTexture(64, 256, (ctx, w, h) => {
-        ctx.fillStyle = "#8c7a4b";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#141816";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(2, 2, w - 4, h - 4);
-        ctx.fillStyle = "#141414";
-        ctx.font = 'bold 14px "Courier Prime", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText("LOCK", w / 2, 34);
-        ctx.fillRect(8, 46, w - 16, 3);
-        ctx.fillStyle = "#6e1a14";
-        ctx.fillText("SHIFT", w / 2, h - 24);
-        ctx.fillRect(8, h - 46, w - 16, 3);
-      }),
-    [],
-  );
-
   const minusBtnTex = useMemo(
     () =>
       createCrispPanelTexture(96, 64, (ctx, w, h) => {
@@ -2318,7 +2522,7 @@ export const HighDetailReactorPanel3D: React.FC = () => {
     return () => window.clearInterval(timer);
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame(({ clock }, delta) => {
     const state = useGameStore.getState();
     state.tickThermodynamics(delta);
     const totalMW =
@@ -2348,24 +2552,13 @@ export const HighDetailReactorPanel3D: React.FC = () => {
       );
     }
     if (boronLampMatRef.current) {
-      const ready = state.boronCooldown <= 0 && !state.isBlackout;
+      const ready =
+        state.boronCooldown <= 0 &&
+        state.boronTankLevel >= 40 &&
+        !state.isBlackout;
       boronLampMatRef.current.color.set(ready ? "#33ff66" : "#ffb000");
       boronLampMatRef.current.emissive.set(ready ? "#33ff66" : "#ffb000");
       boronLampMatRef.current.emissiveIntensity = ready ? 1.4 : 0.45;
-    }
-
-    if (shiftClutchArmRef.current) {
-      const p = clutchDragRef.current.active
-        ? clutchDragRef.current.progress
-        : state.isShiftKeyHeld
-          ? 1
-          : 0;
-      const targetAngle = -0.52 + p * 1.08;
-      shiftClutchArmRef.current.rotation.x = THREE.MathUtils.lerp(
-        shiftClutchArmRef.current.rotation.x,
-        targetAngle,
-        0.28,
-      );
     }
 
     const activeTotalBlocks = Math.round(totalMW / 10);
@@ -2384,15 +2577,45 @@ export const HighDetailReactorPanel3D: React.FC = () => {
       }
     }
 
+    const now = clock.getElapsedTime();
+    if (now - lastStatusDrawRef.current < 0.08) return;
+
+    const totalSuppliedMW =
+      state.sectorMW.pripyat +
+      state.sectorMW.kolkhoz +
+      state.sectorMW.duga +
+      state.sectorMW.kgb +
+      state.sectorMW.vodka +
+      state.sectorMW.steel;
+    const totalTargetMW =
+      state.targetSectorMW.pripyat +
+      state.targetSectorMW.kolkhoz +
+      state.targetSectorMW.duga +
+      state.targetSectorMW.kgb +
+      state.targetSectorMW.vodka +
+      state.targetSectorMW.steel;
+    const all6Matched =
+      state.sectorMW.pripyat === state.targetSectorMW.pripyat &&
+      state.sectorMW.kolkhoz === state.targetSectorMW.kolkhoz &&
+      state.sectorMW.duga === state.targetSectorMW.duga &&
+      state.sectorMW.kgb === state.targetSectorMW.kgb &&
+      state.sectorMW.vodka === state.targetSectorMW.vodka &&
+      state.sectorMW.steel === state.targetSectorMW.steel;
+
     const mandateText =
-      state.activeMandate && !state.activeMandate.fulfilled
-        ? state.activeMandate.requirementText
-        : state.isShiftKeyHeld
-          ? "● [SHIFT] SYNC ACTIVE — GRID STABILIZED TO 50.0 HZ"
-          : "● DRAG 1/2/3 MW LEVERS DIRECTLY (1. COOLING COOLS CORE)";
-    const sig = `${Math.round(state.coreTemp)}|${state.pressureBar}|${state.radiationLevel}|${totalMW}|${Math.round(state.redlineInstability)}|${state.isShiftKeyHeld}|${state.az5Cooldown}|${state.isBlackout}|${mandateText}`;
+      state.boronPoisoningTimer > 0
+        ? `● BORON REACTIVITY DAMPING ACTIVE (-20% MW SAG — ${Math.ceil(state.boronPoisoningTimer)}S)`
+        : state.activeMandate && !state.activeMandate.fulfilled
+          ? state.activeMandate.requirementText
+          : state.isShiftKeyHeld
+            ? "● [SHIFT] SYNC ACTIVE — GRID STABILIZED TO 50.0 HZ"
+            : all6Matched
+              ? "● ALL 6 SECTORS BALANCED — STAMP [ОДОБРЕНО] IN OUTBOX TUBE FOR NEXT MANDATE"
+              : "● MATCH ALL 6 SUBSTATION LEVERS TO DIRECTIVE TARGETS BELOW";
+    const sig = `${Math.round(state.coreTemp / 2) * 2}|${Math.round(state.pressureBar)}|${state.radiationLevel.toFixed(1)}|${totalMW}|${totalSuppliedMW}|${totalTargetMW}|${all6Matched}|${Math.round(state.redlineInstability)}|${state.isShiftKeyHeld}|${state.az5Cooldown}|${Math.ceil(state.boronPoisoningTimer)}|${state.isBlackout}|${mandateText}`;
     const tex = statusMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (tex && tex.userData.lastSig !== sig) {
+      lastStatusDrawRef.current = now;
       tex.userData.lastSig = sig;
       const canvas = tex.image as HTMLCanvasElement;
       const ctx = canvas.getContext("2d");
@@ -2416,9 +2639,9 @@ export const HighDetailReactorPanel3D: React.FC = () => {
               danger: state.radiationLevel >= 7.5,
             },
           ],
-          statusLine: `LOAD: ${totalMW}/100 MW (${totalMW > 100 ? "REDLINE OVERLOAD!" : "NOMINAL"}) | INSTAB: ${Math.round(state.redlineInstability)}%`,
-          statusDanger: totalMW > 100 || state.coreTemp >= 750,
-          footerLine: mandateText.slice(0, 58),
+          statusLine: `TOTAL: ${totalSuppliedMW} / ${totalTargetMW} MW (${all6Matched ? "BALANCED" : "RE-ROUTE LEVERS!"}) | INSTAB: ${Math.round(state.redlineInstability)}%`,
+          statusDanger: !all6Matched || totalMW > 130 || state.coreTemp >= 750,
+          footerLine: mandateText.slice(0, 62),
           isBlackout: state.isBlackout,
         });
         tex.needsUpdate = true;
@@ -2591,16 +2814,18 @@ export const HighDetailReactorPanel3D: React.FC = () => {
       />
 
       {/* 4. Middle Row: 2 Sculpted Cast-Iron Pump Valves + Multi-Part Hinged AZ-5 Safety Cage */}
-      <group position={[0, 1.03, 0.03]}>
+      <group position={[0, 1.09, 0.03]}>
         <SculptedPumpValveAssembly3D
           position={[-0.52, 0, 0]}
           pumpIndex={0}
           label="COOLING PUMP A"
+          subLabel="NORTH H2O: CITY & FARM"
         />
         <SculptedPumpValveAssembly3D
           position={[0, 0, 0]}
           pumpIndex={1}
           label="COOLING PUMP B"
+          subLabel="SOUTH H2O: VODKA PLANT"
         />
 
         {/* Multi-Part AZ-5 Emergency Scram Assembly */}
@@ -2796,8 +3021,9 @@ export const HighDetailReactorPanel3D: React.FC = () => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
               const s = useGameStore.getState();
-              if (s.boronCooldown > 0 || s.isBlackout) {
+              if (s.boronCooldown > 0 || s.boronTankLevel < 40 || s.isBlackout) {
                 playLeverRatchet(0.45);
+                s.injectBoronAcid();
                 return;
               }
               boronDepressRef.current = 1.0;
@@ -2873,280 +3099,71 @@ export const HighDetailReactorPanel3D: React.FC = () => {
         </group>
       </group>
 
-      {/* 5. Bottom Row: Toothed [SHIFT] Clutch Lever + 3 Industrial 10-Segment Power Columns + 18-Segment Redline Bar */}
-      <group position={[0, 0.39, 0.04]}>
-        {/* Toothed [SHIFT] Clutch Lever with Dual Chrome Arms & Bakelite T-Handle */}
-        <group
-          position={[-0.56, 0.02, 0.02]}
-          onPointerDown={(e) => {
-            if (useCameraLookStore.getState().isFreeLookMode) return;
-            e.stopPropagation();
-            const cur = useGameStore.getState().isShiftKeyHeld;
-            clutchDragRef.current = {
-              active: true,
-              startY: e.nativeEvent.clientY,
-              startEngaged: cur,
-              progress: cur ? 1 : 0,
-            };
-            captureCanvasPointer(e);
-          }}
-          onPointerMove={(e) => {
-            if (!clutchDragRef.current.active) return;
-            e.stopPropagation();
-            const dy = e.nativeEvent.clientY - clutchDragRef.current.startY;
-            const startP = clutchDragRef.current.startEngaged ? 1 : 0;
-            clutchDragRef.current.progress = THREE.MathUtils.clamp(
-              startP + dy / 70,
-              0,
-              1,
-            );
-          }}
-          onPointerUp={(e) => {
-            if (!clutchDragRef.current.active) return;
-            e.stopPropagation();
-            const dist = Math.abs(
-              clutchDragRef.current.progress -
-                (clutchDragRef.current.startEngaged ? 1 : 0),
-            );
-            const nextEngaged =
-              dist >= 0.35
-                ? !clutchDragRef.current.startEngaged
-                : !useGameStore.getState().isShiftKeyHeld;
-            clutchDragRef.current.active = false;
-            releaseCanvasPointer(e);
-            playSwitchClank(true);
-            useGameStore.getState().setShiftKeyHeld(nextEngaged);
-          }}
-          onLostPointerCapture={(e) => {
-            if (!clutchDragRef.current.active) return;
-            clutchDragRef.current.active = false;
-            releaseCanvasPointer(e);
-          }}
-        >
-          <mesh position={[0, 0.232, 0.012]} castShadow>
-            <boxGeometry args={[0.295, 0.074, 0.01]} />
-            <meshStandardMaterial
-              color="#8c7a4b"
-              metalness={0.85}
-              roughness={0.28}
-            />
-          </mesh>
-          <mesh position={[0, 0.232, 0.018]}>
-            <planeGeometry args={[0.282, 0.064]} />
-            <meshStandardMaterial map={clutchPlateTex} roughness={0.55} />
-          </mesh>
-
-          {/* Raised Bolted Cast-Iron Clutch Quadrant Box (0.04m deep) with Beveled Rails, 6 Perimeter Hex Bolts, Brass Scale Plate & Pleated Bellows */}
-          <mesh castShadow receiveShadow>
-            <boxGeometry args={[0.23, 0.352, 0.042]} />
-            <meshStandardMaterial
-              color="#1c2220"
-              roughness={0.44}
-              metalness={0.72}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-              roughnessMap={ironTex.roughnessMap}
-            />
-          </mesh>
-          {/* Left & Right Beveled Steel Side Rails */}
-          {[-0.092, 0.092].map((rx, rIdx) => (
-            <mesh key={rIdx} position={[rx, 0, 0.024]} castShadow>
-              <boxGeometry args={[0.024, 0.342, 0.016]} />
-              <meshStandardMaterial
-                color="#2b3036"
-                metalness={0.82}
-                roughness={0.34}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.006}
-              />
-            </mesh>
-          ))}
-          {/* 6 Perimeter Steel Hex Bolts on Clutch Quadrant */}
-          {(
-            [
-              [-0.092, 0.152],
-              [0.092, 0.152],
-              [-0.092, 0],
-              [0.092, 0],
-              [-0.092, -0.152],
-              [0.092, -0.152],
-            ] as const
-          ).map(([bx, by], bIdx) => (
-            <mesh
-              key={bIdx}
-              position={[bx, by, 0.035]}
-              rotation={[Math.PI / 2, 0, 0]}
-            >
-              <cylinderGeometry args={[0.0065, 0.0065, 0.008, 6]} />
-              <meshStandardMaterial
-                color="#8a929a"
-                metalness={0.86}
-                roughness={0.28}
-              />
-            </mesh>
-          ))}
-          {/* Engraved Brass LOCK / SHIFT Scale Plate Alongside Slot */}
-          <mesh position={[-0.056, 0, 0.023]}>
-            <planeGeometry args={[0.036, 0.304]} />
-            <meshStandardMaterial
-              map={clutchScaleTex}
-              metalness={0.65}
-              roughness={0.35}
-            />
-          </mesh>
-          {/* Recessed Dark Slot Channel & Pleated Black Rubber Dust-Bellows */}
-          <mesh position={[0.01, 0, 0.02]}>
-            <boxGeometry args={[0.068, 0.304, 0.012]} />
-            <meshStandardMaterial color="#080a09" roughness={0.94} />
-          </mesh>
-          {Array.from({ length: 16 }).map((_, pIdx) => (
-            <mesh
-              key={`cpleat-${pIdx}`}
-              position={[0.01, -0.135 + pIdx * 0.018, 0.025]}
-            >
-              <boxGeometry args={[0.062, 0.007, 0.008]} />
-              <meshStandardMaterial color="#161918" roughness={0.85} />
-            </mesh>
-          ))}
-          {/* 8 Heavy Extruded Steel Ratchet Teeth Along Both Edges of Clutch Slot */}
-          {Array.from({ length: 8 }).map((_, tIdx) => {
-            const ty = -0.12 + tIdx * 0.034;
-            return (
-              <group key={tIdx} position={[0.01, ty, 0.028]}>
-                <mesh position={[-0.032, 0, 0]} castShadow>
-                  <boxGeometry args={[0.016, 0.01, 0.012]} />
-                  <meshStandardMaterial
-                    color="#8a929a"
-                    metalness={0.88}
-                    roughness={0.28}
-                  />
-                </mesh>
-                <mesh position={[0.032, 0, 0]} castShadow>
-                  <boxGeometry args={[0.016, 0.01, 0.012]} />
-                  <meshStandardMaterial
-                    color="#8a929a"
-                    metalness={0.88}
-                    roughness={0.28}
-                  />
-                </mesh>
-              </group>
-            );
-          })}
-
-          <group ref={shiftClutchArmRef} position={[0.01, 0, 0.032]}>
-            {/* Central Bolted Pivot Knuckle Inside Quadrant */}
-            <mesh position={[0, 0, 0.008]} castShadow>
-              <boxGeometry args={[0.095, 0.042, 0.032]} />
-              <meshStandardMaterial
-                color="#2b3036"
-                metalness={0.84}
-                roughness={0.32}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.006}
-              />
-            </mesh>
-            <mesh position={[0, 0, 0.01]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.011, 0.011, 0.106, 10]} />
-              <meshStandardMaterial
-                color="#8a929a"
-                metalness={0.9}
-                roughness={0.22}
-              />
-            </mesh>
-            {/* Twin Thick Chrome-Steel Lever Arms */}
-            {[-0.034, 0.034].map((lx, lIdx) => (
-              <mesh
-                key={lIdx}
-                position={[lx, 0, 0.08]}
-                rotation={[Math.PI / 2, 0, 0]}
-                castShadow
-              >
-                <cylinderGeometry args={[0.011, 0.013, 0.16, 12]} />
-                <meshStandardMaterial
-                  color="#d4dce0"
-                  roughness={0.2}
-                  metalness={0.9}
-                />
-              </mesh>
-            ))}
-            {/* Lathe-Turned Dark Oxblood Phenolic Bakelite T-Grip */}
-            <mesh
-              position={[0, 0, 0.16]}
-              rotation={[0, 0, Math.PI / 2]}
-              castShadow
-            >
-              <cylinderGeometry args={[0.026, 0.026, 0.175, 16]} />
-              <meshStandardMaterial
-                color="#4a1210"
-                roughness={0.32}
-                metalness={0.15}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.004}
-              />
-            </mesh>
-            {/* Machined Brushed-Steel End-Ferrules */}
-            {[-0.082, 0.082].map((fx, fIdx) => (
-              <mesh
-                key={fIdx}
-                position={[fx, 0, 0.16]}
-                rotation={[0, 0, Math.PI / 2]}
-                castShadow
-              >
-                <cylinderGeometry args={[0.028, 0.028, 0.018, 14]} />
-                <meshStandardMaterial
-                  color="#8a929a"
-                  metalness={0.85}
-                  roughness={0.35}
-                  bumpMap={ironTex.bumpMap}
-                  bumpScale={0.004}
-                />
-              </mesh>
-            ))}
-            {/* Single Thin Recessed Enamel Indicator Ring */}
-            <mesh
-              position={[0, 0, 0.16]}
-              rotation={[0, 0, Math.PI / 2]}
-            >
-              <cylinderGeometry args={[0.0272, 0.0272, 0.012, 14]} />
-              <meshStandardMaterial
-                color="#d98218"
-                roughness={0.36}
-                metalness={0.25}
-              />
-            </mesh>
-          </group>
-        </group>
-
+      {/* 5. Bottom Row: 6-Lever Regional Substation Bank (0–50 MW each) + 18-Segment Redline Bar (Raised +0.10m and shifted -0.06m left so all 6 levers & buttons sit well above desk plane!) */}
+      <group position={[-0.06, 0.49, 0.04]}>
         <IndustrialPowerColumn3D
-          position={[-0.18, 0.02, 0]}
-          system="cooling"
-          label="1. CITY & AGRI"
-          subLabel="ГОРОД И СЕЛО // 0-80 MW"
+          position={[-0.625, 0.02, 0]}
+          sector="pripyat"
+          label="1. PRIPYAT CITY"
+          subLabel="ПРИПЯТЬ // 0-50 MW"
           accentColor="#28b862"
+          ledColor="#28b862"
           minusBtnTex={minusBtnTex}
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[0.18, 0.02, 0]}
-          system="defense"
-          label="2. DEFENSE GRID"
-          subLabel="ЗГРЛС ДУГА // 0-80 MW"
-          accentColor="#d98218"
+          position={[-0.375, 0.02, 0]}
+          sector="kolkhoz"
+          label="2. KOLKHOZ FARM"
+          subLabel="СОВХОЗ // 0-50 MW"
+          accentColor="#28b862"
+          ledColor="#28b862"
           minusBtnTex={minusBtnTex}
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[0.54, 0.02, 0]}
-          system="facility"
-          label="3. VODKA & STEEL"
-          subLabel="ВОДКА И СТАЛЬ // 0-80 MW"
-          accentColor="#c92a1d"
+          position={[-0.125, 0.02, 0]}
+          sector="duga"
+          label="3. DUGA-1 RADAR"
+          subLabel="ДУГА-1 // 0-50 MW"
+          accentColor="#d99b26"
+          ledColor="#d99b26"
+          minusBtnTex={minusBtnTex}
+          plusBtnTex={plusBtnTex}
+        />
+        <IndustrialPowerColumn3D
+          position={[0.125, 0.02, 0]}
+          sector="kgb"
+          label="4. KGB BUNKER 07"
+          subLabel="КГБ-07 // 0-50 MW"
+          accentColor="#d99b26"
+          ledColor="#d99b26"
+          minusBtnTex={minusBtnTex}
+          plusBtnTex={plusBtnTex}
+        />
+        <IndustrialPowerColumn3D
+          position={[0.375, 0.02, 0]}
+          sector="vodka"
+          label="5. VODKA PLANT"
+          subLabel="ВОДКА // 0-50 MW"
+          accentColor="#2ad4c8"
+          ledColor="#2ad4c8"
+          minusBtnTex={minusBtnTex}
+          plusBtnTex={plusBtnTex}
+        />
+        <IndustrialPowerColumn3D
+          position={[0.625, 0.02, 0]}
+          sector="steel"
+          label="6. STEEL WORKS"
+          subLabel="СТАЛЬ // 0-50 MW"
+          accentColor="#2ad4c8"
+          ledColor="#2ad4c8"
           minusBtnTex={minusBtnTex}
           plusBtnTex={plusBtnTex}
         />
 
         {/* 18-Segment Recessed Ribbed Phosphor Glass Total MW & Redline Bar */}
-        <group position={[0, -0.27, 0.03]}>
+        <group position={[0.06, -0.27, 0.03]}>
           <mesh position={[0, 0, -0.006]} castShadow receiveShadow>
             <boxGeometry args={[1.5, 0.088, 0.026]} />
             <meshStandardMaterial
@@ -3209,7 +3226,7 @@ export const HighDetailReactorPanel3D: React.FC = () => {
       </group>
     </group>
   );
-};
+});
 
 interface HighDetailKnifeBreaker3DProps {
   breakerArmRef: React.RefObject<THREE.Group | null>;
@@ -3223,7 +3240,7 @@ interface HighDetailKnifeBreaker3DProps {
 
 export const HighDetailKnifeBreaker3D: React.FC<
   HighDetailKnifeBreaker3DProps
-> = ({ breakerArmRef, breakerDragRef, breakerPlateTex }) => {
+> = React.memo(({ breakerArmRef, breakerDragRef, breakerPlateTex }) => {
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
   const sparkLightRef = useRef<THREE.PointLight>(null);
@@ -3233,6 +3250,7 @@ export const HighDetailKnifeBreaker3D: React.FC<
     if (sparkFlashRef.current > 0) {
       sparkFlashRef.current = Math.max(0, sparkFlashRef.current - delta * 6.5);
       if (sparkLightRef.current) {
+        sparkLightRef.current.visible = sparkFlashRef.current > 0.01;
         sparkLightRef.current.intensity = sparkFlashRef.current * 4.5;
       }
     }
@@ -3242,21 +3260,26 @@ export const HighDetailKnifeBreaker3D: React.FC<
     if (!breakerDragRef.current.active) return;
     e.stopPropagation();
     const finalProg = breakerDragRef.current.progress;
+    const dy = Math.abs(e.nativeEvent.clientY - breakerDragRef.current.startY);
     breakerDragRef.current.active = false;
     releaseCanvasPointer(e);
-    if (finalProg < 0.65) {
+    const s = useGameStore.getState();
+    const isClickAction =
+      dy < 12 && (s.phase !== "playing" || s.isBlackout);
+    if (!isClickAction && finalProg < 0.45) {
       playLeverRatchet(0.5);
       return;
     }
-    const s = useGameStore.getState();
     playKnifeSwitchSlam(true);
     sparkFlashRef.current = 1.0;
     startSoundtrack();
     updateSoundtrackState(false, s.isMusicMuted);
     if (s.phase === "boot") {
       s.startShift();
-    } else if (s.phase !== "playing" || s.isBlackout) {
+    } else if (s.phase !== "playing") {
       s.resetShift();
+    } else if (s.isBlackout) {
+      s.recloseMainBreaker();
     }
   };
 
@@ -3324,6 +3347,7 @@ export const HighDetailKnifeBreaker3D: React.FC<
       </mesh>
       <pointLight
         ref={sparkLightRef}
+        visible={false}
         position={[0, 0.08, 0.12]}
         color="#ffdf78"
         intensity={0}
@@ -3435,7 +3459,7 @@ export const HighDetailKnifeBreaker3D: React.FC<
       </group>
     </group>
   );
-};
+});
 
 // Precomputed 37-tile RBMK-1000 octagonal biological shield matrix (rows of 3, 5, 7, 7, 7, 5, 3 square stainless-steel blocks)
 const RBMK_OCTAGON_TILES: ReadonlyArray<{
@@ -3467,12 +3491,13 @@ const RBMK_OCTAGON_TILES: ReadonlyArray<{
  */
 export const LeftRearWrapAroundPanel3D: React.FC<{
   variant?: "left-rear" | "rear";
-}> = ({ variant = "left-rear" }) => {
+}> = React.memo(({ variant = "left-rear" }) => {
   const groupRef = useRef<THREE.Group>(null);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
   const ribbedGlassTex = useMemo(() => getRibbedGlassCellTexture(), []);
   const vfdMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const lastVfdDrawRef = useRef(0);
 
   // UNIT A-2 refs: 37 octagonal stainless-steel core tiles + pop-out rod pins + oil valve + reciprocating boron piston pump
   const channelLensMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>(
@@ -3494,6 +3519,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
   const emergSealBtnRef = useRef<THREE.Group>(null);
   const emergSealDepressRef = useRef(0);
   const drainLeverGroupRef = useRef<THREE.Group>(null);
+  const drainRingMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const sightGlassWaterMeshRef = useRef<THREE.Mesh>(null);
   const sightGlassWaterMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
@@ -3753,18 +3779,33 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
     }
 
     if (oilLampMatRef.current) {
-      const ok = !s.isBlackout && s.lubeOilPressure >= 30;
+      const ok = !s.isBlackout && s.lubeOilPressure >= 25;
       const col = ok ? "#33ff66" : "#ff2a2a";
       oilLampMatRef.current.color.set(col);
       oilLampMatRef.current.emissive.set(s.isBlackout ? "#000000" : col);
       oilLampMatRef.current.emissiveIntensity = s.isBlackout ? 0 : 1.35;
     }
     if (gasLampMatRef.current) {
-      const ok = !s.isBlackout && s.heliumPressure >= 18;
-      const col = ok ? "#33ff66" : "#ff2a2a";
-      gasLampMatRef.current.color.set(col);
-      gasLampMatRef.current.emissive.set(s.isBlackout ? "#000000" : col);
-      gasLampMatRef.current.emissiveIntensity = s.isBlackout ? 0 : 1.35;
+      const highlightGasTut =
+        variant === "rear" &&
+        ((s.tutorialStep === 3 &&
+          s.pumpThrottle[0] > 50 &&
+          s.nitrogenLoopValve <= 40) ||
+          (!s.isBlackout && s.coreTemp > 650));
+      if (highlightGasTut) {
+        const pulse = 0.5 + 0.5 * Math.sin(t * 6.0);
+        const col = pulse > 0.5 ? "#33ff66" : "#ffb000";
+        gasLampMatRef.current.color.set(col);
+        gasLampMatRef.current.emissive.set(col);
+        gasLampMatRef.current.emissiveIntensity = 1.6 + pulse * 1.4;
+      } else {
+        const ok =
+          !s.isBlackout && s.heliumPressure >= 16 && s.heliumPressure <= 68;
+        const col = ok ? "#33ff66" : "#ff2a2a";
+        gasLampMatRef.current.color.set(col);
+        gasLampMatRef.current.emissive.set(s.isBlackout ? "#000000" : col);
+        gasLampMatRef.current.emissiveIntensity = s.isBlackout ? 0 : 1.35;
+      }
     }
 
     // 5-Segment Ribbed Phosphor Glass Oil Flow Bar on UNIT A-2
@@ -3916,31 +3957,61 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         }
       }
 
+      const anyZoneDrought =
+        s.pripyatWater < 45 || s.kolkhozWater < 45 || s.vodkaWater < 45;
+      const highlightDrainTut =
+        (s.tutorialStep === 3 && s.pumpThrottle[0] > 50) ||
+        (!s.isBlackout && s.bubblerLevel > 30 && anyZoneDrought);
+      if (drainRingMatRef.current) {
+        if (highlightDrainTut) {
+          const pulse = 0.5 + 0.5 * Math.sin(t * 6.0);
+          const col = pulse > 0.5 ? "#33ff66" : "#ffb000";
+          drainRingMatRef.current.color.set(col);
+          drainRingMatRef.current.emissive.set(col);
+          drainRingMatRef.current.emissiveIntensity = 1.4 + pulse * 1.2;
+        } else {
+          drainRingMatRef.current.color.set("#d98218");
+          drainRingMatRef.current.emissive.set("#000000");
+          drainRingMatRef.current.emissiveIntensity = 0;
+        }
+      }
+
       if (sightGlassWaterMeshRef.current && sightGlassWaterMatRef.current) {
         const ratio = THREE.MathUtils.clamp(s.bubblerLevel / 100, 0.06, 1);
         sightGlassWaterMeshRef.current.scale.y = ratio;
         sightGlassWaterMeshRef.current.position.y = -0.115 + ratio * 0.115;
-        const wCol =
-          s.bubblerLevel >= 85
-            ? "#ff2a2a"
-            : s.bubblerLevel >= 65
-              ? "#ffb000"
-              : "#28d8ff";
-        sightGlassWaterMatRef.current.color.set(wCol);
-        sightGlassWaterMatRef.current.emissive.set(
-          s.isBlackout ? "#000000" : wCol,
-        );
-        sightGlassWaterMatRef.current.emissiveIntensity = s.isBlackout
-          ? 0
-          : 1.25;
+        if (highlightDrainTut) {
+          const pulse = 0.5 + 0.5 * Math.sin(t * 6.0);
+          const wCol = pulse > 0.5 ? "#33ff66" : "#ffb000";
+          sightGlassWaterMatRef.current.color.set(wCol);
+          sightGlassWaterMatRef.current.emissive.set(wCol);
+          sightGlassWaterMatRef.current.emissiveIntensity = 1.4 + pulse * 0.9;
+        } else {
+          const wCol =
+            s.bubblerLevel >= 85
+              ? "#ff2a2a"
+              : s.bubblerLevel >= 65
+                ? "#ffb000"
+                : "#28d8ff";
+          sightGlassWaterMatRef.current.color.set(wCol);
+          sightGlassWaterMatRef.current.emissive.set(
+            s.isBlackout ? "#000000" : wCol,
+          );
+          sightGlassWaterMatRef.current.emissiveIntensity = s.isBlackout
+            ? 0
+            : 1.25;
+        }
       }
     }
 
-    // 4. Update Phosphor-Green CRT Monitor Bay (Centered 3-Cell Layout + Oscilloscope Graticule)
+    // 4. Update Phosphor-Green CRT Monitor Bay (Centered 3-Cell Layout + Oscilloscope Graticule) — throttled to ~12.5 FPS (0.08s)
+    if (t - lastVfdDrawRef.current < 0.08) return;
     const sealAllLocked = s.containmentSealLocked;
-    const sig = `${variant}|${Math.round(s.coreTemp)}|${Math.round(s.pressureBar)}|${Math.round(s.pumpAHeat)}|${Math.round(s.pumpBHeat)}|${Math.round(s.lubeOilPressure)}|${Math.round(s.boronTankLevel)}|${s.oilCoolerValve}|${s.nitrogenLoopValve}|${Math.round(s.heliumPressure)}|${Math.round(s.graphiteTemp)}|${activeHotspots}|${sealAllLocked}|${Math.round(s.bubblerLevel)}|${s.bubblerDraining}|${s.isBlackout}`;
+    const boronTanksLeft = (s.boronReservePool / 100).toFixed(1);
+    const sig = `${variant}|${Math.round(s.coreTemp / 2) * 2}|${Math.round(s.pressureBar)}|${Math.round(s.pumpAHeat)}|${Math.round(s.pumpBHeat)}|${Math.round(s.lubeOilPressure)}|${Math.round(s.boronTankLevel)}|${boronTanksLeft}|${s.oilCoolerValve}|${s.nitrogenLoopValve}|${Math.round(s.heliumPressure)}|${Math.round(s.graphiteTemp)}|${activeHotspots}|${sealAllLocked}|${Math.round(s.bubblerLevel)}|${s.bubblerDraining}|${s.isBlackout}`;
     const tex = vfdMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (tex && tex.userData.lastSig !== sig) {
+      lastVfdDrawRef.current = t;
       tex.userData.lastSig = sig;
       const canvas = tex.image as HTMLCanvasElement;
       const ctx = canvas.getContext("2d");
@@ -3951,7 +4022,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 {
                   label: "HELIUM LOOP",
                   val: `${Math.round(s.heliumPressure)} BAR`,
-                  danger: s.heliumPressure < 16 || s.heliumPressure > 52,
+                  danger: s.heliumPressure < 16 || s.heliumPressure > 68,
                 },
                 {
                   label: "GRAPHITE TEMP",
@@ -3968,17 +4039,17 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 {
                   label: "MAX BEARING",
                   val: `${Math.round(20 + Math.max(s.pumpAHeat, s.pumpBHeat))} °C`,
-                  danger: Math.max(s.pumpAHeat, s.pumpBHeat) >= 75,
+                  danger: Math.max(s.pumpAHeat, s.pumpBHeat) >= 70,
                 },
                 {
                   label: "LUBE OIL PRESS",
                   val: `${Math.round(s.lubeOilPressure)}%`,
-                  danger: s.lubeOilPressure < 30,
+                  danger: s.lubeOilPressure < 25,
                 },
                 {
                   label: "BORON TANK",
                   val: `${Math.round(s.boronTankLevel)}%`,
-                  danger: s.boronTankLevel < 35,
+                  danger: s.boronTankLevel < 40,
                 },
               ];
 
@@ -3987,16 +4058,20 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
           cells,
           statusLine:
             variant === "rear"
-              ? `CONTAINMENT: ${sealAllLocked ? "SEALED" : "UNSEALED!"} | N2 VALVE: ${Math.round(s.nitrogenLoopValve)}% | DRAIN: ${s.bubblerDraining ? "OPEN" : "SHUT"}`
-              : `OIL VALVE: ${Math.round(s.oilCoolerValve)}% (-${Math.round(s.oilCoolerValve * 0.15)}% PUMP HEAD) | HOTSPOTS: ${activeHotspots} ACTIVE`,
+              ? s.heliumPressure > 68
+                ? `GAS SATURATED (>68 BAR)! DIAL N2 < 35% & FLIP SCRUBBERS ON!`
+                : `CONTAINMENT: ${sealAllLocked ? "SEALED" : "UNSEALED!"} | N2 VALVE: ${Math.round(s.nitrogenLoopValve)}% | DRAIN: ${s.bubblerDraining ? "PUMPING TO ZONES" : "SHUT"}`
+              : s.lubeOilPressure < 25
+                ? `OIL BREAKDOWN (<25%)! DIAL OIL < 30% TO RECOVER! | HOTSPOTS: ${activeHotspots}`
+                : `OIL VALVE: ${Math.round(s.oilCoolerValve)}% | HOTSPOTS: ${activeHotspots} ACTIVE (-6% B/TILE)`,
           statusDanger:
             variant === "rear"
-              ? !sealAllLocked || s.bubblerLevel >= 85
-              : activeHotspots > 0 || s.lubeOilPressure < 30,
+              ? !sealAllLocked || s.bubblerLevel >= 85 || s.heliumPressure > 68
+              : activeHotspots > 0 || s.lubeOilPressure < 25,
           footerLine:
             variant === "rear"
-              ? "TURN GAS WHEEL (LEFT) • FLIP SEAL TOGGLES • HOLD DRAIN LEVER"
-              : "TURN OIL VALVE (LEFT) • CLICK FLASHING TILES • PUMP BORON",
+              ? "TURN GAS WHEEL (<35% VENTS BAR) • HOLD DRAIN TO REFILL ZONES"
+              : `BORON RESERVES LEFT: ${boronTanksLeft} TANKS (+3.5%/STROKE)`,
           isBlackout: s.isBlackout,
         });
         tex.needsUpdate = true;
@@ -4044,8 +4119,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         </mesh>
       ))}
 
-      {/* Top Engraved Header Plaque (Raised +0.04m cleanly above green jewel lamps) */}
-      <mesh position={[0, 2.275, 0.042]}>
+      {/* Top Engraved Header Plaque (Lowered -0.035m on Y so it sits cleanly inside the top frame) */}
+      <mesh position={[0, 2.24, 0.042]}>
         <planeGeometry args={[1.48, 0.14]} />
         <meshStandardMaterial
           map={headerTex}
@@ -4093,12 +4168,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               position={[-0.51, 0, 0]}
               title="HELIUM PRESS"
               cyrillicSub="ГЕЛИЕВЫЙ КОНТУР"
-              unit="0-60 BAR"
+              unit="0-80 BAR"
               serial="№ 84-ГЛ1"
               min={0}
-              max={60}
+              max={80}
               lowDangerThreshold={16}
-              dangerThreshold={50}
+              dangerThreshold={68}
               getValue={() => useGameStore.getState().heliumPressure}
             />
             <HighDetailManometer3D
@@ -4191,14 +4266,6 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         <group position={[0, 0.78, 0.03]}>
           {/* 1. LEFT: Full Cast-Iron Valve Manifold & Brass Scale Arc (`OIL COOLER VALVE`) */}
           <group position={[-0.53, 0.02, 0.02]}>
-            {/* Subtle Warm Local Fill Light for High-Contrast Readability */}
-            <pointLight
-              position={[0, -0.02, 0.16]}
-              color="#ffe4b0"
-              intensity={0.38}
-              distance={0.58}
-              decay={1.8}
-            />
             <mesh position={[0, 0.25, 0.012]} castShadow>
               <boxGeometry args={[0.31, 0.076, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
@@ -4603,14 +4670,6 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
           {/* 3. RIGHT: Heavy Bolted Quadrant Housing & Reciprocating Piston Lever Pump (`BORON PISTON PUMP`) */}
           <group position={[0.53, 0.02, 0.02]}>
-            {/* Subtle Warm Local Fill Light for High-Contrast Readability */}
-            <pointLight
-              position={[0, -0.02, 0.16]}
-              color="#ffe4b0"
-              intensity={0.38}
-              distance={0.58}
-              decay={1.8}
-            />
             <mesh position={[0, 0.25, 0.012]} castShadow>
               <boxGeometry args={[0.31, 0.076, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
@@ -4665,16 +4724,18 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   );
                   setBoronPistonPos(nextPos);
                   const halfStroke =
-                    nextPos >= 0.7
+                    nextPos >= 0.72
                       ? 1
-                      : nextPos <= 0.3
+                      : nextPos <= 0.28
                         ? 0
                         : pistonDragRef.current.lastHalfStroke;
                   if (halfStroke !== pistonDragRef.current.lastHalfStroke) {
                     pistonDragRef.current.lastHalfStroke = halfStroke;
-                    playSwitchClank(true);
-                    playPneumaticWhoosh();
-                    useGameStore.getState().pumpBoronTank(14);
+                    playSwitchClank(halfStroke === 1);
+                    if (halfStroke === 1) {
+                      playBoronHydraulicPumpStroke();
+                      useGameStore.getState().pumpBoronTank(3.5);
+                    }
                   }
                 };
                 const handleUp = () => {
@@ -4917,14 +4978,6 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
           {/* 1. LEFT: Dual-Pipe Finned Copper Gas Manifold & Oxidized Crimson Handwheel (`HELIUM-N2 LOOP`) */}
           <group position={[-0.53, 0.02, 0.02]}>
-            {/* Subtle Warm Local Fill Light for High-Contrast Readability */}
-            <pointLight
-              position={[0, -0.02, 0.16]}
-              color="#ffe4b0"
-              intensity={0.38}
-              distance={0.58}
-              decay={1.8}
-            />
             <mesh position={[0, 0.25, 0.012]} castShadow>
               <boxGeometry args={[0.31, 0.076, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
@@ -5310,14 +5363,6 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
           {/* 3. RIGHT: Heavy Bolted Quadrant Pull-Lever & Armored Sight-Glass (`BUBBLER DRAIN`) */}
           <group position={[0.53, 0.02, 0.02]}>
-            {/* Subtle Warm Local Fill Light for High-Contrast Readability */}
-            <pointLight
-              position={[0, -0.02, 0.16]}
-              color="#ffe4b0"
-              intensity={0.38}
-              distance={0.58}
-              decay={1.8}
-            />
             <mesh position={[0, 0.25, 0.012]} castShadow>
               <boxGeometry args={[0.31, 0.076, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
@@ -5523,6 +5568,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 <mesh position={[0, 0, 0.076]} rotation={[0, 0, Math.PI / 2]}>
                   <cylinderGeometry args={[0.0228, 0.0228, 0.008, 14]} />
                   <meshStandardMaterial
+                    ref={drainRingMatRef}
                     color="#d98218"
                     roughness={0.36}
                     metalness={0.2}
@@ -5634,7 +5680,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       )}
     </group>
   );
-};
+});
 
 interface Dvk84KeySpec {
   id: string;
@@ -5740,7 +5786,7 @@ const DVK84_KEY_ROWS: ReadonlyArray<{
  */
 export const SovietDvk84KeyboardConsole3D: React.FC<{
   onCycleBulletin?: () => void;
-}> = ({ onCycleBulletin }) => {
+}> = React.memo(({ onCycleBulletin }) => {
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
@@ -6869,6 +6915,6 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
       </group>
     </group>
   );
-};
+});
 
 

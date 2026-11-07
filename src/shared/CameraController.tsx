@@ -28,13 +28,13 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     fov: 56,
   },
   reactor: {
-    position: [0.22, 1.32, 2.35],
-    target: [-1.96, 1.24, 2.48],
+    position: [0.22, 1.32, 2.77],
+    target: [-1.96, 1.24, 2.77],
     fov: 58,
   },
   power: {
-    position: [-0.08, 0.86, 2.35],
-    target: [-1.96, 0.64, 2.35],
+    position: [-0.08, 0.96, 2.77],
+    target: [-1.96, 0.74, 2.77],
     fov: 54,
   },
   terminal: {
@@ -105,8 +105,14 @@ export const CameraController: React.FC = () => {
     },
   });
 
+  const skipNextPoseSyncRef = useRef<boolean>(false);
+
   // Sync base yaw & pitch whenever activeStation changes via [0]-[5] or 3D station buttons
   useEffect(() => {
+    if (skipNextPoseSyncRef.current) {
+      skipNextPoseSyncRef.current = false;
+      return;
+    }
     const pose = STATION_CAMERA_POSES[activeStation];
     const { yaw, pitch } = computePoseYawPitch(pose);
     lookStateRef.current.targetYaw = setShortestTargetYaw(
@@ -187,7 +193,18 @@ export const CameraController: React.FC = () => {
         syncStationPose("terminal");
       } else if (e.key === "3") {
         e.preventDefault();
-        syncStationPose("power");
+        const gs = useGameStore.getState();
+        if (gs.tutorialStep === 3 && gs.pumpThrottle[0] > 50) {
+          skipNextPoseSyncRef.current = gs.activeStation !== "reactor";
+          setActiveStation("reactor");
+          lookStateRef.current.targetYaw = setShortestTargetYaw(
+            lookStateRef.current.currentYaw,
+            Math.PI,
+          );
+          lookStateRef.current.targetPitch = -0.02;
+        } else {
+          syncStationPose("power");
+        }
       } else if (e.key === "4") {
         e.preventDefault();
         syncStationPose("inspector");
@@ -196,6 +213,8 @@ export const CameraController: React.FC = () => {
         syncStationPose("aux");
       } else if (e.key === "6") {
         e.preventDefault();
+        skipNextPoseSyncRef.current =
+          useGameStore.getState().activeStation !== "reactor";
         setActiveStation("reactor");
         lookStateRef.current.targetYaw = setShortestTargetYaw(
           lookStateRef.current.currentYaw,
@@ -204,6 +223,8 @@ export const CameraController: React.FC = () => {
         lookStateRef.current.targetPitch = -0.02;
       } else if (e.key === "7") {
         e.preventDefault();
+        skipNextPoseSyncRef.current =
+          useGameStore.getState().activeStation !== "reactor";
         setActiveStation("reactor");
         lookStateRef.current.targetYaw = setShortestTargetYaw(
           lookStateRef.current.currentYaw,

@@ -479,7 +479,16 @@ export function applySovietPBRToHierarchy(
     }
 
     if (!isTransparentOrAdditive) {
-      obj.castShadow = true
+      let radius = 0.1
+      if (obj.geometry) {
+        if (!obj.geometry.boundingSphere) {
+          obj.geometry.computeBoundingSphere()
+        }
+        radius = obj.geometry.boundingSphere?.radius ?? 0.1
+      }
+      // Disable shadow casting on tiny bolts, rivets, wire cages, and indicator rings (< 5.5cm)
+      // to prevent thousands of microscopic sub-meshes from stalling WebGL shadow map passes!
+      obj.castShadow = radius >= 0.055
       obj.receiveShadow = true
     }
   })
