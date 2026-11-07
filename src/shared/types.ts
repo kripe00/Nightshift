@@ -9,6 +9,7 @@ export type CameraStation =
   | 'terminal'
   | 'power'
   | 'inspector'
+  | 'aux'
 
 export type StampEmblemType =
   | 'MINATOM_OFFICIAL'
@@ -73,6 +74,16 @@ export interface TerminalLogEntry {
   level: 'normal' | 'warn' | 'danger'
 }
 
+export type HotspotSeverity = 'amber' | 'red'
+
+export interface OperationalMandate {
+  id: string
+  code: 'COOLING_OIL' | 'DEFENSE_HZ' | 'PUMP_B_SEAL' | 'FACILITY_BUBBLER'
+  title: string
+  requirementText: string
+  fulfilled: boolean
+}
+
 export interface GameState {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
@@ -84,8 +95,9 @@ export interface GameState {
   isMusicMuted: boolean
   treasonStrikes: number // 0 to 3 (3 = Gulag Game Over)
   lastDecisionFeedback: string | null
+  activeMandate: OperationalMandate | null
 
-  // Reactor & Power Matrix (Komrad Kristianov's Domain)
+  // Reactor & Power Matrix (UNIT A, UNIT A-2, UNIT B & Right Turbine Panel)
   coreTemp: number // 300°C nominal -> 1000°C meltdown
   pressureBar: number // 40 BAR nominal -> 120 BAR critical
   radiationLevel: number // 0.1 to 15.0 R/h
@@ -94,6 +106,28 @@ export interface GameState {
   redlineInstability: number // 0 to 100% (100% triggers Blackout)
   isBlackout: boolean
   pumpsActive: [boolean, boolean] // Pump A & Pump B
+  pumpThrottle: [number, number] // 0 to 100% continuous valve cranking
+  pumpAHeat: number // 0 to 100% bearing heat & cavitation
+  pumpBHeat: number // 0 to 100% bearing heat & cavitation
+  lubeOilPressure: number // 0 to 100% bearing lube pressure (UNIT A-2)
+  oilCoolerValve: number // 0 to 100% oil cooler handwheel opening (UNIT A-2)
+  boronTankLevel: number // 0 to 100% boron reserve tank level (UNIT A-2)
+  channelHotspots: Record<number, HotspotSeverity> // 0..36 RBMK core channel hotspots (UNIT A-2)
+  graphiteTemp: number // 280°C to 850°C moderator temperature (UNIT B)
+  nitrogenLoopValve: number // 0 to 100% Helium-N2 gas regulator wheel (UNIT B)
+  heliumPressure: number // 0 to 60 BAR Helium-N2 loop pressure (UNIT B)
+  bubblerLevel: number // 0 to 100% condenser bubbler pool H2O level (UNIT B)
+  bubblerDraining: boolean // Toothed quadrant drain lever held on UNIT B
+  sealToggles: [boolean, boolean, boolean] // [N2 PURGE, RAD FILTER, SEAL LOCK] on UNIT B
+  containmentSealLocked: boolean // True when all 3 UNIT B seal toggles are locked
+  ventingSteam: boolean // Spring-loaded СБРОС ПАРА lever held down
+  turbineRpm: number // 0 to 3600 RPM
+  gridHz: number // 45.0 to 55.0 Hz (Target 50.0 Hz)
+  excitationTrim: number // -5.0 to +5.0 Hz rotary rheostat offset
+  hzOutOfBoundsSeconds: number // > 8s outside [46.5, 53.5] trips Main Breaker
+  ventilationActive: boolean // ВЕНТИЛЯЦИЯ guarded toggle (-1.2 R/h/s, +10 MW load)
+  kgbLineActive: boolean // СВЯЗЬ КГБ guarded toggle
+  boronCooldown: number // 0 to 30s recharge for БОРНАЯ КИСЛОТА plunger
   az5Available: boolean
   az5Cooldown: number
 
@@ -116,6 +150,26 @@ export interface GameState {
   shiftPower: (system: SystemType, deltaMW: number) => void
   setSubsystemPower: (system: SystemType, targetMW: number) => void
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => void
+  setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => void
+  setOilCoolerValve: (valvePct: number) => void
+  pumpBoronTank: (amountPct?: number) => void
+  quenchChannelHotspot: (channelIndex: number) => void
+  setNitrogenLoopValve: (valvePct: number) => void
+  setBubblerDraining: (draining: boolean) => void
+  toggleSealSwitch: (toggleIndex: 0 | 1 | 2, active?: boolean) => void
+  lockAllContainmentSeals: () => void
+  setVentingSteam: (venting: boolean) => void
+  adjustExcitationTrim: (deltaHz: number) => void
+  toggleVentilation: (active?: boolean) => void
+  toggleKgbLine: (active?: boolean) => void
+  injectBoronAcid: () => void
+  executeDeskDirectiveEffect: (
+    docTitle: string,
+    isForgery: boolean,
+    decision: DirectiveDecision,
+    flawText?: string | null
+  ) => void
+  tickThermodynamics: (dtSeconds: number) => void
   triggerAz5: () => void
   overrideKomradLock: () => void
   purgeFirewall: () => void

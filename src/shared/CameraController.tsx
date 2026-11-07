@@ -10,7 +10,7 @@ interface CameraLookState {
   setFreeLookMode: (val: boolean) => void;
 }
 
-export const useCameraLookStore = create<CameraLookState>((set) => ({
+export const useCameraLookStore = create<CameraLookState>((set) => ({ // oxlint-disable-line react/only-export-components
   isFreeLookMode: false,
   setFreeLookMode: (val: boolean) => set({ isFreeLookMode: val }),
 }));
@@ -28,14 +28,14 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     fov: 56,
   },
   reactor: {
-    position: [-0.22, 1.52, 2.35],
-    target: [-1.96, 1.44, 2.35],
-    fov: 50,
+    position: [0.22, 1.32, 2.35],
+    target: [-1.96, 1.24, 2.48],
+    fov: 58,
   },
   power: {
-    position: [-0.22, 0.92, 2.35],
-    target: [-1.96, 0.56, 2.35],
-    fov: 50,
+    position: [-0.08, 0.86, 2.35],
+    target: [-1.96, 0.64, 2.35],
+    fov: 54,
   },
   terminal: {
     position: [0, 1.48, 1.92],
@@ -47,12 +47,16 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     target: [0, 0.76, 1.54],
     fov: 56,
   },
+  aux: {
+    position: [-0.22, 1.32, 2.35],
+    target: [1.96, 1.24, 2.35],
+    fov: 58,
+  },
 };
 
-const MOUSE_SENSITIVITY = 0.0022;
+const MOUSE_SENSITIVITY = 0.0024;
 const MIN_PITCH = -Math.PI / 2.08; // Looking steeply down at the inspection desk mat
 const MAX_PITCH = Math.PI / 2.6; // Looking up at the ceiling/banner
-const MAX_YAW = Math.PI * 0.75; // Wide 270-degree horizontal bunker arc
 
 function computePoseYawPitch(pose: CameraPose): { yaw: number; pitch: number } {
   const dx = pose.target[0] - pose.position[0];
@@ -63,9 +67,20 @@ function computePoseYawPitch(pose: CameraPose): { yaw: number; pitch: number } {
   const pitch = Math.asin(ny);
   const yaw = Math.atan2(-dx / len, -dz / len);
   return {
-    yaw: THREE.MathUtils.clamp(yaw, -MAX_YAW, MAX_YAW),
+    yaw,
     pitch: THREE.MathUtils.clamp(pitch, MIN_PITCH, MAX_PITCH),
   };
+}
+
+function setShortestTargetYaw(
+  currentYaw: number,
+  desiredYaw: number,
+): number {
+  const delta = Math.atan2(
+    Math.sin(desiredYaw - currentYaw),
+    Math.cos(desiredYaw - currentYaw),
+  );
+  return currentYaw + delta;
 }
 
 export const CameraController: React.FC = () => {
@@ -90,11 +105,14 @@ export const CameraController: React.FC = () => {
     },
   });
 
-  // Sync base yaw & pitch whenever activeStation changes via [0]-[4] or 3D station buttons
+  // Sync base yaw & pitch whenever activeStation changes via [0]-[5] or 3D station buttons
   useEffect(() => {
     const pose = STATION_CAMERA_POSES[activeStation];
     const { yaw, pitch } = computePoseYawPitch(pose);
-    lookStateRef.current.targetYaw = yaw;
+    lookStateRef.current.targetYaw = setShortestTargetYaw(
+      lookStateRef.current.currentYaw,
+      yaw,
+    );
     lookStateRef.current.targetPitch = pitch;
   }, [activeStation]);
 
@@ -113,7 +131,10 @@ export const CameraController: React.FC = () => {
     const syncStationPose = (station: CameraStation) => {
       const pose = STATION_CAMERA_POSES[station];
       const { yaw, pitch } = computePoseYawPitch(pose);
-      lookStateRef.current.targetYaw = yaw;
+      lookStateRef.current.targetYaw = setShortestTargetYaw(
+        lookStateRef.current.currentYaw,
+        yaw,
+      );
       lookStateRef.current.targetPitch = pitch;
       setActiveStation(station);
     };
@@ -121,6 +142,10 @@ export const CameraController: React.FC = () => {
     const handlePointerLockChange = () => {
       const locked = document.pointerLockElement === gl.domElement;
       useCameraLookStore.getState().setFreeLookMode(locked);
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -166,6 +191,25 @@ export const CameraController: React.FC = () => {
       } else if (e.key === "4") {
         e.preventDefault();
         syncStationPose("inspector");
+      } else if (e.key === "5") {
+        e.preventDefault();
+        syncStationPose("aux");
+      } else if (e.key === "6") {
+        e.preventDefault();
+        setActiveStation("reactor");
+        lookStateRef.current.targetYaw = setShortestTargetYaw(
+          lookStateRef.current.currentYaw,
+          (3 * Math.PI) / 4,
+        );
+        lookStateRef.current.targetPitch = -0.02;
+      } else if (e.key === "7") {
+        e.preventDefault();
+        setActiveStation("reactor");
+        lookStateRef.current.targetYaw = setShortestTargetYaw(
+          lookStateRef.current.currentYaw,
+          Math.PI,
+        );
+        lookStateRef.current.targetPitch = -0.02;
       } else if (e.key === "0" || e.key === "Escape") {
         e.preventDefault();
         if (
@@ -205,14 +249,11 @@ export const CameraController: React.FC = () => {
       const isFreeLook =
         document.pointerLockElement === gl.domElement ||
         useCameraLookStore.getState().isFreeLookMode;
-      if (!isFreeLook) return;
+      const isRightOrMiddleDrag = (e.buttons & 2) !== 0 || (e.buttons & 4) !== 0;
+      if (!isFreeLook && !isRightOrMiddleDrag) return;
 
       const look = lookStateRef.current;
-      look.targetYaw = THREE.MathUtils.clamp(
-        look.targetYaw - e.movementX * MOUSE_SENSITIVITY,
-        -MAX_YAW,
-        MAX_YAW,
-      );
+      look.targetYaw -= e.movementX * MOUSE_SENSITIVITY;
       look.targetPitch = THREE.MathUtils.clamp(
         look.targetPitch - e.movementY * MOUSE_SENSITIVITY,
         MIN_PITCH,
@@ -221,6 +262,7 @@ export const CameraController: React.FC = () => {
     };
 
     document.addEventListener("pointerlockchange", handlePointerLockChange);
+    window.addEventListener("contextmenu", handleContextMenu);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("mousemove", handleMouseMove);
@@ -229,6 +271,7 @@ export const CameraController: React.FC = () => {
         "pointerlockchange",
         handlePointerLockChange,
       );
+      window.removeEventListener("contextmenu", handleContextMenu);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("mousemove", handleMouseMove);
@@ -240,14 +283,13 @@ export const CameraController: React.FC = () => {
     const pose = STATION_CAMERA_POSES[activeStation];
     const look = lookStateRef.current;
 
-    const yawSpeed = 1.45;
+    const yawSpeed = 1.65;
     const pitchSpeed = 1.05;
     if (look.keysHeld.left) look.targetYaw += yawSpeed * dt;
     if (look.keysHeld.right) look.targetYaw -= yawSpeed * dt;
     if (look.keysHeld.up) look.targetPitch += pitchSpeed * dt;
     if (look.keysHeld.down) look.targetPitch -= pitchSpeed * dt;
 
-    look.targetYaw = THREE.MathUtils.clamp(look.targetYaw, -MAX_YAW, MAX_YAW);
     look.targetPitch = THREE.MathUtils.clamp(
       look.targetPitch,
       MIN_PITCH,

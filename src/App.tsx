@@ -70,23 +70,35 @@ export function App() {
     powerAllocation.facility,
   ])
 
-  // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase
+  // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase.
+  // Holding Shift + Space starts (or switches into) Endless Sandbox / No-Fail Test Mode (isGodMode = true).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' || e.code === 'Enter') {
         const s = useGameStore.getState()
+        const wantSandbox = e.shiftKey && e.code === 'Space'
         if (s.phase === 'boot') {
           e.preventDefault()
           playSwitchClank(true)
           startSoundtrack()
           updateSoundtrackState(false, s.isMusicMuted)
           s.startShift()
+          if (wantSandbox) {
+            s.setGodMode(true)
+          }
         } else if (s.phase !== 'playing') {
           e.preventDefault()
           playSwitchClank(true)
           startSoundtrack()
           updateSoundtrackState(false, s.isMusicMuted)
           s.resetShift()
+          if (wantSandbox) {
+            s.setGodMode(true)
+          }
+        } else if (wantSandbox) {
+          e.preventDefault()
+          playSwitchClank(true)
+          s.setGodMode(!s.isGodMode)
         }
       }
     }

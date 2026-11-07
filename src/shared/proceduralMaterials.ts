@@ -433,12 +433,18 @@ export function applySovietPBRToHierarchy(
       }
 
       if (mat instanceof THREE.MeshStandardMaterial) {
-        // Keep dynamic/UI CanvasTexture screens & plaques crisp without bump distortion
-        if (mat.map) continue
+        // Keep dynamic/UI CanvasTexture screens, plaques & custom-bumped meshes untouched
+        if (mat.map || mat.bumpMap) continue
         // Skip brightly glowing bulbs/LEDs
-        if (mat.emissiveIntensity > 0.6) continue
+        if (mat.emissiveIntensity > 0.35) continue
 
         const c = mat.color
+        // Preserve vibrant painted Bakelite/enamel/porcelain colors (crimson, hazard yellow, green plunger, porcelain white)
+        const maxCh = Math.max(c.r, c.g, c.b)
+        const minCh = Math.min(c.r, c.g, c.b)
+        const saturation = maxCh > 0 ? (maxCh - minCh) / maxCh : 0
+        if (saturation > 0.42 || maxCh > 0.78) continue
+
         const isBrass =
           mat.metalness >= 0.72 ||
           (c.r > 0.48 && c.g > 0.38 && c.b < 0.38 && mat.metalness >= 0.5)

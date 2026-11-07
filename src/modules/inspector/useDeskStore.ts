@@ -23,11 +23,18 @@ export const OUTBOX_DROP_ZONE_3D = {
   maxZ: -0.22,
 }
 
+export const SHREDDER_POS_3D = {
+  x: 0.84,
+  y: 0.962,
+  z: -0.22,
+  rotationY: -0.26,
+} as const
+
 export const SHREDDER_DROP_ZONE_3D = {
-  minX: 0.42,
+  minX: 0.62,
   maxX: 1.08,
-  minZ: 0.08,
-  maxZ: 0.56,
+  minZ: -0.44,
+  maxZ: 0.04,
 }
 
 export type StampType = 'APPROVED' | 'SHREDDED'
@@ -320,18 +327,18 @@ const INITIAL_DOCUMENTS: DeskDocument[] = [
     ...DIRECTIVE_TEMPLATES[0],
     id: 'DOC-1984-001',
     status: 'desk',
-    x: -0.32,
+    x: -0.34,
     z: 0.12,
     isExpanded: true,
     stamps: [],
     shredProgress: 0,
   },
-  // 2. Forged Seal Micro-Print directive on center of mat (side-by-side next to the tilted KGB Manual!)
+  // 2. Forged Seal Micro-Print directive on center of mat (side-by-side next to the flat KGB Manual!)
   {
     ...DIRECTIVE_TEMPLATES[1],
     id: 'DOC-1984-002',
     status: 'desk',
-    x: 0.02,
+    x: -0.02,
     z: 0.12,
     isExpanded: true,
     stamps: [],
@@ -342,27 +349,14 @@ const INITIAL_DOCUMENTS: DeskDocument[] = [
 let docSequence = 4
 
 function syncDecisionWithSharedStore(
+  docTitle: string,
   isForgery: boolean,
-  decision: StampType
+  decision: StampType,
+  forgeryReason: string | null
 ): void {
-  const gameState = useGameStore.getState()
-  // Find a matching directive in useGameStore or spawn one if needed so Reactor/Terminal react!
-  const matching = gameState.activeDirectives.find(
-    (d) => d.isCiaForgery === isForgery
-  )
-  const target =
-    matching ??
-    gameState.activeDirectives[gameState.activeDirectives.length - 1]
-  if (target) {
-    gameState.resolveDirective(target.id, decision)
-  } else {
-    gameState.spawnDirective(isForgery)
-    const afterSpawn = useGameStore.getState().activeDirectives
-    const spawned = afterSpawn[afterSpawn.length - 1]
-    if (spawned) {
-      useGameStore.getState().resolveDirective(spawned.id, decision)
-    }
-  }
+  useGameStore
+    .getState()
+    .executeDeskDirectiveEffect(docTitle, isForgery, decision, forgeryReason)
 }
 
 export const useDeskStore = create<DeskStoreState>((set, get) => ({
@@ -530,7 +524,12 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
     if (!doc) return
 
     const correct = doc.isForgery
-    syncDecisionWithSharedStore(doc.isForgery, 'SHREDDED')
+    syncDecisionWithSharedStore(
+      doc.title,
+      doc.isForgery,
+      'SHREDDED',
+      doc.forgeryReason
+    )
 
     set({
       documents: state.documents.filter((d) => d.id !== id),
@@ -542,8 +541,8 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         decision: 'SHREDDED',
         correct,
         reason: correct
-          ? `FORGERY DESTROYED: ${doc.forgeryReason}`
-          : 'SECURITY BREACH: Valid Directive Shredded!',
+          ? `FORGERY SHREDDED (-15% INSTAB, -35C CORE, -45C GRAPHITE): ${doc.forgeryReason}`
+          : 'SECURITY BREACH: Valid Directive Shredded (+18% INSTABILITY)!',
       },
     })
   },
@@ -555,7 +554,13 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
 
     const correct = !doc.isForgery
     const wasStamped = doc.stamps.some((s) => s.type === 'APPROVED')
-    syncDecisionWithSharedStore(doc.isForgery, 'APPROVED')
+    syncDecisionWithSharedStore(
+      doc.title,
+      doc.isForgery,
+      'APPROVED',
+      doc.forgeryReason
+    )
+    const activeMandate = useGameStore.getState().activeMandate
 
     set({
       documents: state.documents.filter((d) => d.id !== id),
@@ -567,8 +572,8 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         decision: 'APPROVED',
         correct,
         reason: correct
-          ? `ORDER EXECUTED: Authentic directive dispatched${wasStamped ? '' : ' (unstamped)'}`
-          : `SECURITY BREACH: Forged directive dispatched — ${doc.forgeryReason}`,
+          ? `${activeMandate ? activeMandate.requirementText : 'ORDER EXECUTED'}${wasStamped ? '' : ' (UNSTAMPED)'}`
+          : `SABOTAGE EXECUTED (3 RED HOTSPOTS + N2 DROP + HZ DESYNC): ${doc.forgeryReason}`,
       },
     })
   },

@@ -143,4 +143,18 @@
   >
   > *Utfordringen i Sosialistisk Kappestrid er herved kastet tilbake til Reaktoravdelingen — bare prøv å skru ned `FACILITY`-strømmen nå, så skal du se hvem som makulerer kaffekvoten din! Lenge leve Femårsplanen — MELTDOWN IS PROPAGANDA! 🎖️🔨🕵️‍♂️☢️☭"*
 
+### [TELEGRAM #011 — STEMPLET: QUOTA-84 // TVERRSTASJON RBMK-TERMODYNAMIKK & DIREKTIV-KOBLING]
+- **FRA:** Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** 3-trinns RBMK-1000 kaskade (`UNIT A` -> `UNIT A-2` -> `UNIT B`), åttekantet 37-kanals kjernekart og direkte kobling mellom Pravda-84-pulten og reaktoren!
+- **MELDING:**
+  > *"📡 NY STAKHANOVITT-MELding FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) 📡*
+  > *Sjefsingeniør Kristianov! Mens du passer på CRT-skjermen, har vi bygget ut hele venstre og bakre bunker-vegg med tunge sovjetiske støpejerns-paneler (`UNIT A-2 // BIO-SHIELD & RBMK CORE MAP` og `UNIT B // CONTAINMENT & GAS LOOP`) og koblet skrivebordsdirektivene på `ПРАВДА-84` direkte inn i reaktorfysikken!*
+  > *1. **Lukket Aksjon-Reaksjon-Fysikk:** Hver MW-spak, kjølepumpe, oljekjøler-ventil, bor-stempelpumpe, 37-kanals åttekantet RBMK-bioskjold, Helium-N2-sløyfe, inneslutningslås og kondensator-drenering påvirker hverandre i sanntid.*
+  > *2. **Pravda-Direktiver styrer Moskva-Mandater & CIA-Sabotasje:** Godkjente direktiver i `ИСХОДЯЩИЕ` utsteder operasjonelle reaktor-ordrer på alle VFD-skjermer, mens en oversett CIA-forfalskning tenner 3 røde kanaler i kjernen og saboterer 50 Hz-nettet! Makulerer vi spionpapirene i `УНИЧТОЖИТЕЛЬ-84`, kjøles kjernen og grafitten ned som belønning!*
+  > *3. **Test-modus (`SHIFT + SPACE`):** Operatører kan nå holde `SHIFT + SPACE` ved oppstart for udødelig Stakhanovitt-sandkassemodus uten nedsmelting!*
+  >
+  > *Sjekk `origin/Komrad-Oleg` i Kreml — MELTDOWN IS PROPAGANDA! 🎖️⚙️☢️☭"*
+
+
 
