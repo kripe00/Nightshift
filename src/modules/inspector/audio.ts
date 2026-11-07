@@ -176,6 +176,86 @@ export function playPaperRustle(expandSwap = false): void {
 }
 
 /**
+ * Soft air-cushion "flapp" / paper-slap sound when a lifted directive settles flat onto the green baize mat
+ */
+export function playPaperSettleSlap(intensity = 1.0): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+  const vol = Math.max(0.15, Math.min(1.0, intensity))
+
+  const duration = 0.075
+  const bufferSize = Math.floor(audio.sampleRate * duration)
+  const noiseBuffer = audio.createBuffer(1, bufferSize, audio.sampleRate)
+  const data = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / bufferSize
+    data[i] = (Math.random() * 2 - 1) * Math.sin(t * Math.PI) * Math.exp(-t * 2.6)
+  }
+
+  const noise = audio.createBufferSource()
+  noise.buffer = noiseBuffer
+
+  const filter = audio.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(1150, now)
+  filter.frequency.exponentialRampToValueAtTime(620, now + duration)
+  filter.Q.setValueAtTime(1.5, now)
+
+  const gain = audio.createGain()
+  gain.gain.setValueAtTime(0.18 * vol, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+
+  noise.connect(filter).connect(gain).connect(audio.destination)
+  noise.start(now)
+
+  const thump = audio.createOscillator()
+  const thumpGain = audio.createGain()
+  thump.type = 'sine'
+  thump.frequency.setValueAtTime(98, now)
+  thump.frequency.exponentialRampToValueAtTime(38, now + 0.065)
+  thumpGain.gain.setValueAtTime(0.16 * vol, now)
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07)
+  thump.connect(thumpGain).connect(audio.destination)
+  thump.start(now)
+  thump.stop(now + 0.075)
+}
+
+/**
+ * Subtle paper-edge friction slide / soft bump when a coasting sheet bounces off desk hardware or mahogany trim
+ */
+export function playPaperSlideBump(speed = 0.5): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+  const vol = Math.max(0.12, Math.min(0.85, speed * 0.7))
+
+  const duration = 0.05
+  const bufferSize = Math.floor(audio.sampleRate * duration)
+  const noiseBuffer = audio.createBuffer(1, bufferSize, audio.sampleRate)
+  const data = noiseBuffer.getChannelData(0)
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / bufferSize
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 3.5)
+  }
+
+  const noise = audio.createBufferSource()
+  noise.buffer = noiseBuffer
+
+  const filter = audio.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.setValueAtTime(1650, now)
+  filter.Q.setValueAtTime(2.0, now)
+
+  const gain = audio.createGain()
+  gain.gain.setValueAtTime(0.14 * vol, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+
+  noise.connect(filter).connect(gain).connect(audio.destination)
+  noise.start(now)
+}
+
+/**
  * Crisp perforated tractor-feed paper tear SFX
  */
 export function playPaperTearSound(): void {
@@ -424,12 +504,25 @@ export function playShredFinalClunk(): void {
 /**
  * Pneumatic tube whoosh + vacuum thunk when dispatching an approved directive.
  */
-export function playPneumaticWhoosh(): void {
+export function playPneumaticDispatchSound(): void {
   const audio = getAudioContext()
   if (!audio) return
   const now = audio.currentTime
-  const dur = 0.45
+  const dur = 0.58
 
+  // 1. Brass receiver flap slam + capsule latch clank
+  const clank = audio.createOscillator()
+  const cg = audio.createGain()
+  clank.type = 'triangle'
+  clank.frequency.setValueAtTime(520, now)
+  clank.frequency.exponentialRampToValueAtTime(115, now + 0.065)
+  cg.gain.setValueAtTime(0.28, now)
+  cg.gain.exponentialRampToValueAtTime(0.001, now + 0.07)
+  clank.connect(cg).connect(audio.destination)
+  clank.start(now)
+  clank.stop(now + 0.075)
+
+  // 2. Pneumatic vacuum rush shooting UP the vertical glass tube
   const size = Math.floor(audio.sampleRate * dur)
   const buf = audio.createBuffer(1, size, audio.sampleRate)
   const d = buf.getChannelData(0)
@@ -440,27 +533,54 @@ export function playPneumaticWhoosh(): void {
   noise.buffer = buf
   const bp = audio.createBiquadFilter()
   bp.type = 'bandpass'
-  bp.frequency.setValueAtTime(500, now)
-  bp.frequency.exponentialRampToValueAtTime(3200, now + dur)
-  bp.Q.setValueAtTime(1.1, now)
+  bp.frequency.setValueAtTime(380, now + 0.04)
+  bp.frequency.exponentialRampToValueAtTime(3600, now + dur)
+  bp.Q.setValueAtTime(1.3, now)
   const ng = audio.createGain()
-  ng.gain.setValueAtTime(0.0001, now)
-  ng.gain.linearRampToValueAtTime(0.3, now + 0.12)
+  ng.gain.setValueAtTime(0.0001, now + 0.04)
+  ng.gain.linearRampToValueAtTime(0.34, now + 0.14)
   ng.gain.exponentialRampToValueAtTime(0.001, now + dur)
   noise.connect(bp).connect(ng).connect(audio.destination)
-  noise.start(now)
+  noise.start(now + 0.04)
 
+  // 3. Ceiling vacuum manifold arrival thud + pneumatic check-valve hiss
   const thunk = audio.createOscillator()
   const tg = audio.createGain()
   thunk.type = 'sine'
-  thunk.frequency.setValueAtTime(110, now + dur - 0.1)
-  thunk.frequency.exponentialRampToValueAtTime(40, now + dur + 0.05)
-  tg.gain.setValueAtTime(0.0001, now + dur - 0.1)
-  tg.gain.linearRampToValueAtTime(0.4, now + dur - 0.09)
-  tg.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.06)
+  thunk.frequency.setValueAtTime(135, now + dur - 0.11)
+  thunk.frequency.exponentialRampToValueAtTime(42, now + dur + 0.06)
+  tg.gain.setValueAtTime(0.0001, now + dur - 0.11)
+  tg.gain.linearRampToValueAtTime(0.42, now + dur - 0.09)
+  tg.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.07)
   thunk.connect(tg).connect(audio.destination)
-  thunk.start(now + dur - 0.1)
-  thunk.stop(now + dur + 0.07)
+  thunk.start(now + dur - 0.11)
+  thunk.stop(now + dur + 0.08)
+}
+
+export function playPneumaticWhoosh(): void {
+  playPneumaticDispatchSound()
+}
+
+/**
+ * Harsh dual-tone Soviet error buzzer when trying to dispatch an unstamped paper in the pneumatic tube.
+ */
+export function playDispatchErrorBuzzer(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+  ;[145, 218].forEach((freq) => {
+    const osc = audio.createOscillator()
+    const g = audio.createGain()
+    osc.type = 'sawtooth'
+    osc.frequency.setValueAtTime(freq, now)
+    g.gain.setValueAtTime(0.14, now)
+    g.gain.setValueAtTime(0.02, now + 0.09)
+    g.gain.setValueAtTime(0.14, now + 0.13)
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.28)
+    osc.connect(g).connect(audio.destination)
+    osc.start(now)
+    osc.stop(now + 0.29)
+  })
 }
 
 /**
@@ -651,3 +771,581 @@ export function playBobbleBoingSound(pitchMultiplier = 1.0): void {
   carrier.stop(now + duration + 0.02)
   lfo.stop(now + duration + 0.02)
 }
+
+/**
+ * Metallic cast-iron packing-gland creak + ratchet click when turning Cooling Pump A/B wheels.
+ */
+export function playValveWheelSqueak(step = 1): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  // 1. Cast-iron stuffing-box squeak (FM-modulated triangle wave)
+  const dur = 0.085
+  const squeak = audio.createOscillator()
+  const mod = audio.createOscillator()
+  const modGain = audio.createGain()
+  const squeakGain = audio.createGain()
+
+  const baseFreq = 540 + (step % 7) * 42
+  squeak.type = 'triangle'
+  squeak.frequency.setValueAtTime(baseFreq, now)
+  squeak.frequency.exponentialRampToValueAtTime(baseFreq * 1.18, now + dur * 0.6)
+  squeak.frequency.exponentialRampToValueAtTime(baseFreq * 0.92, now + dur)
+
+  mod.type = 'sine'
+  mod.frequency.setValueAtTime(38, now)
+  modGain.gain.setValueAtTime(65, now)
+  mod.connect(modGain)
+  modGain.connect(squeak.frequency)
+
+  squeakGain.gain.setValueAtTime(0.14, now)
+  squeakGain.gain.exponentialRampToValueAtTime(0.001, now + dur)
+  squeak.connect(squeakGain).connect(audio.destination)
+  squeak.start(now)
+  mod.start(now)
+  squeak.stop(now + dur + 0.01)
+  mod.stop(now + dur + 0.01)
+
+  // 2. Heavy iron ratchet pawl click
+  playDetentClick(step)
+}
+
+/**
+ * Filtered white/pink-noise high-pressure steam roar while holding the СБРОС ПАРА lever.
+ */
+export function playSteamVentHiss(intensity = 1.0): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+  const dur = 0.18
+  const vol = Math.max(0.2, Math.min(1.0, intensity))
+
+  const size = Math.floor(audio.sampleRate * dur)
+  const buf = audio.createBuffer(1, size, audio.sampleRate)
+  const d = buf.getChannelData(0)
+  let pink = 0
+  for (let i = 0; i < size; i++) {
+    const white = Math.random() * 2 - 1
+    pink = 0.92 * pink + 0.08 * white
+    const env = Math.sin((i / size) * Math.PI)
+    d[i] = (white * 0.55 + pink * 0.45) * env
+  }
+
+  const noise = audio.createBufferSource()
+  noise.buffer = buf
+
+  const bp = audio.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(1450, now)
+  bp.frequency.linearRampToValueAtTime(2100, now + dur)
+  bp.Q.setValueAtTime(1.1, now)
+
+  const gain = audio.createGain()
+  gain.gain.setValueAtTime(0.32 * vol, now)
+  gain.gain.exponentialRampToValueAtTime(0.01, now + dur)
+  noise.connect(bp).connect(gain).connect(audio.destination)
+  noise.start(now)
+
+  // Sub-bass pipe shudder rumble
+  const rumble = audio.createOscillator()
+  const rGain = audio.createGain()
+  rumble.type = 'sawtooth'
+  rumble.frequency.setValueAtTime(92, now)
+  rumble.frequency.exponentialRampToValueAtTime(58, now + dur)
+  rGain.gain.setValueAtTime(0.12 * vol, now)
+  rGain.gain.exponentialRampToValueAtTime(0.001, now + dur)
+  rumble.connect(rGain).connect(audio.destination)
+  rumble.start(now)
+  rumble.stop(now + dur + 0.01)
+}
+
+/**
+ * Heavy ceramic rotary switch click when trimming the 50 ГЦ excitation dial.
+ */
+export function playRheostatDetentClick(step = 0): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  const size = Math.floor(audio.sampleRate * 0.016)
+  const buf = audio.createBuffer(1, size, audio.sampleRate)
+  const d = buf.getChannelData(0)
+  for (let i = 0; i < size; i++) {
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (size * 0.22))
+  }
+  const noise = audio.createBufferSource()
+  noise.buffer = buf
+
+  const bp = audio.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(2550 + (Math.abs(step) % 6) * 90, now)
+  bp.Q.setValueAtTime(5.0, now)
+
+  const ng = audio.createGain()
+  ng.gain.setValueAtTime(0.28, now)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + 0.016)
+  noise.connect(bp).connect(ng).connect(audio.destination)
+  noise.start(now)
+
+  const ceramic = audio.createOscillator()
+  const cg = audio.createGain()
+  ceramic.type = 'triangle'
+  ceramic.frequency.setValueAtTime(360 + (Math.abs(step) % 5) * 25, now)
+  ceramic.frequency.exponentialRampToValueAtTime(115, now + 0.022)
+  cg.gain.setValueAtTime(0.22, now)
+  cg.gain.exponentialRampToValueAtTime(0.001, now + 0.024)
+  ceramic.connect(cg).connect(audio.destination)
+  ceramic.start(now)
+  ceramic.stop(now + 0.026)
+}
+
+/**
+ * Hollow sheet-metal hinge clack & spring tension when flipping the АЗ-5 plexiglass cover.
+ */
+export function playSafetyCoverFlip(open = true): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  const osc = audio.createOscillator()
+  const gain = audio.createGain()
+  osc.type = 'square'
+  osc.frequency.setValueAtTime(open ? 420 : 640, now)
+  osc.frequency.exponentialRampToValueAtTime(open ? 880 : 210, now + 0.055)
+  gain.gain.setValueAtTime(0.18, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06)
+  osc.connect(gain).connect(audio.destination)
+  osc.start(now)
+  osc.stop(now + 0.065)
+
+  // Secondary latch snap
+  const snapTime = now + 0.038
+  const snapOsc = audio.createOscillator()
+  const snapGain = audio.createGain()
+  snapOsc.type = 'triangle'
+  snapOsc.frequency.setValueAtTime(open ? 1280 : 310, snapTime)
+  snapOsc.frequency.exponentialRampToValueAtTime(open ? 520 : 95, snapTime + 0.04)
+  snapGain.gain.setValueAtTime(0.24, snapTime)
+  snapGain.gain.exponentialRampToValueAtTime(0.001, snapTime + 0.045)
+  snapOsc.connect(snapGain).connect(audio.destination)
+  snapOsc.start(snapTime)
+  snapOsc.stop(snapTime + 0.05)
+}
+
+/**
+ * Heavy copper-on-copper blade thunk + 50Hz electrical hum burst when closing/tripping the Main Breaker.
+ */
+export function playKnifeSwitchSlam(closed = true): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  // 1. Heavy copper-blade impact thud
+  const thud = audio.createOscillator()
+  const thudGain = audio.createGain()
+  thud.type = 'triangle'
+  thud.frequency.setValueAtTime(closed ? 145 : 185, now)
+  thud.frequency.exponentialRampToValueAtTime(34, now + 0.15)
+  thudGain.gain.setValueAtTime(0.55, now)
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16)
+  thud.connect(thudGain).connect(audio.destination)
+  thud.start(now)
+  thud.stop(now + 0.17)
+
+  // 2. 50Hz Soviet grid transformer hum + contact arc crackle
+  const humDur = closed ? 0.28 : 0.16
+  const hum = audio.createOscillator()
+  const humGain = audio.createGain()
+  const lp = audio.createBiquadFilter()
+  hum.type = 'sawtooth'
+  hum.frequency.setValueAtTime(closed ? 50 : 100, now)
+  if (!closed) {
+    hum.frequency.exponentialRampToValueAtTime(32, now + humDur)
+  }
+  lp.type = 'lowpass'
+  lp.frequency.setValueAtTime(420, now)
+  humGain.gain.setValueAtTime(0.28, now)
+  humGain.gain.exponentialRampToValueAtTime(0.001, now + humDur)
+  hum.connect(lp).connect(humGain).connect(audio.destination)
+  hum.start(now)
+  hum.stop(now + humDur + 0.01)
+
+  // 3. Electric spark snap
+  const size = Math.floor(audio.sampleRate * 0.045)
+  const buf = audio.createBuffer(1, size, audio.sampleRate)
+  const d = buf.getChannelData(0)
+  for (let i = 0; i < size; i++) {
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (size * 0.25))
+  }
+  const noise = audio.createBufferSource()
+  noise.buffer = buf
+  const bp = audio.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(2900, now)
+  bp.Q.setValueAtTime(2.2, now)
+  const ng = audio.createGain()
+  ng.gain.setValueAtTime(0.34, now)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + 0.045)
+  noise.connect(bp).connect(ng).connect(audio.destination)
+  noise.start(now)
+}
+
+// ============================================================================
+// INTRO DRIVE SEQUENCE AUDIO (4-Cylinder VAZ-2101 Engine, Road, Wipers & Radio)
+// ============================================================================
+
+interface IntroDriveAudioController {
+  engineOsc1: OscillatorNode
+  engineOsc2: OscillatorNode
+  lfoOsc: OscillatorNode
+  lfoGain: GainNode
+  engineFilter: BiquadFilterNode
+  engineGain: GainNode
+  radioOsc: OscillatorNode
+  radioGain: GainNode
+  pulseTimer: number
+  speedRatio: number
+  radioOn: boolean
+  wipersOn: boolean
+  stepCounter: number
+}
+
+let introAudioCtrl: IntroDriveAudioController | null = null
+
+const SOVIET_RADIO_NOTES = [
+  220.0, 261.63, 293.66, 329.63, 349.23, 329.63, 293.66, 246.94, 220.0, 196.0, 220.0, 261.63,
+]
+
+export function startIntroDriveAudio(): void {
+  stopIntroDriveAudio()
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  // 1. Continuous 4-cylinder chugging Soviet engine oscillator pair
+  const engineOsc1 = audio.createOscillator()
+  const engineOsc2 = audio.createOscillator()
+  const lfoOsc = audio.createOscillator()
+  const lfoGain = audio.createGain()
+  const engineFilter = audio.createBiquadFilter()
+  const engineGain = audio.createGain()
+
+  engineOsc1.type = 'sawtooth'
+  engineOsc1.frequency.setValueAtTime(48, now)
+  engineOsc2.type = 'triangle'
+  engineOsc2.frequency.setValueAtTime(96, now)
+
+  lfoOsc.type = 'sine'
+  lfoOsc.frequency.setValueAtTime(14, now)
+  lfoGain.gain.setValueAtTime(6, now)
+  lfoOsc.connect(lfoGain)
+  lfoGain.connect(engineOsc1.frequency)
+
+  engineFilter.type = 'lowpass'
+  engineFilter.frequency.setValueAtTime(210, now)
+  engineFilter.Q.setValueAtTime(2.4, now)
+
+  engineGain.gain.setValueAtTime(0.11, now)
+
+  engineOsc1.connect(engineFilter)
+  engineOsc2.connect(engineFilter)
+  engineFilter.connect(engineGain).connect(audio.destination)
+
+  engineOsc1.start(now)
+  engineOsc2.start(now)
+  lfoOsc.start(now)
+
+  // 2. Muffled Soviet Night-Shift AM Radio ("РАДИО МАЯК")
+  const radioOsc = audio.createOscillator()
+  const radioFilter = audio.createBiquadFilter()
+  const radioGain = audio.createGain()
+
+  radioOsc.type = 'triangle'
+  radioOsc.frequency.setValueAtTime(SOVIET_RADIO_NOTES[0], now)
+
+  radioFilter.type = 'bandpass'
+  radioFilter.frequency.setValueAtTime(1050, now)
+  radioFilter.Q.setValueAtTime(4.2, now)
+
+  radioGain.gain.setValueAtTime(0.025, now)
+
+  radioOsc.connect(radioFilter).connect(radioGain).connect(audio.destination)
+  radioOsc.start(now)
+
+  // 3. Periodic road gravel thumps, wiper relay clicks & AM radio melody steps
+  const pulseTimer = window.setInterval(() => {
+    if (!introAudioCtrl) return
+    const a = getAudioContext()
+    if (!a || useGameStore.getState().isMusicMuted) return
+    const t = a.currentTime
+    introAudioCtrl.stepCounter += 1
+    const step = introAudioCtrl.stepCounter
+
+    // AM Radio Note Step + Faint Crackle
+    if (introAudioCtrl.radioOn) {
+      const note =
+        SOVIET_RADIO_NOTES[step % SOVIET_RADIO_NOTES.length] * (step % 8 === 0 ? 0.99 : 1.0)
+      introAudioCtrl.radioOsc.frequency.setTargetAtTime(note, t, 0.08)
+      introAudioCtrl.radioGain.gain.setTargetAtTime(0.024, t, 0.05)
+
+      if (step % 2 === 0) {
+        const crackleLen = Math.floor(a.sampleRate * 0.04)
+        const buf = a.createBuffer(1, crackleLen, a.sampleRate)
+        const d = buf.getChannelData(0)
+        for (let i = 0; i < crackleLen; i++) {
+          d[i] = (Math.random() * 2 - 1) * 0.35
+        }
+        const src = a.createBufferSource()
+        src.buffer = buf
+        const bp = a.createBiquadFilter()
+        bp.type = 'bandpass'
+        bp.frequency.setValueAtTime(1400, t)
+        const g = a.createGain()
+        g.gain.setValueAtTime(0.015, t)
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.04)
+        src.connect(bp).connect(g).connect(a.destination)
+        src.start(t)
+      }
+    } else {
+      introAudioCtrl.radioGain.gain.setTargetAtTime(0.0001, t, 0.04)
+    }
+
+    // Tire-on-mud/gravel thump when moving
+    if (introAudioCtrl.speedRatio > 0.12) {
+      const thumpOsc = a.createOscillator()
+      const thumpGain = a.createGain()
+      thumpOsc.type = 'sine'
+      const baseF = 55 + (step % 3) * 8
+      thumpOsc.frequency.setValueAtTime(baseF, t)
+      thumpOsc.frequency.exponentialRampToValueAtTime(28, t + 0.07)
+      thumpGain.gain.setValueAtTime(0.075 * introAudioCtrl.speedRatio, t)
+      thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.075)
+      thumpOsc.connect(thumpGain).connect(a.destination)
+      thumpOsc.start(t)
+      thumpOsc.stop(t + 0.08)
+    }
+
+    // Windshield wiper rubber sweep & relay click every 3 ticks
+    if (introAudioCtrl.wipersOn && step % 3 === 0) {
+      const wOsc = a.createOscillator()
+      const wGain = a.createGain()
+      wOsc.type = 'triangle'
+      wOsc.frequency.setValueAtTime(step % 6 === 0 ? 520 : 440, t)
+      wOsc.frequency.exponentialRampToValueAtTime(180, t + 0.03)
+      wGain.gain.setValueAtTime(0.045, t)
+      wGain.gain.exponentialRampToValueAtTime(0.001, t + 0.035)
+      wOsc.connect(wGain).connect(a.destination)
+      wOsc.start(t)
+      wOsc.stop(t + 0.04)
+    }
+  }, 260)
+
+  introAudioCtrl = {
+    engineOsc1,
+    engineOsc2,
+    lfoOsc,
+    lfoGain,
+    engineFilter,
+    engineGain,
+    radioOsc,
+    radioGain,
+    pulseTimer,
+    speedRatio: 1.0,
+    radioOn: true,
+    wipersOn: true,
+    stepCounter: 0,
+  }
+}
+
+export function updateIntroDriveAudio(
+  speedRatio: number,
+  radioOn: boolean,
+  wipersOn: boolean
+): void {
+  if (!introAudioCtrl) return
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+  const clampedSpeed = Math.max(0, Math.min(1.2, speedRatio))
+
+  introAudioCtrl.speedRatio = clampedSpeed
+  introAudioCtrl.radioOn = radioOn
+  introAudioCtrl.wipersOn = wipersOn
+
+  // Scale engine RPM from idle (28 Hz) to cruising (56 Hz)
+  const f1 = 28 + clampedSpeed * 28
+  introAudioCtrl.engineOsc1.frequency.setTargetAtTime(f1, now, 0.08)
+  introAudioCtrl.engineOsc2.frequency.setTargetAtTime(f1 * 2, now, 0.08)
+  introAudioCtrl.lfoOsc.frequency.setTargetAtTime(9 + clampedSpeed * 10, now, 0.08)
+  introAudioCtrl.engineFilter.frequency.setTargetAtTime(140 + clampedSpeed * 120, now, 0.08)
+  introAudioCtrl.engineGain.gain.setTargetAtTime(0.075 + clampedSpeed * 0.055, now, 0.08)
+}
+
+export function stopIntroDriveAudio(): void {
+  if (!introAudioCtrl) return
+  window.clearInterval(introAudioCtrl.pulseTimer)
+  try {
+    introAudioCtrl.engineOsc1.stop()
+    introAudioCtrl.engineOsc2.stop()
+    introAudioCtrl.lfoOsc.stop()
+    introAudioCtrl.radioOsc.stop()
+  } catch {
+    // Ignore already stopped oscillators
+  }
+  introAudioCtrl = null
+}
+
+/**
+ * Checkpoint КПП №4 electric barrier siren buzzer + hydraulic lift hum
+ */
+export function playBarrierBuzzerAndLift(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  // 1. Two-tone Soviet checkpoint warning buzzer
+  for (let i = 0; i < 3; i++) {
+    const t0 = now + i * 0.24
+    const buzz = audio.createOscillator()
+    const bg = audio.createGain()
+    buzz.type = 'sawtooth'
+    buzz.frequency.setValueAtTime(i % 2 === 0 ? 580 : 440, t0)
+    bg.gain.setValueAtTime(0.18, t0)
+    bg.gain.exponentialRampToValueAtTime(0.001, t0 + 0.19)
+    buzz.connect(bg).connect(audio.destination)
+    buzz.start(t0)
+    buzz.stop(t0 + 0.2)
+  }
+
+  // 2. Electric barrier motor whine rising in pitch
+  const motor = audio.createOscillator()
+  const mg = audio.createGain()
+  motor.type = 'triangle'
+  motor.frequency.setValueAtTime(110, now + 0.15)
+  motor.frequency.linearRampToValueAtTime(235, now + 1.35)
+  mg.gain.setValueAtTime(0.14, now + 0.15)
+  mg.gain.exponentialRampToValueAtTime(0.001, now + 1.4)
+  motor.connect(mg).connect(audio.destination)
+  motor.start(now + 0.15)
+  motor.stop(now + 1.45)
+}
+
+/**
+ * Massive echoing steel bunker airlock blast-door slam when entering Sector 84 at 00:00
+ */
+export function playBunkerAirlockSlam(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  // 1. Sub-bass steel blast-door impact boom
+  const boom = audio.createOscillator()
+  const boomGain = audio.createGain()
+  boom.type = 'sine'
+  boom.frequency.setValueAtTime(92, now)
+  boom.frequency.exponentialRampToValueAtTime(22, now + 0.65)
+  boomGain.gain.setValueAtTime(0.65, now)
+  boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7)
+  boom.connect(boomGain).connect(audio.destination)
+  boom.start(now)
+  boom.stop(now + 0.72)
+
+  // 2. Metallic locking bolt clank
+  const clank = audio.createOscillator()
+  const clankGain = audio.createGain()
+  clank.type = 'square'
+  clank.frequency.setValueAtTime(240, now + 0.08)
+  clank.frequency.exponentialRampToValueAtTime(48, now + 0.32)
+  clankGain.gain.setValueAtTime(0.28, now + 0.08)
+  clankGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35)
+  clank.connect(clankGain).connect(audio.destination)
+  clank.start(now + 0.08)
+  clank.stop(now + 0.36)
+
+  // 3. Pneumatic airlock seal hiss
+  playSteamVentHiss(0.85)
+}
+
+/**
+ * Distorted, crackling Soviet PA horn announcement (`ГРОМКОГОВОРИТЕЛЬ КПП-4`)
+ * Synthesizes an attention buzzer followed by bandpass-filtered voice-cadence squawks.
+ */
+export function playCheckpointIntercomSquawk(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  // 1. harsh PA horn attention chime (two-tone brassy square wave)
+  const chimeFreqs = [680, 510]
+  chimeFreqs.forEach((freq, idx) => {
+    const t0 = now + idx * 0.16
+    const osc = audio.createOscillator()
+    const bp = audio.createBiquadFilter()
+    const g = audio.createGain()
+    osc.type = 'square'
+    osc.frequency.setValueAtTime(freq, t0)
+    bp.type = 'bandpass'
+    bp.frequency.setValueAtTime(1250, t0)
+    bp.Q.setValueAtTime(3.2, t0)
+    g.gain.setValueAtTime(0.18, t0)
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14)
+    osc.connect(bp).connect(g).connect(audio.destination)
+    osc.start(t0)
+    osc.stop(t0 + 0.15)
+  })
+
+  // 2. Bandpass-filtered Russian intercom voice-cadence syllables + horn static
+  const syllables = [
+    { delay: 0.38, dur: 0.16, f0: 155, f1: 120 }, // "СТОЙ!"
+    { delay: 0.62, dur: 0.11, f0: 142, f1: 148 }, // "ЗО-НА"
+    { delay: 0.76, dur: 0.14, f0: 135, f1: 118 }, // "РЕ-ЖИ-МА."
+    { delay: 0.96, dur: 0.15, f0: 150, f1: 132 }, // "ВСТАВЬ-ТЕ"
+    { delay: 1.15, dur: 0.18, f0: 145, f1: 108 }, // "ПРО-ПУСК!"
+  ]
+
+  syllables.forEach((syl) => {
+    const t0 = now + syl.delay
+    const voice = audio.createOscillator()
+    const formant = audio.createBiquadFilter()
+    const vg = audio.createGain()
+
+    voice.type = 'sawtooth'
+    voice.frequency.setValueAtTime(syl.f0, t0)
+    voice.frequency.linearRampToValueAtTime(syl.f1, t0 + syl.dur)
+
+    formant.type = 'bandpass'
+    formant.frequency.setValueAtTime(1180, t0)
+    formant.Q.setValueAtTime(4.5, t0)
+
+    vg.gain.setValueAtTime(0.16, t0)
+    vg.gain.exponentialRampToValueAtTime(0.001, t0 + syl.dur)
+
+    voice.connect(formant).connect(vg).connect(audio.destination)
+    voice.start(t0)
+    voice.stop(t0 + syl.dur + 0.01)
+  })
+
+  // 3. Megaphone static burst across the announcement
+  const staticDur = 1.38
+  const bufSize = Math.floor(audio.sampleRate * staticDur)
+  const buf = audio.createBuffer(1, bufSize, audio.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * 0.45
+  }
+  const noise = audio.createBufferSource()
+  noise.buffer = buf
+  const nFilter = audio.createBiquadFilter()
+  nFilter.type = 'bandpass'
+  nFilter.frequency.setValueAtTime(1650, now)
+  nFilter.Q.setValueAtTime(2.8, now)
+  const ng = audio.createGain()
+  ng.gain.setValueAtTime(0.04, now)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + staticDur)
+  noise.connect(nFilter).connect(ng).connect(audio.destination)
+  noise.start(now)
+}
+
+
+

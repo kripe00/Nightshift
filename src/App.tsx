@@ -7,6 +7,7 @@ import {
 } from './modules/reactor/soundtrackPlayer'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
+import { MainMenuOverlay } from './shared/MainMenuOverlay'
 import { useGameStore } from './shared/useGameStore'
 
 export function App() {
@@ -70,23 +71,35 @@ export function App() {
     powerAllocation.facility,
   ])
 
-  // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase
+  // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase.
+  // Holding Shift + Space starts (or switches into) Endless Sandbox / No-Fail Test Mode (isGodMode = true).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' || e.code === 'Enter') {
         const s = useGameStore.getState()
+        const wantSandbox = e.shiftKey && e.code === 'Space'
         if (s.phase === 'boot') {
           e.preventDefault()
           playSwitchClank(true)
           startSoundtrack()
           updateSoundtrackState(false, s.isMusicMuted)
           s.startShift()
+          if (wantSandbox) {
+            s.setGodMode(true)
+          }
         } else if (s.phase !== 'playing') {
           e.preventDefault()
           playSwitchClank(true)
           startSoundtrack()
           updateSoundtrackState(false, s.isMusicMuted)
           s.resetShift()
+          if (wantSandbox) {
+            s.setGodMode(true)
+          }
+        } else if (wantSandbox) {
+          e.preventDefault()
+          playSwitchClank(true)
+          s.setGodMode(!s.isGodMode)
         }
       }
     }
@@ -96,6 +109,7 @@ export function App() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#080b09] select-none">
+      <MainMenuOverlay />
       <DebugMenu />
 
       {/* 100% True 3D First-Person Soviet Control Room Canvas (Locked dpr=1 + PCFSoftShadowMap for chiaroscuro 60 FPS micro-pixel aesthetic) */}
