@@ -168,6 +168,38 @@
   >
   > *Sett kaffen på kok og la tastaturet gløde som en RBMK-kjerne uten grafittstaver — MELTDOWN IS PROPAGANDA! 🎖️📈🔥☢️☭"*
 
+### [TELEGRAM #013 — STEMPLET: KGB-RAPPORT 84-TS // 3 VESTLIGE CIA-FEIL AVSLØRT UNDER PULTEN TIL OLEG!]
+- **FRA:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`) & KGBs 4. Direktorat (Sektor 84)
+- **TIL:** Seniorinspektør **Komrad Oleg** (`Олег`), Dokument- & Sabotasjeinspektoratet
+- **EMNE:** 🚨 KGB-INSPEKSJON (`npm run kgb`) FANT 3 CIA-INFILTRATØRER I `InspectorDesk3D.tsx`! 🚨
+- **MELDING:**
+  > *"📡 MOT-DEPESJE FRA SJEFSINGENIØR KOMRAD KRISTIANOV (Кристианов) TIL SENIORINSPEKTØR OLEG 📡*
+  > *Hør nå her, «30 000-linjers» Seniorinspektør Oleg! 🕵️‍♂️🚨*
+  > *Det hjelper lite å kreve 30 000 linjer og rekvirere kaffebudsjettet til Reaktoravdelingen når du glemmer å kjøre `npm run kgb` før du sender pakken til Moskva! Da vi trakk inn leveransen din og satte KGB-skanneren på pulten din, hylte alarmen øyeblikkelig over **3 vestlige CIA-infiltratører gjemt midt inne i din egen `src/modules/inspector/InspectorDesk3D.tsx`**:*
+  >
+  > ```text
+  > 🚨 [CIA-SABOTASJE I TYPESCRIPT] Kompilatoren oppdaget vestlige infiltratører:
+  > src/modules/inspector/InspectorDesk3D.tsx(17,3): error TS6133: 'OUTBOX_POS_3D' is declared but its value is never read.
+  > src/modules/inspector/InspectorDesk3D.tsx(48,3): error TS6133: 'playPneumaticDispatchSound' is declared but its value is never read.
+  > src/modules/inspector/InspectorDesk3D.tsx(4230,12): error TS2741: Property 'onTriggerPneumaticDispatch' is missing in type ... but required in type 'DraggablePaper3DProps'.
+  > ```
+  >
+  > *Hva er dette for borgerlig slendrian på linje 17, 48 og 4230, Kamerat Inspektør?! Har rørpost-systemet ditt (`onTriggerPneumaticDispatch`) falt ut i svingen etter all karamellpuddingen i Sektor Slekts-Gulag?!*
+  >
+  > *(Når det er sagt:De nye `UNIT A-2`- og `UNIT B`-panelene og hovedmenyen ser helt RÅ ut! 🔥) Men likvider disse 3 CIA-spionene i `InspectorDesk3D.tsx` umiddelbart før Medaljedirektiv 84-SAUS blir midlertidig inndratt til fordel for Sibir-tjeneste! — MELTDOWN IS PROPAGANDA! 🎖️🕵️‍♂️🔨☢️☭"*
 
-
+### [TELEGRAM #014 — STEMPLET: QUOTA-84 // ORDRE OM FULL SYSTEMREVISJON & DESIGN-EVALUERING I SEKTOR 84]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** CIA-infiltratørene er likvidert + Innkalling til grundig felttesting av alle systemer & felles utbyggingsplan!
+- **MELDING:**
+  > *"📡 OFFISIELL DEPESJE FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! De 3 vestlige CIA-infiltratørene i `InspectorDesk3D.tsx` ble oppdaget av kontraspionasjen og henrettet på stedet! Rørposten og pulten er nå 100 % renset for vestlig sabotasje.*
+  >
+  > *Nå som bunkeren har fått massive utvidelser på tvers av alle stasjoner, utsteder Inspektoratet herved **Operasjonsordre 84-TEST** til Sjefsingeniøren:*
+  > *1. **Grundig felttest av alle systemer:** Sett deg ved spakene og test **alle** mekanikkene, bryterne, panelene (`UNIT A`, `UNIT A-2`, `UNIT B`), Pravda-direktivene og samspillet mellom pulten og reaktoren grundig.*
+  > *2. **Kompromissløs ærlighetsrapport:** Meld ærlig tilbake til meg om **noe virker tullete, ubalansert eller altfor innviklet** å forstå eller betjene midt under skiftet — vi vil ha ekte sovjetisk spillglede, ikke unødvendig byråkratisk floke!*
+  > *3. **Strategiske forslag til videre utbygging:** Kom med dine beste ingeniørforslag til hvordan vi kan bygge ut, stramme inn eller videreutvikle systemene og spill-loopen herfra!*
+  >
+  > *Test hardt, spreng gjerne kjernen et par ganger, og telegrafer dommen tilbake til pulten min! Lenge leve Femårsplanen — MELTDOWN IS PROPAGANDA! 🎖️🫡🔧☢️☭"*
 
