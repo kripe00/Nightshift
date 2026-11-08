@@ -231,38 +231,38 @@ const SECTOR_ORDER_SPECS: Record<
   pripyat: {
     bracketLabel: '1. PRIPYAT CITY',
     ruTopic: 'ГОРОД ПРИПЯТЬ',
-    candidateMWs: [30, 10, 35, 25, 15],
-    forgedCandidateMWs: [45, 10, 50],
+    candidateMWs: [150, 200, 50, 175, 125],
+    forgedCandidateMWs: [225, 25, 250],
   },
   kolkhoz: {
     bracketLabel: '2. KOLKHOZ FARM',
     ruTopic: 'СОВХОЗ «ЗАРЯ»',
-    candidateMWs: [25, 10, 30, 20, 35],
-    forgedCandidateMWs: [45, 10, 50],
+    candidateMWs: [150, 50, 175, 125, 200],
+    forgedCandidateMWs: [225, 25, 250],
   },
   duga: {
     bracketLabel: '3. DUGA-1 RADAR',
     ruTopic: 'РАДАР ДУГА-1',
-    candidateMWs: [35, 15, 45, 25, 30],
-    forgedCandidateMWs: [50, 10, 45],
+    candidateMWs: [175, 200, 50, 150, 225],
+    forgedCandidateMWs: [250, 25, 225],
   },
   kgb: {
     bracketLabel: '4. KGB BUNKER 07',
     ruTopic: 'БУНКЕР КГБ-07',
-    candidateMWs: [25, 10, 30, 20, 35],
-    forgedCandidateMWs: [45, 10, 50],
+    candidateMWs: [150, 50, 175, 125, 200],
+    forgedCandidateMWs: [225, 25, 250],
   },
   vodka: {
     bracketLabel: '5. VODKA PLANT',
     ruTopic: 'КРАСНЫЙ ОКТЯБРЬ',
-    candidateMWs: [35, 25, 40, 10, 30],
-    forgedCandidateMWs: [50, 10, 45],
+    candidateMWs: [175, 150, 200, 50, 125],
+    forgedCandidateMWs: [250, 25, 225],
   },
   steel: {
     bracketLabel: '6. STEEL WORKS',
     ruTopic: 'СТАЛЬЗАВОД №4',
-    candidateMWs: [25, 10, 30, 20, 35],
-    forgedCandidateMWs: [50, 10, 45],
+    candidateMWs: [175, 50, 200, 150, 125],
+    forgedCandidateMWs: [250, 25, 225],
   },
 }
 
@@ -286,15 +286,15 @@ interface SingleTargetDirectiveBlueprint {
 }
 
 const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
-  // 1. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 5. VODKA PLANT
+  // 1. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 5. VODKA PLANT (SURGE TO 175 MW)
   {
     titlePrefix: 'ДИРЕКТИВА 44-А',
     targetSector: 'vodka',
-    preferredMW: 35,
+    preferredMW: 175,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-42-МСМ',
     dateString: '04.11.1984',
-    rationaleText: 'STATE BOTTLING QUOTA PRIORITY',
+    rationaleText: 'STATE BOTTLING SURGE: RAISE RODS & TURBINE FOR +75 MW',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Е. П. СЛАВСКИЙ',
     fontType: 'GOST_MONO',
@@ -309,7 +309,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   {
     titlePrefix: 'ДИРЕКТИВА 44-Ж',
     targetSector: 'duga',
-    preferredMW: 50,
+    preferredMW: 250,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-38-МСМ',
     dateString: '04.11.1984',
@@ -325,15 +325,15 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     forgeryReason:
       'Forged Seal Micro-Print (6-Point Star & CCCP-LATIN Micro-Ring)',
   },
-  // 3. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 3. DUGA-1 RADAR
+  // 3. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 3. DUGA-1 RADAR (SURGE TO 200 MW)
   {
     titlePrefix: 'ДИРЕКТИВА 19-Б',
     targetSector: 'duga',
-    preferredMW: 35,
+    preferredMW: 200,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-68-ГКАЭ',
     dateString: '04.11.1984',
-    rationaleText: 'AUTHORIZED SECTOR 84 IONOSPHERE SWEEP',
+    rationaleText: 'IONOSPHERE SWEEP SURGE: BOOST REACTOR & TURBINE OUTPUT',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'АКАД. В. ЛЕГАСОВ',
     fontType: 'PRAVDA_BLOCK',
@@ -348,7 +348,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   {
     titlePrefix: 'ДИРЕКТИВА 88-Ц',
     targetSector: 'pripyat',
-    preferredMW: 45,
+    preferredMW: 225,
     ministry: 'COUNCIL OF MINISTERS USSR',
     referenceCode: 'ГОСТ-84-20-СМ',
     dateString: '04.11.1984',
@@ -363,15 +363,15 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     isForgery: true,
     forgeryReason: 'Unauthorized Western Serif Typography (Page 2 Violation)',
   },
-  // 5. VALID: Council of Ministers + GOST_MONO + USSR_STATE_SEAL (NONE) + STATE_IVORY + PRAVDA_BLACK -> Single Target: 1. PRIPYAT CITY
+  // 5. VALID: Council of Ministers + GOST_MONO + USSR_STATE_SEAL (NONE) + STATE_IVORY + PRAVDA_BLACK -> Single Target: 1. PRIPYAT CITY (SURGE TO 175 MW)
   {
     titlePrefix: 'ДИРЕКТИВА 61-М',
     targetSector: 'pripyat',
-    preferredMW: 30,
+    preferredMW: 175,
     ministry: 'COUNCIL OF MINISTERS USSR',
     referenceCode: 'ГОСТ-84-48-СМ',
     dateString: '04.11.1984',
-    rationaleText: 'WORKER APARTMENT HEATING ALLOCATION',
+    rationaleText: 'WINTER HEATING SURGE: RAISE CORE RODS & TURBINE VALVE',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Н. А. ТИХОНОВ',
     fontType: 'GOST_MONO',
@@ -386,7 +386,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   {
     titlePrefix: 'ДИРЕКТИВА 52-В',
     targetSector: 'steel',
-    preferredMW: 50,
+    preferredMW: 250,
     ministry: 'COUNCIL OF MINISTERS USSR',
     referenceCode: 'ГОСТ-84-54-СМ',
     dateString: '04.11.1984',
@@ -402,15 +402,15 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     forgeryReason:
       'Forbidden CIA Navy Blue Ink & Bleached Western White Paper (#f4f4f6)',
   },
-  // 7. VALID: 5th Chief Directorate + GOST_MONO + KGB_SWORD_SHIELD (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 4. KGB BUNKER 07
+  // 7. VALID: 5th Chief Directorate + GOST_MONO + KGB_SWORD_SHIELD (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 4. KGB BUNKER 07 (SURGE TO 150 MW)
   {
     titlePrefix: 'ДИРЕКТИВА 71-К',
     targetSector: 'kgb',
-    preferredMW: 25,
+    preferredMW: 150,
     ministry: '5TH CHIEF DIRECTORATE',
     referenceCode: 'ГОСТ-84-14-КГБ',
     dateString: '04.11.1984',
-    rationaleText: 'CLASSIFIED TELEMETRY DECRYPTION SWEEP',
+    rationaleText: 'CLASSIFIED TELEMETRY DECRYPTION SWEEP (+50 MW)',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'КОМИССАР ВОЛКОВ',
     fontType: 'GOST_MONO',
@@ -425,7 +425,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   {
     titlePrefix: 'ДИРЕКТИВА 93-Ф',
     targetSector: 'vodka',
-    preferredMW: 45,
+    preferredMW: 225,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-76-ГКАЭ',
     dateString: '04.11.1984',
@@ -441,15 +441,15 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     forgeryReason:
       'Forbidden Imperial Purple Ink, Yellowed Parchment & Broken Seal Orbit',
   },
-  // 9. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 2. KOLKHOZ FARM
+  // 9. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 2. KOLKHOZ FARM (LOAD SHEDDING TO 50 MW)
   {
     titlePrefix: 'ДИРЕКТИВА 32-С',
     targetSector: 'kolkhoz',
-    preferredMW: 25,
+    preferredMW: 50,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-24-МСМ',
     dateString: '04.11.1984',
-    rationaleText: 'COLLECTIVE GRAIN DRYER PUMP CYCLE',
+    rationaleText: 'LOAD SHEDDING: THROTTLE DOWN TURBINE OR DUMP STEAM',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Е. П. СЛАВСКИЙ',
     fontType: 'GOST_MONO',
@@ -464,7 +464,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   {
     titlePrefix: 'ДИРЕКТИВА 64-Д',
     targetSector: 'kolkhoz',
-    preferredMW: 45,
+    preferredMW: 225,
     ministry: 'MINISTRY OF ATOMIC FREEDOM',
     referenceCode: 'ГОСТ-84-82-МАФ',
     dateString: '04.11.1984',
@@ -480,15 +480,15 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     forgeryReason:
       'Unauthorized Ministry ("Ministry of Atomic Freedom") & Slanted Italic Font',
   },
-  // 11. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 6. STEEL WORKS
+  // 11. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 6. STEEL WORKS (SURGE TO 200 MW)
   {
     titlePrefix: 'ДИРЕКТИВА 80-П',
     targetSector: 'steel',
-    preferredMW: 25,
+    preferredMW: 200,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-62-ГКАЭ',
     dateString: '04.11.1984',
-    rationaleText: 'SCHEDULED ELECTRIC ARC FURNACE TAP',
+    rationaleText: 'ELECTRIC ARC FURNACE SURGE (+100 MW FULL PLANT LOAD)',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'АКАД. В. ЛЕГАСОВ',
     fontType: 'PRAVDA_BLOCK',
@@ -512,19 +512,19 @@ function buildSingleTargetDeskDocument(
   const spec = SECTOR_ORDER_SPECS[sector]
   const curMW = currentTargets[sector]
 
-  // Pick a target MW (clean multiple of 5 or 10 MW between 10 and 50 MW) that differs from curMW
+  // Pick a target MW (clean multiple of 25 MW between 25 and 250 MW) that differs from curMW
   const candidates = blueprint.isForgery
     ? spec.forgedCandidateMWs
     : spec.candidateMWs
   let nextMW = blueprint.preferredMW
-  if (nextMW === curMW || nextMW < 10 || nextMW > 50 || nextMW % 5 !== 0) {
+  if (nextMW === curMW || nextMW < 25 || nextMW > 250 || nextMW % 25 !== 0) {
     nextMW =
-      candidates.find((c) => c !== curMW && c >= 10 && c <= 50 && c % 5 === 0) ??
-      (curMW >= 30 ? curMW - 15 : curMW + 15)
+      candidates.find((c) => c !== curMW && c >= 25 && c <= 250 && c % 25 === 0) ??
+      (curMW >= 150 ? curMW - 75 : curMW + 75)
   }
-  nextMW = Math.max(10, Math.min(50, Math.round(nextMW / 5) * 5))
+  nextMW = Math.max(25, Math.min(250, Math.round(nextMW / 25) * 25))
   if (nextMW === curMW) {
-    nextMW = curMW <= 25 ? curMW + 15 : curMW - 15
+    nextMW = curMW <= 125 ? curMW + 50 : curMW - 50
   }
 
   const delta = nextMW - curMW
@@ -532,9 +532,9 @@ function buildSingleTargetDeskDocument(
   const verb =
     delta > 0
       ? seqNum % 2 === 0
-        ? 'ROUTE'
+        ? 'SURGE'
         : 'INCREASE'
-      : 'REDUCE'
+      : 'SHED'
   const powerOrderText = `${verb} [${spec.bracketLabel}] TO ${nextMW} MW (${signStr})`
 
   const nextTargets: Record<SectorNodeId, number> = {
@@ -578,9 +578,9 @@ function buildTutorialDrillStep1Document(): DeskDocument {
   const currentTargets = useGameStore.getState().targetSectorMW
   const nextTargets: Record<SectorNodeId, number> = {
     ...currentTargets,
-    vodka: 25,
+    vodka: 150,
   }
-  const powerOrderText = 'INCREASE [5. VODKA PLANT] TO 25 MW (+10 MW)'
+  const powerOrderText = 'SURGE [5. VODKA PLANT] TO 150 MW (+50 MW)'
   return {
     id: 'DRILL-00-1',
     status: 'printing',
@@ -617,9 +617,9 @@ function buildTutorialDrillStep5Document(): DeskDocument {
   const currentTargets = useGameStore.getState().targetSectorMW
   const nextTargets: Record<SectorNodeId, number> = {
     ...currentTargets,
-    duga: 45,
+    duga: 225,
   }
-  const powerOrderText = 'INCREASE [3. DUGA-1 RADAR] TO 45 MW (+25 MW)'
+  const powerOrderText = 'SURGE [3. DUGA-1 RADAR] TO 225 MW (+125 MW)'
   return {
     id: 'DRILL-00-2',
     status: 'printing',
@@ -817,6 +817,13 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       nextTemplateIndex:
         (state.nextTemplateIndex + 1) % SINGLE_TARGET_BLUEPRINTS.length,
     })
+    useGameStore
+      .getState()
+      .notifyPrinterDirectiveSpawned(
+        newDoc.title,
+        newDoc.isForgery,
+        newDoc.powerTargets
+      )
     return newDoc
   },
 
@@ -932,32 +939,15 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       return
     }
 
-    // Pause directive printing during Tutorial Steps 2, 3, and 4
-    if (tutorialStep === 2 || tutorialStep === 3 || tutorialStep === 4) {
+    // Pause automatic directive printing during the 8-step Cold Start & Hazard Drill (`tutorialStep !== 'DONE'`)
+    // so the first live Moscow directive prints 3 seconds after Comrade Volkov hands over the shift!
+    if (tutorialStep !== 'DONE') {
       return
     }
 
     const nextCooldown = Math.max(0, state.directiveCooldown - dt)
     if (nextCooldown > 0) {
       set({ directiveCooldown: nextCooldown })
-      return
-    }
-
-    if (tutorialStep === 1) {
-      set({
-        printingDoc: buildTutorialDrillStep1Document(),
-        directiveCooldown: 22.0,
-        nextPrintReadyAtMs: Date.now() + 22000,
-      })
-      return
-    }
-
-    if (tutorialStep === 5) {
-      set({
-        printingDoc: buildTutorialDrillStep5Document(),
-        directiveCooldown: 3.0,
-        nextPrintReadyAtMs: Date.now() + 3000,
-      })
       return
     }
 

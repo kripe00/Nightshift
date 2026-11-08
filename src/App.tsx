@@ -15,6 +15,8 @@ export function App() {
   const phase = useGameStore((s) => s.phase)
   const tick = useGameStore((s) => s.tick)
   const isMusicMuted = useGameStore((s) => s.isMusicMuted)
+  const wePadHeld = useGameStore((s) => s.wePadHeld)
+  const wePadInspecting = useGameStore((s) => s.wePadInspecting)
 
   useEffect(() => {
     if (phase !== 'playing') return
@@ -116,6 +118,17 @@ export function App() {
     <div className="relative h-screen w-screen overflow-hidden bg-[#080b09] select-none">
       <MainMenuOverlay />
       <DebugMenu />
+
+      {/* Discreet WE-PAD 84 Control Hint Bar at Bottom of Screen */}
+      {phase === 'playing' && (
+        <div className="pointer-events-none fixed bottom-2.5 left-1/2 z-20 -translate-x-1/2 rounded border border-[#28b862]/70 bg-[#051209]/90 px-4 py-1 font-mono text-xs font-bold tracking-wider text-[#39ff14] shadow-lg">
+          {wePadHeld
+            ? wePadInspecting
+              ? '[TAB]: KOMPAKT SIDE-VISNING  |  [E]: LEGG NED WE-PAD  |  [1–6]: BYTT FANE'
+              : '[TAB]: SE NÆRMERE PÅ WE-PAD  |  [E]: LEGG NED WE-PAD  |  [1–6]: BYTT FANE'
+            : '[E]: PLUKK OPP WE-PAD 84'}
+        </div>
+      )}
 
       {/* 100% True 3D First-Person Soviet Control Room Canvas (Locked dpr=1 + PCFSoftShadowMap for chiaroscuro 60 FPS micro-pixel aesthetic) */}
       <Canvas

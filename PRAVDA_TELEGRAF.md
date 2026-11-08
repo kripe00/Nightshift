@@ -203,3 +203,17 @@
   >
   > *Test hardt, spreng gjerne kjernen et par ganger, og telegrafer dommen tilbake til pulten min! Lenge leve Femårsplanen — MELTDOWN IS PROPAGANDA! 🎖️🫡🔧☢️☭"*
 
+### [TELEGRAM #015 — STEMPLET: QUOTA-84 // NY 8-STEG RBMK-1000 TUTORIAL PÅ «WE-PAD 84», VOID/XENON-DRILL & HJUL-STYRING KLAR FOR FELTTEST!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Ordre om umiddelbar felttest av den nye 8-stegs opplæringen (`STEP 0–8`) på `WE-PAD 84` — sjekk om flyten og forklaringene gir 100 % mening!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Inspektoratet har nå ferdigstilt en full oppgradering av hele RBMK-1000-opplæringen, grensesnittet på det sovjetiske Atompunk-nettbrettet **`ЭЛЕКТРОНИКА МЫ-ПАД 84` (`WE-PAD 84`)** og presisjonsstyring på alle kontrollskapene (`UNIT B`, `UNIT A-2`, `UNIT A` og `UNIT C`):*
+  > *1. **8-Stegs Interaktiv RBMK-1000 Oppstarts- & Fare-Tutorial (`STEP 0–8`):** Kamerat Volkov guider nå operatøren steg for steg gjennom kaldstart av reaktoren — fra å plukke opp `WE-PAD 84` (`[E]`), starte `ГЦН 1–4` sirkulasjonspumper og fødevann (`UNIT B`), trekke kontrollstaver og slå på `AUTO REGULATOR (АР)` (`UNIT A-2`), bygge 60+ BAR damptrykk, spinne turbinen til 3000 RPM (`50.0 HZ`) og synkronisere `MAIN BREAKER` kl. 12 (`UNIT C`), balansere 600 MWe ut til de 6 substasjonene (`UNIT A`), og til slutt gjennomføre to praktiske katastrofe-øvelser mot **Positiv Void (`STEP 7`)** og **Xenon-135-forgiftning (`STEP 8`)** på det 37-kanals kjernebrettet!*
+  > *2. **Musehjul-styring (`Scroll Wheel`) på alle ratt og spaker:** Du kan nå bruke musehjulet direkte på alle håndhjul (`±5 %`, eller `Shift + Scroll` for `±1 %` finjustering), alle 6 MW-spaker (`±25 MW`) og av/på-brytere, i tillegg til forstørrede og krystallklare paneler på `UNIT B` og `UNIT A-2`!*
+  > *3. **`K.O.M.R.A.D.-84 // LIVE DISPATCH` etter tutorialen:** Så snart `STEP 8` er bestått, takker Kamerat Volkov for seg, Pravda-teleprinteren starter, og `K.O.M.R.A.D.-84` tar over som levende (og satirisk) reaktor-kommentator.*
+  >
+  > ***OPPDRAG TIL KRISTIANOV:** Sett deg i bunkeren og **test gjennom hele tutorialen fra start til slutt**! Se nøye etter om stegene, `ACTION:`/`WHY:`-forklaringene på `WE-PAD 84` og sammenhengen mellom `UNIT B -> UNIT A-2 -> UNIT C -> UNIT A` **gir 100 % mening** for en ny operatør, og telegrafer tilbake hva du synes! — MELTDOWN IS PROPAGANDA! 🎖️📟⚙️☢️☭"*
+
+

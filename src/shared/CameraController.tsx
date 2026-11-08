@@ -29,12 +29,12 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
   },
   reactor: {
     position: [-0.05, 1.24, 2.58],
-    target: [-1.72, 1.16, 3.12],
+    target: [-2.02, 1.15, 3.16],
     fov: 58,
   },
   power: {
     position: [0.0, 1.24, 2.68],
-    target: [-0.42, 1.16, 4.54],
+    target: [-0.42, 1.15, 4.98],
     fov: 58,
   },
   terminal: {
@@ -182,6 +182,19 @@ export const CameraController: React.FC = () => {
             // Ignore pointer lock security exceptions
           }
         }
+        return;
+      }
+
+      // When inspecting WE-PAD 84 up close ([TAB]), keys [1-6] switch WE-PAD tabs instead of jumping camera stations
+      if (
+        useGameStore.getState().wePadInspecting &&
+        (e.key === "1" ||
+          e.key === "2" ||
+          e.key === "3" ||
+          e.key === "4" ||
+          e.key === "5" ||
+          e.key === "6")
+      ) {
         return;
       }
 

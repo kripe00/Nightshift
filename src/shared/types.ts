@@ -1,4 +1,19 @@
 // Shared Contract: Cross-module TypeScript types and interfaces
+import type {
+  ReactorState,
+  SubstationQuota,
+  TurbineState,
+  TutorialPhase,
+  TutorialPrompt,
+} from '../simulation/rbmkPhysics'
+
+export type {
+  ReactorState,
+  SubstationQuota,
+  TurbineState,
+  TutorialPhase,
+  TutorialPrompt,
+}
 
 export type SystemType = 'cooling' | 'defense' | 'facility'
 export type SectorNodeId =
@@ -9,6 +24,19 @@ export type SectorNodeId =
   | 'vodka'
   | 'steel'
 export type DirectiveDecision = 'APPROVED' | 'SHREDDED'
+
+export type WePadTabId = 1 | 2 | 3 | 4 | 5 | 6
+
+export interface WePadChatMessage {
+  id: string
+  timestamp: string
+  sender: 'COMRADE VOLKOV' | 'K.O.M.R.A.D.-84' | 'SYSTEM' | 'PRAVDA-84'
+  text: string
+  hint?: string
+  phase?: TutorialPhase
+  completed?: boolean
+  level?: 'normal' | 'warn' | 'danger'
+}
 
 export type TutorialStep = 1 | 2 | 3 | 4 | 5 | 'DONE'
 export type DiagnosticAlarmId =
@@ -90,7 +118,7 @@ export interface TerminalLogEntry {
   level: 'normal' | 'warn' | 'danger'
 }
 
-export type HotspotSeverity = 'amber' | 'red'
+export type HotspotSeverity = 'amber' | 'red' | 'cyan'
 
 export interface OperationalMandate {
   id: string
@@ -100,7 +128,7 @@ export interface OperationalMandate {
   fulfilled: boolean
 }
 
-export interface GameState {
+export interface GameState extends ReactorState {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
   activeStation: CameraStation
@@ -112,6 +140,13 @@ export interface GameState {
   treasonStrikes: number // 0 to 3 (3 = Gulag Game Over)
   lastDecisionFeedback: string | null
   activeMandate: OperationalMandate | null
+  tutorialPhase: TutorialPhase
+  tutorialPrompt: TutorialPrompt
+
+  // WE-PAD 84 & H2O Controls
+  wePadActiveTab: WePadTabId
+  wePadChatLog: WePadChatMessage[]
+  selectedH2OSubstationId: 1 | 3 | 5
 
   // Reactor & Power Matrix (UNIT A, UNIT A-2, UNIT B & Right Turbine Panel)
   coreTemp: number // 300°C nominal -> 1000°C meltdown
@@ -119,17 +154,17 @@ export interface GameState {
   radiationLevel: number // 0.1 to 15.0 R/h
   maxSafePower: number // 100 MW (up to 180 MW in Redline)
   powerAllocation: Record<SystemType, number>
-  sectorMW: Record<SectorNodeId, number> // 6 Individual Regional Substation Levers (0-50 MW each)
+  sectorMW: Record<SectorNodeId, number> // 6 Individual Regional Substation Levers
   targetSectorMW: Record<SectorNodeId, number> // 6 Individual Regional Map Target MW values
   targetCityMW: number // Regional Map Sector 1+2 combined target MW
   targetDefenseMW: number // Regional Map Sector 3+4 combined target MW
   targetVodkaMW: number // Regional Map Sector 5+6 combined target MW
   waterReservoir: number // 0 to 100% average local water reservoir level
-  pripyatWater: number // [1] PRIPYAT CITY local water reserve (0..100%, drought < 30%)
-  kolkhozWater: number // [2] KOLKHOZ FARM local water reserve (0..100%, drought < 35%)
-  vodkaWater: number // [5] VODKA DISTILLERY local water reserve (0..100%, drought < 40%)
-  vodkaDroughtTimer: number // 0 to 35s Politburo countdown toward KGB Citation when vodkaWater < 40%
-  waterUsage: number // L/s river water drawn by cooling pumps
+  pripyatWater: number // [1] PRIPYAT CITY H2O % (0..100%, target 85%)
+  kolkhozWater: number // [3] KOLKHOZ FARM H2O % (0..100%, target 85%)
+  vodkaWater: number // [5] VODKA PLANT H2O % (0..100%, target 85%)
+  vodkaDroughtTimer: number
+  waterUsage: number // Plant water drain %
   redlineInstability: number // 0 to 100% (100% triggers Blackout)
   isBlackout: boolean
   pumpsActive: [boolean, boolean] // Pump A & Pump B
@@ -177,6 +212,7 @@ export interface GameState {
   tutorialDrainSeconds: number
   shiftRunId: number
   hoveredDiagnosticId: DiagnosticAlarmId | null
+  hoveredControlHint: string | null
 
   // Shared Actions
   setActiveStation: (station: CameraStation) => void
@@ -185,7 +221,35 @@ export interface GameState {
   skipTutorial: () => void
   setTutorialStep: (step: TutorialStep) => void
   setHoveredDiagnosticId: (id: DiagnosticAlarmId | null) => void
+  setHoveredControlHint: (hint: string | null) => void
+  notifyPrinterDirectiveSpawned: (
+    docTitle: string,
+    isForgery: boolean,
+    powerTargets?: {
+      pripyat?: number
+      kolkhoz?: number
+      duga?: number
+      kgb?: number
+      vodka?: number
+      steel?: number
+    }
+  ) => void
+  toggleWePadHeld: (forceHeld?: boolean) => void
+  toggleWePadInspecting: (forceInspecting?: boolean) => void
+  setWePadActiveTab: (tab: WePadTabId) => void
+  setSubstationH2O: (substationId: 1 | 3 | 5, pct: number) => void
+  adjustSubstationH2O: (substationId: 1 | 3 | 5, deltaPct: number) => void
+  cycleSelectedH2OSubstation: () => void
   recloseMainBreaker: () => void
+  pullMainBreaker: () => void
+  resetTurbineTrip: () => void
+  setFeedwaterValve: (valveRatioOrPct: number) => void
+  toggleMcpPump: (pumpIdx: 0 | 1 | 2 | 3, active?: boolean) => void
+  setSteamDumpValve: (open: boolean) => void
+  toggleSteamDumpValve: () => void
+  setRodTargetRate: (rate: -1 | 0 | 1) => void
+  setAutoRodEnabled: (enabled?: boolean) => void
+  setTurbineSteamValve: (valveRatioOrPct: number) => void
   setShiftKeyHeld: (held: boolean) => void
   shiftPower: (system: SystemType, deltaMW: number) => void
   setSubsystemPower: (system: SystemType, targetMW: number) => void

@@ -3,6 +3,7 @@
 // Full Expanded Directives with Relative Ink Stamps, 3-Page Scrollable KGB Security Manual,
 // and True 2x Straight Optical Magnifying Glass Zoom (Zero UV).
 
+import type { WePadChatMessage, WePadTabId } from '../../shared/types'
 import {
   INK_COLOR_HEX,
   PAPER_COLOR_HEX,
@@ -17,6 +18,31 @@ import {
   type SealEmblemType,
   type SealMicroDefect,
 } from './useDeskStore'
+
+export interface WePadTelemetryPayload {
+  activeTab: WePadTabId
+  wePadHeld: boolean
+  wePadInspecting: boolean
+  tutorialPhase: string
+  tutorialHeader: string
+  tutorialBody: string
+  tutorialHint: string
+  chatLog: WePadChatMessage[]
+  thermalPower: number
+  drumPressure: number
+  drumWaterLevel: number
+  coreTemp: number
+  controlRods: number
+  xenonPoisoning: number
+  voidFraction: number
+  rpm: number
+  syncPhase: number
+  gridConnected: boolean
+  turbineValve?: number
+  totalElectricalMW: number
+  plantWaterDrainPct: number
+  mcpActiveCount: number
+}
 
 // 16-Color Soviet Bunker Palette from Master Prompt STEP 1
 export const SOVIET_16_PALETTE_HEX = [
@@ -2953,10 +2979,522 @@ export function drawSecurityManualCanvas(
 }
 
 /**
- * Renders the True 2x Straight Optical Magnifying Glass Lens (384x384).
- * Zero UV — computes the exact intersection with the topmost overlapping 3D Directive
- * (or the KGB Security Manual) and draws a genuine 2x optically magnified crop!
+ * Draws the engraved Soviet "Bitten Beetroot with Hammer & Sickle" ("Надкусанная Свёкла с Серпом и Молотом")
+ * emblem for ЭЛЕКТРОНИКА «МЫ-ПАД 84» (WE-PAD 84).
  */
+export function drawBittenBeetrootHammerSickleLogo(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  scale = 1.0,
+  strokeCol = '#39ff14',
+  fillCol = '#7a1628'
+): void {
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.scale(scale, scale)
+
+  // Beetroot leafy sprouts at top
+  ctx.strokeStyle = strokeCol
+  ctx.lineWidth = 2.4
+  ctx.beginPath()
+  ctx.moveTo(0, -14)
+  ctx.quadraticCurveTo(-9, -24, -14, -22)
+  ctx.moveTo(0, -14)
+  ctx.lineTo(0, -25)
+  ctx.moveTo(0, -14)
+  ctx.quadraticCurveTo(9, -24, 14, -22)
+  ctx.stroke()
+
+  // Beetroot body with a prominent Apple-style bite on the right side + root tail at bottom
+  ctx.fillStyle = fillCol
+  ctx.strokeStyle = strokeCol
+  ctx.lineWidth = 2.6
+  ctx.beginPath()
+  ctx.moveTo(0, -14)
+  ctx.bezierCurveTo(-16, -14, -19, 2, -10, 13)
+  ctx.lineTo(0, 24) // Root taproot tip
+  ctx.lineTo(9, 13)
+  // Bite indentation on right flank
+  ctx.arc(15, 0, 7.5, Math.PI * 0.68, -Math.PI * 0.68, true)
+  ctx.quadraticCurveTo(10, -14, 0, -14)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+
+  // Hammer & Sickle inside the beetroot
+  ctx.strokeStyle = '#ffd000'
+  ctx.lineWidth = 2.4
+  // Hammer handle & head
+  ctx.beginPath()
+  ctx.moveTo(-6, 9)
+  ctx.lineTo(5, -5)
+  ctx.moveTo(1, -7)
+  ctx.lineTo(8, -2)
+  ctx.stroke()
+  // Sickle arc
+  ctx.beginPath()
+  ctx.arc(-1, 1, 7.5, -Math.PI * 0.65, Math.PI * 0.55)
+  ctx.stroke()
+
+  ctx.restore()
+}
+
+/**
+ * Draws the glowing phosphor-vector screen of ЭЛЕКТРОНИКА «МЫ-ПАД 84» (WE-PAD 84):
+ * - Slogan: "IN SOVIET UNION, THERE IS NO i-PAD, ONLY WE-PAD!"
+ * - Bitten Beetroot with Hammer & Sickle logo
+ * - 6 Interactive Tabs (`[1. ЧАТ / DRILL]`, `[2. UNIT B]`, `[3. UNIT A-2]`, `[4. UNIT A]`, `[5. UNIT C]`, `[6. ФИЗИКА]`)
+ * - Live scrolling Volkov Telegraph Chat Log + Step 0–7 checklist & RBMK-1000 schematics
+ */
+export function drawWePad84ScreenCanvas(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  payload: WePadTelemetryPayload,
+  scrollY = 0
+): void {
+  ctx.save()
+  ctx.imageSmoothingEnabled = true
+  const LW = 1024
+  const LH = 1280
+  ctx.scale(w / LW, h / LH)
+
+  const activeTab = payload.activeTab
+
+  // Deep Phosphor-Black CRT Screen Background & Crisp Outer Frame
+  ctx.fillStyle = '#041109'
+  ctx.fillRect(0, 0, LW, LH)
+  ctx.strokeStyle = '#39ff14'
+  ctx.lineWidth = 4
+  ctx.strokeRect(10, 10, LW - 20, LH - 20)
+
+  // =========================================================================
+  // ZONE 1 (TOP): COMPACT TELEMETRY LINE (30px) + 6 TAB BUTTONS (26px)
+  // =========================================================================
+  ctx.fillStyle = '#082112'
+  ctx.fillRect(20, 20, LW - 40, 56)
+  ctx.strokeStyle = '#28b862'
+  ctx.lineWidth = 2.5
+  ctx.strokeRect(20, 20, LW - 40, 56)
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#00f0ff'
+  ctx.font = 'bold 28px "Consolas", "Courier Prime", monospace'
+  const teleLine = `MWt:${Math.round(payload.thermalPower)} | BAR:${payload.drumPressure.toFixed(0)} | LVL:${Math.round(payload.drumWaterLevel)}mm | VLV:${Math.round((payload.turbineValve ?? 0) * 100)}% | RPM:${Math.round(payload.rpm)} | MWe:${Math.round(payload.totalElectricalMW)}`
+  ctx.fillText(teleLine, LW / 2, 58, LW - 56)
+
+  // 6 Chapter Tab Buttons (`[1] DRILL` .. `[6] HAZARDS`, 2 rows x 3 columns, y = 88..216)
+  const tabSpecs: Array<{ id: WePadTabId; label: string }> = [
+    { id: 1, label: '[1] DRILL' },
+    { id: 2, label: '[2] UNIT B' },
+    { id: 3, label: '[3] UNIT A-2' },
+    { id: 4, label: '[4] UNIT A' },
+    { id: 5, label: '[5] UNIT C' },
+    { id: 6, label: '[6] HAZARDS' },
+  ]
+  const colW = Math.floor((LW - 52) / 3)
+  tabSpecs.forEach((tab, idx) => {
+    const col = idx % 3
+    const row = Math.floor(idx / 3)
+    const tx = 20 + col * (colW + 6)
+    const ty = 88 + row * 64
+    const isSel = activeTab === tab.id
+    ctx.fillStyle = isSel ? '#196b30' : '#091d11'
+    ctx.fillRect(tx, ty, colW, 56)
+    ctx.strokeStyle = isSel ? '#ffd000' : '#28b862'
+    ctx.lineWidth = isSel ? 3.5 : 2
+    ctx.strokeRect(tx, ty, colW, 56)
+    ctx.fillStyle = isSel ? '#ffffff' : '#88e8a0'
+    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText(tab.label, tx + colW / 2, ty + 37, colW - 14)
+  })
+
+  // =========================================================================
+  // ZONE 2 (MIDDLE — 80% OF SCREEN): spacious, big-font active content
+  // =========================================================================
+  const vpX = 20
+  const vpY = 232
+  const vpW = LW - 40
+  const vpH = 956
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(vpX, vpY, vpW, vpH)
+  ctx.clip()
+
+  if (activeTab === 1) {
+    // -----------------------------------------------------------------------
+    // TAB 1: ACTIVE ORDER BOX (`ACTION:` + `WHY:` or `>> K.O.M.R.A.D.-84 // LIVE DISPATCH`) +
+    //        1–2 PREVIOUSLY COMPLETED STEPS / MESSAGES (`26px`) BELOW
+    // -----------------------------------------------------------------------
+    const isCompletedShift = payload.tutorialPhase === 'COMPLETED'
+    const latestLiveMsg =
+      isCompletedShift && payload.chatLog.length > 0
+        ? payload.chatLog[payload.chatLog.length - 1]
+        : null
+
+    const objY = vpY + 8
+    const objH = 385
+    ctx.fillStyle = '#1f1904'
+    ctx.fillRect(vpX + 4, objY, vpW - 8, objH)
+    ctx.strokeStyle = '#ffd000'
+    ctx.lineWidth = 4
+    ctx.strokeRect(vpX + 4, objY, vpW - 8, objH)
+
+    ctx.textAlign = 'left'
+    ctx.fillStyle = '#39ff14'
+    ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
+    const topBoxHeader = isCompletedShift
+      ? '>> K.O.M.R.A.D.-84 // LIVE DISPATCH'
+      : payload.tutorialHeader
+    ctx.fillText(topBoxHeader, vpX + 24, objY + 46, vpW - 48)
+
+    ctx.fillStyle = '#ffe600'
+    ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
+    const rawActiveText =
+      isCompletedShift && latestLiveMsg
+        ? `[${latestLiveMsg.timestamp}] ${latestLiveMsg.sender}: ${latestLiveMsg.text}`
+        : payload.tutorialBody
+    const cleanBody = rawActiveText.replace(/^"|"$/g, '')
+    const bodyLines = wrapCanvasText(ctx, cleanBody, vpW - 48)
+    bodyLines.slice(0, 3).forEach((ln, i) => {
+      ctx.fillText(ln, vpX + 24, objY + 96 + i * 38, vpW - 48)
+    })
+
+    // Divider between ACTION and WHY / LIVE ADVISORY
+    const whyDivY = objY + 216
+    ctx.strokeStyle = '#00f0ff'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(vpX + 20, whyDivY)
+    ctx.lineTo(vpX + vpW - 20, whyDivY)
+    ctx.stroke()
+
+    ctx.fillStyle = '#00f0ff'
+    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+    const cleanHint = payload.tutorialHint.replace(/^"|"$/g, '')
+    const hintLines = wrapCanvasText(ctx, cleanHint, vpW - 48)
+    hintLines.slice(0, 4).forEach((ln, i) => {
+      ctx.fillText(ln, vpX + 24, whyDivY + 34 + i * 33, vpW - 48)
+    })
+
+    // Filter previously completed Volkov steps or earlier live dispatches (never repeat the active top message!)
+    const completedMsgs = isCompletedShift
+      ? payload.chatLog.slice(0, Math.max(0, payload.chatLog.length - 1))
+      : payload.chatLog.filter(
+          (m) =>
+            m.completed &&
+            m.sender !== 'SYSTEM' &&
+            m.phase !== payload.tutorialPhase
+        )
+
+    const histHeaderY = objY + objH + 38
+    ctx.fillStyle = '#58b870'
+    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText(
+      isCompletedShift
+        ? 'PREVIOUS DISPATCHES & VOLKOV LOG (SCROLL):'
+        : 'COMPLETED ORDERS (HISTORY):',
+      vpX + 8,
+      histHeaderY
+    )
+
+    if (completedMsgs.length === 0) {
+      ctx.fillStyle = '#3d7a4e'
+      ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+      ctx.fillText(
+        '• No completed steps yet — execute the active order above.',
+        vpX + 12,
+        histHeaderY + 52,
+        vpW - 24
+      )
+    } else {
+      // Show at most 2 completed steps at a time (scrollY steps through older completed orders)
+      const scrollSteps = Math.max(0, Math.floor(scrollY / 40))
+      const endIdx = Math.max(
+        1,
+        completedMsgs.length - scrollSteps
+      )
+      const startIdx = Math.max(0, endIdx - 2)
+      const visibleCompleted = completedMsgs.slice(startIdx, endIdx).reverse()
+
+      let cardY = histHeaderY + 20
+      visibleCompleted.forEach((msg) => {
+        ctx.font = 'bold 25px "Consolas", "Courier Prime", monospace'
+        const lines = wrapCanvasText(ctx, msg.text, vpW - 56).slice(0, 3)
+        const cardH = 58 + lines.length * 34 + 16
+
+        ctx.fillStyle = 'rgba(10, 38, 18, 0.85)'
+        ctx.fillRect(vpX + 4, cardY, vpW - 8, cardH)
+        ctx.strokeStyle = '#248f43'
+        ctx.lineWidth = 2.5
+        ctx.strokeRect(vpX + 4, cardY, vpW - 8, cardH)
+
+        ctx.textAlign = 'left'
+        ctx.fillStyle = '#39ff14'
+        ctx.font = 'bold 25px "Consolas", "Courier Prime", monospace'
+        ctx.fillText(
+          `[${msg.timestamp}] ${msg.sender}`,
+          vpX + 22,
+          cardY + 38
+        )
+
+        ctx.textAlign = 'right'
+        ctx.fillStyle = '#39ff14'
+        ctx.fillText(
+          msg.sender === 'K.O.M.R.A.D.-84' ? 'LOGGED ✓' : 'COMPLETED ✓',
+          vpX + vpW - 22,
+          cardY + 38
+        )
+
+        ctx.textAlign = 'left'
+        ctx.fillStyle = '#8ce8a4'
+        lines.forEach((ln, lIdx) => {
+          ctx.fillText(ln, vpX + 22, cardY + 78 + lIdx * 34, vpW - 44)
+        })
+
+        cardY += cardH + 18
+      })
+    }
+  } else {
+    // -----------------------------------------------------------------------
+    // TABS 2–6: LARGE VECTOR SCHEMATIC (`lineWidth: 4`, `26px` labels) +
+    //           MAX 4 SHORT BULLET POINTS (`bold 28px monospace`)
+    // -----------------------------------------------------------------------
+    const schemY = vpY + 8
+    const schemH = 270
+    ctx.fillStyle = '#05160b'
+    ctx.fillRect(vpX + 4, schemY, vpW - 8, schemH)
+    ctx.strokeStyle = '#00f0ff'
+    ctx.lineWidth = 4
+    ctx.strokeRect(vpX + 4, schemY, vpW - 8, schemH)
+
+    const drawBullets = (
+      title: string,
+      bullets: [string, string, string, string],
+      accent = '#39ff14'
+    ) => {
+      const boxY = schemY + schemH + 24
+      const boxH = vpH - schemH - 40
+      ctx.fillStyle = '#071a0e'
+      ctx.fillRect(vpX + 4, boxY, vpW - 8, boxH)
+      ctx.strokeStyle = accent
+      ctx.lineWidth = 3.5
+      ctx.strokeRect(vpX + 4, boxY, vpW - 8, boxH)
+
+      ctx.fillStyle = accent
+      ctx.fillRect(vpX + 4, boxY, vpW - 8, 58)
+      ctx.fillStyle = '#031006'
+      ctx.textAlign = 'left'
+      ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
+      ctx.fillText(title, vpX + 22, boxY + 40, vpW - 44)
+
+      let curBY = boxY + 108
+      bullets.forEach((bText, bIdx) => {
+        ctx.font = 'bold 28px "Consolas", "Courier Prime", monospace'
+        ctx.fillStyle = bIdx % 2 === 0 ? '#ffffff' : '#ffe600'
+        const wrapped = wrapCanvasText(ctx, bText, vpW - 52).slice(0, 2)
+        wrapped.forEach((ln, lIdx) => {
+          ctx.fillText(ln, vpX + 24, curBY + lIdx * 38, vpW - 48)
+        })
+        curBY += wrapped.length * 38 + 34
+      })
+    }
+
+    if (activeTab === 2) {
+      // UNIT B Schematic: Drum Separator + 4 MCP Pumps
+      ctx.strokeStyle = '#00f0ff'
+      ctx.lineWidth = 4
+      ctx.strokeRect(vpX + 44, schemY + 38, 320, 110)
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.28)'
+      ctx.fillRect(vpX + 48, schemY + 94, 312, 50)
+      ctx.fillStyle = '#00f0ff'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('DRUM: 70 BAR / 0 MM', vpX + 204, schemY + 78)
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText('FEEDWATER: 50–85%', vpX + 204, schemY + 195)
+
+      for (let i = 0; i < 4; i++) {
+        const px = vpX + 455 + i * 130
+        ctx.strokeStyle = '#39ff14'
+        ctx.lineWidth = 4
+        ctx.beginPath()
+        ctx.arc(px, schemY + 98, 42, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.fillStyle = '#39ff14'
+        ctx.fillText(`ГЦН-${i + 1}`, px, schemY + 185)
+      }
+
+      drawBullets('UNIT B // DRUM & COOLANT LOOP (БЩУ-Т)', [
+        '• PUMPS (ГЦН 1–4): Turn ON all 4 Main Pumps first — prevents steam voids in the core!',
+        '• FEEDWATER (ПЭН): 50% at 600 MWe (85% at 1000 MWe) replaces boiled steam so Drum stays ~0 MM.',
+        '• DRUM PRESSURE: Nominal 70 BAR (Redzone >80 BAR). Use STEAM DUMP (БРУ-К) if >85 BAR.',
+        '• POWER SURGE RULE: More MWt boils water faster — raise Feedwater when raising Rods!',
+      ])
+    } else if (activeTab === 3) {
+      // UNIT A-2 Schematic: 37-Rod Core + Reactivity
+      ctx.strokeStyle = '#39ff14'
+      ctx.lineWidth = 4
+      ctx.beginPath()
+      ctx.arc(vpX + 160, schemY + 135, 86, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.fillStyle = '#39ff14'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('37-ROD CORE', vpX + 160, schemY + 142)
+
+      ctx.textAlign = 'left'
+      ctx.fillStyle = '#00f0ff'
+      ctx.fillText(
+        `ROD POSITION: ${Math.round(payload.controlRods * 100)}%`,
+        vpX + 310,
+        schemY + 86
+      )
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText(
+        `XENON-135: ${payload.xenonPoisoning.toFixed(1)}%`,
+        vpX + 310,
+        schemY + 146
+      )
+      ctx.fillStyle = '#ff5555'
+      ctx.fillText(
+        `POSITIVE VOID: +${payload.voidFraction.toFixed(1)}%`,
+        vpX + 310,
+        schemY + 206
+      )
+
+      drawBullets('UNIT A-2 // CORE & REACTIVITY (СИУР)', [
+        '• ROD POSITION (0–100%): 55% = ~2000 MWt (600 MWe baseline); 90% = 3200 MWt (1000 MWe surge).',
+        '• AUTO REGULATOR (АР): Flip ON (Right Box) — auto-trims rods to hold stable ~69 BAR pressure!',
+        '• WHY RAISE RODS: Opening the Turbine Valve wider drains steam pressure unless Rods produce more MWt.',
+        '• XENON & VOID: Auto-Regulator smoothly compensates for Void & Xenon-135 poisoning.',
+      ])
+    } else if (activeTab === 4) {
+      // UNIT A Schematic: AZ-5 Warning + 6 Substation Sliders
+      ctx.strokeStyle = '#ff2a2a'
+      ctx.lineWidth = 4
+      ctx.strokeRect(vpX + 36, schemY + 36, 430, 195)
+      ctx.fillStyle = '#ff2a2a'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('⚠️ AZ-5 GRAPHITE TIP FLAW', vpX + 251, schemY + 105)
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText('+0.035 REACTIVITY (FIRST 3.5s)', vpX + 251, schemY + 165)
+
+      ctx.fillStyle = '#39ff14'
+      ctx.fillText('6 LEVERS: 0–250 MW EACH', vpX + 725, schemY + 138)
+
+      drawBullets(
+        'UNIT A // AZ-5 & 6 SUBSTATION LEVERS (0–250 MW)',
+        [
+          '• BASELINE QUOTA: All 6 substations start at 100 MW each (600 MWe total baseline).',
+          '• LEVER HEADROOM: Each lever goes up to 250 MW (25 MW steps) for Printer Surge Orders!',
+          '• GENERATION DEFICIT: If Levers > Generator MWe, raise Rods (A-2) + Turbine Valve (C)!',
+          '• AZ-5 DEFECT: Graphite rod tips cause a 3.5s power spike if Void > 20%!',
+        ],
+        '#ff2a2a'
+      )
+    } else if (activeTab === 5) {
+      // UNIT C Schematic: Synchroscope 12 o'clock + 3000 RPM Governor
+      ctx.strokeStyle = '#39ff14'
+      ctx.lineWidth = 4
+      ctx.beginPath()
+      ctx.arc(vpX + 155, schemY + 135, 86, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.strokeStyle = '#ffd000'
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.moveTo(vpX + 155, schemY + 135)
+      ctx.lineTo(vpX + 155, schemY + 56)
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.fillStyle = '#39ff14'
+      ctx.fillText("12 O'CLOCK = 0° SYNC ZONE", vpX + 290, schemY + 86)
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText('1. 20% VALVE -> 3000 RPM GOVERNOR', vpX + 290, schemY + 146)
+      ctx.fillStyle = '#00f0ff'
+      ctx.fillText('2. 60% = 600 MWe | 100% = 1000 MWe', vpX + 290, schemY + 206)
+
+      drawBullets('UNIT C // TURBINE & GRID SYNC (БЩУ-Э)', [
+        '• 3000 RPM GOVERNOR: Click STEAM VALVE to 20% — auto-stabilizes at 3000 RPM (50 HZ)!',
+        '• SYNCHROSCOPE: Click MAIN BREAKER [SPACE] when needle passes 12 o\'clock (top green)!',
+        '• BASELINE (600 MWe): Set STEAM VALVE to 60% after sync to power all 6 substations at 100 MW.',
+        '• SURGE (800–1000 MWe): Raise Rods (A-2) + Feedwater (B) + Steam Valve (C) together!',
+      ])
+    } else {
+      // TAB 6: HAZARDS — POSITIVE VOID & XENON-135 COUNTERMEASURES
+      ctx.strokeStyle = '#ff2a2a'
+      ctx.lineWidth = 4
+      ctx.beginPath()
+      ctx.moveTo(vpX + 44, schemY + 215)
+      ctx.quadraticCurveTo(vpX + 260, schemY + 200, vpX + 440, schemY + 55)
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.fillStyle = '#ff2a2a'
+      ctx.fillText(
+        `VOID (${payload.voidFraction.toFixed(0)}%): RED TILES / FEEDWATER / BORON`,
+        vpX + 52,
+        schemY + 92
+      )
+      ctx.fillStyle = '#00f0ff'
+      ctx.fillText(
+        `XENON (${payload.xenonPoisoning.toFixed(0)}%): CYAN TILES / RAISE RODS >=75%`,
+        vpX + 52,
+        schemY + 155
+      )
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText(
+        'RODS (MWt) -> DRUM BAR -> TURBINE (MWe) -> 6 LEVERS',
+        vpX + 52,
+        schemY + 215
+      )
+
+      drawBullets(
+        'POSITIV VOID & XENON-135 COUNTERMEASURES',
+        [
+          '• STOP HIGH VOID (%): Raise FEEDWATER (UNIT B) to 75%+, click RED core tiles (A-2), or press [BORON INJECTION] on UNIT A (-35% Void)!',
+          '• BURN XENON-135 (%): Raise RODS (СУЗ on A-2) to 75–90% (>1800 MWt) or click CYAN core tiles (-12% Xenon each)!',
+          '• PREVENT XENON PIT: During low-MW orders, keep Rods at ~60% and open STEAM DUMP (БРУ-К) so Xenon keeps burning!',
+          '• MOUSE WHEEL TIP: Scroll wheel on ANY handwheel or lever for fast 5% / 25 MW steps (hold SHIFT for 1% fine trim)!',
+        ],
+        '#00f0ff'
+      )
+    }
+  }
+
+  ctx.restore() // end Zone 2 clip
+
+  // =========================================================================
+  // ZONE 3 (BOTTOM): 1 CLEAN STATUS LINE WITHOUT HEAVY BOX FRAMES
+  // =========================================================================
+  ctx.strokeStyle = '#28b862'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(24, 1202)
+  ctx.lineTo(LW - 24, 1202)
+  ctx.stroke()
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#ffd000'
+  ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+  ctx.fillText(
+    '[1–6]: BYTT FANE   |   [TAB]: ZOOM   |   [E]: LEGG PÅ PULT',
+    LW / 2,
+    1244,
+    LW - 40
+  )
+
+  ctx.restore()
+}
+
 export function drawTrue2xOpticalLensCanvas(
   ctx: CanvasRenderingContext2D,
   w: number,

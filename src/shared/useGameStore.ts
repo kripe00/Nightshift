@@ -1,5 +1,28 @@
 // Shared Contract: Cross-module Zustand store
 import { create } from 'zustand'
+import {
+  createColdStartState,
+  evaluateTutorial,
+  stepReactorSimulation,
+  toggleGridBreaker,
+   triggerBoronInjection,
+  trimCoreChannelTile,
+  type ReactorState,
+  type SubstationQuota,
+  type TutorialPhase,
+  type TutorialPrompt,
+} from '../simulation/rbmkPhysics'
+import {
+  KOMRAD_TAKEOVER_MESSAGE,
+  VOLKOV_FAREWELL_MESSAGE,
+  pickPrinterDirectiveDispatch,
+  pickPropagandaBroadcastDispatch,
+  pickQuotaCommendationDispatch,
+  pickReactorHazardDispatch,
+  pickSectorBrownoutDispatch,
+  type PrinterOrderFlavor,
+  type ReactorHazardCategory,
+} from './komradLiveDispatches'
 import type {
   AppliedStampMark,
   CameraStation,
@@ -12,30 +35,180 @@ import type {
   SectorNodeId,
   SystemType,
   TerminalLogEntry,
+  WePadChatMessage,
+  WePadTabId,
 } from './types'
+
+const SECTOR_TO_SUB_ID: Record<SectorNodeId, number> = {
+  pripyat: 1,
+  duga: 2,
+  kolkhoz: 3,
+  kgb: 4,
+  vodka: 5,
+  steel: 6,
+}
+
+function findSubById(
+  substations: SubstationQuota[],
+  id: number
+): SubstationQuota | undefined {
+  return substations.find((s) => s.id === id)
+}
+
+function extractReactorState(state: ReactorState): ReactorState {
+  return {
+    rodTargetRate: state.rodTargetRate,
+    az5Active: state.az5Active,
+    autoRodEnabled: state.autoRodEnabled,
+    mcpActive: [...state.mcpActive],
+    feedwaterValve: state.feedwaterValve,
+    steamDumpValve: state.steamDumpValve,
+    kgbLineActive: state.kgbLineActive,
+    plantWaterDrainPct: state.plantWaterDrainPct,
+    wePadHeld: state.wePadHeld,
+    wePadInspecting: state.wePadInspecting,
+    controlRods: state.controlRods,
+    az5Timer: state.az5Timer,
+    boronDampingTimer: state.boronDampingTimer ?? 0,
+    reactivity: state.reactivity,
+    thermalPower: state.thermalPower,
+    xenon: state.xenon,
+    iodine: state.iodine,
+    voidFraction: state.voidFraction,
+    rodTilesFlux: [...state.rodTilesFlux],
+    coreTileAnomalies: { ...(state.coreTileAnomalies ?? {}) },
+    coreTemp: state.coreTemp,
+    drumPressure: state.drumPressure,
+    drumWaterLevel: state.drumWaterLevel,
+    coolantFlow: state.coolantFlow,
+    reliefValveOpen: state.reliefValveOpen,
+    turbines: [
+      { ...state.turbines[0] },
+      { ...state.turbines[1] },
+    ],
+    totalElectricalMW: state.totalElectricalMW,
+    substations: state.substations.map((s) => ({ ...s })),
+    roomRadiation: state.roomRadiation,
+    coreMeltdown: state.coreMeltdown,
+    steamExplosion: state.steamExplosion,
+  }
+}
+
+function mapReactorToGameStateFields(
+  r: ReactorState,
+  tutorialPhase: TutorialPhase
+) {
+  const evalRes = evaluateTutorial(r, tutorialPhase)
+  const sub1 = findSubById(r.substations, 1)
+  const sub2 = findSubById(r.substations, 2)
+  const sub3 = findSubById(r.substations, 3)
+  const sub4 = findSubById(r.substations, 4)
+  const sub5 = findSubById(r.substations, 5)
+  const sub6 = findSubById(r.substations, 6)
+
+  const sectorMW: Record<SectorNodeId, number> = {
+    pripyat: Math.round(sub1?.allocatedMW ?? 0),
+    duga: Math.round(sub2?.allocatedMW ?? 0),
+    kolkhoz: Math.round(sub3?.allocatedMW ?? 0),
+    kgb: Math.round(sub4?.allocatedMW ?? 0),
+    vodka: Math.round(sub5?.allocatedMW ?? 0),
+    steel: Math.round(sub6?.allocatedMW ?? 0),
+  }
+  const targetSectorMW: Record<SectorNodeId, number> = {
+    pripyat: Math.round(sub1?.targetMW ?? 100),
+    duga: Math.round(sub2?.targetMW ?? 100),
+    kolkhoz: Math.round(sub3?.targetMW ?? 100),
+    kgb: Math.round(sub4?.targetMW ?? 100),
+    vodka: Math.round(sub5?.targetMW ?? 100),
+    steel: Math.round(sub6?.targetMW ?? 100),
+  }
+  const pumpAActive = Boolean(r.mcpActive[0] || r.mcpActive[1])
+  const pumpBActive = Boolean(r.mcpActive[2] || r.mcpActive[3])
+  const pumpAThrottle = (r.mcpActive[0] ? 50 : 0) + (r.mcpActive[1] ? 50 : 0)
+  const pumpBThrottle = (r.mcpActive[2] ? 50 : 0) + (r.mcpActive[3] ? 50 : 0)
+  const waterLevelPct = Math.max(
+    0,
+    Math.min(100, ((r.drumWaterLevel + 400) / 800) * 100)
+  )
+
+  const channelHotspots: Record<number, HotspotSeverity> = {}
+  for (const [k, v] of Object.entries(r.coreTileAnomalies ?? {})) {
+    channelHotspots[Number(k)] = v === 'void' ? 'red' : 'cyan'
+  }
+
+  return {
+    ...r,
+    channelHotspots,
+    tutorialPhase: evalRes.phase,
+    tutorialPrompt: evalRes,
+    tutorialStep: (evalRes.phase === 'COMPLETED' ? 'DONE' : 1) as GameState['tutorialStep'],
+    pressureBar: Number(r.drumPressure.toFixed(1)),
+    radiationLevel: Number(r.roomRadiation.toFixed(2)),
+    controlRodLevel: Number((r.controlRods * 100).toFixed(1)),
+    boronPoisoningTimer: Number((r.boronDampingTimer ?? 0).toFixed(1)),
+    turbineRpm: Math.round(r.turbines[0].rpm),
+    gridHz: Number(r.turbines[0].freqHz.toFixed(2)),
+    pumpsActive: [pumpAActive, pumpBActive] as [boolean, boolean],
+    pumpThrottle: [pumpAThrottle, pumpBThrottle] as [number, number],
+    nitrogenLoopValve: Number((r.feedwaterValve * 100).toFixed(1)),
+    heliumPressure: Number(r.drumPressure.toFixed(1)),
+    bubblerLevel: Number(waterLevelPct.toFixed(1)),
+    bubblerDraining: r.steamDumpValve,
+    ventingSteam: r.steamDumpValve,
+    sealToggles: [
+      Boolean(r.mcpActive[0]),
+      Boolean(r.mcpActive[1]),
+      Boolean(r.mcpActive[2]),
+    ] as [boolean, boolean, boolean],
+    containmentSealLocked: Boolean(
+      r.mcpActive[0] && r.mcpActive[1] && r.mcpActive[2] && r.mcpActive[3]
+    ),
+    sectorMW,
+    targetSectorMW,
+    targetCityMW: targetSectorMW.pripyat + targetSectorMW.kolkhoz,
+    targetDefenseMW: targetSectorMW.duga + targetSectorMW.kgb,
+    targetVodkaMW: targetSectorMW.vodka + targetSectorMW.steel,
+    pripyatWater: Math.round(sub1?.allocatedH2O ?? 0),
+    kolkhozWater: Math.round(sub3?.allocatedH2O ?? 0),
+    vodkaWater: Math.round(sub5?.allocatedH2O ?? 0),
+    waterReservoir: Math.round(waterLevelPct),
+    waterUsage: Math.round(r.plantWaterDrainPct),
+    // Keep station auxiliary lighting active
+    powerAllocation: {
+      cooling: Math.max(35, Math.round((sectorMW.pripyat + sectorMW.kolkhoz) / 10)),
+      defense: Math.max(35, Math.round((sectorMW.duga + sectorMW.kgb) / 10)),
+      facility: Math.max(30, Math.round((sectorMW.vodka + sectorMW.steel) / 10)),
+    },
+    isBlackout: false,
+  }
+}
 
 export function getContextualDiagnosticHint(
   state: GameState,
   hasIncomingOrder: boolean
 ): string | null {
+  if (state.hoveredControlHint) {
+    return state.hoveredControlHint
+  }
+
   const hintForAlarm = (id: DiagnosticAlarmId): string => {
     switch (id) {
       case 'core':
-        return state.coreTemp > 520 && state.controlRodLevel > 75
-          ? '⚠️ HIGH REACTIVITY: INSERT CONTROL RODS (UNIT A-2) OR BOOST PUMPS TO AVOID OVERHEAT!'
-          : '⚡ HIGH CORE TEMP: TURN [PUMP A/B] ON UNIT A [KEY 1] OR [HELIUM-N2] ON UNIT B [KEY 3] — OR CLICK RED RBMK TILES!'
+        return state.coreTemp > 350
+          ? '⚠️ HIGH CORE TEMP (>350°C): SCROLL DOWN CONTROL RODS ON UNIT A-2 [KEY 3] OR ENABLE ALL 4 ГЦН PUMPS ON UNIT B!'
+          : '⚡ CORE & REACTIVITY: MONITOR THERMAL MWt (3200 MWt NOMINAL) & CONTROL RODS ON UNIT A-2 [KEY 3]!'
       case 'water':
-        return '💧 ZONE WATER LOW: REDUCE SIPHONING PUMP ON UNIT A [KEY 1] — OR PULL & HOLD [BUBBLER DRAIN] ON UNIT B [KEY 3] TO RETURN H2O!'
+        return '💧 DRUM WATER LEVEL: SCROLL FEEDWATER VALVE (ПЭН) ON UNIT B [KEY 3] TO KEEP LEVEL NEAR 0 MM (-100 TO +100 MM)!'
       case 'gas_oil':
-        return state.lubeOilPressure < 30 && state.heliumPressure <= 65
-          ? '⚠️ LUBE OIL THIN (<25%): PRESS [KEY 3] -> DIAL DOWN [OIL COOLER VALVE] ON UNIT A-2 TO LET OIL COOL & RECOVER PRESSURE!'
-          : '⚠️ HELIUM LOOP SATURATED (>68 BAR): PRESS [KEY 3] -> DIAL DOWN [HELIUM-N2] WHEEL & FLIP ON 4 [SEAL SCRUBBERS]!'
+        return '⚠️ DRUM PRESSURE (>78 BAR): OPEN STEAM DUMP (БРУ-К) ON UNIT B [KEY 3] OR STEAM VENT ON UNIT C [KEY 5]!'
       case 'bearing':
-        return '🔥 PUMP BEARINGS HOT: PRESS [KEY 3] -> TURN UP [OIL COOLER VALVE] ON UNIT A-2 (IF OIL PRESS >30%) OR REDUCE WATER PUMPS!'
+        return state.voidFraction > 0.35
+          ? `⚠️ STEAM VOIDS (${Math.round(state.voidFraction * 100)}%): SCROLL UP FEEDWATER (UNIT B), CLICK RED CORE TILES, OR PRESS [BORON INJECTION] ON UNIT A!`
+          : `☢️ XENON POISONING (${Math.round(state.xenon)}%): SCROLL UP RODS (СУЗ) TO BURN XENON OR CLICK CYAN TILES ON 37-CORE MAP!`
       case 'grid':
-        return state.isBlackout
-          ? '🚨 BLACKOUT! MAIN BREAKER TRIPPED: PRESS [KEY 5] -> TUNE [50HZ RHEOSTAT] TO 50.0 HZ, THEN PULL UP [MAIN BREAKER] KNIFE-SWITCH!'
-          : '⚙️ 50HZ GRID DRIFT: PRESS [KEY 5] -> DRAG CENTER [50HZ RHEOSTAT] DIAL TO LOCK 50.0 HZ!'
+        return state.turbines[0]?.tripped
+          ? '🚨 TURBINE TRIPPED! FLIP [TRIP RESET] ON UNIT C [KEY 5], HOLD 3000 RPM (50.0 HZ) & SYNC AT 12 O’CLOCK!'
+          : '⚙️ TURBOGENERATOR SYNC: SCROLL TURBINE STEAM VALVE ON UNIT C [KEY 5] TO 3000 RPM (50.0 HZ) & CLOSE MAIN BREAKER AT 0°!'
       case 'order':
         return '📄 NEW DIRECTIVE IN PRINTER: PRESS [KEY 4] -> TEAR PAPER, INSPECT SEAL/FONT/COLOR, STAMP & DISPATCH (TUBE) OR SHRED!'
     }
@@ -45,27 +218,20 @@ export function getContextualDiagnosticHint(
     return hintForAlarm(state.hoveredDiagnosticId)
   }
 
-  if (state.isBlackout) {
+  if (state.turbines[0]?.tripped) {
     return hintForAlarm('grid')
   }
-  if (state.coreTemp > 520) {
+  if (state.voidFraction > 0.35 || state.xenon > 35) {
+    return hintForAlarm('bearing')
+  }
+  if (state.coreTemp > 350) {
     return hintForAlarm('core')
   }
-  if (Math.abs(state.gridHz - 50.0) > 0.8) {
-    return hintForAlarm('grid')
-  }
-  if (
-    state.pripyatWater < 45 ||
-    state.kolkhozWater < 45 ||
-    state.vodkaWater < 45
-  ) {
-    return hintForAlarm('water')
-  }
-  if (state.heliumPressure > 65 || state.lubeOilPressure < 30) {
+  if (state.drumPressure > 78) {
     return hintForAlarm('gas_oil')
   }
-  if (20 + Math.max(state.pumpAHeat, state.pumpBHeat) > 75) {
-    return hintForAlarm('bearing')
+  if (Math.abs(state.drumWaterLevel) > 150) {
+    return hintForAlarm('water')
   }
   if (hasIncomingOrder) {
     return hintForAlarm('order')
@@ -206,35 +372,60 @@ const MANDATE_BLUEPRINTS: Array<Omit<OperationalMandate, 'id' | 'fulfilled'>> = 
   {
     code: 'COOLING_OIL',
     title: 'MANDATE 44-A // PRIPYAT & VODKA BOTTLING QUOTA',
-    requirementText: 'ROUTE: [1.PRIPYAT 20MW] [2.KOLKHOZ 15MW] [3.DUGA 20MW] [4.KGB 15MW] [5.VODKA 15MW] [6.STEEL 15MW]',
+    requirementText: 'ROUTE: [1.PRIPYAT 200MW] [2.DUGA 200MW] [3.KOLKHOZ 150MW] [4.KGB 150MW] [5.VODKA 150MW] [6.STEEL 150MW]',
   },
   {
     code: 'DEFENSE_HZ',
     title: 'MANDATE 19-B // DUGA-1 OTH RADAR & KGB-07 SWEEP',
-    requirementText: 'SET [3. DUGA-1] >= 25 MW & [4. KGB-07] >= 20 MW & TRIM GRID TO 49.5-50.5 HZ',
+    requirementText: 'SET [2. DUGA-1] 200 MW & [4. KGB-07] 150 MW & LOCK GRID AT 50.0 HZ',
   },
   {
     code: 'PUMP_B_SEAL',
-    title: 'MANDATE 71-K // CONTAINMENT LOCK & PUMP B FLOW',
-    requirementText: 'CRANK COOLING PUMP B >= 70% (UNIT A) & LOCK ALL 3 SEALS (UNIT B)',
+    title: 'MANDATE 71-K // CONTAINMENT LOCK & PUMP FLOW',
+    requirementText: 'ENGAGE ALL 4 ГЦН PUMPS ON UNIT B & MAINTAIN DRUM LEVEL AT 0 MM',
   },
   {
     code: 'FACILITY_BUBBLER',
-    title: 'MANDATE 88-B // RED OCTOBER VODKA & BUBBLER DRAIN',
-    requirementText: 'SET [5. VODKA] >= 25 MW (UNIT A) & DRAIN BUBBLER H2O < 45% (UNIT B)',
+    title: 'MANDATE 88-B // RED OCTOBER VODKA & H2O SUPPLY',
+    requirementText: 'SET [5. VODKA] 150 MW (UNIT A) & 85% H2O ON K.O.M.P.A.S.-04',
   },
 ]
 
 let directiveCounter = 100
 let logCounter = 1
+let chatCounter = 1
 let mandateCounter = 0
-let hotspotAccumulator = 0
 let shiftElapsedSeconds = 0
-let vodkaWarningTimer = 0
 let thermoTickAccumSeconds = 0
-let pumpATripped = false
-let pumpBTripped = false
-let vodkaDroughtSpikeApplied = false
+let komradDispatchSeed = 1
+let lastKomradHazardSec: Record<ReactorHazardCategory, number> = {
+  HIGH_VOID: -30,
+  HIGH_XENON: -30,
+  WATER_LOW: -30,
+  WATER_HIGH: -30,
+  HIGH_PRESSURE: -30,
+  GEN_DEFICIT: -30,
+}
+let lastKomradBrownoutSec = -30
+let lastKomradPropagandaSec = 0
+let brownoutMismatchSeconds = 0
+let prevAllSubstationsOk = true
+
+function resetKomradTrackers(): void {
+  shiftElapsedSeconds = 0
+  lastKomradHazardSec = {
+    HIGH_VOID: -30,
+    HIGH_XENON: -30,
+    WATER_LOW: -30,
+    WATER_HIGH: -30,
+    HIGH_PRESSURE: -30,
+    GEN_DEFICIT: -30,
+  }
+  lastKomradBrownoutSec = -30
+  lastKomradPropagandaSec = 0
+  brownoutMismatchSeconds = 0
+  prevAllSubstationsOk = true
+}
 
 function createNextMandate(): OperationalMandate {
   const tpl = MANDATE_BLUEPRINTS[mandateCounter % MANDATE_BLUEPRINTS.length]
@@ -246,16 +437,18 @@ function createNextMandate(): OperationalMandate {
   }
 }
 
-function isMandateSatisfied(state: GameState, _mandate: OperationalMandate): boolean {
-  const sectors: SectorNodeId[] = ['pripyat', 'kolkhoz', 'duga', 'kgb', 'vodka', 'steel']
-  return sectors.every((k) => state.sectorMW[k] === state.targetSectorMW[k])
-}
-
 function formatShiftClock(shiftTimeMinutes: number): string {
   const totalMins = Math.floor(Math.max(0, Math.min(360, shiftTimeMinutes)))
   const hours = Math.floor(totalMins / 60)
   const mins = totalMins % 60
   return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+}
+
+function formatElapsedTelegraphTime(): string {
+  const totalSecs = Math.max(0, Math.floor(shiftElapsedSeconds))
+  const mm = String(Math.floor(totalSecs / 60)).padStart(2, '0')
+  const ss = String(totalSecs % 60).padStart(2, '0')
+  return `${mm}:${ss}`
 }
 
 function createLogEntry(
@@ -272,6 +465,83 @@ function createLogEntry(
     text,
     level,
   }
+}
+
+function createWePadChatMessage(
+  sender: WePadChatMessage['sender'],
+  text: string,
+  options?: {
+    phase?: TutorialPhase
+    completed?: boolean
+    level?: WePadChatMessage['level']
+    timestamp?: string
+  }
+): WePadChatMessage {
+  chatCounter += 1
+  return {
+    id: `WPCHAT-${chatCounter}`,
+    timestamp: options?.timestamp ?? formatElapsedTelegraphTime(),
+    sender,
+    text: text.replace(/^"|"$/g, ''),
+    phase: options?.phase,
+    completed: options?.completed ?? false,
+    level: options?.level ?? 'normal',
+  }
+}
+
+function createInitialWePadChatLog(prompt: TutorialPrompt): WePadChatMessage[] {
+  const fullText = prompt.hint ? `${prompt.body} ${prompt.hint}` : prompt.body
+  return [
+    createWePadChatMessage('COMRADE VOLKOV', fullText, {
+      phase: prompt.phase,
+      completed: false,
+      timestamp: '00:00',
+    }),
+  ]
+}
+
+function syncWePadChatOnPhaseChange(
+  prevLog: WePadChatMessage[],
+  prevPhase: TutorialPhase,
+  nextPrompt: TutorialPrompt
+): WePadChatMessage[] {
+  if (prevPhase === nextPrompt.phase) return prevLog
+  const marked = prevLog.map((m) =>
+    m.phase === prevPhase ? { ...m, completed: true } : m
+  )
+
+  if (nextPrompt.phase === 'COMPLETED') {
+    const volkovFarewell = createWePadChatMessage(
+      'COMRADE VOLKOV',
+      VOLKOV_FAREWELL_MESSAGE,
+      {
+        phase: 'COMPLETED',
+        completed: true,
+        level: 'normal',
+      }
+    )
+    const komradTakeover = createWePadChatMessage(
+      'K.O.M.R.A.D.-84',
+      KOMRAD_TAKEOVER_MESSAGE,
+      {
+        phase: 'COMPLETED',
+        completed: false,
+        level: 'normal',
+      }
+    )
+    lastKomradPropagandaSec = shiftElapsedSeconds
+    return [...marked.slice(-30), volkovFarewell, komradTakeover]
+  }
+
+  const fullText = nextPrompt.hint
+    ? `${nextPrompt.body} ${nextPrompt.hint}`
+    : nextPrompt.body
+  const nextMsg = createWePadChatMessage('COMRADE VOLKOV', fullText, {
+    phase: nextPrompt.phase,
+    completed: false,
+    level: 'normal',
+  })
+  return [...marked.slice(-30), nextMsg]
 }
 
 function createDirectiveInstance(forceForgery?: boolean): DirectiveDocument {
@@ -304,13 +574,20 @@ const INITIAL_ENTRIES: TerminalLogEntry[] = [
   createLogEntry(
     0,
     'K.O.M.R.A.D.-84',
-    'REMINDER: MELTDOWN IS CAPITALIST PROPAGANDA. DRAG POWER LEVERS DIRECTLY TO ROUTE MW.',
+    'REMINDER: MELTDOWN IS CAPITALIST PROPAGANDA. PRESS [E] TO PICK UP WE-PAD 84 FROM DESK.',
     'normal'
   ),
 ]
 
+const INITIAL_COLD_REACTOR = createColdStartState()
+const INITIAL_MAPPED = mapReactorToGameStateFields(
+  INITIAL_COLD_REACTOR,
+  'STEP_0_PICKUP_WEPAD'
+)
+
 export const useGameStore = create<GameState>((set, get) => ({
-  phase: 'boot',
+  ...INITIAL_MAPPED,
+  phase: 'playing',
   activeStation: 'overview',
   shiftNumber: 1,
   shiftTimeMinutes: 0,
@@ -318,71 +595,35 @@ export const useGameStore = create<GameState>((set, get) => ({
   isGodMode: false,
   isMusicMuted: false,
   treasonStrikes: 0,
-  lastDecisionFeedback: null,
+  lastDecisionFeedback: INITIAL_MAPPED.tutorialPrompt.header,
   activeMandate: null,
 
-  coreTemp: 330,
-  pressureBar: 48,
-  radiationLevel: 0.4,
-  maxSafePower: 110,
-  powerAllocation: {
-    cooling: 35,
-    defense: 35,
-    facility: 30,
-  },
-  sectorMW: {
-    pripyat: 20,
-    kolkhoz: 15,
-    duga: 20,
-    kgb: 15,
-    vodka: 15,
-    steel: 15,
-  },
-  targetSectorMW: {
-    pripyat: 20,
-    kolkhoz: 15,
-    duga: 20,
-    kgb: 15,
-    vodka: 15,
-    steel: 15,
-  },
-  targetCityMW: 35,
-  targetDefenseMW: 35,
-  targetVodkaMW: 30,
-  waterReservoir: 85,
-  pripyatWater: 85,
-  kolkhozWater: 85,
-  vodkaWater: 85,
+  wePadActiveTab: 1,
+  wePadChatLog: createInitialWePadChatLog(INITIAL_MAPPED.tutorialPrompt),
+  selectedH2OSubstationId: 1,
+
+  maxSafePower: 1000,
+  waterReservoir: 50,
+  pripyatWater: 0,
+  kolkhozWater: 0,
+  vodkaWater: 0,
   vodkaDroughtTimer: 0,
-  waterUsage: 48,
+  waterUsage: 0,
   redlineInstability: 0,
-  isBlackout: false,
-  pumpsActive: [true, false],
-  pumpThrottle: [80, 0],
-  pumpAHeat: 38,
+  pumpAHeat: 0,
   pumpBHeat: 0,
   lubeOilPressure: 88,
   oilCoolerValve: 45,
-  controlRodLevel: 50,
   boronTankLevel: 100,
   boronReservePool: 300,
   boronPoisoningTimer: 0,
   isInspectingDesk: false,
   channelHotspots: {},
-  graphiteTemp: 320,
-  nitrogenLoopValve: 42,
-  heliumPressure: 46,
-  bubblerLevel: 24,
-  bubblerDraining: false,
-  sealToggles: [true, true, true],
-  containmentSealLocked: true,
-  ventingSteam: false,
-  turbineRpm: 3000,
-  gridHz: 50.0,
+  graphiteTemp: 25,
   excitationTrim: 0.0,
   hzOutOfBoundsSeconds: 0,
   ventilationActive: false,
-  kgbLineActive: false,
+  kgbLineActive: true,
   auxLoopBActive: false,
   boronCooldown: 0,
   az5Available: true,
@@ -396,10 +637,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   activeDirectives: [],
   printerProgress: 0,
-  tutorialStep: 1,
   tutorialDrainSeconds: 0,
   shiftRunId: 0,
   hoveredDiagnosticId: null,
+  hoveredControlHint: null,
 
   setActiveStation: (station: CameraStation) => {
     set({ activeStation: station })
@@ -411,75 +652,243 @@ export const useGameStore = create<GameState>((set, get) => ({
     )
   },
 
+  setHoveredControlHint: (hint) => {
+    set((state) =>
+      state.hoveredControlHint === hint ? state : { hoveredControlHint: hint }
+    )
+  },
+
+  notifyPrinterDirectiveSpawned: (docTitle, isForgery, powerTargets) => {
+    set((state) => {
+      if (state.tutorialPhase !== 'COMPLETED') return state
+      const prevTargets = state.targetSectorMW
+      const prevTotal =
+        prevTargets.pripyat +
+        prevTargets.duga +
+        prevTargets.kolkhoz +
+        prevTargets.kgb +
+        prevTargets.vodka +
+        prevTargets.steel
+      const newTotal = powerTargets
+        ? (powerTargets.pripyat ?? prevTargets.pripyat) +
+          (powerTargets.duga ?? prevTargets.duga) +
+          (powerTargets.kolkhoz ?? prevTargets.kolkhoz) +
+          (powerTargets.kgb ?? prevTargets.kgb) +
+          (powerTargets.vodka ?? prevTargets.vodka) +
+          (powerTargets.steel ?? prevTargets.steel)
+        : prevTotal
+
+      let flavor: PrinterOrderFlavor = 'DIVERT'
+      if (isForgery && komradDispatchSeed % 2 === 0) {
+        flavor = 'FORGERY_HINT'
+      } else if (newTotal >= prevTotal + 25) {
+        flavor = 'SURGE'
+      } else if (newTotal <= prevTotal - 25) {
+        flavor = 'SHED'
+      }
+      komradDispatchSeed += 1
+      const dispatchMsg = pickPrinterDirectiveDispatch(flavor, komradDispatchSeed)
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'K.O.M.R.A.D.-84',
+        `${dispatchMsg} (${docTitle.slice(0, 26)})`,
+        isForgery && flavor === 'FORGERY_HINT' ? 'warn' : 'normal'
+      )
+      const nextChatLog = [
+        ...state.wePadChatLog.slice(-30),
+        createWePadChatMessage('K.O.M.R.A.D.-84', dispatchMsg, {
+          level: isForgery && flavor === 'FORGERY_HINT' ? 'warn' : 'normal',
+        }),
+      ]
+      return {
+        lastDecisionFeedback: dispatchMsg,
+        wePadChatLog: nextChatLog,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+      }
+    })
+  },
+
+  toggleWePadHeld: (forceHeld?: boolean) => {
+    set((state) => {
+      const nextHeld =
+        typeof forceHeld === 'boolean' ? forceHeld : !state.wePadHeld
+      const nextInspecting = nextHeld ? state.wePadInspecting : false
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        wePadHeld: nextHeld,
+        wePadInspecting: nextInspecting,
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      return {
+        ...mapped,
+        wePadChatLog: nextChatLog,
+      }
+    })
+  },
+
+  toggleWePadInspecting: (forceInspecting?: boolean) => {
+    set((state) => {
+      // [TAB] skal KUN virke når WE-PAD 84 allerede holdes i hånden!
+      if (!state.wePadHeld) return state
+      const nextInspecting =
+        typeof forceInspecting === 'boolean'
+          ? forceInspecting
+          : !state.wePadInspecting
+      return {
+        wePadInspecting: nextInspecting,
+      }
+    })
+  },
+
+  setWePadActiveTab: (tab: WePadTabId) => {
+    set({ wePadActiveTab: tab })
+  },
+
+  setSubstationH2O: (substationId: 1 | 3 | 5, pct: number) => {
+    set((state) => {
+      const clamped = Math.max(0, Math.min(100, Math.round(pct / 5) * 5))
+      const nextSubstations = state.substations.map((s) =>
+        s.id === substationId ? { ...s, allocatedH2O: clamped } : { ...s }
+      )
+      const h2oStations = nextSubstations.filter((s) => s.requiresH2O)
+      const totalH2O = h2oStations.reduce((sum, s) => sum + s.allocatedH2O, 0)
+      const nextDrainPct =
+        h2oStations.length > 0 ? Math.round(totalH2O / h2oStations.length) : 0
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        substations: nextSubstations,
+        plantWaterDrainPct: nextDrainPct,
+      }
+      stepReactorSimulation(nextReactor, 0.001)
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      return {
+        ...mapped,
+        selectedH2OSubstationId: substationId,
+        wePadChatLog: nextChatLog,
+      }
+    })
+  },
+
+  adjustSubstationH2O: (substationId: 1 | 3 | 5, deltaPct: number) => {
+    const state = get()
+    const sub = findSubById(state.substations, substationId)
+    const cur = sub?.allocatedH2O ?? 0
+    state.setSubstationH2O(substationId, cur + deltaPct)
+  },
+
+  cycleSelectedH2OSubstation: () => {
+    set((state) => {
+      const nextId: 1 | 3 | 5 =
+        state.selectedH2OSubstationId === 1
+          ? 3
+          : state.selectedH2OSubstationId === 3
+            ? 5
+            : 1
+      return { selectedH2OSubstationId: nextId }
+    })
+  },
+
   skipTutorial: () => {
     set((state) => {
-      if (state.tutorialStep === 'DONE') return state
-      hotspotAccumulator = 0
-      shiftElapsedSeconds = 0
-      pumpATripped = false
-      pumpBTripped = false
-      vodkaDroughtSpikeApplied = false
-      const msg =
-        '>> VOLKOV DISPATCH: "QUALIFICATION DRILL BYPASSED BY VETERAN OPERATOR. LIVE NIGHT SHIFT ENGAGED — GLORY TO BLOCK 4!"'
+      resetKomradTrackers()
+      const liveReactor: ReactorState = {
+        ...createColdStartState(),
+        rodTargetRate: 0,
+        az5Active: false,
+        autoRodEnabled: true,
+        mcpActive: [true, true, true, true],
+        feedwaterValve: 0.55,
+        steamDumpValve: false,
+        kgbLineActive: true,
+        plantWaterDrainPct: 0,
+        wePadHeld: state.wePadHeld,
+        wePadInspecting: state.wePadInspecting,
+        controlRods: 0.55,
+        az5Timer: 0,
+        boronDampingTimer: 0,
+        reactivity: 0,
+        thermalPower: 2000,
+        xenon: 12,
+        iodine: 24,
+        voidFraction: 0.14,
+        rodTilesFlux: new Array(37).fill(65),
+        coreTileAnomalies: {},
+        coreTemp: 284,
+        drumPressure: 69.0,
+        drumWaterLevel: 0,
+        coolantFlow: 1.0,
+        reliefValveOpen: false,
+        turbines: [
+          {
+            valve: 0.6,
+            rpm: 3000,
+            freqHz: 50.0,
+            syncPhase: 0,
+            gridConnected: true,
+            electricalMW: 300,
+            tripped: false,
+          },
+          {
+            valve: 0.6,
+            rpm: 3000,
+            freqHz: 50.0,
+            syncPhase: 0,
+            gridConnected: true,
+            electricalMW: 300,
+            tripped: false,
+          },
+        ],
+        totalElectricalMW: 600,
+        substations: [
+          { id: 1, name: 'PRIPYAT CITY', allocatedMW: 100, targetMW: 100, maxMW: 250, requiresH2O: false, allocatedH2O: 0, targetH2O: 0, statusText: 'HEATING OK',  quotaOk: true },
+          { id: 2, name: 'DUGA-1 RADAR', allocatedMW: 100, targetMW: 100, maxMW: 250, requiresH2O: false, allocatedH2O: 0, targetH2O: 0, statusText: 'SWEEP OK',    quotaOk: true },
+          { id: 3, name: 'KOLKHOZ FARM', allocatedMW: 100, targetMW: 100, maxMW: 250, requiresH2O: false, allocatedH2O: 0, targetH2O: 0, statusText: 'GRID OK',     quotaOk: true },
+          { id: 4, name: 'KGB BUNKER',   allocatedMW: 100, targetMW: 100, maxMW: 250, requiresH2O: false, allocatedH2O: 0, targetH2O: 0, statusText: 'LINE: ON',    quotaOk: true },
+          { id: 5, name: 'VODKA PLANT',  allocatedMW: 100, targetMW: 100, maxMW: 250, requiresH2O: false, allocatedH2O: 0, targetH2O: 0, statusText: 'MASH OK',     quotaOk: true },
+          { id: 6, name: 'STEEL WORKS',  allocatedMW: 100, targetMW: 100, maxMW: 250, requiresH2O: false, allocatedH2O: 0, targetH2O: 0, statusText: 'FURNACE HOT', quotaOk: true },
+        ],
+        roomRadiation: 0.15,
+        coreMeltdown: false,
+        steamExplosion: false,
+      }
+      const mapped = mapReactorToGameStateFields(liveReactor, 'COMPLETED')
+      const msg = KOMRAD_TAKEOVER_MESSAGE
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
         msg,
         'normal'
       )
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        state.tutorialPhase,
+        mapped.tutorialPrompt
+      )
       return {
-        tutorialStep: 'DONE',
+        ...mapped,
+        phase: 'playing',
         tutorialDrainSeconds: 0,
-        coreTemp: 330,
-        pressureBar: 48,
-        radiationLevel: 0.4,
-        graphiteTemp: 320,
-        heliumPressure: 46,
-        bubblerLevel: 24,
-        bubblerDraining: false,
-        turbineRpm: 3000,
-        gridHz: 50.0,
-        excitationTrim: 0.0,
-        hzOutOfBoundsSeconds: 0,
-        isBlackout: false,
         redlineInstability: 0,
         treasonStrikes: 0,
-        waterReservoir: 85,
-        pripyatWater: 85,
-        kolkhozWater: 85,
-        vodkaWater: 85,
-        vodkaDroughtTimer: 0,
-        pumpsActive: [true, false],
-        pumpThrottle: [80, 0],
-        pumpAHeat: 38,
-        pumpBHeat: 0,
-        lubeOilPressure: 88,
-        oilCoolerValve: 45,
-        controlRodLevel: 50,
-        nitrogenLoopValve: 42,
-        channelHotspots: {},
         activeMandate: null,
-        sectorMW: {
-          pripyat: 20,
-          kolkhoz: 15,
-          duga: 20,
-          kgb: 15,
-          vodka: 15,
-          steel: 15,
-        },
-        targetSectorMW: {
-          pripyat: 20,
-          kolkhoz: 15,
-          duga: 20,
-          kgb: 15,
-          vodka: 15,
-          steel: 15,
-        },
-        targetCityMW: 35,
-        targetDefenseMW: 35,
-        targetVodkaMW: 30,
-        powerAllocation: { cooling: 35, defense: 35, facility: 30 },
         lastDecisionFeedback: msg,
+        wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
@@ -490,68 +899,42 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setTutorialStep: (step) => {
-    set({ tutorialStep: step })
+    set({
+      tutorialStep: step,
+      tutorialPhase: step === 'DONE' ? 'COMPLETED' : 'STEP_0_PICKUP_WEPAD',
+    })
   },
 
   startShift: () => {
-    hotspotAccumulator = 0
-    shiftElapsedSeconds = 0
-    pumpATripped = false
-    pumpBTripped = false
-    vodkaDroughtSpikeApplied = false
-    const baselineMsg =
-      'BASELINE GRID BALANCED (100/100 MW) — STAMP [ОДОБРЕНО] & DISPATCH IN OUTBOX TUBE TO UPDATE TARGETS'
+    resetKomradTrackers()
+    const cold = createColdStartState()
+    const mapped = mapReactorToGameStateFields(cold, 'STEP_0_PICKUP_WEPAD')
     const entry = createLogEntry(
       0,
       'K.O.M.R.A.D.-84',
-      `MAIN BREAKER ENGAGED. SHIFT 1 COMMENCING. ${baselineMsg}`,
+      `RBMK-1000 COLD START SEQUENCE INITIATED. ${mapped.tutorialPrompt.header}`,
       'normal'
     )
     set((state) => ({
+      ...mapped,
       phase: 'playing',
       activeMandate: null,
-      lastDecisionFeedback: baselineMsg,
-      isBlackout: false,
+      lastDecisionFeedback: mapped.tutorialPrompt.header,
+      wePadActiveTab: 1,
+      wePadChatLog: createInitialWePadChatLog(mapped.tutorialPrompt),
+      selectedH2OSubstationId: 1,
       hzOutOfBoundsSeconds: 0,
-      turbineRpm: 3000,
-      gridHz: 50.0,
-      excitationTrim: 0.0,
       ventilationActive: false,
-      kgbLineActive: false,
+      kgbLineActive: true,
       auxLoopBActive: false,
-      sectorMW: {
-        pripyat: 20,
-        kolkhoz: 15,
-        duga: 20,
-        kgb: 15,
-        vodka: 15,
-        steel: 15,
-      },
-      targetSectorMW: {
-        pripyat: 20,
-        kolkhoz: 15,
-        duga: 20,
-        kgb: 15,
-        vodka: 15,
-        steel: 15,
-      },
-      targetCityMW: 35,
-      targetDefenseMW: 35,
-      targetVodkaMW: 30,
-      waterReservoir: 85,
-      pripyatWater: 85,
-      kolkhozWater: 85,
-      vodkaWater: 85,
       vodkaDroughtTimer: 0,
-      controlRodLevel: 50,
       boronTankLevel: 100,
       boronReservePool: 300,
       boronPoisoningTimer: 0,
-      tutorialStep: 1,
       tutorialDrainSeconds: 0,
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
-      powerAllocation: { cooling: 35, defense: 35, facility: 30 },
+      hoveredControlHint: null,
       terminalEntries: [...state.terminalEntries.slice(-24), entry],
       terminalLogs: [
         ...state.terminalLogs.slice(-24),
@@ -561,88 +944,46 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   resetShift: () => {
-    hotspotAccumulator = 0
-    shiftElapsedSeconds = 0
-    pumpATripped = false
-    pumpBTripped = false
-    vodkaDroughtSpikeApplied = false
-    const baselineMsg =
-      'BASELINE GRID BALANCED (100/100 MW) — STAMP [ОДОБРЕНО] & DISPATCH IN OUTBOX TUBE TO UPDATE TARGETS'
+    resetKomradTrackers()
+    const cold = createColdStartState()
+    const mapped = mapReactorToGameStateFields(cold, 'STEP_0_PICKUP_WEPAD')
     const freshEntries = [
       createLogEntry(
         0,
         'K.O.M.R.A.D.-84',
-        'SHIFT RESET BY OPERATOR. ALL GAUGES NORMALIZED BY DECREE.',
+        `RBMK-1000 COLD START RESET BY OPERATOR. ${mapped.tutorialPrompt.header}`,
         'normal'
       ),
     ]
     set((state) => ({
+      ...mapped,
       phase: 'playing',
       shiftTimeMinutes: 0,
       treasonStrikes: 0,
-      tutorialStep: 1,
       tutorialDrainSeconds: 0,
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
-      lastDecisionFeedback: baselineMsg,
+      lastDecisionFeedback: mapped.tutorialPrompt.header,
       activeMandate: null,
-      coreTemp: 330,
-      pressureBar: 48,
-      radiationLevel: 0.4,
-      powerAllocation: { cooling: 35, defense: 35, facility: 30 },
-      sectorMW: {
-        pripyat: 20,
-        kolkhoz: 15,
-        duga: 20,
-        kgb: 15,
-        vodka: 15,
-        steel: 15,
-      },
-      targetSectorMW: {
-        pripyat: 20,
-        kolkhoz: 15,
-        duga: 20,
-        kgb: 15,
-        vodka: 15,
-        steel: 15,
-      },
-      targetCityMW: 35,
-      targetDefenseMW: 35,
-      targetVodkaMW: 30,
-      waterReservoir: 85,
-      pripyatWater: 85,
-      kolkhozWater: 85,
-      vodkaWater: 85,
+      wePadActiveTab: 1,
+      wePadChatLog: createInitialWePadChatLog(mapped.tutorialPrompt),
+      selectedH2OSubstationId: 1,
       vodkaDroughtTimer: 0,
-      waterUsage: 48,
       redlineInstability: 0,
-      isBlackout: false,
-      pumpsActive: [true, false],
-      pumpThrottle: [80, 0],
-      pumpAHeat: 38,
+      pumpAHeat: 0,
       pumpBHeat: 0,
       lubeOilPressure: 88,
       oilCoolerValve: 45,
-      controlRodLevel: 50,
       boronTankLevel: 100,
       boronReservePool: 300,
       boronPoisoningTimer: 0,
       isInspectingDesk: false,
       channelHotspots: {},
-      graphiteTemp: 320,
-      nitrogenLoopValve: 42,
-      heliumPressure: 46,
-      bubblerLevel: 24,
-      bubblerDraining: false,
-      sealToggles: [true, true, true],
-      containmentSealLocked: true,
-      ventingSteam: false,
-      turbineRpm: 3000,
-      gridHz: 50.0,
+      graphiteTemp: 25,
       excitationTrim: 0.0,
       hzOutOfBoundsSeconds: 0,
       ventilationActive: false,
-      kgbLineActive: false,
+      kgbLineActive: true,
       auxLoopBActive: false,
       boronCooldown: 0,
       az5Available: true,
@@ -657,528 +998,500 @@ export const useGameStore = create<GameState>((set, get) => ({
     }))
   },
 
-  recloseMainBreaker: () => {
+  pullMainBreaker: () => {
     set((state) => {
-      if (!state.isBlackout) return state
-      const inSyncWindow = state.gridHz >= 48.8 && state.gridHz <= 51.2
-      if (!inSyncWindow) {
-        const rejectMsg = `MAIN BREAKER REJECTED (${state.gridHz.toFixed(1)} HZ)! TRIM 50HZ RHEOSTAT ON UNIT C TO 49.0-51.0 HZ BEFORE CLOSING!`
-        const rejectEntry = createLogEntry(
-          state.shiftTimeMinutes,
-          'K.O.M.R.A.D.-84',
-          rejectMsg,
-          'danger'
-        )
-        return {
-          lastDecisionFeedback: rejectMsg,
-          terminalEntries: [...state.terminalEntries.slice(-24), rejectEntry],
-          terminalLogs: [
-            ...state.terminalLogs.slice(-24),
-            `[${rejectEntry.timestamp}] ${rejectEntry.sender}: ${rejectEntry.text}`,
-          ],
-        }
+      const baseReactor = extractReactorState(state)
+      const res = toggleGridBreaker(baseReactor, 0)
+      const t0 = baseReactor.turbines[0]
+      baseReactor.turbines[1] = {
+        ...baseReactor.turbines[1],
+        gridConnected: t0.gridConnected,
+        tripped: t0.tripped,
       }
-      const okMsg =
-        'MAIN BREAKER CLOSED! 50.0 HZ GRID SYNCHRONIZED & REGIONAL MW OUTPUT RESTORED.'
-      const okEntry = createLogEntry(
-        state.shiftTimeMinutes,
-        'OPERATOR',
-        okMsg,
-        'normal'
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(baseReactor, prevPhase)
+      let nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
       )
-      return {
-        isBlackout: false,
-        hzOutOfBoundsSeconds: 0,
-        redlineInstability: Math.min(state.redlineInstability, 40),
-        lastDecisionFeedback: okMsg,
-        terminalEntries: [...state.terminalEntries.slice(-24), okEntry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${okEntry.timestamp}] ${okEntry.sender}: ${okEntry.text}`,
-        ],
+      const msg = t0.gridConnected
+        ? 'MAIN BREAKER CLOSED! 50.0 HZ SYNCHRONIZED AT 12 O’CLOCK — 1000 MWe TURBOGENERATOR ONLINE!'
+        : t0.tripped
+          ? res.reason ?? `OUT-OF-PHASE SYNC TRIP (${Math.round(state.turbines[0].rpm)} RPM, PHASE ${Math.round(state.turbines[0].syncPhase)}°)!`
+          : 'MAIN BREAKER OPENED — TURBOGENERATOR DISCONNECTED FROM GRID.'
+      if (t0.tripped) {
+        nextChatLog = [
+          ...nextChatLog.slice(-30),
+          createWePadChatMessage('SYSTEM', `ALERT: ${msg}`, { level: 'danger' }),
+        ]
       }
-    })
-  },
-
-  setShiftKeyHeld: (held: boolean) => {
-    set((state) => {
-      if (held && !state.isShiftKeyHeld && !state.isBlackout) {
-        // Optional Master Power Sync / Boost when engaging the SHIFT CLUTCH lever
-        return {
-          isShiftKeyHeld: true,
-          gridHz: Number((state.gridHz + (50.0 - state.gridHz) * 0.6).toFixed(2)),
-          redlineInstability: Math.max(0, state.redlineInstability - 8),
-        }
-      }
-      return { isShiftKeyHeld: held }
-    })
-  },
-
-  shiftPower: (system: SystemType, deltaMW: number) => {
-    const state = get()
-    const target = state.powerAllocation[system] + deltaMW
-    state.setSubsystemPower(system, target)
-  },
-
-  setSubsystemPower: (system: SystemType, targetMW: number) => {
-    const state = get()
-    if (state.isBlackout || state.komradOverrideLocked) {
-      return
-    }
-    const clamped = Math.max(0, Math.min(80, Math.round(targetMW / 5) * 5))
-    const prevMW = state.powerAllocation[system]
-    if (clamped === prevMW) return
-    const nextAlloc = {
-      ...state.powerAllocation,
-      [system]: clamped,
-    }
-    const totalMW = nextAlloc.cooling + nextAlloc.defense + nextAlloc.facility
-    const mwCeiling =
-      state.tutorialStep !== 'DONE'
-        ? 240
-        : Math.round(
-            40 +
-              (state.controlRodLevel / 100) * 140 +
-              (state.controlRodLevel > 50 ? (state.controlRodLevel - 50) * 1.2 : 0)
-          )
-    if (totalMW > 240 || (clamped > prevMW && totalMW > mwCeiling)) {
-      const warnMsg = `MW CEILING REACHED (${mwCeiling} MW @ ${Math.round(state.controlRodLevel)}% RODS)! WITHDRAW CONTROL RODS ON UNIT A-2 (>50%) TO UNLOCK HIGHER MEGAWATT CAPACITY!`
-      const warnEntry = createLogEntry(
-        state.shiftTimeMinutes,
-        'K.O.M.R.A.D.-84',
-        warnMsg,
-        'warn'
-      )
-      set({
-        lastDecisionFeedback: warnMsg,
-        terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
-        ],
-      })
-      return
-    }
-    const halfA = Math.min(50, Math.round(clamped / 10) * 5)
-    const halfB = Math.min(50, clamped - halfA)
-    const nextSectorMW = { ...state.sectorMW }
-    if (system === 'cooling') {
-      nextSectorMW.pripyat = halfA
-      nextSectorMW.kolkhoz = halfB
-    } else if (system === 'defense') {
-      nextSectorMW.duga = halfA
-      nextSectorMW.kgb = halfB
-    } else {
-      nextSectorMW.vodka = halfA
-      nextSectorMW.steel = halfB
-    }
-    const deltaTenMW = (clamped - prevMW) / 10
-    const nextHz = Number(
-      Math.max(45.0, Math.min(55.0, state.gridHz - deltaTenMW * 0.4)).toFixed(2)
-    )
-    const nextRpm = Math.round(
-      Math.max(0, Math.min(3600, state.turbineRpm - deltaTenMW * 45))
-    )
-    set({
-      powerAllocation: nextAlloc,
-      sectorMW: nextSectorMW,
-      gridHz: nextHz,
-      turbineRpm: nextRpm,
-    })
-  },
-
-  shiftSectorPower: (sector: SectorNodeId, deltaMW: number) => {
-    const state = get()
-    const target = state.sectorMW[sector] + deltaMW
-    state.setSectorPower(sector, target)
-  },
-
-  setSectorPower: (sector: SectorNodeId, targetMW: number) => {
-    const state = get()
-    if (state.isBlackout || state.komradOverrideLocked) {
-      return
-    }
-    const clamped = Math.max(0, Math.min(50, Math.round(targetMW / 5) * 5))
-    const prevMW = state.sectorMW[sector]
-    if (clamped === prevMW) return
-    const nextSectorMW = {
-      ...state.sectorMW,
-      [sector]: clamped,
-    }
-    const nextAlloc: Record<SystemType, number> = {
-      cooling: nextSectorMW.pripyat + nextSectorMW.kolkhoz,
-      defense: nextSectorMW.duga + nextSectorMW.kgb,
-      facility: nextSectorMW.vodka + nextSectorMW.steel,
-    }
-    const totalMW = nextAlloc.cooling + nextAlloc.defense + nextAlloc.facility
-    const mwCeiling =
-      state.tutorialStep !== 'DONE'
-        ? 240
-        : Math.round(
-            40 +
-              (state.controlRodLevel / 100) * 140 +
-              (state.controlRodLevel > 50 ? (state.controlRodLevel - 50) * 1.2 : 0)
-          )
-    if (totalMW > 240 || (clamped > prevMW && totalMW > mwCeiling)) {
-      const warnMsg = `MW CEILING REACHED (${mwCeiling} MW @ ${Math.round(state.controlRodLevel)}% RODS)! WITHDRAW CONTROL RODS ON UNIT A-2 (>50%) TO UNLOCK HIGHER MEGAWATT CAPACITY!`
-      const warnEntry = createLogEntry(
-        state.shiftTimeMinutes,
-        'K.O.M.R.A.D.-84',
-        warnMsg,
-        'warn'
-      )
-      set({
-        lastDecisionFeedback: warnMsg,
-        terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
-        ],
-      })
-      return
-    }
-    const deltaTenMW = (clamped - prevMW) / 10
-    const nextHz = Number(
-      Math.max(45.0, Math.min(55.0, state.gridHz - deltaTenMW * 0.4)).toFixed(2)
-    )
-    const nextRpm = Math.round(
-      Math.max(0, Math.min(3600, state.turbineRpm - deltaTenMW * 45))
-    )
-
-    if (state.tutorialStep === 2 && nextSectorMW.vodka === 25) {
-      const step3Msg =
-        'DRILL 3/5 [KEY 1 -> UNIT A]: MORE MW CREATES CORE HEAT! TURN [COOLING PUMP A] WHEEL ABOVE 50% TO SIPHON COOLING WATER.'
-      const step3Entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'K.O.M.R.A.D.-84',
-        `>> VOLKOV DISPATCH: "${step3Msg}"`,
-        'warn'
-      )
-      set({
-        sectorMW: nextSectorMW,
-        powerAllocation: nextAlloc,
-        tutorialStep: 3,
-        tutorialDrainSeconds: 0,
-        coreTemp: 470,
-        pressureBar: 54,
-        bubblerLevel: 45,
-        pumpThrottle: [40, 0],
-        pumpsActive: [true, false],
-        nitrogenLoopValve: 25,
-        gridHz: 50.0,
-        turbineRpm: 3000,
-        lastDecisionFeedback: step3Msg,
-        terminalEntries: [...state.terminalEntries.slice(-24), step3Entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${step3Entry.timestamp}] ${step3Entry.sender}: ${step3Entry.text}`,
-        ],
-      })
-      return
-    }
-
-    set({
-      sectorMW: nextSectorMW,
-      powerAllocation: nextAlloc,
-      gridHz: state.tutorialStep !== 'DONE' && state.tutorialStep < 4 ? 50.0 : nextHz,
-      turbineRpm:
-        state.tutorialStep !== 'DONE' && state.tutorialStep < 4 ? 3000 : nextRpm,
-    })
-  },
-
-  togglePump: (pumpIndex: 0 | 1, active?: boolean) => {
-    set((state) => {
-      const next: [boolean, boolean] = [...state.pumpsActive] as [boolean, boolean]
-      const targetActive = typeof active === 'boolean' ? active : !next[pumpIndex]
-      const currentHeat = pumpIndex === 0 ? state.pumpAHeat : state.pumpBHeat
-      // Bearing temperature in °C is `20 + currentHeat`; allow restart as soon as bearing temp < 95°C (`currentHeat < 75`)
-      if (targetActive && currentHeat >= 75) {
-        return state
-      }
-      if (pumpIndex === 0) pumpATripped = false
-      else pumpBTripped = false
-      next[pumpIndex] = targetActive
-      const nextThrottle: [number, number] = [...state.pumpThrottle] as [number, number]
-      nextThrottle[pumpIndex] = targetActive ? 80 : 0
-      const statusText = next[pumpIndex] ? 'ENGAGED (80%)' : 'DISENGAGED'
       const entry = createLogEntry(
         state.shiftTimeMinutes,
-        'OPERATOR',
-        `PRIMARY COOLING PUMP ${pumpIndex === 0 ? 'A' : 'B'} ${statusText}.`,
-        next[pumpIndex] ? 'normal' : 'warn'
+        t0.tripped ? 'K.O.M.R.A.D.-84' : 'OPERATOR',
+        msg,
+        t0.tripped ? 'danger' : 'normal'
       )
       return {
-        pumpsActive: next,
-        pumpThrottle: nextThrottle,
+        ...mapped,
+        phase: 'playing',
+        lastDecisionFeedback: msg,
+        wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+      }
+    })
+  },
+
+  recloseMainBreaker: () => {
+    get().pullMainBreaker()
+  },
+
+  resetTurbineTrip: () => {
+    set((state) => {
+      const nextTurbines: [typeof state.turbines[0], typeof state.turbines[1]] = [
+        { ...state.turbines[0], tripped: false },
+        { ...state.turbines[1], tripped: false },
+      ]
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        turbines: nextTurbines,
+      }
+      const mapped = mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
+      const msg =
+        'TURBINE TRIP LATCH RESET! CLICK TURBINE STEAM VALVE TO 20% FOR 3000 RPM (50.0 HZ).'
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'OPERATOR',
+        msg,
+        'normal'
+      )
+      return {
+        ...mapped,
+        lastDecisionFeedback: msg,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+      }
+    })
+  },
+
+  setFeedwaterValve: (valveRatioOrPct: number) => {
+    set((state) => {
+      const normalized =
+        valveRatioOrPct > 1.0001 ? valveRatioOrPct / 100 : valveRatioOrPct
+      const clamped = Math.max(0, Math.min(1, Number(normalized.toFixed(3))))
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        feedwaterValve: clamped,
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      return {
+        ...mapped,
+        wePadChatLog: nextChatLog,
+      }
+    })
+  },
+
+  toggleMcpPump: (pumpIdx: 0 | 1 | 2 | 3, active?: boolean) => {
+    set((state) => {
+      const nextMcp = [...state.mcpActive]
+      nextMcp[pumpIdx] =
+        typeof active === 'boolean' ? active : !nextMcp[pumpIdx]
+      const activeCount = nextMcp.filter(Boolean).length
+      const nextFeedwater =
+        activeCount >= 2 && state.feedwaterValve < 0.40
+          ? 0.50
+          : state.feedwaterValve
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        mcpActive: nextMcp,
+        feedwaterValve: nextFeedwater,
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'OPERATOR',
+        `MAIN CIRCULATION PUMP ГЦН-${pumpIdx + 1} ${nextMcp[pumpIdx] ? 'ENGAGED' : 'STOPPED'} (FLOW ${Math.round(activeCount * 25)}%).`,
+        nextMcp[pumpIdx] ? 'normal' : 'warn'
+      )
+      return {
+        ...mapped,
+        wePadChatLog: nextChatLog,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+      }
+    })
+  },
+
+  setSteamDumpValve: (open: boolean) => {
+    set((state) => {
+      if (state.steamDumpValve === open) return state
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        steamDumpValve: open,
+      }
+      return mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
+    })
+  },
+
+  toggleSteamDumpValve: () => {
+    const state = get()
+    state.setSteamDumpValve(!state.steamDumpValve)
+  },
+
+  setRodTargetRate: (rate: -1 | 0 | 1) => {
+    set((state) => {
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        rodTargetRate: rate,
+        autoRodEnabled: rate !== 0 ? false : state.autoRodEnabled,
+      }
+      return mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
+    })
+  },
+
+  setAutoRodEnabled: (enabled?: boolean) => {
+    set((state) => {
+      const nextAuto =
+        typeof enabled === 'boolean' ? enabled : !state.autoRodEnabled
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        autoRodEnabled: nextAuto,
+        rodTargetRate: nextAuto ? 0 : state.rodTargetRate,
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'OPERATOR',
+        `AUTOMATIC ROD REGULATOR (АР) ${nextAuto ? 'ENGAGED (HOLDING STABLE POWER & 70 BAR)' : 'DISENGAGED (MANUAL СУЗ)'}.`,
+        'normal'
+      )
+      return {
+        ...mapped,
+        wePadChatLog: nextChatLog,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+      }
+    })
+  },
+
+  setTurbineSteamValve: (valveRatioOrPct: number) => {
+    set((state) => {
+      const normalized =
+        valveRatioOrPct > 1.0001 ? valveRatioOrPct / 100 : valveRatioOrPct
+      const clamped = Math.max(0, Math.min(1, Number(normalized.toFixed(3))))
+      // Klikk på TURBINE STEAM VALVE tilbakestiller umiddelbart turb.tripped = false
+      const nextTurbines: [typeof state.turbines[0], typeof state.turbines[1]] = [
+        { ...state.turbines[0], valve: clamped, tripped: false },
+        { ...state.turbines[1], valve: clamped, tripped: false },
+      ]
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        turbines: nextTurbines,
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      return {
+        ...mapped,
+        wePadChatLog: nextChatLog,
+      }
+    })
+  },
+
+  setShiftKeyHeld: (held: boolean) => {
+    set({ isShiftKeyHeld: held })
+  },
+
+  shiftPower: (system: SystemType, deltaMW: number) => {
+    const state = get()
+    const scaledDelta = Math.abs(deltaMW) <= 10 ? deltaMW * 10 : deltaMW
+    if (system === 'cooling') {
+      state.shiftSectorPower('pripyat', scaledDelta)
+    } else if (system === 'defense') {
+      state.shiftSectorPower('duga', scaledDelta)
+    } else {
+      state.shiftSectorPower('vodka', scaledDelta)
+    }
+  },
+
+  setSubsystemPower: (system: SystemType, targetMW: number) => {
+    const state = get()
+    const scaledTarget = targetMW <= 80 ? targetMW * 2.5 : targetMW
+    if (system === 'cooling') {
+      state.setSectorPower('pripyat', scaledTarget)
+    } else if (system === 'defense') {
+      state.setSectorPower('duga', scaledTarget)
+    } else {
+      state.setSectorPower('vodka', scaledTarget)
+    }
+  },
+
+  shiftSectorPower: (sector: SectorNodeId, deltaMW: number) => {
+    const state = get()
+    const current = state.sectorMW[sector] ?? 0
+    state.setSectorPower(sector, current + deltaMW)
+  },
+
+  setSectorPower: (sector: SectorNodeId, targetMW: number) => {
+    set((state) => {
+      if (state.komradOverrideLocked) return state
+      const subId = SECTOR_TO_SUB_ID[sector]
+      const sub = findSubById(state.substations, subId)
+      const maxMW = sub?.maxMW ?? 250
+      const clamped = Math.max(0, Math.min(maxMW, Math.round(targetMW / 25) * 25))
+      if (clamped === Math.round(sub?.allocatedMW ?? 0)) return state
+      const nextSubstations: SubstationQuota[] = state.substations.map((s) =>
+        s.id === subId ? { ...s, allocatedMW: clamped } : { ...s }
+      )
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        substations: nextSubstations,
+      }
+      stepReactorSimulation(nextReactor, 0.001)
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      return {
+        ...mapped,
+        wePadChatLog: nextChatLog,
+      }
+    })
+  },
+
+  togglePump: (pumpIndex: 0 | 1, active?: boolean) => {
+    set((state) => {
+      if (
+        state.tutorialPhase === 'STEP_0_PICKUP_WEPAD' ||
+        state.tutorialPhase === 'STEP_1_COOLING'
+      ) {
+        return state
+      }
+      const idxA = pumpIndex === 0 ? 0 : 2
+      const idxB = pumpIndex === 0 ? 1 : 3
+      const curActive = Boolean(state.mcpActive[idxA] || state.mcpActive[idxB])
+      const target = typeof active === 'boolean' ? active : !curActive
+      const nextMcp = [...state.mcpActive]
+      nextMcp[idxA] = target
+      nextMcp[idxB] = target
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        mcpActive: nextMcp,
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      return {
+        ...mapped,
+        wePadChatLog: nextChatLog,
       }
     })
   },
 
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => {
     set((state) => {
-      const currentHeat = pumpIndex === 0 ? state.pumpAHeat : state.pumpBHeat
-      // Un-trip seized pump as soon as bearing temp is < 95°C (`currentHeat < 75`)
-      const isSeized =
-        (pumpIndex === 0 ? pumpATripped : pumpBTripped) && currentHeat >= 75
-      if (!isSeized) {
-        if (pumpIndex === 0) pumpATripped = false
-        else pumpBTripped = false
+      if (
+        state.tutorialPhase === 'STEP_0_PICKUP_WEPAD' ||
+        state.tutorialPhase === 'STEP_1_COOLING'
+      ) {
+        return state
       }
-      const clamped = isSeized
-        ? 0
-        : Math.max(0, Math.min(100, Number(throttlePct.toFixed(1))))
-      const nextThrottle: [number, number] = [...state.pumpThrottle] as [number, number]
-      nextThrottle[pumpIndex] = clamped
-      const nextActive: [boolean, boolean] = [
-        nextThrottle[0] > 0.5,
-        nextThrottle[1] > 0.5,
-      ]
+      const clamped = Math.max(0, Math.min(100, Number(throttlePct.toFixed(1))))
+      const idxA = pumpIndex === 0 ? 0 : 2
+      const idxB = pumpIndex === 0 ? 1 : 3
+      const nextMcp = [...state.mcpActive]
+      nextMcp[idxA] = clamped >= 15
+      nextMcp[idxB] = clamped >= 55
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        mcpActive: nextMcp,
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
       return {
-        pumpThrottle: nextThrottle,
-        pumpsActive: nextActive,
+        ...mapped,
+        wePadChatLog: nextChatLog,
       }
     })
   },
 
   setOilCoolerValve: (valvePct: number) => {
-    set({
-      oilCoolerValve: Math.max(0, Math.min(100, Number(valvePct.toFixed(1)))),
-    })
+    get().setControlRodLevel(valvePct)
   },
 
   setControlRodLevel: (levelPct: number) => {
     set((state) => {
-      const clamped = Math.max(0, Math.min(100, Number(levelPct.toFixed(1))))
-      if (Math.abs(clamped - state.controlRodLevel) < 0.05) return state
+      const clampedPct = Math.max(0, Math.min(100, Number(levelPct.toFixed(1))))
+      const nextRods = Number((clampedPct / 100).toFixed(4))
+      const delta = nextRods - state.controlRods
+      if (Math.abs(delta) < 0.0005) return state
+      const nextFeedwater =
+        nextRods >= 0.20 && state.feedwaterValve < 0.40
+          ? 0.50
+          : state.feedwaterValve
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        controlRods: nextRods,
+        rodTargetRate: 0,
+        feedwaterValve: nextFeedwater,
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
       return {
-        controlRodLevel: clamped,
+        ...mapped,
+        wePadChatLog: nextChatLog,
       }
     })
   },
 
   adjustControlRodLevel: (deltaPct: number) => {
     const state = get()
-    state.setControlRodLevel(state.controlRodLevel + deltaPct)
+    state.setControlRodLevel(state.controlRods * 100 + deltaPct)
   },
 
-  pumpBoronTank: (amountPct = 3.5) => {
-    set((state) => {
-      const nextRodLevel = Math.max(
-        0,
-        Number((state.controlRodLevel - 5).toFixed(1))
-      )
-      if (state.boronTankLevel >= 100 || state.boronReservePool <= 0) {
-        return nextRodLevel !== state.controlRodLevel
-          ? { controlRodLevel: nextRodLevel }
-          : state
-      }
-      const needed = 100 - state.boronTankLevel
-      const actualGain = Math.min(amountPct, needed, state.boronReservePool)
-      const nextLevel = Number(
-        Math.min(100, state.boronTankLevel + actualGain).toFixed(1)
-      )
-      const nextPool = Number(
-        Math.max(0, state.boronReservePool - actualGain).toFixed(1)
-      )
-      const nextCooldown = Math.max(0, state.boronCooldown - 4.0)
-      return {
-        controlRodLevel: nextRodLevel,
-        boronTankLevel: nextLevel,
-        boronReservePool: nextPool,
-        boronCooldown: nextCooldown,
-      }
-    })
+  pumpBoronTank: () => {
+    get().setAutoRodEnabled()
   },
 
   quenchChannelHotspot: (channelIndex: number) => {
     set((state) => {
-      const activeKeys = Object.keys(state.channelHotspots).map(Number)
-      const hadAnyHotspot = activeKeys.length > 0
-      const targetKey =
-        state.channelHotspots[channelIndex] !== undefined
-          ? channelIndex
-          : hadAnyHotspot
-            ? activeKeys[0]
-            : undefined
-
-      // Clicking a tile in the 37-tile matrix also maps to local rod depth / controlRodLevel (0..100%)
-      const clickedRodPct = Math.round(((channelIndex + 1) / 37) * 100)
-      const nextRodLevel = hadAnyHotspot
-        ? Math.max(0, Number((state.controlRodLevel - 5).toFixed(1)))
-        : Math.abs(state.controlRodLevel - clickedRodPct) <= 4
-          ? state.controlRodLevel >= 50
-            ? Math.max(0, state.controlRodLevel - 10)
-            : Math.min(100, state.controlRodLevel + 10)
-          : clickedRodPct
-
-      if (hadAnyHotspot && state.boronTankLevel < 6) {
-        const warnEntry = createLogEntry(
-          state.shiftTimeMinutes,
-          'K.O.M.R.A.D.-84',
-          `HOTSPOT QUENCH FAILED: BORON TANK AT ${Math.round(state.boronTankLevel)}%! PUMP BORON PISTON ON UNIT A-2 (>= 6% REQUIRED)!`,
-          'danger'
-        )
-        return {
-          controlRodLevel: nextRodLevel,
-          lastDecisionFeedback:
-            'BORON TANK < 6%! PUMP BORON PISTON ON UNIT A-2 TO QUENCH HOTSPOTS!',
-          terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
-          terminalLogs: [
-            ...state.terminalLogs.slice(-24),
-            `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
-          ],
-        }
+      const nextReactor: ReactorState = extractReactorState(state)
+      const res = trimCoreChannelTile(nextReactor, channelIndex)
+      if (res.trimmed === 'none') {
+        return state
       }
-
-      const nextHotspots: Record<number, HotspotSeverity> = {
-        ...state.channelHotspots,
-      }
-      if (typeof targetKey === 'number') {
-        delete nextHotspots[targetKey]
-      }
-      delete nextHotspots[channelIndex]
-
-      const tempDrop = hadAnyHotspot ? 20 : 6
-      const pressDrop = hadAnyHotspot ? 3.5 : 0.8
-      const nextTemp = Math.max(290, state.coreTemp - tempDrop)
-      const nextPress = Math.max(
-        30,
-        Number((state.pressureBar - pressDrop).toFixed(1))
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      let nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
       )
-      const nextBoron = hadAnyHotspot
-        ? Number(Math.max(0, state.boronTankLevel - 6).toFixed(1))
-        : state.boronTankLevel
-
-      if (typeof targetKey === 'number' || hadAnyHotspot) {
-        const entry = createLogEntry(
-          state.shiftTimeMinutes,
-          'OPERATOR',
-          `LOCAL BORON ROD INSERTED IN RBMK CHANNEL #${(targetKey ?? channelIndex) + 1} (RODS: ${Math.round(nextRodLevel)}% WITHDRAWN, HOTSPOT QUENCHED, -${tempDrop}°C).`,
-          'normal'
-        )
-        return {
-          controlRodLevel: nextRodLevel,
-          channelHotspots: nextHotspots,
-          coreTemp: nextTemp,
-          pressureBar: nextPress,
-          boronTankLevel: nextBoron,
-          lastDecisionFeedback: `RBMK CHANNEL #${(targetKey ?? channelIndex) + 1} HOTSPOT QUENCHED (-${tempDrop}°C, RODS ${Math.round(nextRodLevel)}% WITHDRAWN)!`,
-          terminalEntries: [...state.terminalEntries.slice(-24), entry],
-          terminalLogs: [
-            ...state.terminalLogs.slice(-24),
-            `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-          ],
-        }
+      const feedbackMsg =
+        res.trimmed === 'void'
+          ? `CHANNEL #${channelIndex + 1} VOID HOTSPOT TRIMMED (-12% VOID -> ${res.remainingPct}%)!`
+          : `CHANNEL #${channelIndex + 1} XENON POCKET PURGED (-12% XENON -> ${res.remainingPct}%)!`
+      if (mapped.tutorialPhase === prevPhase && mapped.tutorialPhase === 'COMPLETED') {
+        nextChatLog = [
+          ...nextChatLog.slice(-30),
+          createWePadChatMessage('SYSTEM', feedbackMsg, { level: 'normal' }),
+        ]
       }
       return {
-        controlRodLevel: nextRodLevel,
-        channelHotspots: nextHotspots,
-        coreTemp: nextTemp,
-        pressureBar: nextPress,
-        boronTankLevel: nextBoron,
+        ...mapped,
+        lastDecisionFeedback: feedbackMsg,
+        wePadChatLog: nextChatLog,
       }
     })
   },
 
   setNitrogenLoopValve: (valvePct: number) => {
-    set({
-      nitrogenLoopValve: Math.max(0, Math.min(100, Number(valvePct.toFixed(1)))),
-    })
+    get().setFeedwaterValve(valvePct / 100)
   },
 
   setBubblerDraining: (draining: boolean) => {
-    set({ bubblerDraining: draining })
+    get().setSteamDumpValve(draining)
   },
 
   toggleSealSwitch: (toggleIndex: 0 | 1 | 2, active?: boolean) => {
-    set((state) => {
-      const nextToggles: [boolean, boolean, boolean] = [...state.sealToggles] as [
-        boolean,
-        boolean,
-        boolean,
-      ]
-      nextToggles[toggleIndex] =
-        typeof active === 'boolean' ? active : !nextToggles[toggleIndex]
-      const allLocked = nextToggles[0] && nextToggles[1] && nextToggles[2]
-      return {
-        sealToggles: nextToggles,
-        containmentSealLocked: allLocked,
-      }
-    })
+    get().toggleMcpPump(toggleIndex, active)
   },
 
   lockAllContainmentSeals: () => {
-    set((state) => {
-      const entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'OPERATOR',
-        'UNIT B EMERGENCY CONTAINMENT SEAL ENGAGED: ALL AIRLOCKS & N2 PURGE LOCKED.',
-        'normal'
-      )
-      return {
-        sealToggles: [true, true, true],
-        containmentSealLocked: true,
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
-      }
-    })
+    const state = get()
+    const allOn = state.mcpActive.every(Boolean)
+    if (!allOn) {
+      set((s) => {
+        const nextReactor: ReactorState = {
+          ...extractReactorState(s),
+          mcpActive: [true, true, true, true],
+          feedwaterValve: Math.max(s.feedwaterValve, 0.50),
+        }
+        const prevPhase = s.tutorialPhase
+        const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+        const nextChatLog = syncWePadChatOnPhaseChange(
+          s.wePadChatLog,
+          prevPhase,
+          mapped.tutorialPrompt
+        )
+        return {
+          ...mapped,
+          wePadChatLog: nextChatLog,
+        }
+      })
+    } else {
+      state.toggleMcpPump(3)
+    }
   },
 
   setVentingSteam: (venting: boolean) => {
-    set({ ventingSteam: venting })
+    get().setSteamDumpValve(venting)
   },
 
   adjustExcitationTrim: (deltaHz: number) => {
-    set((state) => {
-      const nextTrim = Number(
-        Math.max(-5.0, Math.min(5.0, state.excitationTrim + deltaHz)).toFixed(3)
-      )
-      const actualDelta = nextTrim - state.excitationTrim
-      if (Math.abs(actualDelta) < 0.0001) return state
-      const nextGridHz = Number(
-        Math.max(45.0, Math.min(55.0, state.gridHz + actualDelta)).toFixed(2)
-      )
-      const nextTurbineRpm = Math.round(
-        Math.max(0, Math.min(3600, state.turbineRpm + actualDelta * 115))
-      )
-      return {
-        excitationTrim: nextTrim,
-        gridHz: nextGridHz,
-        turbineRpm: nextTurbineRpm,
-      }
-    })
+    const state = get()
+    const currentValve = state.turbines[0]?.valve ?? 0
+    const valveStep = deltaHz * 0.2
+    state.setTurbineSteamValve(currentValve + valveStep)
   },
 
   toggleVentilation: (active?: boolean) => {
     set((state) => {
       const nextVent =
         typeof active === 'boolean' ? active : !state.ventilationActive
-      const deltaHz = nextVent ? -0.4 : 0.4
-      const entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'OPERATOR',
-        `BUNKER VENTILATION SCRUBBER ${nextVent ? 'ENGAGED (-1.2 R/H/S, +10 MW INTERNAL LOAD -> -0.4 HZ)' : 'DISENGAGED (-10 MW LOAD)'}.`,
-        nextVent ? 'normal' : 'warn'
-      )
-      return {
-        ventilationActive: nextVent,
-        gridHz: Number(
-          Math.max(45.0, Math.min(55.0, state.gridHz + deltaHz)).toFixed(2)
-        ),
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
-      }
+      return { ventilationActive: nextVent }
     })
   },
 
@@ -1186,23 +1499,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => {
       const nextKgb =
         typeof active === 'boolean' ? active : !state.kgbLineActive
-      const deltaHz = nextKgb ? -0.35 : 0.35
-      const entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'OPERATOR',
-        `KGB ENCRYPTED VERIFICATION TRUNK LINE ${nextKgb ? 'ENGAGED (LIVE DIRECTIVE INTEL ON K.O.M.R.A.D.-84, -0.35 HZ DRAG)' : 'DISENGAGED'}.`,
-        'normal'
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        kgbLineActive: nextKgb,
+      }
+      stepReactorSimulation(nextReactor, 0.001)
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
       )
       return {
-        kgbLineActive: nextKgb,
-        gridHz: Number(
-          Math.max(45.0, Math.min(55.0, state.gridHz + deltaHz)).toFixed(2)
-        ),
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
+        ...mapped,
+        wePadChatLog: nextChatLog,
       }
     })
   },
@@ -1211,28 +1522,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => {
       const nextAux =
         typeof active === 'boolean' ? active : !state.auxLoopBActive
-      const deltaHz = nextAux ? -0.75 : 0.75
-      const deltaRpm = nextAux ? -140 : 140
-      const entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'OPERATOR',
-        `AUX LOOP B (TURBINE BYPASS -> CONDENSER) ${nextAux ? 'ENGAGED: 25% STEAM DIVERTED TO UNIT B BUBBLER (+3.5%/S H2O, -15% TURBINE DRIVE)' : 'DISENGAGED: FULL STEAM RESTORED TO TURBINE'}.`,
-        'normal'
-      )
-      return {
-        auxLoopBActive: nextAux,
-        gridHz: Number(
-          Math.max(45.0, Math.min(55.0, state.gridHz + deltaHz)).toFixed(2)
-        ),
-        turbineRpm: Math.round(
-          Math.max(0, Math.min(3600, state.turbineRpm + deltaRpm))
-        ),
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
-      }
+      return { auxLoopBActive: nextAux }
     })
   },
 
@@ -1243,52 +1533,61 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   injectBoronAcid: () => {
-    const state = get()
-    if (state.boronCooldown > 0 || state.isBlackout) return
-    if (state.boronTankLevel < 40) {
-      const warnEntry = createLogEntry(
-        state.shiftTimeMinutes,
-        'K.O.M.R.A.D.-84',
-        `BORON INJECTION FAILED: BORON TANK AT ${Math.round(state.boronTankLevel)}%! PUMP BORON PISTON ON UNIT A-2 (>= 40% REQUIRED)!`,
-        'danger'
+    set((state) => {
+      if (state.boronTankLevel < 15) {
+        const warnMsg = `BORON TANK LOW (${Math.round(state.boronTankLevel)}% < 15%)! WAIT FOR AUTOMATIC BORON REFILL OR USE COLD FEEDWATER (UNIT B)!`
+        const warnEntry = createLogEntry(
+          state.shiftTimeMinutes,
+          'K.O.M.R.A.D.-84',
+          warnMsg,
+          'warn'
+        )
+        return {
+          lastDecisionFeedback: warnMsg,
+          terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
+          terminalLogs: [
+            ...state.terminalLogs.slice(-24),
+            `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
+          ],
+        }
+      }
+
+      const nextReactor: ReactorState = extractReactorState(state)
+      triggerBoronInjection(nextReactor)
+      const nextBoronLevel = Number(
+        Math.max(0, state.boronTankLevel - 15).toFixed(1)
       )
-      set({
-        lastDecisionFeedback:
-          'BORON TANK < 40%! PUMP BORON PISTON ON UNIT A-2 TO REFILL!',
-        terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      let nextChatLog = syncWePadChatOnPhaseChange(
+        state.wePadChatLog,
+        prevPhase,
+        mapped.tutorialPrompt
+      )
+      const msg = `BORON INJECTION ENGAGED (-15% BORON TANK): STEAM VOIDS -35% (${Math.round(nextReactor.voidFraction * 100)}%), NEUTRON DAMPING (-500 MWt FOR 5S)!`
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'OPERATOR',
+        msg,
+        'warn'
+      )
+      if (mapped.tutorialPhase === prevPhase) {
+        nextChatLog = [
+          ...nextChatLog.slice(-30),
+          createWePadChatMessage('SYSTEM', msg, { level: 'warn' }),
+        ]
+      }
+      return {
+        ...mapped,
+        boronTankLevel: nextBoronLevel,
+        lastDecisionFeedback: msg,
+        wePadChatLog: nextChatLog,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
-          `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
-      })
-      return
-    }
-    const nextTemp = Math.max(265, state.coreTemp - 140)
-    const nextGraphite = Math.max(280, state.graphiteTemp - 90)
-    const nextPressure = Math.max(30, state.pressureBar - 18)
-    const nextBoronLevel = Number(
-      Math.max(0, state.boronTankLevel - 45).toFixed(1)
-    )
-    const entry = createLogEntry(
-      state.shiftTimeMinutes,
-      'OPERATOR',
-      `EMERGENCY BORON QUENCH (-140°C CORE, -90°C GRAPHITE, ALL HOTSPOTS QUENCHED, -45% BORON TANK). BORON REACTIVITY DAMPING (-20% MW FOR 15S)!`,
-      'warn'
-    )
-    set({
-      coreTemp: nextTemp,
-      graphiteTemp: nextGraphite,
-      pressureBar: nextPressure,
-      channelHotspots: {},
-      boronTankLevel: nextBoronLevel,
-      boronPoisoningTimer: 15,
-      boronCooldown: 22,
-      lastDecisionFeedback: `BORON QUENCH (-140°C CORE, -90°C GRAPHITE)! BORON REACTIVITY DAMPING ACTIVE (-20% MW FOR 15S)!`,
-      terminalEntries: [...state.terminalEntries.slice(-24), entry],
-      terminalLogs: [
-        ...state.terminalLogs.slice(-24),
-        `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-      ],
+      }
     })
   },
 
@@ -1331,55 +1630,50 @@ export const useGameStore = create<GameState>((set, get) => ({
       let nextTargetCity = state.targetCityMW
       let nextTargetDefense = state.targetDefenseMW
       let nextTargetVodka = state.targetVodkaMW
-      let nextPripyatWater = state.pripyatWater
-      let nextKolkhozWater = state.kolkhozWater
-      let nextVodkaWater = state.vodkaWater
-      let nextWaterReservoir = state.waterReservoir
       let nextTutorialStep = state.tutorialStep
       let feedback = ''
       let logLevel: TerminalLogEntry['level'] = 'normal'
 
+      let nextSubstations = state.substations.map((s) => ({ ...s }))
+
       if (!isForgery && decision === 'APPROVED') {
-        // Genuine Directive Dispatched in Pneumatic Outbox Tube -> Update ONLY the single targeted Regional Map MW sector!
         const baseMandate = createNextMandate()
         const prevTargets = state.targetSectorMW
-        if (typeof powerTargets?.vodka === 'number') {
-          vodkaDroughtSpikeApplied = false
-        }
+        const clampTarget = (val: number | undefined, fallback: number) =>
+          typeof val === 'number'
+            ? Math.max(0, Math.min(250, Math.round(val / 25) * 25))
+            : fallback
+
         nextTargetSector = {
-          pripyat:
-            typeof powerTargets?.pripyat === 'number'
-              ? powerTargets.pripyat
-              : prevTargets.pripyat,
-          kolkhoz:
-            typeof powerTargets?.kolkhoz === 'number'
-              ? powerTargets.kolkhoz
-              : prevTargets.kolkhoz,
-          duga:
-            typeof powerTargets?.duga === 'number'
-              ? powerTargets.duga
-              : prevTargets.duga,
-          kgb:
-            typeof powerTargets?.kgb === 'number'
-              ? powerTargets.kgb
-              : prevTargets.kgb,
-          vodka:
-            typeof powerTargets?.vodka === 'number'
-              ? powerTargets.vodka
-              : prevTargets.vodka,
-          steel:
-            typeof powerTargets?.steel === 'number'
-              ? powerTargets.steel
-              : prevTargets.steel,
+          pripyat: clampTarget(powerTargets?.pripyat, prevTargets.pripyat),
+          kolkhoz: clampTarget(powerTargets?.kolkhoz, prevTargets.kolkhoz),
+          duga: clampTarget(powerTargets?.duga, prevTargets.duga),
+          kgb: clampTarget(powerTargets?.kgb, prevTargets.kgb),
+          vodka: clampTarget(powerTargets?.vodka, prevTargets.vodka),
+          steel: clampTarget(powerTargets?.steel, prevTargets.steel),
         }
         nextTargetCity = nextTargetSector.pripyat + nextTargetSector.kolkhoz
         nextTargetDefense = nextTargetSector.duga + nextTargetSector.kgb
         nextTargetVodka = nextTargetSector.vodka + nextTargetSector.steel
 
+        const subTargetById: Record<number, number> = {
+          1: nextTargetSector.pripyat,
+          2: nextTargetSector.duga,
+          3: nextTargetSector.kolkhoz,
+          4: nextTargetSector.kgb,
+          5: nextTargetSector.vodka,
+          6: nextTargetSector.steel,
+        }
+        nextSubstations = state.substations.map((s) => ({
+          ...s,
+          targetMW: subTargetById[s.id] ?? s.targetMW,
+          maxMW: 250,
+        }))
+
         const sectorLabels: Record<SectorNodeId, string> = {
           pripyat: '1. PRIPYAT CITY',
-          kolkhoz: '2. KOLKHOZ FARM',
-          duga: '3. DUGA-1 RADAR',
+          duga: '2. DUGA-1 RADAR',
+          kolkhoz: '3. KOLKHOZ FARM',
           kgb: '4. KGB BUNKER 07',
           vodka: '5. VODKA PLANT',
           steel: '6. STEEL WORKS',
@@ -1392,14 +1686,33 @@ export const useGameStore = create<GameState>((set, get) => ({
           'vodka',
           'steel',
         ]
-        const changedKey =
-          sectors.find((k) => nextTargetSector[k] !== prevTargets[k]) ??
-          'vodka'
-        const newMW = nextTargetSector[changedKey]
-        const deltaMW = newMW - prevTargets[changedKey]
-        const signStr = deltaMW >= 0 ? `+${deltaMW}` : `${deltaMW}`
-        const actionVerb = deltaMW >= 0 ? 'ROUTE' : 'REDUCE'
-        const routeReqText = `${actionVerb} ${newMW} MW TO [${sectorLabels[changedKey]}] (${signStr} MW)`
+        const changedSectors = sectors.filter(
+          (k) => nextTargetSector[k] !== prevTargets[k]
+        )
+        const prevTotalMW = sectors.reduce((sum, k) => sum + prevTargets[k], 0)
+        const newTotalMW = sectors.reduce(
+          (sum, k) => sum + nextTargetSector[k],
+          0
+        )
+        const totalDeltaMW = newTotalMW - prevTotalMW
+
+        const changeDescriptions = (
+          changedSectors.length > 0 ? changedSectors : (['vodka'] as SectorNodeId[])
+        ).map((k) => {
+          const newMW = nextTargetSector[k]
+          const dMW = newMW - prevTargets[k]
+          const signStr = dMW >= 0 ? `+${dMW}` : `${dMW}`
+          return `[${sectorLabels[k]}] -> ${newMW} MW (${signStr} MW)`
+        })
+
+        const plantGuidance =
+          totalDeltaMW >= 25
+            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): RAISE RODS (A-2), FEEDWATER (B) & TURBINE VALVE (C)!`
+            : totalDeltaMW <= -25
+              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): THROTTLE DOWN TURBINE (C) & RODS (A-2)!`
+              : `DIVERT POWER (${newTotalMW} MWe TOTAL): RE-BALANCE UNIT A LEVERS!`
+
+        const routeReqText = `${changeDescriptions.join(' & ')} // ${plantGuidance}`
 
         nextMandate = {
           ...baseMandate,
@@ -1407,24 +1720,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           requirementText: routeReqText,
           fulfilled: false,
         }
-        nextTemp = Math.max(290, state.coreTemp - 28)
-        nextPressure = Math.max(32, Number((state.pressureBar - 5).toFixed(1)))
-        nextPripyatWater = Math.min(100, state.pripyatWater + 8)
-        nextKolkhozWater = Math.min(100, state.kolkhozWater + 8)
-        nextVodkaWater = Math.min(100, state.vodkaWater + 8)
-        nextWaterReservoir = Number(
-          ((nextPripyatWater + nextKolkhozWater + nextVodkaWater) / 3).toFixed(1)
-        )
-        if (state.tutorialStep === 1) {
-          nextTutorialStep = 2
-          feedback =
-            'DRILL 2/5 [PRESS KEY 1 -> UNIT A]: VODKA PLANT DEMANDS 25 MW! PULL LEVER [5. VODKA PLANT] UP UNTIL ITS READOUT SHOWS 25 / 25 MW.'
-        } else {
-          feedback = `PNEUMATIC DISPATCH (${docTitle.slice(0, 20)})! ${routeReqText}`
-        }
+        feedback = `ORDER APPROVED (${docTitle.slice(0, 18)}): ${routeReqText}`
         logLevel = 'normal'
       } else if (!isForgery && decision === 'SHREDDED') {
-        // Shredded valid directive -> KGB Citation + Grid/Thermal penalty
         if (!state.isGodMode) {
           nextStrikes = Math.min(3, state.treasonStrikes + 1)
         }
@@ -1432,80 +1730,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         feedback = `TREASON STRIKE! VALID SOVIET DIRECTIVE (${docTitle.slice(0, 24)}) SHREDDED!`
         logLevel = 'danger'
       } else if (isForgery && decision === 'SHREDDED') {
-        // Caught & Shredded Western Forgery -> Stabilize reactor instability (-15%), cool graphite & core, restore water, clear 1 hotspot!
-        if (state.tutorialStep === 5) {
-          nextTutorialStep = 'DONE'
-          hotspotAccumulator = 0
-          shiftElapsedSeconds = 0
-          nextInstability = 0
-          nextTemp = 330
-          nextPressure = 48
-          nextGraphite = 320
-          nextHelium = 46
-          nextOilPress = 88
-          nextTrim = 0.4
-          nextHz = 50.0
-          nextStrikes = 0
-          nextHotspots = {}
-          nextPripyatWater = 85
-          nextKolkhozWater = 85
-          nextVodkaWater = 85
-          nextWaterReservoir = 85
-          feedback =
-            '>> VOLKOV DISPATCH: "QUALIFICATION PASSED, COMRADE. LIVE NIGHT SHIFT ENGAGED — GLORY TO BLOCK 4!"'
-          logLevel = 'normal'
-        } else {
-          nextInstability = Math.max(0, state.redlineInstability - 15)
-          nextTemp = Math.max(290, state.coreTemp - 35)
-          nextGraphite = Math.max(290, state.graphiteTemp - 45)
-          nextOilPress = Math.min(100, state.lubeOilPressure + 12)
-          nextPripyatWater = Math.min(100, state.pripyatWater + 14)
-          nextKolkhozWater = Math.min(100, state.kolkhozWater + 14)
-          nextVodkaWater = Math.min(100, state.vodkaWater + 14)
-          nextWaterReservoir = Number(
-            ((nextPripyatWater + nextKolkhozWater + nextVodkaWater) / 3).toFixed(1)
-          )
-          const hotspotKeys = Object.keys(nextHotspots)
-          if (hotspotKeys.length > 0) {
-            delete nextHotspots[Number(hotspotKeys[0])]
-          }
-          feedback = `CIA SABOTAGE SHREDDED (${docTitle.slice(0, 22)})! INSTABILITY -15%, CORE -35°C, RESERVOIR +14%.`
-          logLevel = 'normal'
-        }
+        nextInstability = Math.max(0, state.redlineInstability - 15)
+        feedback = `CIA SABOTAGE SHREDDED (${docTitle.slice(0, 22)})! INSTABILITY -15%.`
+        logLevel = 'normal'
       } else {
-        // Forged Western Sabotage Approved & Dispatched -> Immediate Cross-Panel Sabotage Event & Reckless Surge!
-        // Note: Map targets ONLY update from genuine ПРАВДА-84 directives!
         if (!state.isGodMode) {
           nextStrikes = Math.min(3, state.treasonStrikes + 1)
         }
-        nextPripyatWater = Math.max(12, state.pripyatWater - 24)
-        nextKolkhozWater = Math.max(12, state.kolkhozWater - 24)
-        nextVodkaWater = Math.max(12, state.vodkaWater - 24)
-        nextWaterReservoir = Number(
-          ((nextPripyatWater + nextKolkhozWater + nextVodkaWater) / 3).toFixed(1)
-        )
-        nextTemp = Math.min(980, state.coreTemp + 95)
-        nextPressure = Math.min(118, Number((state.pressureBar + 18).toFixed(1)))
-        nextGraphite = Math.min(820, state.graphiteTemp + 85)
-        nextHelium = Math.min(80, state.heliumPressure + 16)
-        nextSealToggles = [state.sealToggles[0], state.sealToggles[1], false]
-        nextSealLocked = false
-        nextTrim = Number(
-          Math.max(-5.0, Math.min(5.0, state.excitationTrim - 2.2)).toFixed(2)
-        )
-        nextHz = Number(Math.max(45.2, state.gridHz - 2.1).toFixed(2))
-
-        // Ignite 3 Red RBMK Channel Hotspots on UNIT A-2!
-        const candidateChannels = [4, 11, 18, 24, 31, 8, 15, 29]
-        let ignited = 0
-        for (const ch of candidateChannels) {
-          if (nextHotspots[ch] !== 'red') {
-            nextHotspots[ch] = 'red'
-            ignited += 1
-            if (ignited >= 3) break
-          }
-        }
-        feedback = `CIA SABOTAGE DISPATCHED (${flawText ?? 'FORGERY'})! RESERVOIR -24%, 3 RED HOTSPOTS ON UNIT A-2, GRID DESYNCED!`
+        feedback = `CIA SABOTAGE DISPATCHED (${flawText ?? 'FORGERY'})! TREASON STRIKE RECORDED!`
         logLevel = 'danger'
       }
 
@@ -1515,14 +1747,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         feedback,
         logLevel
       )
+      const nextChatLog = [
+        ...state.wePadChatLog.slice(-30),
+        createWePadChatMessage('PRAVDA-84', feedback, { level: logLevel }),
+      ]
       const nextPhase =
         !state.isGodMode && nextStrikes >= 3
           ? 'gulag'
-          : !state.isGodMode && nextTemp >= 1000
+          : !state.isGodMode && nextTemp >= 1200
             ? 'meltdown'
             : state.phase
 
       return {
+        substations: nextSubstations,
         tutorialStep: nextTutorialStep,
         coreTemp: nextTemp,
         pressureBar: nextPressure,
@@ -1541,16 +1778,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         targetCityMW: nextTargetCity,
         targetDefenseMW: nextTargetDefense,
         targetVodkaMW: nextTargetVodka,
-        pripyatWater: nextPripyatWater,
-        kolkhozWater: nextKolkhozWater,
-        vodkaWater: nextVodkaWater,
-        waterReservoir: nextWaterReservoir,
-        bubblerLevel: nextTutorialStep === 'DONE' && state.tutorialStep === 5 ? 24 : state.bubblerLevel,
-        turbineRpm: nextTutorialStep === 'DONE' && state.tutorialStep === 5 ? 3000 : state.turbineRpm,
-        pumpThrottle: nextTutorialStep === 'DONE' && state.tutorialStep === 5 ? [80, 0] : state.pumpThrottle,
-        pumpsActive: nextTutorialStep === 'DONE' && state.tutorialStep === 5 ? [true, false] : state.pumpsActive,
-        nitrogenLoopValve: nextTutorialStep === 'DONE' && state.tutorialStep === 5 ? 42 : state.nitrogenLoopValve,
         lastDecisionFeedback: feedback,
+        wePadChatLog: nextChatLog,
         phase: nextPhase,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
@@ -1567,943 +1796,222 @@ export const useGameStore = create<GameState>((set, get) => ({
     const frameDt = Math.max(0, Math.min(0.25, dtSeconds))
     if (frameDt === 0) return
 
-    // Throttle store commits to ~13.3 Hz (~75ms interval) to prevent 60 FPS Zustand subscriber churn
-    // while keeping time integration 100% continuous and accurate.
     thermoTickAccumSeconds += frameDt
     if (thermoTickAccumSeconds < 0.075) return
     const dt = Math.min(0.25, thermoTickAccumSeconds)
     thermoTickAccumSeconds = 0
 
-    // =========================================================================
-    // 0. 5-Stage KGB Operator Qualification Drill (`tutorialStep !== 'DONE'`)
-    //    Freeze background thermal/water/hotspot chaos while the operator learns!
-    // =========================================================================
-    if (state.tutorialStep !== 'DONE') {
-      if (state.tutorialStep === 3) {
-        const pumpReady = state.pumpThrottle[0] > 50
-        const gasReady = state.nitrogenLoopValve > 40
-        const nextDrainSec = state.bubblerDraining
-          ? state.tutorialDrainSeconds + dt
-          : state.tutorialDrainSeconds
-        const nextTemp =
-          pumpReady && gasReady
-            ? Math.max(350, state.coreTemp - 32 * dt)
-            : pumpReady
-              ? Math.max(395, state.coreTemp - 18 * dt)
-              : state.coreTemp
-        const nextBubbler = state.bubblerDraining
-          ? Math.max(18, state.bubblerLevel - 22 * dt)
-          : pumpReady && state.bubblerLevel < 52
-            ? Math.min(52, state.bubblerLevel + 5.5 * dt)
-            : state.bubblerLevel
-        const nextPripyat = state.bubblerDraining
-          ? Math.min(92, state.pripyatWater + 12 * dt)
-          : pumpReady && state.pripyatWater > 74
-            ? Math.max(74, state.pripyatWater - 2.2 * dt)
-            : state.pripyatWater
-
-        if (pumpReady && gasReady && nextDrainSec >= 0.45) {
-          const step4Msg =
-            'DRILL 4/5 [PRESS KEY 5 -> UNIT C]: POWER CHANGES SHIFT TURBINE FREQUENCY (48.8 HZ)! DRAG THE [50HZ RHEOSTAT] CENTER DIAL TO LOCK 50.0 HZ SO THE MAIN BREAKER STAYS CLOSED.'
-          const step4Entry = createLogEntry(
-            state.shiftTimeMinutes,
-            'K.O.M.R.A.D.-84',
-            `>> VOLKOV DISPATCH: "${step4Msg}"`,
-            'warn'
-          )
-          set({
-            tutorialStep: 4,
-            tutorialDrainSeconds: 0,
-            coreTemp: 345,
-            pressureBar: 48,
-            bubblerLevel: 26,
-            pripyatWater: 85,
-            kolkhozWater: 85,
-            vodkaWater: 85,
-            waterReservoir: 85,
-            gridHz: 48.8,
-            excitationTrim: -0.8,
-            turbineRpm: 2910,
-            lastDecisionFeedback: step4Msg,
-            terminalEntries: [...state.terminalEntries.slice(-24), step4Entry],
-            terminalLogs: [
-              ...state.terminalLogs.slice(-24),
-              `[${step4Entry.timestamp}] ${step4Entry.sender}: ${step4Entry.text}`,
-            ],
-          })
-          return
-        }
-
-        set({
-          tutorialDrainSeconds: Number(nextDrainSec.toFixed(2)),
-          coreTemp: Number(nextTemp.toFixed(1)),
-          bubblerLevel: Number(nextBubbler.toFixed(1)),
-          pripyatWater: Number(nextPripyat.toFixed(1)),
-          waterReservoir: Number(
-            ((nextPripyat + state.kolkhozWater + state.vodkaWater) / 3).toFixed(1)
-          ),
-        })
-        return
-      }
-
-      if (state.tutorialStep === 4) {
-        const totalMW =
-          state.powerAllocation.cooling +
-          state.powerAllocation.defense +
-          state.powerAllocation.facility
-        const loadDeltaTenMW = (100 - totalMW) / 10
-        const loadOffsetHz = loadDeltaTenMW * 0.4
-        const loadOffsetRpm = loadDeltaTenMW * 45
-        const targetHz = Math.max(
-          45.0,
-          Math.min(55.0, 50.0 + loadOffsetHz + state.excitationTrim)
-        )
-        const targetRpm = Math.min(
-          3600,
-          Math.max(0, 3000 + loadOffsetRpm + state.excitationTrim * 115)
-        )
-        const nextHz = Number(
-          (
-            state.gridHz +
-            (targetHz - state.gridHz) * Math.min(1, dt * 3.5)
-          ).toFixed(2)
-        )
-        const nextRpm = Math.round(
-          state.turbineRpm +
-            (targetRpm - state.turbineRpm) * Math.min(1, dt * 3.5)
-        )
-
-        if (nextHz >= 49.7 && nextHz <= 50.3) {
-          const step5Msg =
-            'DRILL 5/5 [PRESS KEY 4 -> DESK]: INSPECT NEW ORDER WITH [B] MANUAL OR [Z] LENS! IT HAS A FAKE SEAL — STAMP RED [УНИЧТОЖЕНО], DROP IN RIGHT SHREDDER & PULL HANDLE 5 TIMES!'
-          const step5Entry = createLogEntry(
-            state.shiftTimeMinutes,
-            'K.O.M.R.A.D.-84',
-            `>> VOLKOV DISPATCH: "${step5Msg}"`,
-            'warn'
-          )
-          set({
-            tutorialStep: 5,
-            gridHz: 50.0,
-            excitationTrim: -loadOffsetHz,
-            turbineRpm: 3000,
-            lastDecisionFeedback: step5Msg,
-            terminalEntries: [...state.terminalEntries.slice(-24), step5Entry],
-            terminalLogs: [
-              ...state.terminalLogs.slice(-24),
-              `[${step5Entry.timestamp}] ${step5Entry.sender}: ${step5Entry.text}`,
-            ],
-          })
-          return
-        }
-
-        set({
-          gridHz: nextHz,
-          turbineRpm: nextRpm,
-        })
-        return
-      }
-
-      return
-    }
-
     if (state.phase === 'playing') {
       shiftElapsedSeconds += dt
     }
 
+    const baseReactor = extractReactorState(state)
+    stepReactorSimulation(baseReactor, dt)
+    if (baseReactor.turbines[0].gridConnected && !baseReactor.turbines[0].tripped) {
+      baseReactor.turbines[1] = {
+        ...baseReactor.turbines[0],
+      }
+      baseReactor.totalElectricalMW =
+        baseReactor.turbines[0].electricalMW + baseReactor.turbines[1].electricalMW
+    } else {
+      baseReactor.turbines[1] = {
+        ...baseReactor.turbines[0],
+        electricalMW: 0,
+      }
+      baseReactor.totalElectricalMW = baseReactor.turbines[0].electricalMW
+    }
+
+    if (state.isGodMode) {
+      baseReactor.coreMeltdown = false
+      baseReactor.steamExplosion = false
+      if (baseReactor.coreTemp > 1100) baseReactor.coreTemp = 1100
+      if (baseReactor.drumPressure > 110) baseReactor.drumPressure = 110
+    }
+
+    const prevTutorialPhase = state.tutorialPhase
+    const mapped = mapReactorToGameStateFields(baseReactor, prevTutorialPhase)
+    const nextBoronTankLevel = Number(
+      Math.min(100, state.boronTankLevel + 2.0 * dt).toFixed(1)
+    )
     const newLogs: TerminalLogEntry[] = []
-    // Inspection Grace Damping: While holding Magnifying Glass or reading Desk Manual, reduce ambient thermal/pressure escalation by 30%!
-    const graceFactor = state.isInspectingDesk ? 0.7 : 1.0
-
-    // =========================================================================
-    // 1. UNIT A & UNIT A-2: Pump Cavitation, Lube Oil Pressure & Bearing Heat
-    // =========================================================================
-    const nextThrottle: [number, number] = [...state.pumpThrottle] as [
-      number,
-      number,
-    ]
-    const nextPumps: [boolean, boolean] = [...state.pumpsActive] as [
-      boolean,
-      boolean,
-    ]
-
-    const tA = state.isBlackout ? 0 : nextThrottle[0] / 100
-    const tB = state.isBlackout ? 0 : nextThrottle[1] / 100
-    const bothRunning = tA > 0.65 && tB > 0.65
-    const oilValveRatio = state.oilCoolerValve / 100
-
-    // OIL COOLER VALVE (`UNIT A-2` Left Wheel) & LUBE OIL PRESS Breakdown:
-    // - Running OIL COOLER VALVE > 50% cooks the closed-loop oil, causing LUBE OIL PRESS to drop at -1.5%/s!
-    // - Dialing OIL COOLER VALVE down (<= 30%) lets the oil cool off so LUBE OIL PRESS recovers (+2.8%/s)!
-    // - Between 31% and 50%, gentle pump bearing drain vs oil cooling balance.
-    let oilNetRate = 0
-    if (state.isBlackout) {
-      oilNetRate = -(tA + tB) * 0.4
-    } else if (state.oilCoolerValve > 50) {
-      oilNetRate = -1.5 * (0.65 + (state.oilCoolerValve - 50) / 50) * graceFactor
-    } else if (state.oilCoolerValve <= 30) {
-      oilNetRate = 2.8
-    } else {
-      oilNetRate = oilValveRatio * 1.1 - (tA + tB) * 0.45 * graceFactor
-    }
-    const nextLubeOil = Math.max(
-      5,
-      Math.min(100, state.lubeOilPressure + oilNetRate * dt)
-    )
-    const oilBrokenDown = nextLubeOil < 25
-
-    // Pripyat Drought (`pripyatWater < 30%`): Pump A sucks air, halving its cooling power and doubling MAX BEARING heat climb!
-    const pripyatCavitation = state.pripyatWater < 30
-
-    // Bearing heat (`0..100`, where displayed MAX BEARING °C = `20 + pumpHeat`):
-    // - Turning up OIL COOLER VALVE rapidly cools MAX BEARING (-3.5°C/s) UNLESS oil has broken down (`nextLubeOil < 25%`)!
-    // - Stopped/tripped pump cools down rapidly at -6°C/s and auto-restarts once bearing temp < 95°C (pumpHeat < 75).
-    const computeNextPumpHeat = (
-      curHeat: number,
-      throttleRatio: number,
-      isTripped: boolean,
-      isPumpA: boolean
-    ): number => {
-      if (throttleRatio <= 0.01 || isTripped) {
-        return Math.max(0, curHeat - 6.0 * dt)
-      }
-      const droughtMult = isPumpA && pripyatCavitation ? 2.0 : 1.0
-      if (
-        !bothRunning &&
-        !oilBrokenDown &&
-        state.oilCoolerValve >= 35 &&
-        !(isPumpA && pripyatCavitation)
-      ) {
-        const activeOilCool =
-          state.oilCoolerValve > 50 ? 3.5 * oilValveRatio : 1.4 * oilValveRatio
-        const heatClimb = 0.95 * throttleRatio * graceFactor
-        const drifted = curHeat + (heatClimb - activeOilCool) * dt
-        return Math.max(18, Math.min(60, drifted))
-      }
-      const lowOilMult = oilBrokenDown ? 2.2 : nextLubeOil < 40 ? 1.45 : 1.0
-      const cavRate = bothRunning ? 1.55 * tA * tB : 0
-      const oilCool =
-        state.isBlackout || oilBrokenDown ? 0 : 3.5 * oilValveRatio
-      const climbRate =
-        (0.95 * throttleRatio + cavRate) * lowOilMult * droughtMult * graceFactor
-      const netRate = (climbRate - oilCool) * dt
-      return Math.max(0, Math.min(100, curHeat + netRate))
-    }
-
-    let nextHeatA = computeNextPumpHeat(state.pumpAHeat, tA, pumpATripped, true)
-    let nextHeatB = computeNextPumpHeat(state.pumpBHeat, tB, pumpBTripped, false)
-
-    if (nextHeatA >= 100 && state.pumpsActive[0]) {
-      pumpATripped = true
-      nextPumps[0] = false
-      nextThrottle[0] = 0
-      newLogs.push(
-        createLogEntry(
-          state.shiftTimeMinutes,
-          'K.O.M.R.A.D.-84',
-          'CAVITATION SEIZURE! COOLING PUMP A BEARING HIT 120°C AND TRIPPED! COOLING DOWN (-6°C/S)...',
-          'danger'
-        )
-      )
-    } else if (pumpATripped && nextHeatA < 75) {
-      pumpATripped = false
-      nextPumps[0] = true
-      nextThrottle[0] = 80
-      newLogs.push(
-        createLogEntry(
-          state.shiftTimeMinutes,
-          'K.O.M.R.A.D.-84',
-          'PUMP A BEARING COOLED BELOW 95°C — AUTOMATICALLY RESTARTED AT 80%!',
-          'normal'
-        )
-      )
-    }
-
-    if (nextHeatB >= 100 && state.pumpsActive[1]) {
-      pumpBTripped = true
-      nextPumps[1] = false
-      nextThrottle[1] = 0
-      newLogs.push(
-        createLogEntry(
-          state.shiftTimeMinutes,
-          'K.O.M.R.A.D.-84',
-          'CAVITATION SEIZURE! COOLING PUMP B BEARING HIT 120°C AND TRIPPED! COOLING DOWN (-6°C/S)...',
-          'danger'
-        )
-      )
-    } else if (pumpBTripped && nextHeatB < 75) {
-      pumpBTripped = false
-      nextPumps[1] = true
-      nextThrottle[1] = 80
-      newLogs.push(
-        createLogEntry(
-          state.shiftTimeMinutes,
-          'K.O.M.R.A.D.-84',
-          'PUMP B BEARING COOLED BELOW 95°C — AUTOMATICALLY RESTARTED AT 80%!',
-          'normal'
-        )
-      )
-    }
-
-    // =========================================================================
-    // 2. UNIT A-2: 37-Channel RBMK Core Map Hotspots (No spawn in first 60s, max 2)
-    // =========================================================================
-    const nextHotspots: Record<number, HotspotSeverity> = {
-      ...state.channelHotspots,
-    }
-    if (
-      state.phase === 'playing' &&
-      !state.isBlackout &&
-      shiftElapsedSeconds >= 60
-    ) {
-      const cavitationTrigger = bothRunning ? 0.42 : 0
-      const thermalTrigger = state.coreTemp > 560 ? 0.25 : 0
-      hotspotAccumulator += (cavitationTrigger + thermalTrigger) * dt
-
-      if (hotspotAccumulator >= 8.0) {
-        hotspotAccumulator = 0
-        const keys = Object.keys(nextHotspots).map(Number)
-        const amberKey = keys.find((k) => nextHotspots[k] === 'amber')
-        if (typeof amberKey === 'number' && (bothRunning || state.coreTemp > 600)) {
-          nextHotspots[amberKey] = 'red'
-          newLogs.push(
-            createLogEntry(
-              state.shiftTimeMinutes,
-              'K.O.M.R.A.D.-84',
-              `RBMK CHANNEL #${amberKey + 1} ESCALATED TO RED HOTSPOT! CLICK FLASHING TILE ON UNIT A-2!`,
-              'danger'
-            )
-          )
-        } else if (keys.length < 2) {
-          const seed = Math.floor(state.shiftTimeMinutes * 13 + state.coreTemp) % 37
-          for (let offset = 0; offset < 37; offset++) {
-            const candidate = (seed + offset * 7) % 37
-            if (!nextHotspots[candidate]) {
-              nextHotspots[candidate] =
-                bothRunning && state.coreTemp > 620 ? 'red' : 'amber'
-              break
-            }
-          }
-        }
-      }
-    }
-
-    let redHotspotCount = 0
-    let amberHotspotCount = 0
-    for (const sev of Object.values(nextHotspots)) {
-      if (sev === 'red') redHotspotCount += 1
-      else if (sev === 'amber') amberHotspotCount += 1
-    }
-
-    // =========================================================================
-    // 3. UNIT B: Graphite Moderator Temp, Helium-N2 Closed-Loop Thermal Saturation & Bubbler Pool
-    // =========================================================================
-    const n2ValveRatio = state.nitrogenLoopValve / 100
-    const activeScrubberCount =
-      (state.sealToggles[0] ? 1 : 0) +
-      (state.sealToggles[1] ? 1 : 0) +
-      (state.sealToggles[2] ? 1 : 0)
-    const scrubbersActive = activeScrubberCount >= 2
-
-    // Thermal Overpressure (`HELIUM LOOP` Left Gauge on UNIT B, 0-80 BAR):
-    // - Running HELIUM-N2 > 45% expands the hot closed-loop gas, driving heliumPressure up (+1.0 BAR/s toward 80 BAR)!
-    // - Dialing HELIUM-N2 down (< 35%) AND flipping ON the CONTAINMENT SEAL SCRUBBERS vents pressure (-2.5 BAR/s)!
-    let nextHelium = state.heliumPressure
-    if (state.isBlackout) {
-      nextHelium = Math.max(12, state.heliumPressure - 0.5 * dt)
-    } else if (state.nitrogenLoopValve > 45) {
-      const expandRate =
-        (0.45 + ((state.nitrogenLoopValve - 45) / 55) * 0.75) * graceFactor
-      nextHelium = Number(
-        Math.min(80, state.heliumPressure + expandRate * dt).toFixed(2)
-      )
-    } else if (state.nitrogenLoopValve < 35 && scrubbersActive) {
-      const ventRate = 2.5 * (activeScrubberCount / 3)
-      nextHelium = Number(
-        Math.max(22, state.heliumPressure - ventRate * dt).toFixed(2)
-      )
-    } else {
-      // Gentle equilibrium around 44-48 BAR when running in the 35-45% sweet spot
-      const targetEq = 36 + n2ValveRatio * 24
-      nextHelium = Number(
-        Math.max(
-          16,
-          Math.min(
-            80,
-            state.heliumPressure + (targetEq - state.heliumPressure) * 0.25 * dt
-          )
-        ).toFixed(2)
-      )
-    }
-
-    // Saturation Failure (> 68 BAR): Above 68 BAR, the gas loop thermally saturates (losing 75% of its cooling power!) and leaks radiation (+0.15 R/H/s)!
-    const heliumSaturated = nextHelium > 68
-    const effectiveGasEfficiency = heliumSaturated ? 0.25 : 1.0
-    const effectiveN2Flow = state.isBlackout
-      ? 0
-      : n2ValveRatio * effectiveGasEfficiency
-
-    // Graphite Moderator Temp:
-    // - Turning up HELIUM-N2 LOOP cools GRAPHITE TEMP and absorbs up to 40% of core heat without using zone water (unless saturated > 68 BAR!)
-    const graphiteHeatPush =
-      state.coreTemp > 550
-        ? (state.coreTemp - 550) * 0.028 * graceFactor
-        : 0
-    const lowHeliumPush =
-      nextHelium < 22 ? (22 - nextHelium) * 0.16 * graceFactor : 0
-    const saturationHeatPush = heliumSaturated ? 1.8 * graceFactor : 0
-    const graphiteGasCooling = effectiveN2Flow * 4.8
-    const baselineGraphite = 305 + (state.coreTemp - 310) * 0.36
-    const nextGraphite = Math.max(
-      280,
-      Math.min(
-        850,
-        state.graphiteTemp +
-          ((baselineGraphite - state.graphiteTemp) * 0.08 +
-            graphiteHeatPush +
-            lowHeliumPush +
-            saturationHeatPush -
-            graphiteGasCooling) *
-            dt
-      )
-    )
-
-    // =========================================================================
-    // 4. Per-Zone Water Siphoning (`UNIT A` <-> `K.O.M.R.A.D.-84` Map <-> `UNIT B` Bubbler)
-    // =========================================================================
-    const rawCoolingMW = state.powerAllocation.cooling
-    const rawNonCoolingMW =
-      state.powerAllocation.defense +
-      state.powerAllocation.facility +
-      (state.ventilationActive ? 10 : 0)
-    const rawTotalMW = rawCoolingMW + rawNonCoolingMW
-
-    // Boron Poisoning ("Boron Reactivity Damping"): temporarily sags Total Plant MW Output by -20% for 15 seconds!
-    const nextBoronPoisoning = Math.max(0, state.boronPoisoningTimer - dt)
-    const boronMwFactor = nextBoronPoisoning > 0 ? 0.8 : 1.0
-    const coolingMW = rawCoolingMW
-    const totalMW = Math.round(rawTotalMW * boronMwFactor)
-
-    const effTA = nextPumps[0] && !state.isBlackout ? nextThrottle[0] / 100 : 0
-    const effTB = nextPumps[1] && !state.isBlackout ? nextThrottle[1] / 100 : 0
-    const rawPumpSum = effTA + effTB
-    const nextWaterUsage = Math.round(rawPumpSum * 60)
-
-    // Bubbler Drain: Pulling & Holding BUBBLER DRAIN (UNIT B Right Lever) pumps condensed steam water out of BUBBLER MAX
-    // BACK OUT to [1] PRIPYAT, [2] KOLKHOZ, and [5] VODKA (+10% H2O/s to all 3 zones)!
-    const canDrainBubbler = state.bubblerDraining && state.bubblerLevel > 6
-    const bubblerZoneReturnRate = canDrainBubbler ? 10.0 : 0
-
-    // COOLING PUMP A (UNIT A Left Wheel) — North Municipal/Agri Siphon ([1] PRIPYAT CITY & [2] KOLKHOZ FARM):
-    // - When PUMP A > 40%,Pripyat & Kolkhoz water drains into the plant. When PUMP A <= 35%, their local water naturally recharges (+1.8%/s).
-    const pumpADrainRate =
-      effTA > 0.4
-        ? (0.65 + (effTA - 0.4) * 2.15) * graceFactor
-        : 0
-    const pumpARechargeRate = effTA <= 0.35 ? 1.8 : 0
-
-    // STEAM VENT Water Cost: Venting live steam into the atmosphere drains -2.5%/s from bubblerLevel
-    // (or from regional water reserves if bubblerLevel <= 6%)!
-    const steamVentZoneDrain =
-      state.ventingSteam && state.bubblerLevel <= 6.5 ? 2.5 : 0
-
-    const nextPripyatWater = Number(
-      Math.max(
-        0,
-        Math.min(
-          100,
-          state.pripyatWater +
-            (pumpARechargeRate +
-              bubblerZoneReturnRate -
-              pumpADrainRate -
-              steamVentZoneDrain) *
-              dt
-        )
-      ).toFixed(1)
-    )
-    const nextKolkhozWater = Number(
-      Math.max(
-        0,
-        Math.min(
-          100,
-          state.kolkhozWater +
-            (pumpARechargeRate +
-              bubblerZoneReturnRate -
-              pumpADrainRate * 0.92 -
-              steamVentZoneDrain) *
-              dt
-        )
-      ).toFixed(1)
-    )
-
-    // COOLING PUMP B (UNIT A Right Wheel) — South Vodka Distillery Siphon ([5] VODKA DISTILLERY):
-    // - When PUMP B > 40%, Vodka water drains into the plant. When PUMP B <= 35%, Vodka water naturally recharges (+2.0%/s).
-    const pumpBDrainRate =
-      effTB > 0.4
-        ? (0.75 + (effTB - 0.4) * 2.35) * graceFactor
-        : 0
-    const pumpBRechargeRate = effTB <= 0.35 ? 2.0 : 0
-
-    const nextVodkaWater = Number(
-      Math.max(
-        0,
-        Math.min(
-          100,
-          state.vodkaWater +
-            (pumpBRechargeRate +
-              bubblerZoneReturnRate -
-              pumpBDrainRate -
-              steamVentZoneDrain) *
-              dt
-        )
-      ).toFixed(1)
-    )
-
-    const nextWaterReservoir = Number(
-      ((nextPripyatWater + nextKolkhozWater + nextVodkaWater) / 3).toFixed(1)
-    )
-
-    // Where Siphoned Water Goes -> BUBBLER MAX (`CONDENSER H2O` on UNIT B):
-    // - Water sucked into the reactor boils into steam and fills BUBBLER MAX (`bubblerLevel`)!
-    // - Active containment scrubbers also condense steam into BUBBLER MAX at +1.0%/s!
-    // - AUX LOOP B (Turbine Bypass -> Condenser on UNIT C) diverts 25% of live reactor steam directly into BUBBLER MAX at +3.5%/s!
-    // - STEAM VENT (UNIT C) dumps live steam into the sky, draining -2.5%/s from BUBBLER MAX!
-    const siphonedToBubblerRate = (pumpADrainRate + pumpBDrainRate) * 0.58
-    const scrubberCondenseRate =
-      scrubbersActive && (state.nitrogenLoopValve < 35 || state.pressureBar > 60)
-        ? 1.0
-        : 0
-    const auxBypassCondenseRate = state.auxLoopBActive ? 3.5 : 0
-    const steamVentBubblerDrain = state.ventingSteam ? -2.5 : 0
-    const steamToBubblerRate =
-      siphonedToBubblerRate +
-      scrubberCondenseRate +
-      auxBypassCondenseRate +
-      steamVentBubblerDrain +
-      (state.pressureBar > 75 ? 0.25 : 0)
-    const nextBubbler = canDrainBubbler
-      ? Math.max(6, state.bubblerLevel - 24 * dt)
-      : Math.max(6, Math.min(100, state.bubblerLevel + steamToBubblerRate * dt))
-    const bubblerFlooded = nextBubbler > 90
-
-    // Drought Penalties When a Zone is Sucked Dry:
-    // 1. Vodka Drought (`vodkaWater < 40%`): Distillery demand spikes +10 MW and a 35s Politburo countdown starts toward a KGB Citation (+1 Strike)!
-    let nextVodkaDroughtTimer = state.vodkaDroughtTimer
-    let nextTargetSectorMW = state.targetSectorMW
-    let nextTargetVodkaMW = state.targetVodkaMW
-    let nextStrikes = state.treasonStrikes
-
-    if (state.phase === 'playing' && nextVodkaWater < 40) {
-      nextVodkaDroughtTimer = Math.min(35, state.vodkaDroughtTimer + dt)
-      if (!vodkaDroughtSpikeApplied) {
-        vodkaDroughtSpikeApplied = true
-        const spikedVodka = Math.min(50, state.targetSectorMW.vodka + 10)
-        nextTargetSectorMW = {
-          ...state.targetSectorMW,
-          vodka: spikedVodka,
-        }
-        nextTargetVodkaMW = spikedVodka + state.targetSectorMW.steel
-        newLogs.push(
-          createLogEntry(
-            state.shiftTimeMinutes,
-            'PRINTER',
-            `VODKA VATS DRY (${Math.round(nextVodkaWater)}% < 40%)! DISTILLERY DEMAND SPIKED +10 MW (${spikedVodka} MW) — 35S POLITBURO COUNTDOWN STARTED! THROTTLE DOWN PUMP B OR PULL BUBBLER DRAIN!`,
-            'danger'
-          )
-        )
-      }
-      vodkaWarningTimer += dt
-      if (vodkaWarningTimer >= 14.0) {
-        vodkaWarningTimer = 0
-        newLogs.push(
-          createLogEntry(
-            state.shiftTimeMinutes,
-            'PRINTER',
-            `POLITBURO VODKA DROUGHT WARNING: ${Math.max(0, Math.ceil(35 - nextVodkaDroughtTimer))}S UNTIL KGB CITATION! PULL BUBBLER DRAIN LEVER (UNIT B) OR LOWER PUMP B!`,
-            'warn'
-          )
-        )
-      }
-      if (nextVodkaDroughtTimer >= 35) {
-        nextVodkaDroughtTimer = 0
-        if (!state.isGodMode) {
-          nextStrikes = Math.min(3, state.treasonStrikes + 1)
-        }
-        newLogs.push(
-          createLogEntry(
-            state.shiftTimeMinutes,
-            'K.O.M.R.A.D.-84',
-            `KGB CITATION ISSUED (+1 STRIKE)! RED OCTOBER VODKA VATS REMAINED DRY FOR 35 SECONDS!`,
-            'danger'
-          )
-        )
-      }
-    } else {
-      nextVodkaDroughtTimer = Math.max(0, state.vodkaDroughtTimer - dt * 1.5)
-      vodkaWarningTimer = Math.max(0, vodkaWarningTimer - dt)
-      if (vodkaDroughtSpikeApplied && nextVodkaWater >= 44) {
-        vodkaDroughtSpikeApplied = false
-      }
-    }
-
-    // 2. Pripyat Drought (`nextPripyatWater < 30%`): Pump A sucks air, halving its cooling power!
-    const effPumpAFlow =
-      effTA * (nextPripyatWater < 10 ? 0.15 : nextPripyatWater < 30 ? 0.5 : 1.0)
-    const effPumpBFlow =
-      effTB * (nextVodkaWater < 10 ? 0.15 : nextVodkaWater < 30 ? 0.65 : 1.0)
-    const pumpFlowSum = effPumpAFlow + effPumpBFlow
-
-    // Dry Closed-Loop Cooling:
-    // - HELIUM-N2 LOOP on UNIT B absorbs up to 40% of core heat without using zone water (unless thermally saturated > 68 BAR, which loses 75% cooling!)
-    // - OIL COOLER VALVE on UNIT A-2 provides supplemental dry core cooling (unless oil breaks down < 25%!)
-    const dryGasCoolingFactor = Math.min(0.4, effectiveN2Flow * 0.45)
-    const dryOilCoolingBonus = oilBrokenDown ? 0 : oilValveRatio * 18
-
-    // Equilibrium Core Temp at baseline (Cooling=35-40MW, 1 pump @ 80%, controlRodLevel=50%): ~330°C!
-    // Reactivity & Heat Generation:
-    // - Base thermal production rate (`coreTemp` and `pressureBar` climb rate) scales directly with `controlRodLevel` (0..100%).
-    // - Withdrawing rods (`100%`) supercharges fission heat and steam pressure; inserting them (`0%`) chokes the reaction and cools the core down.
-    // - Positive Void Interaction: If `controlRodLevel > 80%` while zone water levels drop below 40%, trigger rapid thermal spikes (simulating RBMK positive void coefficient danger).
-    const rodRatio = state.controlRodLevel / 100
-    const rodThermalScale = 0.25 + 1.5 * rodRatio
-    const rodEquilibriumShift = (state.controlRodLevel - 50) * 1.4
-    const rodContinuousHeatRate =
-      ((state.controlRodLevel - 50) / 50) * 2.4 * graceFactor
-    const anyZoneBelow40 =
-      nextPripyatWater < 40 || nextKolkhozWater < 40 || nextVodkaWater < 40
-    const rodVoidSpikeRate =
-      state.controlRodLevel > 80 && anyZoneBelow40
-        ? (4.5 + ((state.controlRodLevel - 80) / 20) * 4.5) * graceFactor
-        : 0
-
-    const rawHeatLoad = Math.max(
-      0,
-      ((rawTotalMW - 90) * 1.05 + (rawNonCoolingMW - 50) * 0.8) * rodThermalScale
-    )
-    const effectiveHeatLoad = rawHeatLoad * (1 - dryGasCoolingFactor)
-    const pumpDeficitHeat =
-      pumpFlowSum < 0.35
-        ? (0.35 - pumpFlowSum) * 165 * (1 - dryGasCoolingFactor) * rodThermalScale
-        : 0
-    const pumpExtraCooling = Math.max(0, pumpFlowSum - 0.8) * 52
-    // When MAIN BREAKER is tripped open (isBlackout === true), the turbine generator is no longer converting reactor thermal energy into electricity (+140°C bottleneck)!
-    const blackoutHeatBottleneck = state.isBlackout ? 140 : 0
-    const equilibriumTemp =
-      328 +
-      rodEquilibriumShift +
-      effectiveHeatLoad +
-      blackoutHeatBottleneck -
-      (coolingMW - 35) * 1.65 -
-      pumpExtraCooling -
-      dryOilCoolingBonus +
-      pumpDeficitHeat
-
-    const rawRelaxationRate = (equilibriumTemp - state.coreTemp) * 0.08
-    const relaxationRate =
-      rawRelaxationRate > 0 ? rawRelaxationRate * graceFactor : rawRelaxationRate
-    const activeCoolingBoost =
-      coolingMW > 35 && pumpFlowSum >= 0.4
-        ? -((coolingMW - 35) / 40) * 1.85 * Math.min(1.3, pumpFlowSum / 0.8)
-        : 0
-    const hotspotHeatRate =
-      (redHotspotCount * 1.6 + amberHotspotCount * 0.5) * graceFactor
-    const positiveVoidRate =
-      (nextGraphite > 650
-        ? ((nextGraphite - 650) / 50) * 2.0 * graceFactor
-        : 0) + rodVoidSpikeRate
-
-    // Reactor Heat Bottleneck: coreTemp climbs 1.8x faster while MAIN BREAKER is open!
-    // STEAM VENT: pulling STEAM VENT rapidly drops coreTemp by -10°C/s!
-    const rawNetHeatRate =
-      relaxationRate +
-      rodContinuousHeatRate +
-      activeCoolingBoost +
-      hotspotHeatRate +
-      positiveVoidRate
-    const blackoutMultipliedHeatRate =
-      state.isBlackout && rawNetHeatRate > 0
-        ? rawNetHeatRate * 1.8
-        : rawNetHeatRate
-    const steamVentCoreCoolingRate = state.ventingSteam ? -10.0 : 0
-    const continuousNetHeat =
-      state.phase === 'playing'
-        ? (blackoutMultipliedHeatRate + steamVentCoreCoolingRate) * dt
-        : 0
-
-    let nextCoreTemp = Math.max(285, state.coreTemp + continuousNetHeat)
-    if (state.isGodMode && nextCoreTemp > 920) {
-      nextCoreTemp = 920
-    }
-
-    // Steam Pressure (0-120 BAR):
-    // - Pulling STEAM VENT rapidly drops pressureBar by -5.5 BAR/s!
-    // - While MAIN BREAKER is open (isBlackout), pressureBar climbs 1.8x faster!
-    // - Steam pressure climb and equilibrium also scale with `controlRodLevel` and RBMK positive void spikes!
-    const coolingPressureRelief = ((coolingMW - 35) / 40) * 8.0
-    const lowPumpPressurePush = Math.max(0, 0.7 - pumpFlowSum) * 14
-    const rodPressureShift = (state.controlRodLevel - 50) * 0.22
-    const targetPressureFromTemp =
-      48 +
-      rodPressureShift +
-      ((nextCoreTemp - 330) / 670) * 65 * rodThermalScale +
-      (state.isBlackout ? 18 : 0) -
-      coolingPressureRelief +
-      lowPumpPressurePush
-    const hotspotPressurePush =
-      (redHotspotCount * 0.42 + amberHotspotCount * 0.14) * graceFactor * dt
-    const voidPressureSpike =
-      rodVoidSpikeRate > 0 ? rodVoidSpikeRate * 0.25 * dt : 0
-    const bubblerBackPressure = bubblerFlooded ? 0.65 * graceFactor * dt : 0
-
-    let nextPressure = state.pressureBar
-    if (state.ventingSteam) {
-      const ventRate = bubblerFlooded ? 2.5 : 5.5
-      nextPressure = Math.max(
-        28,
-        state.pressureBar - ventRate * dt + hotspotPressurePush
-      )
-    } else {
-      const rawPressDrift =
-        (targetPressureFromTemp - state.pressureBar) * 0.32 * rodThermalScale
-      const blackoutPressMultiplier =
-        state.isBlackout && rawPressDrift > 0 ? 1.8 : 1.0
-      const pressureDrift =
-        (rawPressDrift > 0
-          ? rawPressDrift * graceFactor * blackoutPressMultiplier
-          : rawPressDrift) * dt
-      nextPressure = Math.max(
-        28,
-        Math.min(
-          120,
-          state.pressureBar +
-            pressureDrift +
-            hotspotPressurePush +
-            voidPressureSpike +
-            bubblerBackPressure
-        )
-      )
-    }
-
-    let nextInstability = state.redlineInstability
-    if (nextPressure > 95 && !state.isBlackout) {
-      nextInstability = Math.min(
-        100,
-        nextInstability + ((nextPressure - 95) / 25) * 1.6 * graceFactor * dt
-      )
-    }
-
-    // Room Radiation (Dosimeter R/H):
-    // - Above 68 BAR, saturated Helium-N2 loop leaks radiation (+0.15 R/H/s)!
-    // - Pulling STEAM VENT releases +0.12 R/H/s steam radiation into the hall!
-    // - Flipping ON VENTILATION (-1.2 R/H/s) or Containment Seal Scrubbers scrubs radiation!
-    let nextRad = state.radiationLevel
-    if (heliumSaturated) {
-      nextRad = Math.min(15.0, nextRad + 0.15 * graceFactor * dt)
-    }
-    if (state.ventingSteam) {
-      const unsealedPenalty =
-        !state.containmentSealLocked || bubblerFlooded ? 0.32 : 0.12
-      nextRad = Math.min(15.0, nextRad + unsealedPenalty * dt)
-    } else if (!state.containmentSealLocked && nextPressure > 75) {
-      nextRad = Math.min(15.0, nextRad + 0.25 * graceFactor * dt)
-    }
-
-    if ((state.ventilationActive || scrubbersActive) && !state.isBlackout) {
-      const ventScrub = state.ventilationActive
-        ? state.sealToggles[1]
-          ? 1.45
-          : 1.2
-        : 0
-      const sealScrub =
-        scrubbersActive && state.nitrogenLoopValve < 35 ? 0.45 : 0
-      nextRad = Math.max(0.1, nextRad - (ventScrub + sealScrub) * dt)
-    } else {
-      const baselineRad = Math.max(0.2, ((nextCoreTemp - 280) / 720) * 10)
-      nextRad = Math.max(
-        0.1,
-        Math.min(15.0, nextRad + (baselineRad - nextRad) * 0.12 * dt)
-      )
-    }
-
-    // =========================================================================
-    // 5. UNIT C (Right Panel): Deterministic Turbine RPM & 50.0 Hz Grid Coupling
-    //    - Raising MW levers on UNIT A slows the turbine (-0.4 Hz & -45 RPM per +10 MW above 100 MW)
-    //    - Lowering MW levers speeds the turbine up (+0.4 Hz & +45 RPM per -10 MW below 100 MW)
-    //    - Reactor pressureBar > 48 BAR speeds the turbine up (climbing > 65 BAR pushes > 3250 RPM & > 50.8 HZ)
-    //    - Active Kolkhoz Drought (< 35%) or Steel Mill overload (> 35 MW) pulls gridHz down by -0.15 Hz/s
-    //    - Active KGB LINE induces -0.35 Hz drag; Active AUX LOOP B reduces turbine steam drive by 15% (-0.75 Hz & -140 RPM)
-    //    - Turning 50HZ RHEOSTAT (excitationTrim) trims RPM & Hz back to 3000 RPM / 50.0 HZ
-    // =========================================================================
-    const loadDeltaTenMW = (100 - totalMW) / 10
-    const loadOffsetHz = state.isBlackout ? 0.6 : loadDeltaTenMW * 0.4
-    const loadOffsetRpm = state.isBlackout ? 90 : loadDeltaTenMW * 45
-    const pressureOffsetHz = (nextPressure - 48) * 0.048
-    const pressureOffsetRpm = (nextPressure - 48) * 14.8
-    const kgbOffsetHz = state.kgbLineActive ? -0.35 : 0
-    const auxLoopOffsetHz = state.auxLoopBActive ? -0.75 : 0
-    const auxLoopOffsetRpm = state.auxLoopBActive ? -140 : 0
-    const boronDipOffsetHz = nextBoronPoisoning > 0 ? -0.65 : 0
-    const rheostatOffsetRpm = state.excitationTrim * 115
-
-    // Kolkhoz Farm Water Drought (< 35%) or Steel Mill Overload (steel > 35 MW) pulls gridHz down by -0.15 Hz/s
-    const hasDroughtOrSteelOverload =
-      !state.isBlackout &&
-      (nextKolkhozWater < 35 || state.sectorMW.steel > 35)
-    const droughtSteelSteadyHz = hasDroughtOrSteelOverload ? -0.55 : 0
-    const droughtSteelDragRateHz = hasDroughtOrSteelOverload ? -0.15 * dt : 0
-
-    const targetRpm = Math.min(
-      3600,
-      Math.max(
-        0,
-        3000 +
-          loadOffsetRpm +
-          pressureOffsetRpm +
-          auxLoopOffsetRpm +
-          rheostatOffsetRpm
-      )
-    )
-    const steamVentRpmDrop = state.ventingSteam ? -180 * dt : 0
-    const nextRpm = Math.min(
-      3600,
-      Math.max(
-        0,
-        state.turbineRpm +
-          (targetRpm - state.turbineRpm) * Math.min(1, dt * 2.8) +
-          steamVentRpmDrop
-      )
-    )
-
-    const targetHz = Math.max(
-      45.0,
-      Math.min(
-        55.0,
-        50.0 +
-          loadOffsetHz +
-          pressureOffsetHz +
-          kgbOffsetHz +
-          auxLoopOffsetHz +
-          boronDipOffsetHz +
-          droughtSteelSteadyHz +
-          state.excitationTrim
-      )
-    )
-    const steamVentHzDrop = state.ventingSteam ? -0.45 * dt : 0
-    const rawNextHz =
-      state.gridHz +
-      (targetHz - state.gridHz) * Math.min(1, dt * 2.4) +
-      droughtSteelDragRateHz +
-      steamVentHzDrop
-    const nextHz = Number(Math.max(45.0, Math.min(55.0, rawNextHz)).toFixed(2))
-
-    // Automatic MAIN BREAKER Trip:
-    // If gridHz stays outside [47.8, 52.2] Hz OR turbineRpm > 3450 RPM for > 10 seconds,
-    // the MAIN BREAKER knife-switch automatically trips OPEN (isBlackout = true)!
-    let nextHzOut = state.hzOutOfBoundsSeconds
-    let nextBlackout = state.isBlackout
-    if (
-      state.phase === 'playing' &&
-      !state.isBlackout &&
-      (nextHz < 47.8 || nextHz > 52.2 || nextRpm > 3450)
-    ) {
-      nextHzOut += dt
-      if (nextHzOut >= 10.0 && !state.isGodMode) {
-        nextBlackout = true
-        nextHzOut = 0
-        const tripReason =
-          nextRpm > 3450
-            ? `TURBINE OVERSPEED (${Math.round(nextRpm)} RPM > 3450)`
-            : `50HZ DEVIATION (${nextHz.toFixed(1)} HZ OUTSIDE 47.8-52.2 HZ)`
-        const tripMsg = `MAIN BREAKER TRIPPED OPEN! ${tripReason} FOR 10S — REGIONAL BLACKOUT (0 MW) & 1.8X CORE HEAT! TRIM 50HZ RHEOSTAT TO 49-51 HZ & PULL BREAKER [SPACE]!`
-        newLogs.push(
-          createLogEntry(
-            state.shiftTimeMinutes,
-            'K.O.M.R.A.D.-84',
-            tripMsg,
-            'danger'
-          )
-        )
-      }
-    } else {
-      nextHzOut = Math.max(0, nextHzOut - dt * 1.5)
-    }
-
-    const nextBoronCooldown = Math.max(0, state.boronCooldown - dt)
-
-    // =========================================================================
-    // 6. Check Active Moscow Operational Mandate Completion
-    // =========================================================================
-    let nextMandate = state.activeMandate
     let nextFeedback = state.lastDecisionFeedback
-    if (
-      state.phase === 'playing' &&
-      nextMandate &&
-      !nextMandate.fulfilled &&
-      isMandateSatisfied(
-        {
-          ...state,
-          gridHz: nextHz,
-          bubblerLevel: nextBubbler,
-          waterReservoir: nextWaterReservoir,
-        },
-        nextMandate
-      )
-    ) {
-      nextMandate = { ...nextMandate, fulfilled: true }
-      nextCoreTemp = Math.max(290, nextCoreTemp - 25)
-      nextInstability = Math.max(0, nextInstability - 18)
-      nextFeedback = `REGIONAL GRID TARGETS MET (${nextMandate.title})! CORE -25°C, INSTABILITY -18%. DISPATCH NEXT DIRECTIVE IN OUTBOX TUBE!`
+    let nextChatLog = syncWePadChatOnPhaseChange(
+      state.wePadChatLog,
+      prevTutorialPhase,
+      mapped.tutorialPrompt
+    )
+
+    if (mapped.tutorialPhase !== prevTutorialPhase) {
+      const transitionText =
+        mapped.tutorialPhase === 'COMPLETED'
+          ? KOMRAD_TAKEOVER_MESSAGE
+          : `>> VOLKOV DRILL: ${mapped.tutorialPrompt.header}`
+      nextFeedback = transitionText
       newLogs.push(
         createLogEntry(
           state.shiftTimeMinutes,
           'K.O.M.R.A.D.-84',
-          nextFeedback,
+          transitionText,
           'normal'
         )
       )
+    }
+
+    // =========================================================================
+    // REACTIVE POST-TUTORIAL K.O.M.R.A.D.-84 // LIVE DISPATCH COMMENTATOR
+    // =========================================================================
+    if (mapped.tutorialPhase === 'COMPLETED') {
+      const pushKomradLiveDispatch = (
+        msg: string,
+        level: 'normal' | 'warn' | 'danger' = 'normal'
+      ) => {
+        nextFeedback = msg
+        nextChatLog = [
+          ...nextChatLog.slice(-30),
+          createWePadChatMessage('K.O.M.R.A.D.-84', msg, { level }),
+        ]
+        newLogs.push(
+          createLogEntry(state.shiftTimeMinutes, 'K.O.M.R.A.D.-84', msg, level)
+        )
+      }
+
+      const totalAllocatedMW = baseReactor.substations.reduce(
+        (sum, s) => sum + s.allocatedMW,
+        0
+      )
+      const allQuotasOk = baseReactor.substations.every((s) => s.quotaOk)
+      const failingSub = baseReactor.substations.find((s) => !s.quotaOk)
+
+      // Situation D: All 6 substation quotas turn green after a change/brownout!
+      if (allQuotasOk && !prevAllSubstationsOk) {
+        brownoutMismatchSeconds = 0
+        komradDispatchSeed += 1
+        const praise = pickQuotaCommendationDispatch(komradDispatchSeed)
+        pushKomradLiveDispatch(praise, 'normal')
+        lastKomradPropagandaSec = shiftElapsedSeconds
+      }
+      prevAllSubstationsOk = allQuotasOk
+
+      // Situation B: Reactor Systems Entering Yellow/Red Zone (25s per-category cooldown)
+      let hazardFired = false
+      const tryHazard = (
+        cat: ReactorHazardCategory,
+        valA: number,
+        valB: number,
+        level: 'warn' | 'danger'
+      ) => {
+        if (hazardFired) return
+        if (shiftElapsedSeconds - lastKomradHazardSec[cat] >= 25) {
+          lastKomradHazardSec[cat] = shiftElapsedSeconds
+          lastKomradPropagandaSec = shiftElapsedSeconds
+          komradDispatchSeed += 1
+          const text = pickReactorHazardDispatch(
+            cat,
+            valA,
+            valB,
+            komradDispatchSeed
+          )
+          pushKomradLiveDispatch(text, level)
+          hazardFired = true
+        }
+      }
+
+      if (baseReactor.voidFraction > 0.35) {
+        tryHazard(
+          'HIGH_VOID',
+          baseReactor.voidFraction * 100,
+          0,
+          baseReactor.voidFraction > 0.55 ? 'danger' : 'warn'
+        )
+      }
+      if (baseReactor.xenon > 35) {
+        tryHazard(
+          'HIGH_XENON',
+          baseReactor.xenon,
+          0,
+          baseReactor.xenon > 55 ? 'danger' : 'warn'
+        )
+      }
+      if (baseReactor.drumWaterLevel < -200) {
+        tryHazard('WATER_LOW', baseReactor.drumWaterLevel, 0, 'danger')
+      } else if (baseReactor.drumWaterLevel > 200) {
+        tryHazard('WATER_HIGH', baseReactor.drumWaterLevel, 0, 'warn')
+      }
+      if (baseReactor.drumPressure > 78) {
+        tryHazard(
+          'HIGH_PRESSURE',
+          baseReactor.drumPressure,
+          0,
+          baseReactor.drumPressure >= 85 ? 'danger' : 'warn'
+        )
+      }
+      if (totalAllocatedMW > baseReactor.totalElectricalMW + 15) {
+        tryHazard(
+          'GEN_DEFICIT',
+          totalAllocatedMW,
+          baseReactor.totalElectricalMW,
+          'warn'
+        )
+      }
+
+      // Situation C: Substation Brownout / Quota Mismatch (> 15s mismatch, 28s cooldown)
+      if (failingSub) {
+        brownoutMismatchSeconds += dt
+        if (
+          !hazardFired &&
+          brownoutMismatchSeconds >= 15 &&
+          shiftElapsedSeconds - lastKomradBrownoutSec >= 28
+        ) {
+          lastKomradBrownoutSec = shiftElapsedSeconds
+          lastKomradPropagandaSec = shiftElapsedSeconds
+          komradDispatchSeed += 1
+          const brownoutText = pickSectorBrownoutDispatch(
+            `sub_${failingSub.id}`,
+            failingSub.allocatedMW,
+            failingSub.targetMW,
+            komradDispatchSeed
+          )
+          pushKomradLiveDispatch(brownoutText, 'warn')
+          hazardFired = true
+        }
+      } else {
+        brownoutMismatchSeconds = 0
+      }
+
+      // Situation E: Periodic Atom-Propaganda Broadcasts (~45s interval when calm & stable)
+      const isCalm =
+        allQuotasOk &&
+        baseReactor.voidFraction <= 0.30 &&
+        baseReactor.xenon <= 30 &&
+        Math.abs(baseReactor.drumWaterLevel) <= 150 &&
+        baseReactor.drumPressure <= 76
+      if (
+        !hazardFired &&
+        isCalm &&
+        shiftElapsedSeconds - lastKomradPropagandaSec >= 45
+      ) {
+        lastKomradPropagandaSec = shiftElapsedSeconds
+        komradDispatchSeed += 1
+        const propText = pickPropagandaBroadcastDispatch(komradDispatchSeed)
+        pushKomradLiveDispatch(propText, 'normal')
+      }
     }
 
     const nextPhase =
-      !state.isGodMode && nextStrikes >= 3
+      !state.isGodMode && state.treasonStrikes >= 3
         ? 'gulag'
-        : !state.isGodMode && nextCoreTemp >= 1000
+        : !state.isGodMode && (baseReactor.coreMeltdown || baseReactor.steamExplosion)
           ? 'meltdown'
           : state.phase
 
-    if (newLogs.length > 0) {
+    if (newLogs.length > 0 || nextChatLog !== state.wePadChatLog) {
       const updatedEntries = [...state.terminalEntries.slice(-24), ...newLogs]
       set({
-        coreTemp: nextCoreTemp,
-        pumpAHeat: nextHeatA,
-        pumpBHeat: nextHeatB,
-        lubeOilPressure: Number(nextLubeOil.toFixed(1)),
-        channelHotspots: nextHotspots,
-        graphiteTemp: Number(nextGraphite.toFixed(1)),
-        heliumPressure: nextHelium,
-        bubblerLevel: Number(nextBubbler.toFixed(1)),
-        pripyatWater: Number(nextPripyatWater.toFixed(1)),
-        kolkhozWater: Number(nextKolkhozWater.toFixed(1)),
-        vodkaWater: Number(nextVodkaWater.toFixed(1)),
-        vodkaDroughtTimer: Number(nextVodkaDroughtTimer.toFixed(1)),
-        waterReservoir: nextWaterReservoir,
-        waterUsage: nextWaterUsage,
-        pumpThrottle: nextThrottle,
-        pumpsActive: nextPumps,
-        pressureBar: Number(nextPressure.toFixed(1)),
-        redlineInstability: nextInstability,
-        radiationLevel: Number(nextRad.toFixed(2)),
-        turbineRpm: Math.round(nextRpm),
-        gridHz: nextHz,
-        hzOutOfBoundsSeconds: nextHzOut,
-        isBlackout: nextBlackout,
-        boronCooldown: nextBoronCooldown,
-        boronPoisoningTimer: Number(nextBoronPoisoning.toFixed(2)),
-        targetSectorMW: nextTargetSectorMW,
-        targetVodkaMW: nextTargetVodkaMW,
-        treasonStrikes: nextStrikes,
-        activeMandate: nextMandate,
+        ...mapped,
+        boronTankLevel: nextBoronTankLevel,
         lastDecisionFeedback: nextFeedback,
         phase: nextPhase,
+        wePadChatLog: nextChatLog,
         terminalEntries: updatedEntries,
         terminalLogs: updatedEntries.map(
           (e) => `[${e.timestamp}] ${e.sender}: ${e.text}`
@@ -2511,70 +2019,48 @@ export const useGameStore = create<GameState>((set, get) => ({
       })
     } else {
       set({
-        coreTemp: nextCoreTemp,
-        pumpAHeat: nextHeatA,
-        pumpBHeat: nextHeatB,
-        lubeOilPressure: Number(nextLubeOil.toFixed(1)),
-        channelHotspots: nextHotspots,
-        graphiteTemp: Number(nextGraphite.toFixed(1)),
-        heliumPressure: nextHelium,
-        bubblerLevel: Number(nextBubbler.toFixed(1)),
-        pripyatWater: Number(nextPripyatWater.toFixed(1)),
-        kolkhozWater: Number(nextKolkhozWater.toFixed(1)),
-        vodkaWater: Number(nextVodkaWater.toFixed(1)),
-        vodkaDroughtTimer: Number(nextVodkaDroughtTimer.toFixed(1)),
-        waterReservoir: nextWaterReservoir,
-        waterUsage: nextWaterUsage,
-        pumpThrottle: nextThrottle,
-        pumpsActive: nextPumps,
-        pressureBar: Number(nextPressure.toFixed(1)),
-        redlineInstability: nextInstability,
-        radiationLevel: Number(nextRad.toFixed(2)),
-        turbineRpm: Math.round(nextRpm),
-        gridHz: nextHz,
-        hzOutOfBoundsSeconds: nextHzOut,
-        isBlackout: nextBlackout,
-        boronCooldown: nextBoronCooldown,
-        boronPoisoningTimer: Number(nextBoronPoisoning.toFixed(2)),
-        targetSectorMW: nextTargetSectorMW,
-        targetVodkaMW: nextTargetVodkaMW,
-        treasonStrikes: nextStrikes,
-        activeMandate: nextMandate,
-        lastDecisionFeedback: nextFeedback,
+        ...mapped,
+        boronTankLevel: nextBoronTankLevel,
         phase: nextPhase,
       })
     }
   },
 
   triggerAz5: () => {
-    const state = get()
-    if (!state.az5Available || state.az5Cooldown > 0) return
-
-    const boronFactor = 0.4 + 0.6 * (state.boronTankLevel / 100)
-    const tempDrop = Math.round(280 * boronFactor)
-    const cooledTemp = Math.max(305, state.coreTemp - tempDrop)
-    const nextBoronTank = Math.max(0, state.boronTankLevel - 40)
-    const entry = createLogEntry(
-      state.shiftTimeMinutes,
-      'K.O.M.R.A.D.-84',
-      `AZ-5 BORON RODS DROPPED (-${tempDrop}°C, ALL HOTSPOTS QUENCHED, BORON TANK ${Math.round(nextBoronTank)}%)!`,
-      'warn'
-    )
-    set({
-      coreTemp: cooledTemp,
-      graphiteTemp: Math.max(295, state.graphiteTemp - 110),
-      pressureBar: Math.max(36, state.pressureBar - 24),
-      redlineInstability: Math.max(0, state.redlineInstability - 40),
-      channelHotspots: {},
-      controlRodLevel: 0,
-      boronTankLevel: nextBoronTank,
-      az5Available: false,
-      az5Cooldown: 45,
-      terminalEntries: [...state.terminalEntries.slice(-24), entry],
-      terminalLogs: [
-        ...state.terminalLogs.slice(-24),
-        `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-      ],
+    set((state) => {
+      const nextAz5 = !state.az5Active
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        az5Active: nextAz5,
+        az5Timer: nextAz5 ? 0 : state.az5Timer,
+        autoRodEnabled: nextAz5 ? false : state.autoRodEnabled,
+      }
+      const mapped = mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
+      const msg = nextAz5
+        ? 'AZ-5 EMERGENCY SCRAM ENGAGED! GRAPHITE DISPLACER TIPS ENTERING CORE (+REACTIVITY SPIKE FIRST 3.5S)!'
+        : 'AZ-5 SCRAM LATCH RESET BY OPERATOR — MANUAL ROD CONTROL RESTORED.'
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'K.O.M.R.A.D.-84',
+        msg,
+        nextAz5 ? 'danger' : 'warn'
+      )
+      const nextChatLog = [
+        ...state.wePadChatLog.slice(-30),
+        createWePadChatMessage('SYSTEM', msg, {
+          level: nextAz5 ? 'danger' : 'warn',
+        }),
+      ]
+      return {
+        ...mapped,
+        lastDecisionFeedback: msg,
+        wePadChatLog: nextChatLog,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+      }
     })
   },
 
@@ -2600,22 +2086,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   purgeFirewall: () => {
     set((state) => {
-      if (state.powerAllocation.defense < 20) {
-        const failEntry = createLogEntry(
-          state.shiftTimeMinutes,
-          'SYS.DEFENSE',
-          'FIREWALL PURGE FAILED: REQUIRES AT LEAST 20 MW IN [DEFENSE] CHANNEL!',
-          'danger'
-        )
-        return {
-          terminalEntries: [...state.terminalEntries.slice(-24), failEntry],
-          terminalLogs: [
-            ...state.terminalLogs.slice(-24),
-            `[${failEntry.timestamp}] ${failEntry.sender}: ${failEntry.text}`,
-          ],
-        }
-      }
-
       const okEntry = createLogEntry(
         state.shiftTimeMinutes,
         'SYS.DEFENSE',
@@ -2759,14 +2229,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   debugSetTemp: (temp: number) => {
-    set({ coreTemp: Math.max(280, Math.min(1000, temp)) })
+    set({ coreTemp: Math.max(25, Math.min(1300, temp)) })
   },
 
   debugTriggerBlackout: () => {
-    set((state) => ({
-      isBlackout: !state.isBlackout,
-      redlineInstability: state.isBlackout ? 0 : 95,
-    }))
+    get().pullMainBreaker()
   },
 
   debugCompleteShift: () => {
@@ -2776,161 +2243,17 @@ export const useGameStore = create<GameState>((set, get) => ({
   tick: () => {
     const state = get()
     if (state.phase !== 'playing') return
-    if (state.tutorialStep !== 'DONE') return
 
-    // 1. Advance clock: 360 in-game minutes (00:00 -> 06:00) over 10.5 real minutes (630 real seconds -> ~1.75s per 1 in-game minute)
-    // In Sandbox / GodMode (Shift+Space), wrap the clock so the player never runs out of time!
+    // 1. Advance clock continuously without stopping at 10 minutes (wraps around 360 in-game minutes)
     const SHIFT_MINUTES_PER_SECOND = 1 / 1.75
     const rawNextMinutes = state.shiftTimeMinutes + SHIFT_MINUTES_PER_SECOND
-    if (!state.isGodMode && rawNextMinutes >= 360) {
-      set({ shiftTimeMinutes: 360, phase: 'victory' })
-      return
-    }
-    const nextMinutes = state.isGodMode
-      ? rawNextMinutes % 360
-      : Math.min(360, rawNextMinutes)
-    const prevWholeMin = Math.floor(state.shiftTimeMinutes)
-    const nextWholeMin = Math.floor(nextMinutes)
-    const crossedWholeMinute = nextWholeMin !== prevWholeMin
+    const nextMinutes = rawNextMinutes % 360
 
-    // 2. Calculate non-cooling overload and Redline instability (`1. COOLING` never causes Redline overload!)
-    const nonCoolingMW =
-      state.powerAllocation.defense +
-      state.powerAllocation.facility +
-      (state.ventilationActive ? 10 : 0)
-    const totalMW = state.powerAllocation.cooling + nonCoolingMW
-    const isRedline = totalMW > 130 || nonCoolingMW > 90
-
-    let nextInstability = state.redlineInstability
-    let nextBlackout = state.isBlackout
-    let nextAlloc = { ...state.powerAllocation }
-    const newLogs: TerminalLogEntry[] = []
-
-    if (isRedline && !state.isBlackout) {
-      const excessMW = Math.max(totalMW - 130, nonCoolingMW - 90)
-      nextInstability = Math.min(100, state.redlineInstability + (excessMW / 10) * 2.2)
-      if (nextInstability >= 100 && !state.isGodMode) {
-        nextBlackout = true
-        nextInstability = 60
-        newLogs.push(
-          createLogEntry(
-            nextMinutes,
-            'K.O.M.R.A.D.-84',
-            'REDLINE OVERLOAD! MAIN BREAKER TRIPPED OPEN! TRIM 50HZ RHEOSTAT TO 49-51 HZ & CLOSE BREAKER [SPACE]!',
-            'danger'
-          )
-        )
-      }
-    } else {
-      nextInstability = Math.max(0, state.redlineInstability - 4)
-    }
-
-    const nextTemp = state.coreTemp
-
-    // 3. CIA Cyber Intrusion & K.O.M.R.A.D.-84 gaslighting events
-    let nextCiaActive = state.ciaIntrusionActive
-    let nextCiaProgress = state.ciaIntrusionProgress
-    let nextKomradLock = state.komradOverrideLocked
-
-    if (
-      !nextCiaActive &&
-      crossedWholeMinute &&
-      nextWholeMin >= 48 &&
-      nextWholeMin % 48 === 0
-    ) {
-      nextCiaActive = true
-      nextCiaProgress = 15
-      newLogs.push(
-        createLogEntry(
-          nextMinutes,
-          'SYS.DEFENSE',
-          'INTRUSION DETECTED IN SECTOR 07! ROUTE >= 20 MW TO [DEFENSE] & PURGE FIREWALL.',
-          'danger'
-        )
-      )
-    } else if (nextCiaActive) {
-      const defenseShield = state.powerAllocation.defense >= 30 ? -8 : 5
-      nextCiaProgress = Math.max(0, Math.min(100, nextCiaProgress + defenseShield))
-      if (nextCiaProgress === 0) {
-        nextCiaActive = false
-        newLogs.push(
-          createLogEntry(
-            nextMinutes,
-            'SYS.DEFENSE',
-            'PASSIVE DEFENSE SHIELD DEFLECTED CIA TELEMETRY PROBE.',
-            'normal'
-          )
-        )
-      } else if (nextCiaProgress >= 100) {
-        nextCiaActive = false
-        nextCiaProgress = 0
-        if (!state.isGodMode) {
-          nextKomradLock = true
-          nextAlloc = {
-            cooling: 20,
-            defense: 10,
-            facility: 50,
-          }
-          newLogs.push(
-            createLogEntry(
-              nextMinutes,
-              'K.O.M.R.A.D.-84',
-              'OPTIMIZATION DECREE: COOLING DIVERTED TO ILLUMINATE LENIN COURTYARD STATUE. CLICK [OVERRIDE AI]!',
-              'danger'
-            )
-          )
-        }
-      }
-    }
-
-    // Periodic English K.O.M.R.A.D.-84 status alerts when secondary parameters cross 80%
-    if (nextTemp >= 750 && state.coreTemp < 750) {
-      newLogs.push(
-        createLogEntry(
-          nextMinutes,
-          'K.O.M.R.A.D.-84',
-          `WARNING: CORE TEMP AT ${Math.round(nextTemp)}°C! CRANK COOLING PUMPS OR INJECT BORON ON UNIT A!`,
-          'warn'
-        )
-      )
-    }
-    if (
-      state.bubblerLevel >= 85 &&
-      crossedWholeMinute &&
-      nextWholeMin % 12 === 0
-    ) {
-      newLogs.push(
-        createLogEntry(
-          nextMinutes,
-          'K.O.M.R.A.D.-84',
-          `UNIT B BUBBLER POOL AT ${Math.round(state.bubblerLevel)}%! PULL BUBBLER DRAIN LEVER ON UNIT B TO PREVENT STEAM BACK-PRESSURE!`,
-          'warn'
-        )
-      )
-    }
-    if (
-      state.graphiteTemp >= 640 &&
-      crossedWholeMinute &&
-      nextWholeMin % 12 === 0
-    ) {
-      newLogs.push(
-        createLogEntry(
-          nextMinutes,
-          'K.O.M.R.A.D.-84',
-          `UNIT B GRAPHITE TEMP AT ${Math.round(state.graphiteTemp)}°C! OPEN HELIUM-N2 GAS REGULATOR ON UNIT B!`,
-          'danger'
-        )
-      )
-    }
-
-    // 5. Pravda Dot-Matrix Printer progress (strictly gated by 3D Inspector Desk single-paper & cooldown rules)
-    const facilitySpeed = state.isBlackout
-      ? 1
-      : Math.max(2, (state.powerAllocation.facility / 20) * 2.5)
+    // 2. Pravda Dot-Matrix Printer progress (strictly gated by 3D Inspector Desk single-paper & cooldown rules)
     let nextPrinterProgress = state.printerProgress
     let nextDirectives = state.activeDirectives
     if (state.activeDirectives.length === 0 && shiftElapsedSeconds >= 15) {
-      nextPrinterProgress = Math.min(100, state.printerProgress + facilitySpeed)
+      nextPrinterProgress = Math.min(100, state.printerProgress + 3.5)
       if (nextPrinterProgress >= 100) {
         const spawned = createDirectiveInstance()
         nextDirectives = [spawned]
@@ -2938,27 +2261,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
-    const nextPhase = !state.isGodMode && nextTemp >= 1000 ? 'meltdown' : state.phase
-    const updatedEntries =
-      newLogs.length > 0
-        ? [...state.terminalEntries.slice(-24), ...newLogs]
-        : state.terminalEntries
+    const nextPhase =
+      !state.isGodMode && state.treasonStrikes >= 3
+        ? 'gulag'
+        : !state.isGodMode && (state.coreMeltdown || state.steamExplosion)
+          ? 'meltdown'
+          : state.phase
 
     set({
       shiftTimeMinutes: nextMinutes,
-      coreTemp: nextTemp,
-      powerAllocation: nextAlloc,
-      redlineInstability: nextInstability,
-      isBlackout: nextBlackout,
       az5Cooldown: Math.max(0, state.az5Cooldown - 1),
-      ciaIntrusionActive: nextCiaActive,
-      ciaIntrusionProgress: nextCiaProgress,
-      komradOverrideLocked: nextKomradLock,
       printerProgress: nextPrinterProgress,
       activeDirectives: nextDirectives,
       phase: nextPhase,
-      terminalEntries: updatedEntries,
-      terminalLogs: updatedEntries.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
     })
   },
 }))
