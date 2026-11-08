@@ -121,26 +121,123 @@ function wrapCanvasText(
   return lines
 }
 
+const DIRECTIVE_HIGH_CONTRAST_INK_HEX: Record<
+  DeskDocument['inkColor'],
+  string
+> = {
+  SOVIET_CRIMSON: '#8a0f0a',
+  BUNKER_OLIVE: '#143b16',
+  PRAVDA_BLACK: '#0a0a0a',
+  IMPERIAL_PURPLE: '#4e106e',
+  CIA_NAVY_BLUE: '#0b2968',
+}
+
 function getFontDeclaration(fontType: DocumentFontType, sizePx: number): string {
   switch (fontType) {
     case 'WESTERN_SERIF':
-      return `bold ${sizePx}px Georgia, "Times New Roman", Times, serif`
+      return `900 ${sizePx}px Georgia, "Times New Roman", Times, serif`
     case 'SLANTED_ITALIC':
-      return `italic bold ${sizePx}px "Courier Prime", monospace`
+      return `italic 900 ${sizePx}px "Courier Prime", "Consolas", monospace`
     case 'BOURGEOIS_SANS':
-      return `bold ${sizePx}px Arial, Helvetica, sans-serif`
+      return `900 ${sizePx}px "Arial Black", Arial, Helvetica, sans-serif`
     case 'PRAVDA_BLOCK':
-      return `900 ${sizePx}px "Courier Prime", monospace`
+      return `900 ${sizePx}px "Courier Prime", "Consolas", monospace`
     case 'GOST_MONO':
     default:
-      return `bold ${sizePx}px "Courier Prime", monospace`
+      return `900 ${sizePx}px "Courier Prime", "Consolas", monospace`
   }
 }
 
 /**
+ * 1. Helper Function for Ultra-Thick Text (`drawHeavyText`)
+ * Sets `ctx.lineJoin = 'round'`, `ctx.miterLimit = 2`, and `ctx.lineWidth = Math.max(2.2, fontSize * 0.08)`
+ * in the exact same color as `ctx.fillStyle` (or an optional dark outline), then calls BOTH
+ * `ctx.strokeText(text, x, y)` AND `ctx.fillText(text, x, y)` so every character stroke is 2-3x thicker!
+ */
+export function drawHeavyText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  fillColor: string,
+  options?: {
+    maxWidth?: number
+    outlineColor?: string
+    outlineWidth?: number
+    strokeColor?: string
+    strokeWidth?: number
+  }
+): void {
+  ctx.save()
+  ctx.lineJoin = 'round'
+  ctx.miterLimit = 2
+  const maxWidth = options?.maxWidth
+
+  // Optional outer contrast outline pass (e.g. black outline behind white Ministry banner text)
+  if (options?.outlineColor) {
+    ctx.strokeStyle = options.outlineColor
+    ctx.lineWidth = options.outlineWidth ?? Math.max(4.5, fontSize * 0.16)
+    if (maxWidth !== undefined) {
+      ctx.strokeText(text, x, y, maxWidth)
+    } else {
+      ctx.strokeText(text, x, y)
+    }
+  }
+
+  // Primary self-colored thickening stroke pass + solid fill pass
+  ctx.fillStyle = fillColor
+  ctx.strokeStyle = options?.strokeColor ?? fillColor
+  ctx.lineWidth = options?.strokeWidth ?? Math.max(2.2, fontSize * 0.08)
+
+  if (maxWidth !== undefined) {
+    ctx.strokeText(text, x, y, maxWidth)
+    ctx.fillText(text, x, y, maxWidth)
+  } else {
+    ctx.strokeText(text, x, y)
+    ctx.fillText(text, x, y)
+  }
+  ctx.restore()
+}
+
+function parseDirectiveOrderDisplay(doc: DeskDocument): {
+  sectorLine: string
+  targetLoadLine: string
+  shortNote: string
+} {
+  let sectorLine = '[5] VODKA PLANT'
+  let targetLoadLine = 'TARGET: 25 MW (+10 MW)'
+
+  const bracketMatch = doc.powerOrderText.match(/\[(\d+)\.?\s*([^\]]+)\]/)
+  if (bracketMatch) {
+    sectorLine = `[${bracketMatch[1]}] ${bracketMatch[2].trim()}`
+  }
+
+  const mwMatch = doc.powerOrderText.match(/TO\s+(\d+)\s*MW/i)
+  const deltaMatch = doc.powerOrderText.match(/\(\s*([+-]?\d+\s*MW)\s*\)/i)
+  if (mwMatch) {
+    const deltaPart = deltaMatch ? ` (${deltaMatch[1].replace(/\s+/g, ' ')})` : ''
+    targetLoadLine = `TARGET: ${mwMatch[1]} MW${deltaPart}`
+  }
+
+  const rawWords = doc.content
+    .replace(/^.*?\(\s*[+-]?\d+\s*MW\s*\)\.?\s*/i, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  const shortNote = (
+    rawWords.length > 0
+      ? rawWords.slice(0, 5).join(' ')
+      : 'STAMP GREEN APPROVED'
+  ).toUpperCase()
+
+  return { sectorLine, targetLoadLine, shortNote }
+}
+
+/**
  * Renders the 3 Official Soviet Seals (USSR State Seal, MinSredMash Atom, KGB Sword & Shield).
- * At 1x (`isMagnified = false`), micro-print is tiny and barely a texture line;
- * at 2x (`isMagnified = true` inside the optical lens), the micro-ring text, star points, and orbits are razor-sharp.
+ * Giant, thick-lined (`4px–6px` lineWidth) with 2.5x larger bold ring text (`★ СССР ★ 1984 ★` vs `★ CCCP-LATIN ★`)
+ * so every seal detail is crystal clear at a glance on a MacBook screen.
  */
 export function drawOfficialSeal(
   ctx: CanvasRenderingContext2D,
@@ -150,11 +247,11 @@ export function drawOfficialSeal(
   sealType: SealEmblemType,
   microDefect: SealMicroDefect,
   inkHex: string,
-  isMagnified: boolean
+  _isMagnified: boolean
 ): void {
   ctx.save()
   ctx.translate(cx, cy)
-  const scale = radius / 50
+  const scale = radius / 100
   ctx.scale(scale, scale)
 
   const hasLatinRing =
@@ -162,63 +259,73 @@ export function drawOfficialSeal(
     microDefect === 'SIX_POINT_STAR' ||
     microDefect === 'BROKEN_ORBIT'
 
-  const topRingText = hasLatinRing
-    ? '★ CCCP-LATIN • SERIES-6 ★'
-    : '★ СССР • ГОССТАНДАРТ 84 ★'
+  const topRingText = hasLatinRing ? '★ CCCP-LATIN ★' : '★ СССР ★ 1984 ★'
 
   const bottomRingText =
     sealType === 'USSR_STATE_SEAL'
       ? hasLatinRing
-        ? 'SOVMIN • WESTERN PRESS'
-        : 'СОВЕТ МИНИСТРОВ СССР'
+        ? 'SOVMIN-WEST'
+        : 'СОВМИН СССР'
       : sealType === 'MINSREDMASH_ATOM'
         ? hasLatinRing
-          ? 'MINSREDMASH • ORBIT-1'
-          : 'МИНСРЕДМАШ • ОБЪЕКТ №4'
+          ? 'ORBIT-FAKE'
+          : 'МИНСРЕДМАШ'
         : hasLatinRing
-          ? '5-UPR • LANGLEY COPY'
-          : '5-Е УПРАВЛЕНИЕ КГБ СССР'
+          ? 'LANGLEY-5'
+          : 'КГБ СССР №4'
 
   ctx.strokeStyle = inkHex
   ctx.fillStyle = inkHex
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
 
-  // Outer Double Stamp Ring
-  ctx.lineWidth = isMagnified ? 2.8 : 2.5
+  // Outer & Inner Stamp Rings (Doubled 4px-6px heavy lineWidth)
+  ctx.lineWidth = 6.0
   ctx.beginPath()
-  ctx.arc(0, 0, 47, 0, Math.PI * 2)
+  ctx.arc(0, 0, 95, 0, Math.PI * 2)
   ctx.stroke()
 
-  ctx.lineWidth = isMagnified ? 1.5 : 1.1
-  ctx.setLineDash([2.2, 1.6])
+  ctx.lineWidth = 3.8
+  ctx.setLineDash([5.5, 3.8])
   ctx.beginPath()
-  ctx.arc(0, 0, 43, 0, Math.PI * 2)
+  ctx.arc(0, 0, 86, 0, Math.PI * 2)
   ctx.stroke()
   ctx.setLineDash([])
 
-  ctx.lineWidth = isMagnified ? 2.2 : 1.6
+  ctx.lineWidth = 5.0
   ctx.beginPath()
-  ctx.arc(0, 0, 31, 0, Math.PI * 2)
+  ctx.arc(0, 0, 56, 0, Math.PI * 2)
   ctx.stroke()
 
-  // Micro-print top & bottom ring labels (crisp, un-dithered high-contrast strokes)
+  // 2.5x Larger Bold Ring Text (`★ СССР ★ 1984 ★` vs `★ CCCP-LATIN ★`) with `drawHeavyText`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = isMagnified
-    ? 'bold 7.2px "Courier Prime", monospace'
-    : 'bold 4.2px "Courier Prime", monospace'
-  ctx.fillText(topRingText, 0, -36.5)
-  ctx.fillText(bottomRingText, 0, 38)
+  ctx.font = '900 18.5px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, topRingText, 0, -71, 18.5, inkHex, {
+    maxWidth: 146,
+    strokeWidth: 2.0,
+  })
+  drawHeavyText(ctx, bottomRingText, 0, 72, 18.5, inkHex, {
+    maxWidth: 144,
+    strokeWidth: 2.0,
+  })
 
-  // Left & Right micro serial codes
-  ctx.font = isMagnified
-    ? 'bold 6.8px "Courier Prime", monospace'
-    : 'bold 4.0px "Courier Prime", monospace'
-  ctx.fillText(microDefect === 'NONE' ? '№84' : 'ERR', -37, 2)
-  ctx.fillText(microDefect === 'NONE' ? '5★' : '6★', 37, 2)
+  // Left & Right Bold Rim Codes
+  ctx.font = '900 17px "Courier Prime", "Consolas", monospace'
+  const leftCode = microDefect === 'NONE' ? '№84' : 'ERR'
+  const rightCode =
+    microDefect === 'NONE'
+      ? '5★'
+      : microDefect === 'FOUR_POINT_STAR'
+        ? '4★'
+        : '6★'
+  drawHeavyText(ctx, leftCode, -72, 2, 17, inkHex, { strokeWidth: 1.8 })
+  drawHeavyText(ctx, rightCode, 72, 2, 17, inkHex, { strokeWidth: 1.8 })
 
-  // Top Crown Star at (0, -24)
-  const starY = -24
-  const rOuter = 7.2
+  // Top Crown Star at (0, -39) — giant & thick-lined (`5-pt` vs `4-pt` / `6-pt` fake)
+  const starY = -39
+  const rOuter = 16.5
+  ctx.lineWidth = 3.2
   if (microDefect === 'SIX_POINT_STAR') {
     ctx.beginPath()
     ctx.moveTo(0, starY - rOuter)
@@ -226,6 +333,7 @@ export function drawOfficialSeal(
     ctx.lineTo(-rOuter * 0.86, starY + rOuter * 0.5)
     ctx.closePath()
     ctx.fill()
+    ctx.stroke()
 
     ctx.beginPath()
     ctx.moveTo(0, starY + rOuter)
@@ -233,8 +341,9 @@ export function drawOfficialSeal(
     ctx.lineTo(-rOuter * 0.86, starY - rOuter * 0.5)
     ctx.closePath()
     ctx.fill()
+    ctx.stroke()
   } else if (microDefect === 'FOUR_POINT_STAR') {
-    const rIn = rOuter * 0.35
+    const rIn = rOuter * 0.36
     ctx.beginPath()
     ctx.moveTo(0, starY - rOuter)
     ctx.lineTo(rIn, starY - rIn)
@@ -246,8 +355,9 @@ export function drawOfficialSeal(
     ctx.lineTo(-rIn, starY - rIn)
     ctx.closePath()
     ctx.fill()
+    ctx.stroke()
   } else {
-    const rInner = rOuter * 0.42
+    const rInner = rOuter * 0.44
     ctx.beginPath()
     for (let i = 0; i < 10; i++) {
       const r = i % 2 === 0 ? rOuter : rInner
@@ -259,106 +369,107 @@ export function drawOfficialSeal(
     }
     ctx.closePath()
     ctx.fill()
+    ctx.stroke()
   }
 
-  // Center Emblem by Seal Type
+  // Center Emblem by Seal Type (Doubled 4px–6px lineWidth)
   if (sealType === 'USSR_STATE_SEAL') {
-    ctx.lineWidth = isMagnified ? 2.2 : 1.5
+    ctx.lineWidth = 5.4
     ctx.beginPath()
-    ctx.arc(0, 4, 14, 0, Math.PI * 2)
+    ctx.arc(0, 11, 27, 0, Math.PI * 2)
     ctx.stroke()
 
-    ctx.lineWidth = isMagnified ? 1.5 : 1.0
+    ctx.lineWidth = 4.2
     ctx.beginPath()
-    ctx.ellipse(0, 4, 7, 14, 0, 0, Math.PI * 2)
+    ctx.ellipse(0, 11, 13.5, 27, 0, 0, Math.PI * 2)
     ctx.stroke()
 
     ctx.beginPath()
-    ctx.moveTo(-14, 4)
-    ctx.lineTo(14, 4)
-    ctx.moveTo(-12, -3)
-    ctx.lineTo(12, -3)
-    ctx.moveTo(-12, 11)
-    ctx.lineTo(12, 11)
+    ctx.moveTo(-27, 11)
+    ctx.lineTo(27, 11)
+    ctx.moveTo(-23, -3)
+    ctx.lineTo(23, -3)
+    ctx.moveTo(-23, 25)
+    ctx.lineTo(23, 25)
     ctx.stroke()
 
-    ctx.lineWidth = 3.0
-    ctx.setLineDash([3, 1.5])
+    ctx.lineWidth = 6.2
+    ctx.setLineDash([6.5, 3.5])
     ctx.beginPath()
-    ctx.arc(0, 4, 21, Math.PI * 0.68, Math.PI * 1.32)
+    ctx.arc(0, 11, 39, Math.PI * 0.68, Math.PI * 1.32)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(0, 4, 21, -Math.PI * 0.32, Math.PI * 0.32)
+    ctx.arc(0, 11, 39, -Math.PI * 0.32, Math.PI * 0.32)
     ctx.stroke()
     ctx.setLineDash([])
 
-    ctx.lineWidth = 2.6
+    ctx.lineWidth = 5.8
     ctx.beginPath()
-    ctx.moveTo(-7, 11)
-    ctx.lineTo(7, -5)
+    ctx.moveTo(-14, 24)
+    ctx.lineTo(14, -6)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(1, 3, 8, -Math.PI * 0.65, Math.PI * 0.55)
+    ctx.arc(2, 9, 16, -Math.PI * 0.65, Math.PI * 0.55)
     ctx.stroke()
   } else if (sealType === 'MINSREDMASH_ATOM') {
-    ctx.lineWidth = isMagnified ? 2.4 : 1.7
+    ctx.lineWidth = 5.8
     ctx.beginPath()
-    ctx.ellipse(0, 4, 19, 7.5, (-32 * Math.PI) / 180, 0, Math.PI * 2)
+    ctx.ellipse(0, 11, 37, 16, (-32 * Math.PI) / 180, 0, Math.PI * 2)
     ctx.stroke()
 
     if (microDefect === 'BROKEN_ORBIT') {
-      ctx.setLineDash([2.8, 2.8])
+      ctx.setLineDash([7.0, 6.5])
       ctx.beginPath()
-      ctx.ellipse(0, 4, 19, 7.5, (32 * Math.PI) / 180, 0, Math.PI * 1.15)
+      ctx.ellipse(0, 11, 37, 16, (32 * Math.PI) / 180, 0, Math.PI * 1.12)
       ctx.stroke()
       ctx.setLineDash([])
     } else {
       ctx.beginPath()
-      ctx.ellipse(0, 4, 19, 7.5, (32 * Math.PI) / 180, 0, Math.PI * 2)
+      ctx.ellipse(0, 11, 37, 16, (32 * Math.PI) / 180, 0, Math.PI * 2)
       ctx.stroke()
     }
 
     ctx.beginPath()
-    ctx.arc(0, 4, 3.2, 0, Math.PI * 2)
+    ctx.arc(0, 11, 8.8, 0, Math.PI * 2)
     ctx.fill()
 
-    ctx.lineWidth = 2.5
+    ctx.lineWidth = 5.6
     ctx.beginPath()
-    ctx.moveTo(-8, 12)
-    ctx.lineTo(8, -5)
+    ctx.moveTo(-15, 26)
+    ctx.lineTo(15, -6)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(1, 4, 8.5, -Math.PI * 0.6, Math.PI * 0.55)
+    ctx.arc(2, 11, 17, -Math.PI * 0.6, Math.PI * 0.55)
     ctx.stroke()
   } else if (sealType === 'KGB_SWORD_SHIELD') {
-    ctx.lineWidth = 2.8
+    ctx.lineWidth = 6.2
     ctx.beginPath()
-    ctx.moveTo(0, -18)
-    ctx.lineTo(0, 25)
-    ctx.moveTo(-8, -13)
-    ctx.lineTo(8, -13)
+    ctx.moveTo(0, -28)
+    ctx.lineTo(0, 48)
+    ctx.moveTo(-18, -19)
+    ctx.lineTo(18, -19)
     ctx.stroke()
 
     ctx.fillStyle = '#e8dec3'
-    ctx.lineWidth = 2.4
+    ctx.lineWidth = 5.6
     ctx.beginPath()
-    ctx.moveTo(-12, -10)
-    ctx.lineTo(12, -10)
-    ctx.lineTo(10, 8)
-    ctx.lineTo(0, 20)
-    ctx.lineTo(-10, 8)
+    ctx.moveTo(-24, -13)
+    ctx.lineTo(24, -13)
+    ctx.lineTo(20, 19)
+    ctx.lineTo(0, 41)
+    ctx.lineTo(-20, 19)
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
 
     ctx.fillStyle = inkHex
-    ctx.lineWidth = 2.3
+    ctx.lineWidth = 5.6
     ctx.beginPath()
-    ctx.moveTo(-6, 10)
-    ctx.lineTo(6, -4)
+    ctx.moveTo(-12, 23)
+    ctx.lineTo(12, -4)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(0, 3, 6.5, -Math.PI * 0.6, Math.PI * 0.55)
+    ctx.arc(0, 9, 13.5, -Math.PI * 0.6, Math.PI * 0.55)
     ctx.stroke()
   }
 
@@ -376,83 +487,123 @@ export function drawCompactTeletypeSlipCanvas(
   doc: DeskDocument
 ): void {
   ctx.save()
-  ctx.imageSmoothingEnabled = false
+  ctx.imageSmoothingEnabled = true
+  const LW = 256
+  const LH = 320
+  ctx.scale(w / LW, h / LH)
+
   const paperHex = PAPER_COLOR_HEX[doc.paperColor]
-  const inkHex = INK_COLOR_HEX[doc.inkColor]
+  const inkHex = DIRECTIVE_HIGH_CONTRAST_INK_HEX[doc.inkColor]
+  const { sectorLine, targetLoadLine } = parseDirectiveOrderDisplay(doc)
 
   ctx.fillStyle = paperHex
-  ctx.fillRect(0, 0, w, h)
+  ctx.fillRect(0, 0, LW, LH)
 
   // Left & Right Tractor Sprocket Holes
-  ctx.fillStyle = '#0d110f'
-  for (let y = 14; y < h - 18; y += 26) {
-    ctx.fillRect(8, y, 8, 8)
-    ctx.fillRect(w - 16, y, 8, 8)
+  ctx.fillStyle = '#0a0a0a'
+  for (let y = 14; y < LH - 18; y += 26) {
+    ctx.fillRect(7, y, 8, 8)
+    ctx.fillRect(LW - 15, y, 8, 8)
   }
 
   // Serrated bottom tear edge shadow
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
-  ctx.fillRect(0, h - 10, w, 10)
-  ctx.fillStyle = '#0d110f'
-  for (let x = 0; x < w; x += 12) {
+  ctx.fillRect(0, LH - 10, LW, 10)
+  ctx.fillStyle = '#0a0a0a'
+  for (let x = 0; x < LW; x += 12) {
     ctx.beginPath()
-    ctx.moveTo(x, h)
-    ctx.lineTo(x + 6, h - 7)
-    ctx.lineTo(x + 12, h)
+    ctx.moveTo(x, LH)
+    ctx.lineTo(x + 6, LH - 7)
+    ctx.lineTo(x + 12, LH)
     ctx.closePath()
     ctx.fill()
   }
 
   // Inner Slip Frame
-  ctx.strokeStyle = '#18211b'
-  ctx.lineWidth = 2
-  ctx.strokeRect(24, 12, w - 48, h - 28)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 3.5
+  ctx.strokeRect(20, 10, LW - 40, LH - 24)
 
-  // Header Badge: ПРАВДА-84 // ТЕЛЕТАЙП
+  // 1. Bold Ministry Header Banner
   ctx.fillStyle = inkHex
-  ctx.fillRect(30, 20, w - 60, 28)
-  ctx.fillStyle = paperHex
-  ctx.font = 'bold 14px "Courier Prime", monospace'
+  ctx.fillRect(24, 15, LW - 48, 52)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('ПРАВДА-84 // ТЕЛЕТАЙП', w / 2, 34)
-
-  // Title & Reference Code
-  ctx.fillStyle = '#0d110f'
-  ctx.textAlign = 'left'
-  ctx.font = getFontDeclaration(doc.fontType, 14)
-  const lines = wrapCanvasText(ctx, doc.title, w - 68)
-  let y = 72
-  for (const line of lines.slice(0, 3)) {
-    ctx.fillText(line, 34, y)
-    y += 20
+  ctx.font = getFontDeclaration(doc.fontType, 18)
+  const minLines = wrapCanvasText(ctx, doc.ministry, LW - 56)
+  if (minLines.length === 1) {
+    drawHeavyText(ctx, minLines[0], LW / 2, 41, 18, '#ffffff', {
+      maxWidth: LW - 54,
+      outlineColor: '#0a0a0a',
+      outlineWidth: 3.5,
+    })
+  } else {
+    ctx.font = getFontDeclaration(doc.fontType, 16)
+    drawHeavyText(ctx, minLines[0], LW / 2, 30, 16, '#ffffff', {
+      maxWidth: LW - 54,
+      outlineColor: '#0a0a0a',
+      outlineWidth: 3.2,
+    })
+    drawHeavyText(ctx, minLines.slice(1).join(' '), LW / 2, 52, 16, '#ffffff', {
+      maxWidth: LW - 54,
+      outlineColor: '#0a0a0a',
+      outlineWidth: 3.2,
+    })
   }
 
-  ctx.font = 'bold 13px "Courier Prime", monospace'
-  ctx.fillStyle = '#2a362b'
-  ctx.fillText(`КОД: ${doc.referenceCode}`, 34, y + 12)
-  ctx.fillText(`ДАТА: ${doc.dateString}`, 34, y + 32)
+  // 2. Massive Dark 2-Line Center Target Box
+  ctx.fillStyle = '#101814'
+  ctx.fillRect(24, 74, LW - 48, 108)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 3.5
+  ctx.strokeRect(24, 74, LW - 48, 108)
 
-  // Ministry Stamp Box
-  ctx.strokeStyle = inkHex
+  ctx.font = '900 22px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, sectorLine, LW / 2, 104, 22, '#33ff66', {
+    maxWidth: LW - 58,
+    outlineColor: '#050807',
+    outlineWidth: 3.5,
+  })
+
+  ctx.strokeStyle = '#28b862'
   ctx.lineWidth = 2
-  ctx.strokeRect(34, h - 82, w - 68, 38)
-  ctx.fillStyle = inkHex
-  ctx.textAlign = 'center'
-  ctx.font = 'bold 12px "Courier Prime", monospace'
-  ctx.fillText(doc.ministry.slice(0, 24), w / 2, h - 63)
+  ctx.beginPath()
+  ctx.moveTo(32, 126)
+  ctx.lineTo(LW - 32, 126)
+  ctx.stroke()
 
-  ctx.fillStyle = '#8b1e1e'
-  ctx.font = 'bold 12px "VT323", monospace'
-  ctx.fillText('► DRAG ONTO MAT TO UNFOLD ►', w / 2, h - 26)
+  ctx.font = '900 22px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, targetLoadLine, LW / 2, 156, 22, '#ffe066', {
+    maxWidth: LW - 58,
+    outlineColor: '#050807',
+    outlineWidth: 3.5,
+  })
+
+  // 3. Bottom Unfold Callout & Giant Seal Preview
+  drawOfficialSeal(
+    ctx,
+    LW / 2,
+    234,
+    44,
+    doc.sealType,
+    doc.sealMicroDefect,
+    inkHex,
+    false
+  )
+
+  ctx.font = '900 17px "VT323", monospace'
+  drawHeavyText(ctx, '► TEAR TO DESK ►', LW / 2, LH - 24, 17, '#8a0f0a', {
+    maxWidth: LW - 56,
+  })
 
   ctx.restore()
 }
 
 /**
  * Draws the Full Expanded Directive Document (768x1024 crisp high-DPI canvas, normalized to 560x740 logical grid).
- * Increases base typography size by 35% (Ministry header 24px-28px, Ref/Date/Title 20px-22px, Body 18px-20px in #141413 ink)
- * while keeping micro-print seal rings, star points, and orbits fine enough that the 2x Magnifying Glass remains essential.
+ * Restructured from top to bottom with ZERO empty middle gap, ultra-thick `drawHeavyText` strokes,
+ * a 200px tall center dark command box, +55% larger metadata & signature, +35% larger thick-lined seal,
+ * and a clean unclipped bottom instruction bar.
  */
 export function drawFullDirectiveSheetCanvas(
   ctx: CanvasRenderingContext2D,
@@ -468,7 +619,9 @@ export function drawFullDirectiveSheetCanvas(
   ctx.scale(w / LW, h / LH)
 
   const paperHex = PAPER_COLOR_HEX[doc.paperColor]
-  const inkHex = INK_COLOR_HEX[doc.inkColor]
+  const inkHex = DIRECTIVE_HIGH_CONTRAST_INK_HEX[doc.inkColor]
+  const { sectorLine, targetLoadLine, shortNote } =
+    parseDirectiveOrderDisplay(doc)
 
   // 1. Paper Stock Tint Background
   ctx.fillStyle = paperHex
@@ -477,190 +630,332 @@ export function drawFullDirectiveSheetCanvas(
   // Folded top-right dog-ear corner
   ctx.fillStyle = '#8f8772'
   ctx.beginPath()
-  ctx.moveTo(LW - 42, 0)
-  ctx.lineTo(LW, 42)
-  ctx.lineTo(LW - 42, 42)
+  ctx.moveTo(LW - 36, 0)
+  ctx.lineTo(LW, 36)
+  ctx.lineTo(LW - 36, 36)
   ctx.closePath()
   ctx.fill()
 
   // 2. Tractor-Feed Sprocket Holes Left & Right
-  ctx.fillStyle = '#0d110f'
+  ctx.fillStyle = '#0a0a0a'
   for (let y = 18; y < LH - 18; y += 34) {
-    ctx.fillRect(10, y, 10, 10)
-    ctx.fillRect(LW - 20, y, 10, 10)
+    ctx.fillRect(8, y, 10, 10)
+    ctx.fillRect(LW - 18, y, 10, 10)
   }
 
-  // 3. Official Double Border Frame
-  ctx.strokeStyle = '#18211b'
-  ctx.lineWidth = 3
-  ctx.strokeRect(30, 16, LW - 60, LH - 32)
-  ctx.lineWidth = 1.2
-  ctx.strokeRect(35, 21, LW - 70, LH - 42)
+  // 3. Heavy Official Double Border Frame
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 4.5
+  ctx.strokeRect(26, 14, LW - 52, LH - 28)
+  ctx.lineWidth = 2.2
+  ctx.strokeRect(32, 20, LW - 64, LH - 40)
 
-  // Micro-print security border line along top edge (subtle at 1x, crisp under 2x Magnifying Glass)
+  // ============================================================================
+  // SECTION 1: TOP MINISTRY BANNER (Taller & Bolder, y: 26..136) + GOST & DATE ROW (y: 140..176)
+  // - Removed tiny unreadable micro-line above the red banner.
+  // - 40% taller coloured Ministry banner with +45% larger white + black-outlined strokes.
+  // - Single big, bold row for GOST code & Date (`ГОСТ-84-01  |  04.11.1984`) at +50% larger font size.
+  // ============================================================================
+  const bannerX = 38
+  const bannerY = 26
+  const bannerW = LW - 76
+  const bannerH = 108
   ctx.fillStyle = inkHex
-  ctx.font = isMagnified
-    ? 'bold 12px "Courier Prime", monospace'
-    : 'bold 8.5px "Courier Prime", monospace'
-  ctx.textAlign = 'center'
-  ctx.fillText(
-    `${doc.secretWatermark} • ФОРМА №4 • ${doc.paperColor} • ${doc.inkColor}`,
-    LW / 2,
-    34
-  )
+  ctx.fillRect(bannerX, bannerY, bannerW, bannerH)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 4.0
+  ctx.strokeRect(bannerX, bannerY, bannerW, bannerH)
 
-  // 4. Issuing Ministry Header Banner (Bold 24px–26px, wrapped cleanly if 2 lines)
-  ctx.fillStyle = inkHex
-  ctx.fillRect(42, 42, LW - 84, 58)
-  ctx.fillStyle = paperHex
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = getFontDeclaration(doc.fontType, 24)
-  const ministryLines = wrapCanvasText(ctx, doc.ministry, LW - 100)
+  ctx.font = getFontDeclaration(doc.fontType, 38)
+  const ministryLines = wrapCanvasText(ctx, doc.ministry, bannerW - 24)
   if (ministryLines.length === 1) {
-    ctx.font = getFontDeclaration(doc.fontType, 25)
-    ctx.fillText(ministryLines[0], LW / 2, 71)
+    ctx.font = getFontDeclaration(doc.fontType, 42)
+    drawHeavyText(
+      ctx,
+      ministryLines[0],
+      LW / 2,
+      bannerY + bannerH / 2,
+      42,
+      '#ffffff',
+      {
+        maxWidth: bannerW - 20,
+        outlineColor: '#0a0a0a',
+        outlineWidth: 6.5,
+      }
+    )
   } else {
-    ctx.font = getFontDeclaration(doc.fontType, 22)
-    ctx.fillText(ministryLines[0], LW / 2, 58)
-    ctx.fillText(ministryLines.slice(1).join(' '), LW / 2, 83)
+    ctx.font = getFontDeclaration(doc.fontType, 38)
+    drawHeavyText(
+      ctx,
+      ministryLines[0],
+      LW / 2,
+      bannerY + 32,
+      38,
+      '#ffffff',
+      {
+        maxWidth: bannerW - 20,
+        outlineColor: '#0a0a0a',
+        outlineWidth: 6.0,
+      }
+    )
+    drawHeavyText(
+      ctx,
+      ministryLines.slice(1).join(' '),
+      LW / 2,
+      bannerY + 76,
+      38,
+      '#ffffff',
+      {
+        maxWidth: bannerW - 20,
+        outlineColor: '#0a0a0a',
+        outlineWidth: 6.0,
+      }
+    )
   }
 
-  // 5. Reference Code (`ИСХ. №`) & Date (`ДАТА`) Row (Bold 20px)
-  ctx.fillStyle = '#141413'
-  ctx.textAlign = 'left'
-  ctx.font = getFontDeclaration(doc.fontType, 20)
-  ctx.fillText(`ИСХ. № ${doc.referenceCode}`, 44, 122)
-  ctx.textAlign = 'right'
-  ctx.fillText(`ДАТА: ${doc.dateString}`, LW - 44, 122)
+  // Single Big, Bold Row for GOST Code & Date (`ГОСТ-84-01  |  04.11.1984`) at +50% larger font size
+  const gostRowY = 140
+  const gostRowH = 38
+  ctx.fillStyle = 'rgba(10, 10, 10, 0.08)'
+  ctx.fillRect(bannerX, gostRowY, bannerW, gostRowH)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 3.0
+  ctx.strokeRect(bannerX, gostRowY, bannerW, gostRowH)
 
-  ctx.strokeStyle = inkHex
-  ctx.lineWidth = 2.5
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = getFontDeclaration(doc.fontType, 27)
+  drawHeavyText(
+    ctx,
+    `${doc.referenceCode}   |   ${doc.dateString}`,
+    LW / 2,
+    gostRowY + gostRowH / 2 + 1,
+    27,
+    '#0a0a0a',
+    { maxWidth: bannerW - 20 }
+  )
+
+  // ============================================================================
+  // SECTION 2: MASSIVE 2-LINE CENTER TARGET BOX (Fills Upper-Middle of Page, y: 184..382, height = 198px!)
+  //   - Line 1 (Huge Bold Emerald/Yellow): `[5] VODKA PLANT` (Font size 2x larger!)
+  //   - Line 2 (Giant Poster-Sized Readout): `TARGET: 25 MW (+10 MW)` (Font size 2.2x larger, ultra-thick stroke!)
+  // ============================================================================
+  const boxX = 38
+  const boxY = 184
+  const boxW = LW - 76
+  const boxH = 198
+  ctx.fillStyle = '#0f1713'
+  ctx.fillRect(boxX, boxY, boxW, boxH)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 5.0
+  ctx.strokeRect(boxX, boxY, boxW, boxH)
+  ctx.strokeStyle = '#28b862'
+  ctx.lineWidth = 3.0
+  ctx.strokeRect(boxX + 6, boxY + 6, boxW - 12, boxH - 12)
+
+  // Line 1: Huge Bold Emerald `[5] VODKA PLANT`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = '900 50px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, sectorLine, LW / 2, boxY + 54, 50, '#3dff78', {
+    maxWidth: boxW - 28,
+    outlineColor: '#040806',
+    outlineWidth: 7.0,
+    strokeWidth: 4.2,
+  })
+
+  // Heavy Emerald Center Divider Bar inside Dark Command Box
+  ctx.strokeStyle = '#28b862'
+  ctx.lineWidth = 3.5
   ctx.beginPath()
-  ctx.moveTo(42, 138)
-  ctx.lineTo(LW - 42, 138)
+  ctx.moveTo(boxX + 18, boxY + 100)
+  ctx.lineTo(boxX + boxW - 18, boxY + 100)
   ctx.stroke()
 
-  // 6. Directive Title (Bold 22px), Power Routing Order Box & Body Paragraphs
+  // Line 2: Giant Poster-Sized Readout `TARGET: 25 MW (+10 MW)`
+  ctx.font = '900 52px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, targetLoadLine, LW / 2, boxY + 150, 52, '#ffe066', {
+    maxWidth: boxW - 28,
+    outlineColor: '#040806',
+    outlineWidth: 7.5,
+    strokeWidth: 4.5,
+  })
+
+  // ============================================================================
+  // SECTION 3: 1-LINE CIPHER / FONT INSPECTION BANNER (y: 388..444, +60% larger font size!)
+  // Rendered in `doc.fontType` so `GOST_MONO` vs fake font is huge and effortless to inspect!
+  // ============================================================================
+  const noteY = 388
+  const noteH = 56
+  ctx.fillStyle = 'rgba(10, 10, 10, 0.08)'
+  ctx.fillRect(bannerX, noteY, bannerW, noteH)
+  ctx.strokeStyle = inkHex
+  ctx.lineWidth = 3.5
+  ctx.strokeRect(bannerX, noteY, bannerW, noteH)
+
   ctx.save()
+  ctx.beginPath()
+  ctx.rect(bannerX + 4, noteY + 2, bannerW - 8, noteH - 4)
+  ctx.clip()
   if (doc.fontType === 'SLANTED_ITALIC') {
-    ctx.transform(1, 0, -0.18, 1, 46, 0)
+    ctx.translate(LW / 2, noteY + noteH / 2)
+    ctx.transform(1, 0, -0.24, 1, 0, 0)
+    ctx.translate(-LW / 2, -(noteY + noteH / 2))
   }
-  ctx.fillStyle = inkHex
-  ctx.textAlign = 'left'
-  ctx.font = getFontDeclaration(doc.fontType, 22)
-  const titleLines = wrapCanvasText(ctx, doc.title, LW - 92)
-  let y = 164
-  for (const line of titleLines) {
-    ctx.fillText(line, 44, y)
-    y += 26
-  }
-
-  // Prominent Framed Single-Target Regional Power Routing Order Banner
-  if (doc.powerOrderText) {
-    const boxY = y - 6
-    ctx.fillStyle = '#18241d'
-    ctx.fillRect(42, boxY, LW - 84, 42)
-    ctx.strokeStyle = inkHex
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(42, boxY, LW - 84, 42)
-    ctx.fillStyle = '#33ff66'
-    ctx.font = 'bold 18px "Courier Prime", monospace'
-    ctx.textAlign = 'center'
-    ctx.fillText(doc.powerOrderText, LW / 2, boxY + 26)
-    ctx.textAlign = 'left'
-    y = boxY + 64
-  } else {
-    y += 10
-  }
-
-  ctx.fillStyle = '#141413'
-  ctx.font = getFontDeclaration(doc.fontType, 18)
-  const bodyLines = wrapCanvasText(ctx, doc.content, LW - 92)
-  for (const line of bodyLines) {
-    ctx.fillText(line, 44, y)
-    y += 25
-  }
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = getFontDeclaration(doc.fontType, 34)
+  drawHeavyText(
+    ctx,
+    shortNote,
+    LW / 2,
+    noteY + noteH / 2 + 1,
+    34,
+    '#0a0a0a',
+    { maxWidth: bannerW - 20 }
+  )
   ctx.restore()
 
-  // 7. Bottom Footer Row: Signature & Clearance Block (Left) + Official Soviet Seal Emblem (Right)
-  const footerTop = 426
-  const footerH = 228
+  // ============================================================================
+  // SECTION 4: EXPANDED BOTTOM METADATA, SIGNATURE & GIANT OFFICIAL SEAL (`ПЕЧАТЬ`) (y: 450..674)
+  // - Left Column (`ПОДПИСЬ`, `PAPER`, `INK`, `FONT`): +55% larger font with `drawHeavyText`, removed tiny micro-code.
+  // - Right Column: Giant, thick-lined Official Seal (`radius = 104`, fills right half of lower box).
+  // ============================================================================
+  const footerTop = 450
+  const footerH = 224
   ctx.strokeStyle = inkHex
-  ctx.lineWidth = 2.2
-  ctx.strokeRect(42, footerTop, LW - 84, footerH)
+  ctx.lineWidth = 4.0
+  ctx.strokeRect(bannerX, footerTop, bannerW, footerH)
 
-  // Official Soviet Seal at (cx=426, cy=footerTop + 114, r=78)
+  // Left Column (x: 48..296)
+  const leftX = 48
+  const leftMaxW = 246
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+
+  ctx.font = '900 22px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, 'ПОДПИСЬ:', leftX, footerTop + 26, 22, '#0a0a0a', {
+    maxWidth: leftMaxW,
+  })
+
+  ctx.font = getFontDeclaration(doc.fontType, 32)
+  drawHeavyText(ctx, doc.signature, leftX, footerTop + 62, 32, inkHex, {
+    maxWidth: leftMaxW,
+  })
+
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 3.0
+  ctx.beginPath()
+  ctx.moveTo(leftX, footerTop + 86)
+  ctx.lineTo(leftX + leftMaxW, footerTop + 86)
+  ctx.stroke()
+
+  // 3 Huge, Crystal-Clear Inspection Lines (`PAPER`, `INK`, `FONT`) at +55% larger font size
+  ctx.font = '900 25px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(
+    ctx,
+    `PAPER: ${doc.paperColor}`,
+    leftX,
+    footerTop + 114,
+    25,
+    '#0a0a0a',
+    { maxWidth: leftMaxW }
+  )
+  drawHeavyText(
+    ctx,
+    `INK:   ${doc.inkColor}`,
+    leftX,
+    footerTop + 154,
+    25,
+    inkHex,
+    { maxWidth: leftMaxW }
+  )
+  drawHeavyText(
+    ctx,
+    `FONT:  ${doc.fontType}`,
+    leftX,
+    footerTop + 194,
+    25,
+    '#0a0a0a',
+    { maxWidth: leftMaxW }
+  )
+
+  // Right Column — Giant, Thick-Lined Official Seal (`ПЕЧАТЬ`) filling the entire right half of the lower box
   drawOfficialSeal(
     ctx,
-    426,
-    footerTop + 114,
-    78,
+    410,
+    footerTop + 112,
+    104,
     doc.sealType,
     doc.sealMicroDefect,
     inkHex,
     isMagnified
   )
 
-  ctx.fillStyle = '#141413'
-  ctx.textAlign = 'left'
-  ctx.font = 'bold 18px "Courier Prime", monospace'
-  ctx.fillText('ПОДПИСЬ:', 54, footerTop + 30)
-  ctx.fillStyle = inkHex
-  ctx.font = getFontDeclaration(doc.fontType, 21)
-  ctx.fillText(doc.signature, 54, footerTop + 60)
+  // ============================================================================
+  // SECTION 5: UNCLIPPED BOTTOM BLACK INSTRUCTION BAR (y: 680..720)
+  // Shortened to `[ОДОБРЕНО] -> LEFT TUBE  |  [УНИЧТОЖЕНО] -> RIGHT SHREDDER`
+  // centered cleanly inside the black bar with zero left/right clipping!
+  // ============================================================================
+  const bottomBarY = 680
+  const bottomBarH = 40
+  ctx.fillStyle = '#0a0d0b'
+  ctx.fillRect(bannerX, bottomBarY, bannerW, bottomBarH)
+  ctx.strokeStyle = '#b8a46b'
+  ctx.lineWidth = 2.8
+  ctx.strokeRect(bannerX, bottomBarY, bannerW, bottomBarH)
 
-  ctx.fillStyle = '#141413'
-  ctx.font = 'bold 18px "Courier Prime", monospace'
-  ctx.fillText(`PAPER: ${doc.paperColor}`, 54, footerTop + 104)
-  ctx.fillText(`INK:   ${doc.inkColor}`, 54, footerTop + 132)
-  ctx.fillText(`FONT:  ${doc.fontType}`, 54, footerTop + 160)
-  ctx.fillStyle = inkHex
-  ctx.font = isMagnified
-    ? 'bold 13px "Courier Prime", monospace'
-    : 'bold 10px "Courier Prime", monospace'
-  ctx.fillText(`МИКРО-КОД: ${doc.secretWatermark}`, 54, footerTop + 198)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = '900 22px "VT323", "Courier Prime", monospace'
+  drawHeavyText(
+    ctx,
+    '[ОДОБРЕНО] -> LEFT TUBE  |  [УНИЧТОЖЕНО] -> RIGHT SHREDDER',
+    LW / 2,
+    bottomBarY + bottomBarH / 2 + 1,
+    22,
+    '#ffe066',
+    {
+      maxWidth: bannerW - 18,
+      outlineColor: '#000000',
+      outlineWidth: 3.5,
+      strokeWidth: 1.8,
+    }
+  )
 
-  // 8. Permanently Attached Relative Ink Stamps (`doc.stamps`)
+  // 6. Permanently Attached Relative Ink Stamps (`doc.stamps`)
   for (const stamp of doc.stamps) {
     ctx.save()
     const sx = Math.max(115, Math.min(LW - 115, stamp.u * LW))
     const sy = Math.max(66, Math.min(LH - 66, stamp.v * LH))
     ctx.translate(sx, sy)
     ctx.rotate(-0.08)
-    const stampColor = stamp.type === 'APPROVED' ? '#1b6e32' : '#8b1e1e'
-    ctx.fillStyle = 'rgba(230, 222, 195, 0.85)'
-    ctx.fillRect(-104, -35, 208, 70)
+    const stampColor = stamp.type === 'APPROVED' ? '#0f5c25' : '#8a0f0a'
+    ctx.fillStyle = 'rgba(235, 228, 205, 0.94)'
+    ctx.fillRect(-118, -42, 236, 84)
     ctx.strokeStyle = stampColor
     ctx.fillStyle = stampColor
-    ctx.lineWidth = 5
-    ctx.strokeRect(-104, -35, 208, 70)
-    ctx.lineWidth = 2
-    ctx.strokeRect(-96, -27, 192, 54)
-    ctx.font = 'bold 24px "Courier Prime", monospace'
+    ctx.lineWidth = 6.5
+    ctx.strokeRect(-118, -42, 236, 84)
+    ctx.lineWidth = 3.0
+    ctx.strokeRect(-108, -32, 216, 64)
+    ctx.font = '900 32px "Courier Prime", "Consolas", monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(
+    drawHeavyText(
+      ctx,
       stamp.type === 'APPROVED' ? 'ОДОБРЕНО' : 'УНИЧТОЖЕНО',
       0,
-      -7
+      -8,
+      32,
+      stampColor
     )
-    ctx.font = 'bold 15px "Courier Prime", monospace'
-    ctx.fillText(`${stamp.type} // №4`, 0, 16)
+    ctx.font = '900 20px "Courier Prime", "Consolas", monospace'
+    drawHeavyText(ctx, `${stamp.type} // №4`, 0, 20, 20, stampColor)
     ctx.restore()
   }
-
-  // 9. Bottom Instruction Strip
-  ctx.fillStyle = '#0d110f'
-  ctx.fillRect(42, LH - 66, LW - 84, 36)
-  ctx.fillStyle = '#b8a46b'
-  ctx.font = 'bold 17px "VT323", monospace'
-  ctx.textAlign = 'center'
-  ctx.fillText(
-    'STAMP [ОДОБРЕНО] -> DROP IN LEFT [ПНЕВМОПОЧТА TUBE] OR SHRED [RIGHT]',
-    LW / 2,
-    LH - 44
-  )
 
   ctx.restore()
 }

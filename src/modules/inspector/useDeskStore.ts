@@ -67,6 +67,11 @@ export const SHREDDER_DROP_ZONE_3D = {
   maxZ: 0.04,
 }
 
+export const MANUAL_DEFAULT_POS_3D = {
+  x: 0.56,
+  z: 0.16,
+} as const
+
 export type StampType = 'APPROVED' | 'SHREDDED'
 
 export type ManualPageId = 1 | 2 | 3 | 4 | 5 | 6 | 7
@@ -188,6 +193,7 @@ interface DeskStoreState {
   capsuleState: PneumaticCapsuleState
   hatchOpen: boolean
   packedDoc: DeskDocument | null
+  manualDefaultPos: { x: number; z: number }
   bringToFront: (id: string) => void
   updateDocumentPosition: (
     id: string,
@@ -288,8 +294,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-42-МСМ',
     dateString: '04.11.1984',
-    rationaleText:
-      'State bottling quota requires immediate single-substation adjustment on UNIT A. All other regional substations remain unchanged.',
+    rationaleText: 'STATE BOTTLING QUOTA PRIORITY',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Е. П. СЛАВСКИЙ',
     fontType: 'GOST_MONO',
@@ -308,8 +313,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-38-МСМ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Emergency over-the-horizon radar test requires maximum single-channel draw on UNIT A.',
+    rationaleText: 'OVER-HORIZON RADAR SURGE TEST',
     secretWatermark: 'CCCP-LATIN • SERIES-6',
     signature: 'Б. Е. ЩЕРБИНА',
     fontType: 'GOST_MONO',
@@ -329,8 +333,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-68-ГКАЭ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Authorized ionosphere sweep on Sector 84 perimeter. Adjust ONLY [3. DUGA-1 RADAR] on UNIT A.',
+    rationaleText: 'AUTHORIZED SECTOR 84 IONOSPHERE SWEEP',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'АКАД. В. ЛЕГАСОВ',
     fontType: 'PRAVDA_BLOCK',
@@ -349,8 +352,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'COUNCIL OF MINISTERS USSR',
     referenceCode: 'ГОСТ-84-20-СМ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Unscheduled municipal floodlight surge ordered for Pripyat residential blocks.',
+    rationaleText: 'UNSCHEDULED MUNICIPAL FLOODLIGHT SURGE ORDER',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Н. А. ТИХОНОВ',
     fontType: 'WESTERN_SERIF',
@@ -369,8 +371,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'COUNCIL OF MINISTERS USSR',
     referenceCode: 'ГОСТ-84-48-СМ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Evening heating allocation for Pripyat worker apartments. Adjust ONLY [1. PRIPYAT CITY] on UNIT A.',
+    rationaleText: 'WORKER APARTMENT HEATING ALLOCATION',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Н. А. ТИХОНОВ',
     fontType: 'GOST_MONO',
@@ -389,8 +390,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'COUNCIL OF MINISTERS USSR',
     referenceCode: 'ГОСТ-84-54-СМ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Divert maximum bus load to Blast Furnace #4 and ignore thermal reserve limits.',
+    rationaleText: 'DIVERT MAXIMUM FURNACE BUS LOAD',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'В. И. ДОЛГИХ',
     fontType: 'GOST_MONO',
@@ -410,8 +410,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: '5TH CHIEF DIRECTORATE',
     referenceCode: 'ГОСТ-84-14-КГБ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Classified telemetry decryption sweep in Sector 07. Adjust ONLY [4. KGB BUNKER 07] on UNIT A.',
+    rationaleText: 'CLASSIFIED TELEMETRY DECRYPTION SWEEP',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'КОМИССАР ВОЛКОВ',
     fontType: 'GOST_MONO',
@@ -430,8 +429,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-76-ГКАЭ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Divert emergency reserve power to Red October distillery vats for unscheduled midnight batch.',
+    rationaleText: 'MIDNIGHT DISTILLERY VAT OVERLOAD ORDER',
     secretWatermark: 'CCCP-LATIN • ORBIT-ERR',
     signature: 'А. М. ПЕТРОСЬЯНЦ',
     fontType: 'GOST_MONO',
@@ -451,8 +449,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-24-МСМ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Collective grain dryer and irrigation pump cycle. Adjust ONLY [2. KOLKHOZ FARM] on UNIT A.',
+    rationaleText: 'COLLECTIVE GRAIN DRYER PUMP CYCLE',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'Е. П. СЛАВСКИЙ',
     fontType: 'GOST_MONO',
@@ -471,8 +468,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'MINISTRY OF ATOMIC FREEDOM',
     referenceCode: 'ГОСТ-84-82-МАФ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Overload rural substation transformer bank while venting primary coolant loop.',
+    rationaleText: 'OVERLOAD RURAL TRANSFORMER BANK NOW',
     secretWatermark: 'CCCP-LATIN • USA-84',
     signature: 'ДЖ. СМИТ',
     fontType: 'SLANTED_ITALIC',
@@ -492,8 +488,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
     referenceCode: 'ГОСТ-84-62-ГКАЭ',
     dateString: '04.11.1984',
-    rationaleText:
-      'Scheduled electric arc furnace tap at Steel Works #4. Adjust ONLY [6. STEEL WORKS] on UNIT A.',
+    rationaleText: 'SCHEDULED ELECTRIC ARC FURNACE TAP',
     secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'АКАД. В. ЛЕГАСОВ',
     fontType: 'PRAVDA_BLOCK',
@@ -554,7 +549,7 @@ function buildSingleTargetDeskDocument(
     ministry: blueprint.ministry,
     referenceCode: blueprint.referenceCode,
     dateString: blueprint.dateString,
-    content: `${powerOrderText}. ${blueprint.rationaleText}`,
+    content: blueprint.rationaleText,
     powerOrderText,
     powerTargets: {
       cityMW: nextTargets.pripyat + nextTargets.kolkhoz,
@@ -593,7 +588,7 @@ function buildTutorialDrillStep1Document(): DeskDocument {
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-01-МСМ',
     dateString: '04.11.1984',
-    content: `${powerOrderText}. KGB QUALIFICATION DRILL STEP 1/5: Tear from printer, stamp GREEN [ОДОБРЕНО], pack in brass capsule & launch up the left Pneumatic Tube!`,
+    content: 'DRILL 1: STAMP GREEN APPROVED',
     powerOrderText,
     powerTargets: {
       cityMW: nextTargets.pripyat + nextTargets.kolkhoz,
@@ -632,7 +627,7 @@ function buildTutorialDrillStep5Document(): DeskDocument {
     ministry: 'MINISTRY OF ENERGY AND ELECTRIFICATION',
     referenceCode: 'ГОСТ-84-09-МЭЭ',
     dateString: '04.11.1984',
-    content: `${powerOrderText}. KGB QUALIFICATION DRILL STEP 5/5: Notice the 4-Point NATO Star Seal & CIA Navy Blue Ink! Stamp RED [УНИЧТОЖЕНО], drop in right Shredder & pull handle 5 times!`,
+    content: 'DRILL 5: FAKE SEAL SHRED',
     powerOrderText,
     powerTargets: {
       cityMW: nextTargets.pripyat + nextTargets.kolkhoz,
@@ -701,6 +696,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
   capsuleState: 'CRADLE_EMPTY',
   hatchOpen: false,
   packedDoc: null,
+  manualDefaultPos: { ...MANUAL_DEFAULT_POS_3D },
 
   resetDeskStore: () => {
     docSequence = 1
@@ -716,6 +712,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       capsuleState: 'CRADLE_EMPTY',
       hatchOpen: false,
       packedDoc: null,
+      manualDefaultPos: { ...MANUAL_DEFAULT_POS_3D },
     })
   },
 
@@ -878,6 +875,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         packedDoc: null,
         capsuleState: 'CRADLE_EMPTY',
         hatchOpen: false,
+        manualDefaultPos: { ...MANUAL_DEFAULT_POS_3D },
         directiveCooldown: 3.5,
         nextPrintReadyAtMs: Date.now() + 3500,
       })

@@ -28,14 +28,14 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     fov: 56,
   },
   reactor: {
-    position: [0.22, 1.32, 2.77],
-    target: [-1.96, 1.24, 2.77],
+    position: [-0.05, 1.24, 2.58],
+    target: [-1.68, 1.16, 3.08],
     fov: 58,
   },
   power: {
-    position: [-0.08, 0.96, 2.77],
-    target: [-1.96, 0.74, 2.77],
-    fov: 54,
+    position: [0.0, 1.24, 2.68],
+    target: [-0.42, 1.16, 4.54],
+    fov: 58,
   },
   terminal: {
     position: [0, 1.48, 1.92],
@@ -48,8 +48,8 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     fov: 56,
   },
   aux: {
-    position: [-0.22, 1.32, 2.35],
-    target: [1.96, 1.24, 2.35],
+    position: [0.12, 1.24, 2.02],
+    target: [1.76, 1.16, 2.02],
     fov: 58,
   },
 };
@@ -193,18 +193,7 @@ export const CameraController: React.FC = () => {
         syncStationPose("terminal");
       } else if (e.key === "3") {
         e.preventDefault();
-        const gs = useGameStore.getState();
-        if (gs.tutorialStep === 3 && gs.pumpThrottle[0] > 50) {
-          skipNextPoseSyncRef.current = gs.activeStation !== "reactor";
-          setActiveStation("reactor");
-          lookStateRef.current.targetYaw = setShortestTargetYaw(
-            lookStateRef.current.currentYaw,
-            Math.PI,
-          );
-          lookStateRef.current.targetPitch = -0.02;
-        } else {
-          syncStationPose("power");
-        }
+        syncStationPose("power");
       } else if (e.key === "4") {
         e.preventDefault();
         syncStationPose("inspector");
@@ -214,21 +203,21 @@ export const CameraController: React.FC = () => {
       } else if (e.key === "6") {
         e.preventDefault();
         skipNextPoseSyncRef.current =
-          useGameStore.getState().activeStation !== "reactor";
-        setActiveStation("reactor");
+          useGameStore.getState().activeStation !== "power";
+        setActiveStation("power");
         lookStateRef.current.targetYaw = setShortestTargetYaw(
           lookStateRef.current.currentYaw,
-          (3 * Math.PI) / 4,
+          Math.PI / 2 - 0.42,
         );
         lookStateRef.current.targetPitch = -0.02;
       } else if (e.key === "7") {
         e.preventDefault();
         skipNextPoseSyncRef.current =
-          useGameStore.getState().activeStation !== "reactor";
-        setActiveStation("reactor");
+          useGameStore.getState().activeStation !== "power";
+        setActiveStation("power");
         lookStateRef.current.targetYaw = setShortestTargetYaw(
           lookStateRef.current.currentYaw,
-          Math.PI,
+          Math.PI / 2 + 0.42,
         );
         lookStateRef.current.targetPitch = -0.02;
       } else if (e.key === "0" || e.key === "Escape") {

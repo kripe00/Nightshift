@@ -19,6 +19,7 @@ import {
   BREECH_CHAMBER_DROP_ZONE_3D,
   CAPSULE_CRADLE_POS_3D,
   INK_COLOR_HEX,
+  MANUAL_DEFAULT_POS_3D,
   OUTBOX_BREECH_POS_3D,
   OUTBOX_DROP_ZONE_3D,
   PAPER_COLOR_HEX,
@@ -165,8 +166,8 @@ const _manualDeskPos = new THREE.Vector3()
 const _manualHeldWorldPos = new THREE.Vector3()
 
 const MANUAL_BOUNDS_3D = {
-  x: 0.34,
-  z: 0.1,
+  x: MANUAL_DEFAULT_POS_3D.x,
+  z: MANUAL_DEFAULT_POS_3D.z,
   width: MANUAL_BASE_W * MANUAL_SCALE,
   height: MANUAL_BASE_H * MANUAL_SCALE,
 }
@@ -1466,7 +1467,7 @@ export function InspectorDesk3D() {
     }
   }, [printingDocId])
 
-  // 2. 6-Page Soviet Master Folder / Technical Ring-Binder State (Pages 1..6 + Stepped Scroll + Draggable Position + Handheld Mode)
+  // 2. 7-Page Soviet Master Folder / Technical Ring-Binder State (Pages 1..7 + Stepped Scroll + Unified Hold-Drag / Quick-Click + Handheld Mode)
   const [manualPage, setManualPage] = useState<ManualPageId>(1)
   const [manualScrollY, setManualScrollY] = useState<number>(0)
   const [isManualHeld, setIsManualHeld] = useState<boolean>(false)
@@ -1476,16 +1477,41 @@ export function InspectorDesk3D() {
   const manualPosRef = useRef<{
     x: number
     z: number
+    pointerDown: boolean
+    pointerId: number | null
+    downClientX: number
+    downClientY: number
+    downTimeMs: number
     dragging: boolean
+    suppressNextClick: boolean
     dx: number
     dz: number
   }>({
     x: MANUAL_BOUNDS_3D.x,
     z: MANUAL_BOUNDS_3D.z,
+    pointerDown: false,
+    pointerId: null,
+    downClientX: 0,
+    downClientY: 0,
+    downTimeMs: 0,
     dragging: false,
+    suppressNextClick: false,
     dx: 0,
     dz: 0,
   })
+
+  const shiftRunId = useGameStore((s) => s.shiftRunId)
+  useEffect(() => {
+    manualPosRef.current.x = MANUAL_BOUNDS_3D.x
+    manualPosRef.current.z = MANUAL_BOUNDS_3D.z
+    manualPosRef.current.pointerDown = false
+    manualPosRef.current.pointerId = null
+    manualPosRef.current.dragging = false
+    manualPosRef.current.suppressNextClick = false
+    isManualHeldRef.current = false
+    queueMicrotask(() => setIsManualHeld(false))
+    lensDirtyRef.current = true
+  }, [shiftRunId])
 
   const toggleManualHeld = () => {
     const next = !isManualHeldRef.current
@@ -1536,7 +1562,7 @@ export function InspectorDesk3D() {
   })
   const lensDragOffsetRef = useRef<{ dx: number; dz: number }>({ dx: 0, dz: 0 })
 
-  // 4. Draggable 3D Wooden Rubber Stamps (`ОДОБРЕНО` & `УНИЧТОЖЕНО`) with 3-Detent Plungers
+  // 4. Draggable 3D Wooden Rubber Stamps (`ОДОБРЕНО` & `УНИЧТОЖЕНО`) with Unified Whole-Stamp Hitbox
   const approveStampGroupRef = useRef<THREE.Group | null>(null)
   const shredStampGroupRef = useRef<THREE.Group | null>(null)
   const approvePlungerRef = useRef<THREE.Group | null>(null)
@@ -1552,13 +1578,16 @@ export function InspectorDesk3D() {
         targetZ: number
         x: number
         z: number
+        pointerDown: boolean
+        pointerId: number | null
+        downClientX: number
+        downClientY: number
+        downTimeMs: number
+        holdElapsedMs: number
         draggingBody: boolean
         dx: number
         dz: number
-        pullingPlunger: boolean
-        plungerStartY: number
         plungerStep: number
-        stampedThisStroke: boolean
       }
     >
   >({
@@ -1569,13 +1598,16 @@ export function InspectorDesk3D() {
       targetZ: -0.22,
       x: 0.22,
       z: -0.22,
+      pointerDown: false,
+      pointerId: null,
+      downClientX: 0,
+      downClientY: 0,
+      downTimeMs: 0,
+      holdElapsedMs: 0,
       draggingBody: false,
       dx: 0,
       dz: 0,
-      pullingPlunger: false,
-      plungerStartY: 0,
       plungerStep: 0,
-      stampedThisStroke: false,
     },
     SHREDDED: {
       homeX: 0.38,
@@ -1584,13 +1616,16 @@ export function InspectorDesk3D() {
       targetZ: -0.22,
       x: 0.38,
       z: -0.22,
+      pointerDown: false,
+      pointerId: null,
+      downClientX: 0,
+      downClientY: 0,
+      downTimeMs: 0,
+      holdElapsedMs: 0,
       draggingBody: false,
       dx: 0,
       dz: 0,
-      pullingPlunger: false,
-      plungerStartY: 0,
       plungerStep: 0,
-      stampedThisStroke: false,
     },
   })
 
@@ -3252,32 +3287,50 @@ export function InspectorDesk3D() {
     }
 
     const stApp = stampStateRef.current.APPROVED
-    if (!stApp.draggingBody && !stApp.pullingPlunger) {
+    if (stApp.pointerDown) {
+      stApp.holdElapsedMs += dt * 1000
+      if (!stApp.draggingBody && stApp.holdElapsedMs > 150) {
+        stApp.draggingBody = true
+        playDetentClick(1)
+      }
+    }
+    if (!stApp.draggingBody) {
       stApp.x = THREE.MathUtils.lerp(stApp.x, stApp.targetX, 0.24)
       stApp.z = THREE.MathUtils.lerp(stApp.z, stApp.targetZ, 0.24)
     }
     if (approveStampGroupRef.current) {
-      approveStampGroupRef.current.position.set(
-        stApp.x,
-        stApp.draggingBody ? 0.96 : 0.935,
-        stApp.z
+      const targetAppY = stApp.draggingBody ? 0.96 : 0.935
+      const nextAppY = THREE.MathUtils.lerp(
+        approveStampGroupRef.current.position.y || targetAppY,
+        targetAppY,
+        0.38
       )
+      approveStampGroupRef.current.position.set(stApp.x, nextAppY, stApp.z)
     }
     if (approvePlungerRef.current) {
       approvePlungerRef.current.position.y = -stApp.plungerStep * 0.011
     }
 
     const stShr = stampStateRef.current.SHREDDED
-    if (!stShr.draggingBody && !stShr.pullingPlunger) {
+    if (stShr.pointerDown) {
+      stShr.holdElapsedMs += dt * 1000
+      if (!stShr.draggingBody && stShr.holdElapsedMs > 150) {
+        stShr.draggingBody = true
+        playDetentClick(1)
+      }
+    }
+    if (!stShr.draggingBody) {
       stShr.x = THREE.MathUtils.lerp(stShr.x, stShr.targetX, 0.24)
       stShr.z = THREE.MathUtils.lerp(stShr.z, stShr.targetZ, 0.24)
     }
     if (shredStampGroupRef.current) {
-      shredStampGroupRef.current.position.set(
-        stShr.x,
-        stShr.draggingBody ? 0.96 : 0.935,
-        stShr.z
+      const targetShrY = stShr.draggingBody ? 0.96 : 0.935
+      const nextShrY = THREE.MathUtils.lerp(
+        shredStampGroupRef.current.position.y || targetShrY,
+        targetShrY,
+        0.38
       )
+      shredStampGroupRef.current.position.set(stShr.x, nextShrY, stShr.z)
     }
     if (shredPlungerRef.current) {
       shredPlungerRef.current.position.y = -stShr.plungerStep * 0.011
@@ -3474,6 +3527,10 @@ export function InspectorDesk3D() {
       if (hit) updateTearingSlipMove(hit, e.nativeEvent.timeStamp)
       return
     }
+    if (manualPosRef.current.pointerDown) {
+      handleManualDragMove(e)
+      return
+    }
     if (activeDragDocId) {
       e.stopPropagation()
       const hit = getDeskLocalHitFromEvent(e, deskGroupRef.current)
@@ -3490,6 +3547,9 @@ export function InspectorDesk3D() {
     if (slipGrabRef.current.dragging) {
       e.stopPropagation()
       finishTearingSlipUp()
+    }
+    if (manualPosRef.current.pointerDown) {
+      handleManualDragUp(e)
     }
     if (activeDragDocId) {
       e.stopPropagation()
@@ -3541,7 +3601,7 @@ export function InspectorDesk3D() {
     lensDirtyRef.current = true
   }
 
-  // 2B. Draggable 7-Page Soviet Master Manual Handlers (Grab spiral binding bar to drag across mat)
+  // 2B. Draggable 7-Page Soviet Master Manual Handlers (Unified Hold & Drag Anywhere on Manual vs. Quick Click for Tabs/Buttons)
   const scrollManual = (dir: 1 | -1) => {
     playScrollTickSound()
     setManualScrollY((prev) => Math.max(0, Math.min(360, prev + dir * 36)))
@@ -3555,93 +3615,146 @@ export function InspectorDesk3D() {
   const handleManualDragDown = (e: ThreeEvent<PointerEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return
     e.stopPropagation()
-    if (isManualHeldRef.current) {
-      toggleManualHeld()
-      return
-    }
-    const target = e.target as Element & {
+    if (isManualHeldRef.current) return
+    const target = (e.nativeEvent.target ?? e.target) as Element & {
       setPointerCapture?: (id: number) => void
     }
-    target.setPointerCapture?.(e.pointerId)
-    manualPosRef.current.dragging = true
-    playPaperRustle(false)
+    target?.setPointerCapture?.(e.pointerId)
+    const mp = manualPosRef.current
+    mp.pointerDown = true
+    mp.pointerId = e.pointerId
+    mp.downClientX = e.clientX
+    mp.downClientY = e.clientY
+    mp.downTimeMs = e.nativeEvent.timeStamp
+    mp.dragging = false
+    mp.suppressNextClick = false
     const hit = getDeskLocalHitFromEvent(
       e,
       deskGroupRef.current,
       BASE_MAT_Y + 0.012
     )
     if (hit) {
-      manualPosRef.current.dx = hit.x - manualPosRef.current.x
-      manualPosRef.current.dz = hit.z - manualPosRef.current.z
+      mp.dx = hit.x - mp.x
+      mp.dz = hit.z - mp.z
+    } else {
+      mp.dx = 0
+      mp.dz = 0
     }
   }
 
   const handleManualDragMove = (e: ThreeEvent<PointerEvent>) => {
-    if (!manualPosRef.current.dragging) return
+    const mp = manualPosRef.current
+    if (!mp.pointerDown) return
     e.stopPropagation()
+    const moveDistPx = Math.hypot(
+      e.clientX - mp.downClientX,
+      e.clientY - mp.downClientY
+    )
+    const heldMs = e.nativeEvent.timeStamp - mp.downTimeMs
+    if (!mp.dragging && (moveDistPx > 5 || (heldMs > 160 && moveDistPx > 1.5))) {
+      mp.dragging = true
+      mp.suppressNextClick = true
+      playPaperRustle(false)
+    }
+    if (!mp.dragging) return
     const hit = getDeskLocalHitFromEvent(
       e,
       deskGroupRef.current,
       BASE_MAT_Y + 0.012
     )
     if (!hit) return
-    manualPosRef.current.x = Math.max(
-      -0.88,
-      Math.min(0.88, hit.x - manualPosRef.current.dx)
-    )
-    manualPosRef.current.z = Math.max(
-      -0.28,
-      Math.min(0.38, hit.z - manualPosRef.current.dz)
-    )
+    mp.x = Math.max(-0.88, Math.min(0.88, hit.x - mp.dx))
+    mp.z = Math.max(-0.28, Math.min(0.38, hit.z - mp.dz))
     lensDirtyRef.current = true
   }
 
   const handleManualDragUp = (e: ThreeEvent<PointerEvent>) => {
-    if (!manualPosRef.current.dragging) return
+    const mp = manualPosRef.current
+    if (!mp.pointerDown) return
     e.stopPropagation()
-    manualPosRef.current.dragging = false
-    playPaperRustle(true)
-    lensDirtyRef.current = true
+    const moveDistPx = Math.hypot(
+      e.clientX - mp.downClientX,
+      e.clientY - mp.downClientY
+    )
+    const heldMs = e.nativeEvent.timeStamp - mp.downTimeMs
+    const wasDragging = mp.dragging || moveDistPx > 5 || (heldMs >= 160 && moveDistPx > 1.5)
+    mp.pointerDown = false
+    mp.pointerId = null
+    mp.dragging = false
+    if (wasDragging) {
+      mp.suppressNextClick = true
+      playPaperRustle(true)
+      lensDirtyRef.current = true
+      window.setTimeout(() => {
+        manualPosRef.current.suppressNextClick = false
+      }, 60)
+    }
   }
 
-  // 3. Wooden Rubber Stamp Body Drag & 3-Step Plunger Handlers (Auto-return to ink pads!)
+  // 3. Unified Whole-Stamp Hitbox Handlers (Hold & Drag to Move vs. Quick Click to Stamp!)
   const isOverAnyDeskDoc = (x: number, z: number): boolean => {
     const deskDocs = useDeskStore
       .getState()
       .documents.filter((d) => d.status === 'desk')
     return deskDocs.some((doc) => {
-      const docW = doc.isExpanded ? PAPER_EXPANDED_W_3D : PAPER_COMPACT_W_3D
-      const docH = doc.isExpanded ? PAPER_EXPANDED_H_3D : PAPER_COMPACT_H_3D
+      const livePos = liveDocPosMapRef.current[doc.id] ?? {
+        x: doc.x,
+        z: doc.z,
+        isExpanded: doc.isExpanded,
+      }
+      const docW = livePos.isExpanded ? PAPER_EXPANDED_W_3D : PAPER_COMPACT_W_3D
+      const docH = livePos.isExpanded ? PAPER_EXPANDED_H_3D : PAPER_COMPACT_H_3D
       return (
-        x >= doc.x - docW / 2 - 0.06 &&
-        x <= doc.x + docW / 2 + 0.06 &&
-        z >= doc.z - docH / 2 - 0.06 &&
-        z <= doc.z + docH / 2 + 0.06
+        x >= livePos.x - docW / 2 - 0.06 &&
+        x <= livePos.x + docW / 2 + 0.06 &&
+        z >= livePos.z - docH / 2 - 0.06 &&
+        z <= livePos.z + docH / 2 + 0.06
       )
     })
   }
 
-  const makeStampBodyHandlers = (type: StampType) => ({
+  const makeUnifiedStampHandlers = (type: StampType) => ({
     onPointerDown: (e: ThreeEvent<PointerEvent>) => {
       if (useCameraLookStore.getState().isFreeLookMode) return
       e.stopPropagation()
-      const target = e.target as Element & {
+      const target = (e.nativeEvent.target ?? e.target) as Element & {
         setPointerCapture?: (id: number) => void
       }
-      target.setPointerCapture?.(e.pointerId)
+      target?.setPointerCapture?.(e.pointerId)
       const st = stampStateRef.current[type]
-      st.draggingBody = true
-      playDetentClick(1)
+      st.pointerDown = true
+      st.pointerId = e.pointerId
+      st.downClientX = e.clientX
+      st.downClientY = e.clientY
+      st.downTimeMs = e.nativeEvent.timeStamp
+      st.holdElapsedMs = 0
+      st.draggingBody = false
       const hit = getDeskLocalHitFromEvent(e, deskGroupRef.current, 0.935)
       if (hit) {
         st.dx = hit.x - st.x
         st.dz = hit.z - st.z
+      } else {
+        st.dx = 0
+        st.dz = 0
       }
     },
     onPointerMove: (e: ThreeEvent<PointerEvent>) => {
       const st = stampStateRef.current[type]
-      if (!st.draggingBody) return
+      if (!st.pointerDown) return
       e.stopPropagation()
+      const moveDistPx = Math.hypot(
+        e.clientX - st.downClientX,
+        e.clientY - st.downClientY
+      )
+      const heldMs = Math.max(
+        st.holdElapsedMs,
+        e.nativeEvent.timeStamp - st.downTimeMs
+      )
+      if (!st.draggingBody && (moveDistPx > 5 || heldMs > 150)) {
+        st.draggingBody = true
+        playDetentClick(1)
+      }
+      if (!st.draggingBody) return
       const hit = getDeskLocalHitFromEvent(e, deskGroupRef.current, 0.935)
       if (!hit) return
       st.x = Math.max(-1.02, Math.min(1.02, hit.x - st.dx))
@@ -3651,14 +3764,67 @@ export function InspectorDesk3D() {
     },
     onPointerUp: (e: ThreeEvent<PointerEvent>) => {
       const st = stampStateRef.current[type]
-      if (!st.draggingBody) return
+      if (!st.pointerDown) return
       e.stopPropagation()
+      const moveDistPx = Math.hypot(
+        e.clientX - st.downClientX,
+        e.clientY - st.downClientY
+      )
+      const heldMs = Math.max(
+        st.holdElapsedMs,
+        e.nativeEvent.timeStamp - st.downTimeMs
+      )
+      const wasDragOrHold = st.draggingBody || moveDistPx > 5 || heldMs >= 150
+      st.pointerDown = false
+      st.pointerId = null
+      st.holdElapsedMs = 0
       st.draggingBody = false
-      playDetentClick(0)
-      if (!isOverAnyDeskDoc(st.x, st.z)) {
-        st.targetX = st.homeX
-        st.targetZ = st.homeZ
+
+      if (wasDragOrHold) {
+        // Hold & Drag Mode: set the stamp down cleanly at this spot on the desk/paper without firing the plunger!
+        st.targetX = st.x
+        st.targetZ = st.z
+        playDetentClick(0)
+        return
       }
+
+      // Quick Click (< 150ms and < 5px movement):
+      // Bonus convenience: if the stamp is sitting away from any paper (e.g. in its ink cradle/dock) and there is a paper on the desk,
+      // automatically slide it onto the paper and stamp it (or bring it over the paper) so clicking in the dock never feels wasted!
+      if (!isOverAnyDeskDoc(st.x, st.z)) {
+        const deskDocs = useDeskStore
+          .getState()
+          .documents.filter((d) => d.status === 'desk')
+        const topDoc = deskDocs[deskDocs.length - 1]
+        if (topDoc) {
+          const livePos = liveDocPosMapRef.current[topDoc.id] ?? {
+            x: topDoc.x,
+            z: topDoc.z,
+          }
+          const targetPaperX =
+            livePos.x + (type === 'APPROVED' ? -0.025 : 0.025)
+          const targetPaperZ = livePos.z + 0.025
+          st.x = targetPaperX
+          st.z = targetPaperZ
+          st.targetX = targetPaperX
+          st.targetZ = targetPaperZ
+        }
+      }
+
+      // Fire the Stamp Plunger Animation (stampDown) & apply ink onto the directive paper!
+      st.plungerStep = 3
+      execute3DStampImpact(type)
+      window.setTimeout(() => {
+        st.plungerStep = 0
+      }, 160)
+    },
+    onPointerCancel: (e: ThreeEvent<PointerEvent>) => {
+      const st = stampStateRef.current[type]
+      if (!st.pointerDown) return
+      e.stopPropagation()
+      st.pointerDown = false
+      st.pointerId = null
+      st.draggingBody = false
     },
     onDoubleClick: (e: ThreeEvent<MouseEvent>) => {
       e.stopPropagation()
@@ -3666,54 +3832,6 @@ export function InspectorDesk3D() {
       st.targetX = st.homeX
       st.targetZ = st.homeZ
       playSwitchClank(false)
-    },
-  })
-
-  const makeStampPlungerHandlers = (type: StampType) => ({
-    onPointerDown: (e: ThreeEvent<PointerEvent>) => {
-      if (useCameraLookStore.getState().isFreeLookMode) return
-      e.stopPropagation()
-      const target = e.target as Element & {
-        setPointerCapture?: (id: number) => void
-      }
-      target.setPointerCapture?.(e.pointerId)
-      const st = stampStateRef.current[type]
-      st.pullingPlunger = true
-      st.plungerStartY = e.clientY
-      st.plungerStep = 0
-      st.stampedThisStroke = false
-      playDetentClick(1)
-    },
-    onPointerMove: (e: ThreeEvent<PointerEvent>) => {
-      const st = stampStateRef.current[type]
-      if (!st.pullingPlunger) return
-      e.stopPropagation()
-      const deltaY = Math.max(0, e.clientY - st.plungerStartY)
-      const step = Math.min(3, Math.floor(deltaY / 8))
-      if (step !== st.plungerStep) {
-        st.plungerStep = step
-        playDetentClick(step + 1)
-        if (step === 3 && !st.stampedThisStroke) {
-          st.stampedThisStroke = true
-          execute3DStampImpact(type)
-        }
-      }
-    },
-    onPointerUp: (e: ThreeEvent<PointerEvent>) => {
-      const st = stampStateRef.current[type]
-      if (!st.pullingPlunger) return
-      e.stopPropagation()
-      st.pullingPlunger = false
-      if (!st.stampedThisStroke) {
-        st.stampedThisStroke = true
-        st.plungerStep = 3
-        execute3DStampImpact(type)
-      }
-      window.setTimeout(() => {
-        st.plungerStep = 0
-        st.targetX = st.homeX
-        st.targetZ = st.homeZ
-      }, 150)
     },
   })
 
@@ -5679,7 +5797,7 @@ export function InspectorDesk3D() {
           4. SOVIET CONTROL ROOM MASTER FOLDER & 3-RING TECHNICAL BINDER
              (`ТЕХНИЧЕСКАЯ ПАПКА БЛОКА №4` — KGB FORGERY + RBMK PANELS)
           (100% FLAT AGAINST THE GREEN INSPECTION MAT AT `BASE_MAT_Y + 0.012`,
-           POSITIONED AT `x: +0.36, z: +0.08` RIGHT NEXT TO ACTIVE DIRECTIVES)
+           POSITIONED AT `x: +0.56, z: +0.16` CLEANLY TO THE RIGHT OF THE STAMP DOCK & IN FRONT OF THE SHREDDER)
          ============================================================ */}
       <group
         ref={manualGroupRef}
@@ -5687,6 +5805,10 @@ export function InspectorDesk3D() {
         rotation={[0, 0, 0]}
         scale={MANUAL_SCALE}
         onWheel={handleManualWheel}
+        onPointerDown={handleManualDragDown}
+        onPointerMove={handleManualDragMove}
+        onPointerUp={handleManualDragUp}
+        onPointerCancel={handleManualDragUp}
       >
         {/* Mottled-Maroon / Dark-Olive Soviet Leatherette Hardcover Outer Folder Base */}
         <mesh castShadow receiveShadow onWheel={handleManualWheel}>
@@ -5709,10 +5831,6 @@ export function InspectorDesk3D() {
           position={[-MANUAL_BASE_W / 2 - 0.01, 0.011, 0]}
           castShadow
           receiveShadow
-          onPointerDown={handleManualDragDown}
-          onPointerMove={handleManualDragMove}
-          onPointerUp={handleManualDragUp}
-          onPointerCancel={handleManualDragUp}
         >
           <boxGeometry args={[0.026, 0.026, MANUAL_BASE_H + 0.018]} />
           <meshStandardMaterial color="#3b110e" roughness={0.55} metalness={0.15} />
@@ -5757,15 +5875,12 @@ export function InspectorDesk3D() {
           />
         )}
 
-        {/* Draggable Top Brass Grip Clamp & Embossed `СССР // СЕКРЕТНО` Crest Strip (`localZ < -0.175`) */}
+        {/* Draggable Top Brass Grip Clamp & Embossed `СССР // СЕКРЕТНО` Crest Strip */}
         <group
           position={[0, 0.015, -MANUAL_BASE_H / 2 - 0.005]}
-          onPointerDown={handleManualDragDown}
-          onPointerMove={handleManualDragMove}
-          onPointerUp={handleManualDragUp}
-          onPointerCancel={handleManualDragUp}
           onDoubleClick={(e) => {
             e.stopPropagation()
+            if (manualPosRef.current.suppressNextClick) return
             toggleManualHeld()
           }}
         >
@@ -5794,10 +5909,9 @@ export function InspectorDesk3D() {
         {/* Physical 3D Brass Carry-Latch Button (`▲ ВЗЯТЬ / PICK UP [B]` vs `▼ НА СТОЛ / PUT DOWN [B]`) */}
         <group
           position={[0, 0.014, MANUAL_BASE_H / 2 + 0.02]}
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation()
+            if (manualPosRef.current.suppressNextClick) return
             toggleManualHeld()
           }}
         >
@@ -5921,11 +6035,10 @@ export function InspectorDesk3D() {
           >
             <mesh
               castShadow
-              onPointerDown={(e) => e.stopPropagation()}
-              onPointerUp={(e) => e.stopPropagation()}
               onWheel={handleManualWheel}
               onClick={(e) => {
                 e.stopPropagation()
+                if (manualPosRef.current.suppressNextClick) return
                 playPageTurnSound()
                 setManualPage(secTab.targetPage)
                 setManualScrollY(0)
@@ -5969,11 +6082,10 @@ export function InspectorDesk3D() {
             >
               <mesh
                 castShadow
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
                 onWheel={handleManualWheel}
                 onClick={(e) => {
                   e.stopPropagation()
+                  if (manualPosRef.current.suppressNextClick) return
                   playPageTurnSound()
                   setManualPage(tabPage)
                   setManualScrollY(0)
@@ -6003,35 +6115,9 @@ export function InspectorDesk3D() {
           rotation={[-Math.PI / 2, 0, 0]}
           receiveShadow
           onWheel={handleManualWheel}
-          onPointerDown={(e) => {
-            if (!e.uv) {
-              e.stopPropagation()
-              return
-            }
-            const localZ = (0.5 - e.uv.y) * (MANUAL_BASE_H - 0.016)
-            // Dragging is restricted to the very top clamp edge (`localZ < -0.175`) so Row 1 section tabs click cleanly
-            if (localZ < -0.175) {
-              handleManualDragDown(e)
-              return
-            }
-            e.stopPropagation()
-          }}
-          onPointerMove={(e) => {
-            if (manualPosRef.current.dragging) {
-              handleManualDragMove(e)
-              return
-            }
-            e.stopPropagation()
-          }}
-          onPointerUp={(e) => {
-            if (manualPosRef.current.dragging) {
-              handleManualDragUp(e)
-              return
-            }
-            e.stopPropagation()
-          }}
           onClick={(e) => {
             e.stopPropagation()
+            if (manualPosRef.current.suppressNextClick) return
             if (!e.uv) return
             const u = e.uv.x
             const v = 1 - e.uv.y
@@ -6216,8 +6302,15 @@ export function InspectorDesk3D() {
         ref={approveStampGroupRef}
         position={[0.22, 0.935, -0.22]}
         scale={1.0}
+        {...makeUnifiedStampHandlers('APPROVED')}
       >
-        <group {...makeStampBodyHandlers('APPROVED')}>
+        {/* Unified Whole-Stamp Invisible Hitbox Cylinder (Handle + Shaft + Base) */}
+        <mesh position={[0, 0.08, 0]}>
+          <cylinderGeometry args={[0.055, 0.055, 0.16, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+
+        <group>
           {deskPropNodes.stampBodyApprove && (
             <primitive object={deskPropNodes.stampBodyApprove} />
           )}
@@ -6246,10 +6339,7 @@ export function InspectorDesk3D() {
           </mesh>
         </group>
 
-        <group
-          ref={approvePlungerRef}
-          {...makeStampPlungerHandlers('APPROVED')}
-        >
+        <group ref={approvePlungerRef}>
           {deskPropNodes.stampPlungerApprove && (
             <primitive object={deskPropNodes.stampPlungerApprove} />
           )}
@@ -6313,8 +6403,15 @@ export function InspectorDesk3D() {
         ref={shredStampGroupRef}
         position={[0.38, 0.935, -0.22]}
         scale={1.0}
+        {...makeUnifiedStampHandlers('SHREDDED')}
       >
-        <group {...makeStampBodyHandlers('SHREDDED')}>
+        {/* Unified Whole-Stamp Invisible Hitbox Cylinder (Handle + Shaft + Base) */}
+        <mesh position={[0, 0.08, 0]}>
+          <cylinderGeometry args={[0.055, 0.055, 0.16, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+
+        <group>
           {deskPropNodes.stampBodyShred && (
             <primitive object={deskPropNodes.stampBodyShred} />
           )}
@@ -6343,7 +6440,7 @@ export function InspectorDesk3D() {
           </mesh>
         </group>
 
-        <group ref={shredPlungerRef} {...makeStampPlungerHandlers('SHREDDED')}>
+        <group ref={shredPlungerRef}>
           {deskPropNodes.stampPlungerShred && (
             <primitive object={deskPropNodes.stampPlungerShred} />
           )}

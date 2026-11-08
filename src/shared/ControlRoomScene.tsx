@@ -22,6 +22,8 @@ import {
   HighDetailManometer3D,
   HighDetailReactorPanel3D,
   LeftRearWrapAroundPanel3D,
+  makePlaqueTex,
+  paintSovietCRTScreen,
   SovietCRTMonitorBay3D,
   SovietDvk84KeyboardConsole3D,
 } from "./MechanicalPanels3D";
@@ -106,11 +108,43 @@ function wrapText(
   return lines;
 }
 
-function formatClock(minutes: number): string {
-  const clamped = Math.max(0, Math.min(360, Math.floor(minutes)));
-  const h = Math.floor(clamped / 60);
-  const m = clamped % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+function drawHeavyCrtText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  colorHex: string,
+  _strokePx = 0.8,
+  maxWidth?: number,
+): void {
+  ctx.save();
+  // Clean open-counter monospace font stack with wide letter spacing so A/B/D/P/R/O/8/5/S counters never blob shut
+  ctx.font = ctx.font
+    .replace(/^900\b/, "700")
+    .replace(/"VT323"\s*,\s*/g, "");
+  (ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing =
+    "1.6px";
+  const isDarkText =
+    colorHex === "#020804" ||
+    colorHex === "#041208" ||
+    colorHex === "#141414";
+  ctx.lineJoin = "round";
+  if (!isDarkText) {
+    ctx.strokeStyle = "#000802";
+    ctx.lineWidth = 2.6;
+    if (maxWidth !== undefined) {
+      ctx.strokeText(text, x, y, maxWidth);
+    } else {
+      ctx.strokeText(text, x, y);
+    }
+  }
+  ctx.fillStyle = colorHex;
+  if (maxWidth !== undefined) {
+    ctx.fillText(text, x, y, maxWidth);
+  } else {
+    ctx.fillText(text, x, y);
+  }
+  ctx.restore();
 }
 
 /**
@@ -613,9 +647,6 @@ const InspectorDesk3DPlaceholder: React.FC = () => {
  * 3D Overhead Bulkhead Telemetry Board & 3D Camera Station Selector Rail
  */
 const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
-  const headerMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const headerTexture = useMemo(() => createNearestCanvasTexture(768, 96), []);
-  const lastHeaderDrawRef = useRef(0);
   const lastRightDrawRef = useRef(0);
   const breakerArmRef = useRef<THREE.Group>(null);
   const rheostatRingMatRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -629,16 +660,16 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
   const breakerPlateTex = useMemo(
     () =>
-      createNearestCanvasTexture(144, 40, (ctx, w, h) => {
-        ctx.fillStyle = "#141414";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#ff2a2a";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(2, 2, w - 4, h - 4);
-        ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 15px "Kremlin", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText("MAIN BREAKER", w / 2, 25);
+      makePlaqueTex("MAIN BREAKER", "PULL OR [SPACE] TO CLOSE", {
+        width: 384,
+        height: 104,
+        titleSize: 30,
+        subSize: 21,
+        titleColor: "#ffcc00",
+        titleStroke: "#ffcc00",
+        subColor: "#44ff77",
+        subStroke: "#44ff77",
+        borderColor: "#ff2a2a",
       }),
     [],
   );
@@ -695,106 +726,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         rheostatPointerMatRef.current.emissiveIntensity = 0.35;
       }
     }
-
-    if (now - lastHeaderDrawRef.current < 0.08) return;
-
-    const isFreeLookMode = useCameraLookStore.getState().isFreeLookMode;
-    const deskState = useDeskStore.getState();
-    const hasApprovedDoc = deskState.documents.some(
-      (d) => d.status === "desk" && d.stamps.some((st) => st.type === "APPROVED"),
-    );
-    let tutBanner: string | null = null;
-    if (s.tutorialStep === 1) {
-      tutBanner =
-        deskState.printingDoc !== null
-          ? "DRILL 1/5 [KEY 4 -> DESK]: DRAG PAPER RIGHT TO TEAR FROM PRINTER -> PLACE ON DESK MAT."
-          : !hasApprovedDoc && deskState.capsuleState === "CRADLE_EMPTY"
-            ? "DRILL 1/5 [KEY 4 -> DESK]: ORDER IS GENUINE! CLICK GREEN STAMP [ОДОБРЕНО] -> STAMP PAPER."
-            : "DRILL 1/5 [KEY 4 -> DESK]: PACK PAPER IN CAPSULE -> OPEN TUBE HATCH -> LOAD -> CLOSE & PULL RED LEVER!";
-    } else if (s.tutorialStep === 2) {
-      tutBanner =
-        "DRILL 2/5 [PRESS KEY 1 -> UNIT A]: VODKA PLANT DEMANDS 25 MW! PULL LEVER [5. VODKA PLANT] TO 25/25 MW.";
-    } else if (s.tutorialStep === 3) {
-      tutBanner =
-        s.pumpThrottle[0] <= 50
-          ? "DRILL 3/5 [KEY 1 -> UNIT A]: MORE MW CREATES CORE HEAT! TURN [COOLING PUMP A] WHEEL ABOVE 50%."
-          : "DRILL 3/5 [PRESS KEY 3 -> UNIT B]: TURN [HELIUM-N2 LOOP] (>40%) & HOLD [BUBBLER DRAIN] LEVER!";
-    } else if (s.tutorialStep === 4) {
-      tutBanner =
-        "DRILL 4/5 [PRESS KEY 5 -> UNIT C]: POWER CHANGES SHIFT TURBINE HZ! DRAG [50HZ RHEOSTAT] DIAL TO 50.0 HZ.";
-    } else if (s.tutorialStep === 5) {
-      tutBanner =
-        "DRILL 5/5 [PRESS KEY 4 -> DESK]: FAKE SEAL ORDER! STAMP RED [УНИЧТОЖЕНО], DROP IN SHREDDER & PULL 5X!";
-    }
-
-    const diagBanner =
-      s.hoveredDiagnosticId !== null || s.tutorialStep === "DONE"
-        ? getContextualDiagnosticHint(s, deskState.printingDoc !== null)
-        : null;
-    const activeTopBanner = diagBanner ?? tutBanner;
-
-    const sig = `${s.phase}|${s.shiftNumber}|${Math.floor(s.shiftTimeMinutes)}|${Math.round(s.coreTemp / 2) * 2}|${s.treasonStrikes}|${s.isShiftKeyHeld}|${s.isGodMode}|${isFreeLookMode}|${activeTopBanner ?? ""}|${s.lastDecisionFeedback ?? ""}`;
-    const hTex = headerMatRef.current?.map as THREE.CanvasTexture | undefined;
-    if (hTex && hTex.userData.lastSig !== sig) {
-      lastHeaderDrawRef.current = now;
-      hTex.userData.lastSig = sig;
-      const hCanvas = hTex.image as HTMLCanvasElement;
-      const ctx = hCanvas.getContext("2d");
-      if (ctx) {
-        ctx.imageSmoothingEnabled = false;
-        ctx.fillStyle = "#141414";
-        ctx.fillRect(0, 0, 768, 96);
-        ctx.strokeStyle = activeTopBanner ? "#ffb000" : "#364940";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(2, 2, 764, 92);
-
-        ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 20px "Kremlin", monospace';
-        ctx.textAlign = "left";
-        ctx.fillText(
-          tutBanner && !diagBanner
-            ? "УЧЕБНАЯ ТРЕВОГА // TRAINING DRILL [BACKSPACE: SKIP]"
-            : diagBanner
-              ? "ТАБЛО ТРЕВОГИ // TACTICAL DIAGNOSTIC REMEDY"
-              : "MELTDOWN IS PROPAGANDA // SECTOR 84",
-          18,
-          30,
-        );
-
-        ctx.fillStyle = isFreeLookMode ? "#ffb000" : "#33ff66";
-        ctx.font = 'bold 19px "VT323", monospace';
-        ctx.textAlign = "right";
-        ctx.fillText(
-          isFreeLookMode
-            ? "[L-CTRL] MODE: FREE-LOOK // ОБЗОР"
-            : "[L-CTRL] MODE: CURSOR // КУРСОР",
-          750,
-          30,
-        );
-        ctx.textAlign = "left";
-
-        ctx.fillStyle = s.coreTemp >= 750 ? "#ff2a2a" : "#33ff66";
-        ctx.font = 'bold 22px "VT323", monospace';
-        ctx.fillText(
-          `SHIFT: ${s.shiftNumber}/5 | CLOCK: ${formatClock(s.shiftTimeMinutes)}/${s.isGodMode ? "INF (SANDBOX)" : "06:00"} | CORE: ${Math.round(s.coreTemp)}C | STRIKES: ${s.treasonStrikes}/3 | [SHIFT]: ${s.isShiftKeyHeld ? "ENGAGED" : "LOCKED"}`,
-          18,
-          58,
-        );
-
-        ctx.fillStyle = activeTopBanner ? "#ffdd55" : "#e6dec3";
-        ctx.font = '18px "VT323", monospace';
-        const statusLine =
-          s.phase === "boot"
-            ? "PRESS [SPACE] TO START SHIFT — OR [SHIFT+SPACE] FOR ENDLESS NO-FAIL SANDBOX!"
-            : s.phase !== "playing"
-              ? `SHIFT ENDED (${s.phase.toUpperCase()}) — PRESS [SPACE] OR [SHIFT+SPACE] TO RESET!`
-              : (activeTopBanner ??
-                s.lastDecisionFeedback ??
-                "CAMERA: [1-5] STATION ZOOM | [0/ESC] CHAIR | [L-CTRL] FREE-LOOK/CURSOR | [SHIFT+SPACE] SANDBOX");
-        ctx.fillText(statusLine.slice(0, 94), 18, 84);
-        hTex.needsUpdate = true;
-      }
-    }
   });
 
   const steamLeverArmRef = useRef<THREE.Group>(null);
@@ -817,64 +748,55 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
   const steamPlateTex = useMemo(
     () =>
-      createCrispPanelTexture(224, 56, (ctx, w, h) => {
-        ctx.fillStyle = "#141414";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#ff2a2a";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        ctx.fillStyle = "#ff2a2a";
-        ctx.font = 'bold 20px "Courier Prime", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText("STEAM VENT", w / 2, 24);
-        ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 16px "VT323", monospace';
-        ctx.fillText("HOLD: VENT PRESSURE", w / 2, 46);
+      makePlaqueTex("STEAM VENT", "HOLD: VENT PRESSURE", {
+        width: 384,
+        height: 104,
+        titleSize: 32,
+        subSize: 21,
+        titleColor: "#ff4444",
+        titleStroke: "#ff4444",
+        subColor: "#ffcc00",
+        subStroke: "#ffcc00",
+        borderColor: "#ff2a2a",
       }),
     [],
   );
 
   const rheostatPlateTex = useMemo(
     () =>
-      createCrispPanelTexture(224, 56, (ctx, w, h) => {
-        ctx.fillStyle = "#141414";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#33ff66";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        ctx.fillStyle = "#33ff66";
-        ctx.font = 'bold 18px "Courier Prime", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText("50HZ RHEOSTAT", w / 2, 24);
-        ctx.fillStyle = "#e6dec3";
-        ctx.font = 'bold 16px "VT323", monospace';
-        ctx.fillText("DRAG: TRIM 50.0 HZ", w / 2, 46);
+      makePlaqueTex("50HZ RHEOSTAT", "TRIM GRID TO 50.0 HZ", {
+        width: 384,
+        height: 104,
+        titleSize: 30,
+        subSize: 21,
+        titleColor: "#44ff77",
+        titleStroke: "#44ff77",
+        subColor: "#ffffff",
+        subStroke: "#ffffff",
+        borderColor: "#33ff66",
       }),
     [],
   );
 
   const toggleSpecs = useMemo(() => {
     const items = [
-      { id: 0, label: "VENTILATION", sub: "-1.2 R/H (+10MW)", color: "#33ff66" },
-      { id: 1, label: "AUDIO [M]", sub: "BUNKER SOUND", color: "#ffb000" },
-      { id: 2, label: "KGB LINE", sub: "DECODE DIRECTIVES", color: "#33ff66" },
-      { id: 3, label: "AUX LOOP B", sub: "BYPASS -> BUBBLER", color: "#ffb000" },
+      { id: 0, label: "VENTILATION", sub: "-1.2 R/H (+10MW)", color: "#44ff77" },
+      { id: 1, label: "AUDIO [M]", sub: "BUNKER SOUND", color: "#ffcc00" },
+      { id: 2, label: "KGB LINE", sub: "DECODE ORDERS", color: "#44ff77" },
+      { id: 3, label: "AUX LOOP B", sub: "BYPASS->BUBBLER", color: "#ffcc00" },
     ];
     return items.map((item) => ({
       ...item,
-      texture: createCrispPanelTexture(224, 60, (ctx, w, h) => {
-        ctx.fillStyle = "#141816";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(2, 2, w - 4, h - 4);
-        ctx.fillStyle = item.color;
-        ctx.font = 'bold 18px "Courier Prime", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText(item.label, w / 2, 24);
-        ctx.fillStyle = "#e6dec3";
-        ctx.font = 'bold 16px "VT323", monospace';
-        ctx.fillText(item.sub, w / 2, 48);
+      texture: makePlaqueTex(item.label, item.sub, {
+        width: 352,
+        height: 104,
+        titleSize: 29,
+        subSize: 21,
+        titleColor: item.color,
+        titleStroke: item.color,
+        subColor: "#ffffff",
+        subStroke: "#ffffff",
+        borderColor: "#b8a46b",
       }),
     }));
   }, []);
@@ -896,10 +818,10 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       if (child.position.y < 0.88) {
         legacyLowerMeshes.push(child);
       } else {
-        child.position.x *= 1.4;
-        child.position.y = 0.94 + (child.position.y - 0.88) * 1.3;
-        child.scale.x *= 1.4;
-        child.scale.y *= 1.3;
+        child.position.x *= 1.68;
+        child.position.y = 0.94 + (child.position.y - 0.88) * 1.56;
+        child.scale.x *= 1.68;
+        child.scale.y *= 1.56;
       }
     }
     for (const obj of legacyLowerMeshes) {
@@ -936,9 +858,9 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           ctx.stroke();
         }
         ctx.fillStyle = "#1e7a3b";
-        ctx.font = 'bold 20px "VT323", monospace';
+        ctx.font = '900 28px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("50.0 HZ", cx, 42);
+        ctx.fillText("50.0 HZ", cx, 46);
       }),
     [],
   );
@@ -949,20 +871,21 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
   const rightHeaderPlateTex = useMemo(
     () =>
-      createNearestCanvasTexture(512, 72, (ctx, w, h) => {
-        ctx.fillStyle = "#141414";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 21px "Kremlin", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText("TURBINE 50HZ GRID PANEL // UNIT C", w / 2, 30);
-        ctx.fillStyle = "#33ff66";
-        ctx.font = 'bold 17px "VT323", monospace';
-        ctx.fillText("TURBINE NO. 1 • 50HZ EXCITATION • MAIN BREAKER", w / 2, 56);
-      }),
+      makePlaqueTex(
+        "TURBINE 50HZ GRID PANEL // UNIT C",
+        "TURBINE NO. 1 • 50HZ RHEOSTAT • MAIN BREAKER",
+        {
+          width: 768,
+          height: 112,
+          titleSize: 31,
+          subSize: 24,
+          titleColor: "#ffcc00",
+          titleStroke: "#ffcc00",
+          subColor: "#44ff77",
+          subStroke: "#44ff77",
+          borderColor: "#b8a46b",
+        },
+      ),
     [],
   );
 
@@ -1046,48 +969,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       const canvas = rTex.image as HTMLCanvasElement;
       const ctx = canvas.getContext("2d");
       if (ctx) {
-        const w = 768;
-        const h = 144;
-        ctx.imageSmoothingEnabled = false;
-
-        // 1. Deep Curved Phosphor-Green CRT Tube Gradient & Vignette
-        const grad = ctx.createRadialGradient(
-          w * 0.5,
-          h * 0.5,
-          h * 0.1,
-          w * 0.5,
-          h * 0.5,
-          w * 0.56,
-        );
-        if (s.isBlackout) {
-          grad.addColorStop(0, "#1c0808");
-          grad.addColorStop(1, "#080202");
-        } else {
-          grad.addColorStop(0, "#0b2914");
-          grad.addColorStop(0.7, "#06190c");
-          grad.addColorStop(1, "#020b05");
-        }
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, w, h);
-
-        // 2. CRT Oscilloscope Graticule Grid
-        ctx.strokeStyle = s.isBlackout
-          ? "rgba(255, 42, 42, 0.15)"
-          : "rgba(51, 255, 102, 0.13)";
-        ctx.lineWidth = 1;
-        for (let gx = 48; gx < w; gx += 48) {
-          ctx.beginPath();
-          ctx.moveTo(gx, 8);
-          ctx.lineTo(gx, h - 8);
-          ctx.stroke();
-        }
-        for (let gy = 24; gy < h; gy += 24) {
-          ctx.beginPath();
-          ctx.moveTo(10, gy);
-          ctx.lineTo(w - 10, gy);
-          ctx.stroke();
-        }
-
         const hzDanger = s.gridHz < 47.8 || s.gridHz > 52.2;
         const bubblerFlooded = s.bubblerLevel > 90;
         const statusDanger =
@@ -1096,10 +977,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           s.turbineRpm > 3450 ||
           s.ventingSteam ||
           bubblerFlooded;
-
-        ctx.strokeStyle = statusDanger ? "#ff2a2a" : "#2be85d";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(6, 6, w - 12, h - 12);
 
         const cells = [
           {
@@ -1119,77 +996,24 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           },
         ];
 
-        const cellW = 232;
-        const cellCenters = [134, 384, 634];
-        cells.forEach((c, idx) => {
-          const cx = cellCenters[idx] ?? 384;
-          const x0 = cx - cellW / 2;
-          ctx.fillStyle = c.danger
-            ? "rgba(90, 12, 12, 0.55)"
-            : "rgba(4, 18, 9, 0.65)";
-          ctx.fillRect(x0, 12, cellW, 68);
-          ctx.strokeStyle = c.danger ? "#ff2a2a" : "#248f46";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(x0, 12, cellW, 68);
-
-          ctx.fillStyle = c.danger ? "#ff2a2a" : "#1f6e39";
-          ctx.fillRect(x0 + 2, 14, cellW - 4, 18);
-          ctx.fillStyle = c.danger ? "#ffffff" : "#d8ffe2";
-          ctx.font = 'bold 14px "Courier Prime", monospace';
-          ctx.textAlign = "center";
-          ctx.fillText(c.label, cx, 28);
-
-          ctx.save();
-          ctx.shadowColor = c.danger ? "#ff2a2a" : "#33ff66";
-          ctx.shadowBlur = 8;
-          ctx.fillStyle = c.danger ? "#ff4444" : "#44ff77";
-          ctx.font = 'bold 40px "VT323", monospace';
-          ctx.fillText(c.val, cx, 69);
-          ctx.restore();
-        });
-
-        ctx.fillStyle = "rgba(3, 14, 7, 0.78)";
-        ctx.fillRect(18, 86, w - 36, 48);
-        ctx.strokeStyle = statusDanger ? "#ff2a2a" : "#248f46";
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(18, 86, w - 36, 48);
-
         const steamStatus = s.ventingSteam
           ? "VENTING (-2.5% H2O)"
           : `${Math.round(s.pressureBar)} BAR`;
         const statusLineText = s.isBlackout
-          ? `> BREAKER TRIPPED (1.8X HEAT)! TRIM TO 49-51 HZ & PULL BREAKER [SPACE]!`
-          : `> STEAM: ${steamStatus} | AUX B: ${s.auxLoopBActive ? "BYPASS (+3.5% H2O)" : "OFF"} | VENT: ${s.ventilationActive ? "ON (+10MW)" : "OFF"}`;
-        ctx.save();
-        ctx.textAlign = "center";
-        ctx.shadowColor = statusDanger ? "#ff2a2a" : "#33ff66";
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = statusDanger ? "#ff3b3b" : "#33ff66";
-        ctx.font = 'bold 21px "VT323", monospace';
-        ctx.fillText(statusLineText, w / 2, 108);
-        ctx.restore();
+          ? `BREAKER TRIPPED! TRIM 49-51 HZ & PULL BREAKER [SPACE]!`
+          : `STEAM: ${steamStatus} | AUX B: ${s.auxLoopBActive ? "BYPASS (+3.5%)" : "OFF"} | VENT: ${s.ventilationActive ? "ON" : "OFF"}`;
 
-        ctx.textAlign = "center";
-        ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 14px "Courier Prime", monospace';
-        ctx.fillText(
-          s.hzOutOfBoundsSeconds > 0 && !s.isBlackout
-            ? `[UNIT C] WARNING: BREAKER TRIPS IN ${Math.max(0, Math.ceil(10 - s.hzOutOfBoundsSeconds))}S! TURN 50HZ RHEOSTAT!`
-            : "[UNIT C] TURN 50HZ RHEOSTAT • AUX LOOP B -> BUBBLER • MAIN BREAKER",
-          w / 2,
-          128,
-        );
-
-        // Scanline Overlay & Top Glass Sheen
-        ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
-        for (let y = 0; y < h; y += 3) {
-          ctx.fillRect(0, y, w, 1);
-        }
-        const glassSheen = ctx.createLinearGradient(0, 0, 0, 38);
-        glassSheen.addColorStop(0, "rgba(180, 255, 205, 0.09)");
-        glassSheen.addColorStop(1, "rgba(180, 255, 205, 0.0)");
-        ctx.fillStyle = glassSheen;
-        ctx.fillRect(8, 8, w - 16, 32);
+        paintSovietCRTScreen(ctx, 768, 144, {
+          headerCode: "CRT-84C",
+          cells,
+          statusLine: statusLineText,
+          statusDanger,
+          footerLine:
+            s.hzOutOfBoundsSeconds > 0 && !s.isBlackout
+              ? `WARNING: BREAKER TRIPS IN ${Math.max(0, Math.ceil(10 - s.hzOutOfBoundsSeconds))}S! TURN 50HZ RHEOSTAT!`
+              : "TURN 50HZ RHEOSTAT • AUX LOOP B -> BUBBLER • MAIN BREAKER",
+          isBlackout: s.isBlackout,
+        });
 
         rTex.needsUpdate = true;
       }
@@ -1198,44 +1022,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
   return (
     <>
-      {/* Overhead Bulkhead Telemetry Marquee (Pulled forward directly above the closer K.O.M.R.A.D.-84 CRT terminal) */}
-      <group position={[0, 2.48, 0.48]} rotation={[0.16, 0, 0]}>
-        <mesh>
-          <boxGeometry args={[2.56, 0.34, 0.08]} />
-          <meshStandardMaterial
-            color="#141414"
-            roughness={0.75}
-            metalness={0.5}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.042]}>
-          <planeGeometry args={[2.48, 0.3]} />
-          <meshStandardMaterial
-            ref={headerMatRef}
-            map={headerTexture}
-            color="#ffffff"
-            emissive="#ffffff"
-            emissiveMap={headerTexture}
-            emissiveIntensity={0.68}
-            roughness={0.85}
-          />
-        </mesh>
-      </group>
-
       {/* ============================================================
           3. NEW RIGHT-SIDE SOVIET CONTROL PANEL WING (<RightControlPanel3D />)
-          Positioned at a TRUE 90° angle on the operator's RIGHT SIDE
-          (x: +1.96, z: 2.35, rotation.y = -Math.PI / 2 = -90° directly facing the chair!)
+          Positioned at comfortable 1.76m radius on Right Wall (x: 1.76, z: 2.02)
          ============================================================ */}
       <group
         ref={rightPanelGroupRef}
-        position={[2.12, 0.0, 2.35]}
+        position={[1.76, -0.02, 2.02]}
         rotation={[0, -Math.PI / 2, 0]}
-        scale={[1.14, 1.1, 1.12]}
+        scale={[1.04, 1.05, 1.04]}
       >
         {/* Main Right-Wing Steel Cabinet Body (Mirrors Left ReactorStation3D) */}
-        <mesh position={[0, 1.12, -0.18]} castShadow receiveShadow>
-          <boxGeometry args={[1.66, 2.24, 0.42]} />
+        <mesh position={[0, 1.18, -0.18]} castShadow receiveShadow>
+          <boxGeometry args={[1.66, 2.38, 0.42]} />
           <meshStandardMaterial
             color="#23312b"
             roughness={0.45}
@@ -1245,8 +1044,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        <mesh position={[0, 1.12, -0.22]} castShadow receiveShadow>
-          <boxGeometry args={[1.74, 2.32, 0.36]} />
+        <mesh position={[0, 1.18, -0.22]} castShadow receiveShadow>
+          <boxGeometry args={[1.74, 2.46, 0.36]} />
           <meshStandardMaterial
             color="#141414"
             roughness={0.5}
@@ -1258,8 +1057,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         </mesh>
 
         {/* Heavy Stepped Bevel Plates, Welded Seams, Corner L-Angle Iron Trim & Hex Bolts */}
-        <mesh position={[-0.84, 1.12, 0.032]} castShadow receiveShadow>
-          <boxGeometry args={[0.042, 2.26, 0.036]} />
+        <mesh position={[-0.84, 1.18, 0.032]} castShadow receiveShadow>
+          <boxGeometry args={[0.042, 2.40, 0.036]} />
           <meshStandardMaterial
             color="#18211b"
             metalness={0.7}
@@ -1268,8 +1067,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             bumpScale={0.008}
           />
         </mesh>
-        <mesh position={[0.84, 1.12, 0.032]} castShadow receiveShadow>
-          <boxGeometry args={[0.042, 2.26, 0.036]} />
+        <mesh position={[0.84, 1.18, 0.032]} castShadow receiveShadow>
+          <boxGeometry args={[0.042, 2.40, 0.036]} />
           <meshStandardMaterial
             color="#18211b"
             metalness={0.7}
@@ -1311,9 +1110,9 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           </group>
         ))}
 
-        {/* Top Riveted Header Plaque: TURBINE & 50HZ GRID PANEL (Raised cleanly above green jewel lamps) */}
-        <mesh position={[0, 2.235, 0.035]}>
-          <planeGeometry args={[1.48, 0.14]} />
+        {/* Top Riveted Header Plaque: TURBINE & 50HZ GRID PANEL (Centered cleanly inside top frame with generous margin) */}
+        <mesh position={[0, 2.13, 0.044]}>
+          <planeGeometry args={[1.40, 0.148]} />
           <meshStandardMaterial
             map={rightHeaderPlateTex}
             emissive="#ffffff"
@@ -1326,8 +1125,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         {/* Corner Gusset Plates & Overhead Hooded Panel Work-Lights */}
         {(
           [
-            [-0.78, 2.22],
-            [0.78, 2.22],
+            [-0.78, 2.32],
+            [0.78, 2.32],
             [-0.78, 0.14],
             [0.78, 0.14],
           ] as const
@@ -1370,7 +1169,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           </group>
         ))}
         {[-0.48, 0.48].map((lx, lIdx) => (
-          <group key={lIdx} position={[lx, 2.31, 0.08]}>
+          <group key={lIdx} position={[lx, 2.43, 0.08]}>
             <mesh position={[0, 0, -0.04]} rotation={[Math.PI / 2, 0, 0]} castShadow>
               <cylinderGeometry args={[0.012, 0.014, 0.11, 8]} />
               <meshStandardMaterial color="#18211b" metalness={0.75} roughness={0.38} />
@@ -1397,10 +1196,10 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         ))}
 
         {/* 3 High-Res 16-Part Bolted Turbine, 50Hz Grid Frequency & Generator Load Gauges */}
-        <group position={[0, 1.815, 0.03]}>
+        <group position={[0, 1.775, 0.03]}>
           <HighDetailManometer3D
             position={[-0.51, 0, 0]}
-            title="TURBINE RPM"
+            title="RPM"
             cyrillicSub="ТУРБИНА №1"
             unit="0-3600 RPM"
             serial="№ 84-ТБ1"
@@ -1411,7 +1210,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           />
           <HighDetailManometer3D
             position={[0, 0, 0]}
-            title="GRID 50 HZ"
+            title="GRID 50HZ"
             cyrillicSub="ЧАСТОТА СЕТИ"
             unit="45.0-55.0 HZ"
             serial="№ 84-ГЦ2"
@@ -1424,7 +1223,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           />
           <HighDetailManometer3D
             position={[0.51, 0, 0]}
-            title="GEN. LOAD"
+            title="MW LOAD"
             cyrillicSub="НАГРУЗКА МВТ"
             unit="0-180 MW"
             serial="№ 84-ЭЛ3"
@@ -1490,9 +1289,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               window.addEventListener("pointercancel", handleUp);
             }}
           >
-            <mesh position={[0, 0.21, 0.01]}>
-              <planeGeometry args={[0.34, 0.082]} />
-              <meshStandardMaterial map={steamPlateTex} roughness={0.55} />
+            <mesh position={[0, 0.22, 0.006]} castShadow>
+              <boxGeometry args={[0.44, 0.112, 0.01]} />
+              <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+            </mesh>
+            <mesh position={[0, 0.22, 0.012]}>
+              <planeGeometry args={[0.425, 0.103]} />
+              <meshStandardMaterial
+                map={steamPlateTex}
+                emissive="#ffffff"
+                emissiveMap={steamPlateTex}
+                emissiveIntensity={0.35}
+                roughness={0.55}
+              />
             </mesh>
             {/* Heavy Cast-Iron Quadrant Housing & Return Coil Spring */}
             <mesh castShadow receiveShadow>
@@ -1673,9 +1482,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               <cylinderGeometry args={[0.165, 0.165, 0.12, 16]} />
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
-            <mesh position={[0, 0.21, 0.01]}>
-              <planeGeometry args={[0.36, 0.082]} />
-              <meshStandardMaterial map={rheostatPlateTex} roughness={0.55} />
+            <mesh position={[0, 0.22, 0.006]} castShadow>
+              <boxGeometry args={[0.465, 0.112, 0.01]} />
+              <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+            </mesh>
+            <mesh position={[0, 0.22, 0.012]}>
+              <planeGeometry args={[0.45, 0.103]} />
+              <meshStandardMaterial
+                map={rheostatPlateTex}
+                emissive="#ffffff"
+                emissiveMap={rheostatPlateTex}
+                emissiveIntensity={0.35}
+                roughness={0.55}
+              />
             </mesh>
             {/* Stepped Cast-Iron & Brushed-Brass Rheostat Bezel */}
             <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
@@ -1802,14 +1621,18 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                   triggerToggle();
                 }}
               >
-                {/* Engraved Brass/Iron Plaque Above Toggle */}
-                <mesh position={[0, 0.105, 0.008]}>
-                  <planeGeometry args={[0.28, 0.072]} />
+                {/* Engraved Brass/Iron Plaque Above Toggle (+25% larger) */}
+                <mesh position={[0, 0.112, 0.004]} castShadow>
+                  <boxGeometry args={[0.342, 0.098, 0.008]} />
+                  <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+                </mesh>
+                <mesh position={[0, 0.112, 0.01]}>
+                  <planeGeometry args={[0.33, 0.09]} />
                   <meshStandardMaterial
                     map={tSpec.texture}
                     emissive="#ffffff"
                     emissiveMap={tSpec.texture}
-                    emissiveIntensity={0.32}
+                    emissiveIntensity={0.36}
                     roughness={0.65}
                   />
                 </mesh>
@@ -1875,13 +1698,13 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         </group>
       </group>
 
-      {/* 4. BEVELED ANGLE-IRON SEAMS FOR ENLARGED K.O.M.R.A.D.-84 MAINFRAME (+40% WIDTH, +30% HEIGHT) */}
+      {/* 4. BEVELED ANGLE-IRON SEAMS FOR ENLARGED K.O.M.R.A.D.-84 MAINFRAME (+20% ADDITIONAL SCALE) */}
       <group position={[0, 0.14, 2.18]}>
         <group position={[0, 0, -1.62]}>
           <primitive object={terminalHousingModel} />
           {/* Heavy Welded Corner L-Angle Trim & Recessed Bezel Bolts on Enlarged K.O.M.R.A.D.-84 Mainframe */}
-          <mesh position={[-1.16, 1.18, 0.04]} castShadow receiveShadow>
-            <boxGeometry args={[0.048, 2.34, 0.048]} />
+          <mesh position={[-1.39, 1.32, 0.04]} castShadow receiveShadow>
+            <boxGeometry args={[0.054, 2.62, 0.054]} />
             <meshStandardMaterial
               color="#18211b"
               metalness={0.68}
@@ -1890,8 +1713,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               bumpScale={0.008}
             />
           </mesh>
-          <mesh position={[1.16, 1.18, 0.04]} castShadow receiveShadow>
-            <boxGeometry args={[0.048, 2.34, 0.048]} />
+          <mesh position={[1.39, 1.32, 0.04]} castShadow receiveShadow>
+            <boxGeometry args={[0.054, 2.62, 0.054]} />
             <meshStandardMaterial
               color="#18211b"
               metalness={0.68}
@@ -1900,14 +1723,14 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               bumpScale={0.008}
             />
           </mesh>
-          {[-0.92, -0.46, 0, 0.46, 0.92].map((bx, idx) => (
+          {[-1.1, -0.55, 0, 0.55, 1.1].map((bx, idx) => (
             <mesh
               key={idx}
-              position={[bx, 2.26, 0.145]}
+              position={[bx, 2.53, 0.145]}
               rotation={[Math.PI / 2, 0, 0]}
               castShadow
             >
-              <cylinderGeometry args={[0.014, 0.014, 0.018, 6]} />
+              <cylinderGeometry args={[0.016, 0.016, 0.02, 6]} />
               <meshStandardMaterial
                 color="#b8a46b"
                 metalness={0.85}
@@ -2192,20 +2015,27 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       {/* Consolidated Left + Left-Rear Control Wing Pool Light */}
       <pointLight
         ref={reactorSpotRef}
-        position={[-1.25, 2.02, 2.75]}
+        position={[-1.12, 2.22, 2.65]}
         color="#ffba5c"
-        intensity={2.6}
-        distance={6.2}
-        decay={1.3}
+        intensity={2.9}
+        distance={7.5}
+        decay={1.15}
       />
 
-      {/* Consolidated Right + Rear Wrap-Around Control Wing Pool Light */}
+      {/* Consolidated Rear-Left (`UNIT B`) + Right Wing Pool Light */}
       <pointLight
-        position={[1.15, 2.02, 2.85]}
+        position={[-1.12, 2.22, 5.25]}
         color="#ffba5c"
-        intensity={2.5}
-        distance={6.2}
-        decay={1.3}
+        intensity={2.9}
+        distance={7.5}
+        decay={1.15}
+      />
+      <pointLight
+        position={[1.15, 2.15, 2.15]}
+        color="#ffba5c"
+        intensity={2.6}
+        distance={6.5}
+        decay={1.25}
       />
 
       {/* Ceiling Rotating Redline / Meltdown Klaxon Beacon (#ff2a2a — Dark when nominal, blazes red during alarm) */}
@@ -2259,15 +2089,6 @@ const KOMRAD_DARK_HUMOR_BULLETINS: readonly string[] = [
   "BUBBLER POOL NOTICE: PULL UNIT B DRAIN LEVER WHEN BUBBLER EXCEEDS 70% TO RECYCLE CONDENSATE INTO THE RESERVOIR!",
 ];
 
-const HOURLY_CRT_BANNERS: readonly string[] = [
-  "00:00 — SHIFT START: INSPECT DIRECTIVES, DISPATCH IN TUBE, MATCH REGIONAL MW TARGETS",
-  "01:00 — HOUR 01: MONITOR WATER RESERVOIR LEVEL — KEEP VODKA DISTILLERY ABOVE 40% H2O",
-  "02:00 — HOUR 02: WATCH FOR FORGED CIA DIRECTIVES — SHRED SABOTAGE ORDERS IMMEDIATELY",
-  "03:00 — HOUR 03: MID-SHIFT COOLING AUDIT — BALANCE HELIUM-N2 LOOP & BUBBLER DRAIN",
-  "04:00 — HOUR 04: PEAK GRID DEMAND — MATCH CITY, DUGA RADAR & VODKA MILL MW QUOTAS",
-  "05:00 — HOUR 05: FINAL HOUR — HOLD CORE BELOW 900°C UNTIL 06:00 MORNING SIREN",
-];
-
 const Komrad84SplitScreenCrt3D: React.FC<{
   bulletinIdx: number;
   onCycleBulletin: () => void;
@@ -2277,24 +2098,24 @@ const Komrad84SplitScreenCrt3D: React.FC<{
 
   const crtTexture = useMemo(() => {
     const canvas = document.createElement("canvas");
-    // Capped at 1024x640 (2.5x faster GPU texture upload than 1600x1000 while keeping crisp retro phosphor text)
-    canvas.width = 1024;
-    canvas.height = 640;
+    // 1:1 native 1600x1000 resolution for razor-sharp MacBook Retina phosphor text
+    canvas.width = 1600;
+    canvas.height = 1000;
     const tex = new THREE.CanvasTexture(canvas);
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearFilter;
-    tex.anisotropy = 8;
+    tex.anisotropy = 16;
     tex.generateMipmaps = false;
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, []);
 
   const curvedCrtGeometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(1.88, 1.17, 16, 12);
+    const geo = new THREE.PlaneGeometry(2.26, 1.41, 16, 12);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i) / 0.94;
-      const y = pos.getY(i) / 0.585;
+      const x = pos.getX(i) / 1.13;
+      const y = pos.getY(i) / 0.705;
       const r2 = x * x + y * y;
       const bulge = Math.max(0, 1 - r2 * 0.42) * 0.028;
       pos.setZ(i, bulge);
@@ -2336,27 +2157,24 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     ctx.scale(canvas.width / w, canvas.height / h);
 
     // 1. Deep Phosphor-Green CRT Background
-    ctx.fillStyle = state.isBlackout ? "#020804" : "#05160a";
+    ctx.fillStyle = state.isBlackout ? "#020804" : "#041208";
     ctx.fillRect(0, 0, w, h);
 
-    // Outer double border
-    ctx.strokeStyle = "#33ff66";
+    // Outer double border filling 99% of canvas (margin reduced to 6px from canvas edges!)
+    ctx.strokeStyle = "#39ff14";
     ctx.lineWidth = 4;
-    ctx.strokeRect(10, 10, w - 20, h - 20);
-    ctx.strokeStyle = "rgba(51, 255, 102, 0.35)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(18, 18, w - 36, h - 36);
+    ctx.strokeRect(6, 6, w - 12, h - 12);
 
     // =========================================================================
-    // TOP TELEMETRY HEADER BAR (y = 18..86)
+    // TOP TELEMETRY HEADER BAR (y = 8..82) — +40% Larger, Ultra-Bold Font (900)
     // =========================================================================
-    ctx.fillStyle = "rgba(14, 52, 26, 0.85)";
-    ctx.fillRect(20, 20, w - 40, 64);
-    ctx.strokeStyle = "#33ff66";
-    ctx.lineWidth = 3;
+    ctx.fillStyle = "rgba(10, 44, 20, 0.94)";
+    ctx.fillRect(8, 8, w - 16, 74);
+    ctx.strokeStyle = "#39ff14";
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
-    ctx.moveTo(18, 86);
-    ctx.lineTo(w - 18, 86);
+    ctx.moveTo(6, 82);
+    ctx.lineTo(w - 6, 82);
     ctx.stroke();
 
     const totalSuppliedMW = state.isBlackout
@@ -2376,286 +2194,197 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     const hh = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
     const mm = String(totalMinutes % 60).padStart(2, "0");
 
-    ctx.font = 'bold 28px "VT323", monospace';
+    ctx.font = '700 30px "Consolas", "Lucida Console", monospace';
     ctx.textAlign = "left";
-    ctx.fillStyle = "#33ff66";
-    ctx.fillText("K.O.M.R.A.D.-84 // SECTOR 04 GRID", 34, 61);
+    drawHeavyCrtText(ctx, "K.O.M.R.A.D.-84", 20, 56, "#39ff14", 0.9);
 
     // Total Output Pill
     const mwDiff = Math.abs(totalSuppliedMW - totalTargetMW);
-    ctx.fillStyle =
+    const mwCol =
       totalSuppliedMW > 140
         ? "#ff2a2a"
         : mwDiff <= 10
-          ? "#33ff66"
-          : "#ffb000";
-    ctx.fillText(
-      `| TOTAL OUTPUT: ${totalSuppliedMW} / ${totalTargetMW} MW`,
-      430,
-      61,
+          ? "#39ff14"
+          : "#ffd000";
+    drawHeavyCrtText(
+      ctx,
+      `| TOTAL OUTPUT: ${totalSuppliedMW}/${totalTargetMW} MW`,
+      315,
+      56,
+      mwCol,
+      0.9,
     );
 
     // Water Reservoir Pill
-    ctx.fillStyle =
-      waterPct < 30 ? "#ff2a2a" : waterPct < 45 ? "#ffb000" : "#38e8ff";
-    ctx.fillText(
-      `| WATER RESERVOIR: ${waterPct}% (DRAW: ${waterDraw} L/s)`,
-      795,
-      61,
+    const wtrCol =
+      waterPct < 30 ? "#ff2a2a" : waterPct < 45 ? "#ffd000" : "#00f0ff";
+    drawHeavyCrtText(
+      ctx,
+      `| WATER RESERVOIR: ${waterPct}% (${waterDraw}L/s)`,
+      775,
+      56,
+      wtrCol,
+      0.9,
     );
 
     // Clock Pill
     ctx.textAlign = "right";
-    ctx.fillStyle = state.ciaIntrusionActive ? "#ff2a2a" : "#e6dec3";
-    ctx.fillText(
+    const clkCol = state.ciaIntrusionActive ? "#ff2a2a" : "#ffe600";
+    drawHeavyCrtText(
+      ctx,
       state.ciaIntrusionActive
         ? `CIA HACK: ${Math.round(state.ciaIntrusionProgress)}% | ${hh}:${mm}`
-        : `CLOCK: ${hh}:${mm} / 06:00`,
-      w - 34,
-      61,
+        : `CLOCK: ${hh}:${mm}/06:00`,
+      w - 18,
+      56,
+      clkCol,
+      0.9,
     );
 
     // =========================================================================
-    // SPLIT-SCREEN DIVIDER (Left 62% Regional Vector Map: x=24..996, Right 38% AI Log: x=1008..1576)
+    // SPLIT-SCREEN DIVIDER (Left 62% Regional Vector Map: x=8..994, Right 38% AI Log: x=1002..1592)
     // =========================================================================
-    const mapX = 24;
-    const mapY = 96;
-    const mapW = 972;
-    const mapH = h - 118;
+    const mapX = 8;
+    const mapY = 86;
+    const mapW = 986;
+    const mapH = h - 94;
 
-    const chatX = 1008;
-    const chatY = 96;
-    const chatW = w - chatX - 24;
-    const chatH = h - 118;
+    const chatX = 1002;
+    const chatY = 86;
+    const chatW = w - chatX - 8;
+    const chatH = h - 94;
 
     // Frame Left Map Panel
-    ctx.fillStyle = "rgba(4, 18, 9, 0.94)";
+    ctx.fillStyle = "rgba(3, 14, 7, 0.96)";
     ctx.fillRect(mapX, mapY, mapW, mapH);
-    ctx.strokeStyle = "#29cc54";
+    ctx.strokeStyle = "#39ff14";
     ctx.lineWidth = 3;
     ctx.strokeRect(mapX, mapY, mapW, mapH);
 
     // -------------------------------------------------------------------------
     // 1. DETAILED GEOGRAPHIC & TOPOGRAPHICAL BACKGROUND
     // -------------------------------------------------------------------------
-    // Tactical Grid + Forest Sector Coordinates (A-1 through F-6)
-    ctx.strokeStyle = "rgba(51, 255, 102, 0.09)";
+    ctx.strokeStyle = "rgba(57, 255, 20, 0.08)";
     ctx.lineWidth = 1;
-    const colLabels = ["A", "B", "C", "D", "E", "F"];
-    for (let c = 0; c < 6; c++) {
-      const gx = mapX + (c + 1) * (mapW / 6);
-      if (c < 5) {
-        ctx.beginPath();
-        ctx.moveTo(gx, mapY + 42);
-        ctx.lineTo(gx, mapY + mapH);
-        ctx.stroke();
-      }
-      ctx.fillStyle = "rgba(51, 255, 102, 0.42)";
-      ctx.font = 'bold 15px "VT323", monospace';
-      ctx.textAlign = "center";
-      ctx.fillText(
-        `SEC-${colLabels[c]}`,
-        mapX + (c + 0.5) * (mapW / 6),
-        mapY + 60,
-      );
-    }
-    for (let r = 0; r < 6; r++) {
-      const gy = mapY + 42 + (r + 1) * ((mapH - 42) / 6);
-      if (r < 5) {
-        ctx.beginPath();
-        ctx.moveTo(mapX, gy);
-        ctx.lineTo(mapX + mapW, gy);
-        ctx.stroke();
-      }
-      ctx.fillStyle = "rgba(51, 255, 102, 0.42)";
-      ctx.font = 'bold 15px "VT323", monospace';
-      ctx.textAlign = "left";
-      ctx.fillText(
-        `${colLabels[r]}-${r + 1}`,
-        mapX + 8,
-        mapY + 58 + r * ((mapH - 42) / 6),
-      );
-    }
-
-    // Topographical Elevation Contour Rings (#0d3b1e / #144d29)
-    ctx.save();
-    ctx.strokeStyle = "#0e4221";
-    ctx.lineWidth = 1.5;
-    const contourHills = [
-      { cx: mapX + 790, cy: mapY + 150, rx: 145, ry: 75 },
-      { cx: mapX + 810, cy: mapY + 435, rx: 135, ry: 72 },
-      { cx: mapX + 185, cy: mapY + 435, rx: 140, ry: 70 },
-      { cx: mapX + 780, cy: mapY + 715, rx: 145, ry: 74 },
-    ];
-    for (const hill of contourHills) {
-      for (let ring = 1; ring <= 3; ring++) {
-        ctx.beginPath();
-        ctx.ellipse(
-          hill.cx,
-          hill.cy,
-          hill.rx * (0.55 + ring * 0.18),
-          hill.ry * (0.55 + ring * 0.18),
-          0,
-          0,
-          Math.PI * 2,
-        );
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-
-    // Red Forest Pine Clusters (Рыжий Лес)
-    const pineClusters = [
-      [mapX + 365, mapY + 125],
-      [mapX + 390, mapY + 140],
-      [mapX + 595, mapY + 130],
-      [mapX + 625, mapY + 145],
-      [mapX + 615, mapY + 340],
-      [mapX + 640, mapY + 355],
-      [mapX + 355, mapY + 610],
-      [mapX + 380, mapY + 625],
-    ] as const;
-    ctx.strokeStyle = "#1a6633";
-    ctx.lineWidth = 1.5;
-    for (const [px, py] of pineClusters) {
+    for (let c = 1; c < 6; c++) {
+      const gx = mapX + c * (mapW / 6);
       ctx.beginPath();
-      ctx.moveTo(px, py - 10);
-      ctx.lineTo(px - 7, py + 4);
-      ctx.lineTo(px + 7, py + 4);
-      ctx.closePath();
+      ctx.moveTo(gx, mapY + 42);
+      ctx.lineTo(gx, mapY + mapH);
+      ctx.stroke();
+    }
+    for (let r = 1; r < 6; r++) {
+      const gy = mapY + 42 + r * ((mapH - 42) / 6);
+      ctx.beginPath();
+      ctx.moveTo(mapX, gy);
+      ctx.lineTo(mapX + mapW, gy);
       ctx.stroke();
     }
 
-    // Yanov-Chernobyl Railway Line with Cross-Ties (Ж/Д ЛИНИЯ ЯНОВ)
-    ctx.save();
-    ctx.strokeStyle = "#1f6b39";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(mapX + 20, mapY + 305);
-    ctx.lineTo(mapX + 440, mapY + 445);
-    ctx.lineTo(mapX + mapW - 20, mapY + 595);
-    ctx.stroke();
-    ctx.setLineDash([3, 9]);
-    ctx.lineWidth = 9;
-    ctx.stroke();
-    ctx.restore();
-
-    // Winding Pripyat River & Cooling Reservoir Lake ("РЕКА ПРИПЯТЬ // ПРУД-ОХЛАДИТЕЛЬ")
+    // Winding Pripyat River & Cooling Reservoir Lake
     ctx.save();
     const riverFillCol =
-      waterPct < 30 ? "rgba(255, 58, 58, 0.25)" : "rgba(32, 195, 245, 0.22)";
+      waterPct < 30 ? "rgba(255, 58, 58, 0.25)" : "rgba(0, 240, 255, 0.22)";
     ctx.strokeStyle = riverFillCol;
-    ctx.lineWidth = 44;
+    ctx.lineWidth = 46;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(mapX + 310, mapY + 55);
+    ctx.moveTo(mapX + 340, mapY + 55);
     ctx.bezierCurveTo(
-      mapX + 340,
-      mapY + 210,
-      mapX + 415,
-      mapY + 335,
-      mapX + 465,
-      mapY + 455,
+      mapX + 370,
+      mapY + 215,
+      mapX + 435,
+      mapY + 340,
+      mapX + 490,
+      mapY + 460,
     );
     ctx.bezierCurveTo(
-      mapX + 515,
-      mapY + 575,
-      mapX + 435,
-      mapY + 715,
-      mapX + 485,
-      mapY + mapH - 18,
+      mapX + 540,
+      mapY + 585,
+      mapX + 460,
+      mapY + 725,
+      mapX + 505,
+      mapY + mapH - 12,
     );
     ctx.stroke();
 
     // Cooling Reservoir Lake Basin beside Chernobyl-4 Plant
     ctx.fillStyle = riverFillCol;
-    ctx.strokeStyle = waterPct < 30 ? "#ff4444" : "#2bc4eb";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = waterPct < 30 ? "#ff4444" : "#00f0ff";
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.ellipse(mapX + 445, mapY + 495, 82, 46, 0.25, 0, Math.PI * 2);
+    ctx.ellipse(mapX + 485, mapY + 515, 92, 50, 0.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // Irrigation Canal Branch to Kolkhoz "Zarya" (West) & Intake Main to Vodka Distillery (SW)
-    ctx.strokeStyle = waterPct < 35 ? "rgba(255,60,60,0.45)" : "rgba(45,215,255,0.42)";
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    ctx.moveTo(mapX + 410, mapY + 380);
-    ctx.lineTo(mapX + 225, mapY + 425);
-    ctx.moveTo(mapX + 455, mapY + 635);
-    ctx.lineTo(mapX + 245, mapY + 705);
-    ctx.stroke();
-
     // Animated cyan water current chevrons along Pripyat River
-    ctx.strokeStyle = waterPct < 30 ? "#ff4444" : "#38e8ff";
-    ctx.lineWidth = 3;
-    ctx.setLineDash([12, 12]);
+    ctx.strokeStyle = waterPct < 30 ? "#ff4444" : "#00f0ff";
+    ctx.lineWidth = 3.5;
+    ctx.setLineDash([14, 12]);
     ctx.lineDashOffset = -(timeBucket * 6);
     ctx.beginPath();
-    ctx.moveTo(mapX + 310, mapY + 55);
+    ctx.moveTo(mapX + 340, mapY + 55);
     ctx.bezierCurveTo(
-      mapX + 340,
-      mapY + 210,
-      mapX + 415,
-      mapY + 335,
-      mapX + 465,
-      mapY + 455,
+      mapX + 370,
+      mapY + 215,
+      mapX + 435,
+      mapY + 340,
+      mapX + 490,
+      mapY + 460,
     );
     ctx.bezierCurveTo(
-      mapX + 515,
-      mapY + 575,
-      mapX + 435,
-      mapY + 715,
-      mapX + 485,
-      mapY + mapH - 18,
+      mapX + 540,
+      mapY + 585,
+      mapX + 460,
+      mapY + 725,
+      mapX + 505,
+      mapY + mapH - 12,
     );
     ctx.stroke();
     ctx.restore();
 
-    ctx.fillStyle = waterPct < 30 ? "#ff6666" : "#38e8ff";
-    ctx.font = 'bold 17px "VT323", monospace';
-    ctx.textAlign = "center";
-    ctx.fillText("РЕКА ПРИПЯТЬ", mapX + 385, mapY + 255);
-    ctx.fillText("ПРУД-ОХЛАДИТЕЛЬ", mapX + 445, mapY + 556);
-
     // Map Sub-Header Banner
-    ctx.fillStyle = "rgba(18, 68, 34, 0.92)";
-    ctx.fillRect(mapX + 2, mapY + 2, mapW - 4, 40);
-    ctx.fillStyle = "#33ff66";
-    ctx.font = 'bold 23px "VT323", monospace';
+    ctx.fillStyle = "rgba(14, 58, 28, 0.96)";
+    ctx.fillRect(mapX + 2, mapY + 2, mapW - 4, 42);
+    ctx.font = '900 28px "VT323", "Consolas", monospace';
     ctx.textAlign = "left";
-    ctx.fillText(
-      "SECTOR 84 TOPOGRAPHICAL POWER & WATER GRID // 6-NODE SUBSTATION MAP",
-      mapX + 14,
-      mapY + 29,
+    drawHeavyCrtText(
+      ctx,
+      "SECTOR 84 POWER & WATER GRID // 6 SUBSTATIONS",
+      mapX + 12,
+      mapY + 31,
+      "#39ff14",
+      0.8,
     );
 
     ctx.textAlign = "right";
     if (state.activeMandate) {
-      ctx.fillStyle = "#ffb000";
-      ctx.fillText(
-        `ACTIVE ORDER: ${state.activeMandate.title.slice(0, 28)}`,
-        mapX + mapW - 14,
-        mapY + 29,
+      drawHeavyCrtText(
+        ctx,
+        `ORDER: ${state.activeMandate.title.slice(0, 26)}`,
+        mapX + mapW - 12,
+        mapY + 31,
+        "#ffd000",
+        0.8,
       );
     }
 
     // -------------------------------------------------------------------------
-    // COORDINATES OF CENTER REACTOR & 6 REGIONAL SUBSTATION NODES
+    // COORDINATES OF ENLARGED CENTER REACTOR (+25%) & 6 ENLARGED SECTOR CARDS (+20%)
     // -------------------------------------------------------------------------
-    const reactorCx = mapX + 486;
-    const reactorCy = mapY + 425;
+    const reactorCx = mapX + 493;
+    const reactorCy = mapY + 450;
 
     const nodes = {
-      pripyat: { cx: mapX + 175, cy: mapY + 145 },
-      kolkhoz: { cx: mapX + 175, cy: mapY + 425 },
-      vodka: { cx: mapX + 175, cy: mapY + 705 },
-      duga: { cx: mapX + 795, cy: mapY + 145 },
-      kgb: { cx: mapX + 795, cy: mapY + 425 },
-      steel: { cx: mapX + 795, cy: mapY + 705 },
+      pripyat: { cx: mapX + 178, cy: mapY + 168 },
+      kolkhoz: { cx: mapX + 178, cy: mapY + 450 },
+      vodka: { cx: mapX + 178, cy: mapY + 732 },
+      duga: { cx: mapX + 808, cy: mapY + 168 },
+      kgb: { cx: mapX + 808, cy: mapY + 450 },
+      steel: { cx: mapX + 808, cy: mapY + 732 },
     };
 
-    // Helper: Draw High-Voltage Transmission Line (MW) + Optional Water Main (H2O) with Siphon/Drain Arrow Animation
+    // Helper: Draw +50% Thicker High-Voltage Transmission Line (MW) + Cyan Water Main (H2O) with Enlarged Siphon Arrows
     const drawTransmissionLink = (
       tx: number,
       ty: number,
@@ -2672,13 +2401,13 @@ const Komrad84SplitScreenCrt3D: React.FC<{
         supplied === 0 || !waterOk
           ? "#ff2a2a"
           : mwOk
-            ? "#33ff66"
-            : "#ffb000";
+            ? "#39ff14"
+            : "#ffd000";
 
       ctx.save();
       ctx.strokeStyle = col;
-      ctx.lineWidth = 3.5;
-      ctx.setLineDash([12, 8]);
+      ctx.lineWidth = 5.5;
+      ctx.setLineDash([14, 9]);
       ctx.lineDashOffset = -(timeBucket * 7);
       ctx.beginPath();
       ctx.moveTo(reactorCx, reactorCy);
@@ -2689,39 +2418,37 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       if (hasWater) {
         const isDrainingOutward = state.bubblerDraining && state.bubblerLevel > 0;
         const wCol = isDrainingOutward
-          ? "#44ffaa"
+          ? "#44ff66"
           : zoneWaterPct >= minWater
-            ? "#38e8ff"
+            ? "#00f0ff"
             : "#ff2a2a";
         const dashSpeed = isDrainingOutward
           ? -(timeBucket * 11)
           : isSiphoningInward
             ? timeBucket * 11
             : -(timeBucket * 3);
-        const startX = reactorCx - 12;
-        const startY = reactorCy + 12;
+        const startX = reactorCx - 14;
+        const startY = reactorCy + 16;
         const endX = tx;
-        const endY = ty + 12;
+        const endY = ty + 16;
 
         ctx.save();
         ctx.strokeStyle = wCol;
-        ctx.lineWidth = isSiphoningInward || isDrainingOutward ? 3.5 : 2.5;
-        ctx.setLineDash([7, 6]);
+        ctx.lineWidth = isSiphoningInward || isDrainingOutward ? 5.5 : 4.0;
+        ctx.setLineDash([9, 7]);
         ctx.lineDashOffset = dashSpeed;
         ctx.beginPath();
         ctx.moveTo(startX, startY);
         ctx.lineTo(endX, endY);
         ctx.stroke();
 
-        // Draw animated directional chevron arrows along the water pipe
+        // Enlarged directional chevron arrows (+50% larger) along the water pipe
         const dx = endX - startX;
         const dy = endY - startY;
         const angle = Math.atan2(dy, dx);
-        // When siphoning inward, arrows point FROM node TO reactor (angle + Math.PI)
-        // When draining bubbler outward (or recharging), arrows point FROM reactor TO node (angle)
         const arrowAngle =
           isSiphoningInward && !isDrainingOutward ? angle + Math.PI : angle;
-        for (const tPos of [0.35, 0.65]) {
+        for (const tPos of [0.36, 0.64]) {
           const ax = startX + dx * tPos;
           const ay = startY + dy * tPos;
           ctx.save();
@@ -2729,9 +2456,9 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           ctx.rotate(arrowAngle);
           ctx.fillStyle = wCol;
           ctx.beginPath();
-          ctx.moveTo(7, 0);
-          ctx.lineTo(-5, -5);
-          ctx.lineTo(-5, 5);
+          ctx.moveTo(11, 0);
+          ctx.lineTo(-8, -8);
+          ctx.lineTo(-8, 8);
           ctx.closePath();
           ctx.fill();
           ctx.restore();
@@ -2807,113 +2534,127 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     );
 
     // -------------------------------------------------------------------------
-    // 2. CENTERPIECE: CHERNOBYL-4 ATOMIC COMPLEX (АЭС БЛОК №4)
+    // 2. CENTERPIECE: CHERNOBYL-4 ATOMIC COMPLEX (Enlarged +25% with +45% Larger Bold Text)
     // -------------------------------------------------------------------------
     {
       const cx = reactorCx;
       const cy = reactorCy;
       const coreCrit = state.coreTemp >= 760;
-      const plantCol = coreCrit ? "#ff2a2a" : "#33ff66";
+      const plantCol = coreCrit ? "#ff2a2a" : "#39ff14";
+      const rBoxW = 282;
+      const rBoxH = 228;
+      const rx0 = cx - rBoxW / 2;
+      const ry0 = cy - rBoxH / 2;
 
-      // Switchyard perimeter & dark pad
-      ctx.fillStyle = "rgba(5, 22, 11, 0.94)";
-      ctx.fillRect(cx - 118, cy - 86, 236, 178);
+      // Switchyard perimeter & solid dark pad
+      ctx.fillStyle = "rgba(2, 10, 4, 0.96)";
+      ctx.fillRect(rx0, ry0, rBoxW, rBoxH);
       ctx.strokeStyle = plantCol;
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(cx - 118, cy - 86, 236, 178);
+      ctx.lineWidth = 3.5;
+      ctx.strokeRect(rx0, ry0, rBoxW, rBoxH);
 
       // Two Hyperboloid Cooling Towers on Right of Complex with Rising Steam Puffs
       for (let tIdx = 0; tIdx < 2; tIdx++) {
-        const tx = cx + 44 + tIdx * 42;
-        const ty = cy - 6;
+        const tx = cx + 52 + tIdx * 48;
+        const ty = cy - 26;
         ctx.fillStyle = "#082613";
         ctx.strokeStyle = plantCol;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.moveTo(tx - 16, ty + 18);
-        ctx.quadraticCurveTo(tx - 9, ty - 8, tx - 12, ty - 28);
-        ctx.lineTo(tx + 12, ty - 28);
-        ctx.quadraticCurveTo(tx + 9, ty - 8, tx + 16, ty + 18);
+        ctx.moveTo(tx - 18, ty + 20);
+        ctx.quadraticCurveTo(tx - 10, ty - 10, tx - 14, ty - 32);
+        ctx.lineTo(tx + 14, ty - 32);
+        ctx.quadraticCurveTo(tx + 10, ty - 10, tx + 18, ty + 20);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
 
-        // Animated Steam Puffs above Cooling Towers
         const puffOff = ((timeBucket + tIdx * 2) % 4) * 4;
         ctx.strokeStyle = "#88ffaa";
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(tx - 4, ty - 35 - puffOff, 5, 0, Math.PI * 2);
-        ctx.arc(tx + 5, ty - 39 - puffOff, 6, 0, Math.PI * 2);
+        ctx.arc(tx - 4, ty - 40 - puffOff, 6, 0, Math.PI * 2);
+        ctx.arc(tx + 6, ty - 45 - puffOff, 7, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Main Rectangular Turbine Hall (МАШЗАЛ) & Reactor Block No. 4 Sarcophagus
+      // Main Rectangular Turbine Hall & Reactor Block No. 4 Sarcophagus
       ctx.fillStyle = "#0b3018";
       ctx.strokeStyle = plantCol;
-      ctx.lineWidth = 2.2;
-      ctx.fillRect(cx - 102, cy - 12, 124, 28);
-      ctx.strokeRect(cx - 102, cy - 12, 124, 28);
-      // Turbine Hall lit windows
+      ctx.lineWidth = 2.5;
+      ctx.fillRect(cx - 122, cy - 30, 142, 30);
+      ctx.strokeRect(cx - 122, cy - 30, 142, 30);
       ctx.fillStyle = state.isBlackout ? "#163020" : "#55ff88";
-      for (let wx = cx - 94; wx < cx + 14; wx += 12) {
-        ctx.fillRect(wx, cy - 4, 7, 10);
+      for (let wx = cx - 114; wx < cx + 12; wx += 14) {
+        ctx.fillRect(wx, cy - 21, 8, 12);
       }
 
-      // Reactor Block 4 Upper Containment Building
+      // Reactor Block 4 Upper Containment Building & Ventilation Stack
       ctx.fillStyle = "#0e3b1e";
-      ctx.fillRect(cx - 58, cy - 38, 56, 26);
-      ctx.strokeRect(cx - 58, cy - 38, 56, 26);
-
-      // Tall Striped Ventilation Stack (ВЕНТТРУБА АЭС-4) above Reactor Block
+      ctx.fillRect(cx - 72, cy - 58, 64, 28);
+      ctx.strokeRect(cx - 72, cy - 58, 64, 28);
       ctx.fillStyle = "#061c0d";
-      ctx.fillRect(cx - 35, cy - 78, 10, 40);
-      ctx.strokeRect(cx - 35, cy - 78, 10, 40);
-      ctx.fillStyle = "#ffb000";
-      ctx.fillRect(cx - 34, cy - 70, 8, 5);
-      ctx.fillRect(cx - 34, cy - 56, 8, 5);
-      // Blinking beacon at top of stack
+      ctx.fillRect(cx - 46, cy - 102, 12, 44);
+      ctx.strokeRect(cx - 46, cy - 102, 12, 44);
+      ctx.fillStyle = "#ffd000";
+      ctx.fillRect(cx - 45, cy - 92, 10, 6);
+      ctx.fillRect(cx - 45, cy - 76, 10, 6);
       if (timeBucket % 2 === 0) {
         ctx.fillStyle = "#ff2a2a";
         ctx.beginPath();
-        ctx.arc(cx - 30, cy - 82, 4, 0, Math.PI * 2);
+        ctx.arc(cx - 40, cy - 106, 5, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Center Complex Telemetry Tag
+      // Center Complex Telemetry Tag Banner
       ctx.fillStyle = plantCol;
-      ctx.fillRect(cx - 114, cy + 22, 228, 22);
-      ctx.fillStyle = "#041208";
-      ctx.font = 'bold 17px "VT323", monospace';
+      ctx.fillRect(rx0 + 4, cy + 4, rBoxW - 8, 30);
+      ctx.font = '700 20px "Consolas", "Lucida Console", monospace';
       ctx.textAlign = "center";
-      ctx.fillText("CHERNOBYL-4 ATOMIC COMPLEX (АЭС-4)", cx, cy + 38);
-
-      ctx.fillStyle = coreCrit ? "#ff4444" : "#33ff66";
-      ctx.font = 'bold 18px "VT323", monospace';
-      ctx.fillText(
-        `CORE: ${Math.round(state.coreTemp)}°C | H2O RESERVOIR: ${waterPct}%`,
+      drawHeavyCrtText(
+        ctx,
+        "CHERNOBYL-4 ATOMIC COMPLEX",
         cx,
-        cy + 61,
+        cy + 26,
+        "#041208",
+        0.8,
+        rBoxW - 16,
       );
-      ctx.fillStyle = "#38e8ff";
-      ctx.font = '16px "VT323", monospace';
-      ctx.fillText(
-        state.bubblerDraining
-          ? `DRAINING BUBBLER (${Math.round(state.bubblerLevel)}%) -> REFILLING ZONES!`
-          : `PUMP DRAW: ${waterDraw} L/s | BUBBLER H2O: ${Math.round(state.bubblerLevel)}%`,
+
+      // Enlarged CORE & H2O Readout
+      ctx.font = '700 23px "Consolas", "Lucida Console", monospace';
+      drawHeavyCrtText(
+        ctx,
+        `CORE: ${Math.round(state.coreTemp)}°C | H2O: ${waterPct}%`,
         cx,
-        cy + 81,
+        cy + 64,
+        coreCrit ? "#ff2a2a" : "#39ff14",
+        0.85,
+        rBoxW - 14,
+      );
+
+      // Enlarged PUMP DRAW & BUBBLER Readout
+      ctx.font = '700 20px "Consolas", "Lucida Console", monospace';
+      drawHeavyCrtText(
+        ctx,
+        state.bubblerDraining
+          ? `DRAINING BUBBLER (${Math.round(state.bubblerLevel)}%)!`
+          : `PUMP DRAW: ${waterDraw}L/s | BUBBLER: ${Math.round(state.bubblerLevel)}%`,
+        cx,
+        cy + 98,
+        "#00f0ff",
+        0.8,
+        rBoxW - 14,
       );
     }
 
     // -------------------------------------------------------------------------
-    // 3. SIX RECOGNIZABLE ARCHITECTURAL SILHOUETTES & TELEMETRY BADGES
+    // 3. SIX ENLARGED SECTOR CARDS (+20% Box Size, Single-Language Header, +50% Telemetry)
     // -------------------------------------------------------------------------
     const drawNodeBadgeAndFrame = (opts: {
       cx: number;
       cy: number;
       codeTitle: string;
-      ruSub: string;
       suppliedMW: number;
       targetMW: number;
       hasWater: boolean;
@@ -2930,8 +2671,8 @@ const Komrad84SplitScreenCrt3D: React.FC<{
         col: string,
       ) => void;
     }) => {
-      const boxW = 286;
-      const boxH = 194;
+      const boxW = 336;
+      const boxH = 232;
       const x0 = opts.cx - boxW / 2;
       const y0 = opts.cy - boxH / 2;
       const dispMW = state.isBlackout ? 0 : opts.suppliedMW;
@@ -2943,147 +2684,188 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       const borderCol = isAlert
         ? "#ff2a2a"
         : mwOk
-          ? "#33ff66"
-          : "#ffb000";
+          ? "#39ff14"
+          : "#ffd000";
 
-      // Card Backing
+      // Solid Dark Card Backing (`rgba(2, 10, 4, 0.94)`)
       ctx.fillStyle = isAlert
-        ? "rgba(42, 8, 8, 0.92)"
-        : mwOk
-          ? "rgba(5, 28, 14, 0.92)"
-          : "rgba(34, 24, 4, 0.92)";
+        ? "rgba(36, 4, 4, 0.95)"
+        : "rgba(2, 10, 4, 0.94)";
       ctx.fillRect(x0, y0, boxW, boxH);
       ctx.strokeStyle = borderCol;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 3.2;
       ctx.strokeRect(x0, y0, boxW, boxH);
 
-      // Top Title Banner
+      // Single-Language Bold English Title Banner
       ctx.fillStyle = borderCol;
-      ctx.fillRect(x0, y0, boxW, 24);
-      ctx.fillStyle = "#041208";
-      ctx.font = 'bold 18px "VT323", monospace';
+      ctx.fillRect(x0, y0, boxW, 34);
+      ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
       ctx.textAlign = "left";
-      ctx.fillText(opts.codeTitle, x0 + 8, y0 + 18);
-      ctx.textAlign = "right";
-      ctx.fillText(opts.ruSub, x0 + boxW - 8, y0 + 18);
+      drawHeavyCrtText(
+        ctx,
+        opts.codeTitle,
+        x0 + 10,
+        y0 + 25,
+        "#020804",
+        0.85,
+        boxW - 20,
+      );
 
-      // Architectural Silhouette Viewport (y0 + 26 .. y0 + 118)
+      // Architectural Silhouette Viewport (reduced height by 20% -> silH = 70 so numbers get max space)
       const silX = x0 + 8;
-      const silY = y0 + 28;
+      const silY = y0 + 38;
       const silW = boxW - 16;
-      const silH = 88;
-      ctx.fillStyle = "rgba(3, 14, 7, 0.85)";
+      const silH = 70;
+      ctx.fillStyle = "rgba(2, 10, 4, 0.92)";
       ctx.fillRect(silX, silY, silW, silH);
-      ctx.strokeStyle = "rgba(51, 255, 102, 0.25)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(57, 255, 20, 0.28)";
+      ctx.lineWidth = 1.2;
       ctx.strokeRect(silX, silY, silW, silH);
 
-      // Ground horizon line inside silhouette viewport
       ctx.strokeStyle = borderCol;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(silX + 4, silY + silH - 8);
-      ctx.lineTo(silX + silW - 4, silY + silH - 8);
+      ctx.moveTo(silX + 4, silY + silH - 6);
+      ctx.lineTo(silX + silW - 4, silY + silH - 6);
       ctx.stroke();
 
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(silX + 1, silY + 1, silW - 2, silH - 2);
+      ctx.clip();
       opts.drawSilhouette(silX, silY, silW, silH, powered, borderCol);
+      ctx.restore();
 
-      // Telemetry Badge Section (y0 + 122 .. y0 + 190)
-      ctx.textAlign = "left";
-      ctx.font = 'bold 20px "VT323", monospace';
-      ctx.fillStyle = state.isBlackout
+      // Massive Telemetry Readouts (`MW: XX / XX` & `H2O: XX%`)
+      const mwReadoutCol = state.isBlackout
         ? "#ff2a2a"
         : mwOk
-          ? "#33ff66"
-          : "#ffb000";
-      ctx.fillText(
-        `MW: ${dispMW} / ${opts.targetMW} MW`,
+          ? "#39ff14"
+          : "#ffd000";
+      ctx.textAlign = "left";
+      ctx.font = '700 25px "Consolas", "Lucida Console", monospace';
+      drawHeavyCrtText(
+        ctx,
+        `MW: ${dispMW}/${opts.targetMW}`,
         x0 + 10,
-        y0 + 138,
+        y0 + 141,
+        mwReadoutCol,
+        0.85,
       );
 
-      // H2O or Special Status on Right
       ctx.textAlign = "right";
       if (opts.hasWater) {
         const droughtFlash = !waterOk && timeBucket % 2 === 0;
-        ctx.fillStyle = waterOk
-          ? "#38e8ff"
+        const h2oCol = waterOk
+          ? "#00f0ff"
           : droughtFlash
             ? "#ffffff"
             : "#ff2a2a";
-        ctx.fillText(
-          waterOk ? `H2O: OK (${zWater}%)` : `H2O: DRY! (${zWater}% <${opts.minWater}%)`,
+        drawHeavyCrtText(
+          ctx,
+          waterOk ? `H2O: ${zWater}%` : `DRY! ${zWater}%`,
           x0 + boxW - 10,
-          y0 + 138,
+          y0 + 141,
+          h2oCol,
+          0.85,
         );
       } else if (opts.extraStatus) {
-        ctx.fillStyle = powered ? "#7be896" : "#ff4444";
-        ctx.fillText(opts.extraStatus, x0 + boxW - 10, y0 + 138);
+        drawHeavyCrtText(
+          ctx,
+          opts.extraStatus,
+          x0 + boxW - 10,
+          y0 + 141,
+          powered ? "#39ff14" : "#ff2a2a",
+          0.8,
+        );
       }
 
-      // MW Bar Graph (0..50 MW)
+      // High-Contrast MW Bar Graph (0..50 MW)
       const barX = x0 + 10;
-      const barY = y0 + 146;
+      const barY = y0 + 154;
       const barW = boxW - 20;
-      const barH = 12;
-      ctx.fillStyle = "#071a0d";
+      const barH = 18;
+      ctx.fillStyle = "#041208";
       ctx.fillRect(barX, barY, barW, barH);
       ctx.strokeStyle = borderCol;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 2;
       ctx.strokeRect(barX, barY, barW, barH);
 
       const fillRatio = Math.min(1, dispMW / 50);
-      ctx.fillStyle = mwOk ? "#33ff66" : "#ffb000";
+      ctx.fillStyle = mwOk ? "#39ff14" : "#ffd000";
       ctx.fillRect(barX + 2, barY + 2, (barW - 4) * fillRatio, barH - 4);
 
       const targetX = barX + 2 + (barW - 4) * Math.min(1, opts.targetMW / 50);
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(targetX - 2, barY - 2, 4, barH + 4);
+      ctx.fillRect(targetX - 3, barY - 3, 6, barH + 6);
 
-      // Bottom Control Hint / Drought Alert / Blackout Banner
+      // Bigger Bottom Status Line in Each Card
       ctx.textAlign = "left";
-      ctx.font = 'bold 15px "VT323", monospace';
+      ctx.font = '700 20px "Consolas", "Lucida Console", monospace';
       if (state.isBlackout) {
-        ctx.fillStyle = timeBucket % 2 === 0 ? "#ffffff" : "#ff4444";
-        ctx.fillText(
-          "GRID DISCONNECTED — 0 MW SUPPLIED!",
+        drawHeavyCrtText(
+          ctx,
+          "BREAKER OPEN — 0 MW!",
           x0 + 10,
-          y0 + 182,
+          y0 + 212,
+          timeBucket % 2 === 0 ? "#ffffff" : "#ff2a2a",
+          0.8,
+          boxW - 20,
+        );
+      } else if (!waterOk && opts.droughtStatusText) {
+        drawHeavyCrtText(
+          ctx,
+          opts.droughtStatusText,
+          x0 + 10,
+          y0 + 212,
+          "#ff2a2a",
+          0.8,
+          boxW - 20,
+        );
+      } else if (mwOk) {
+        drawHeavyCrtText(
+          ctx,
+          "QUOTA OK",
+          x0 + 10,
+          y0 + 212,
+          "#39ff14",
+          0.8,
+          boxW - 20,
         );
       } else {
-        ctx.fillStyle = !waterOk ? "#ff4444" : "#9be6b0";
-        ctx.fillText(
-          !waterOk && opts.droughtStatusText
-            ? opts.droughtStatusText
-            : mwOk
-              ? "STATUS: QUOTA MATCHED [OK]"
-              : `ADJUST UNIT A LEVER TO ${opts.targetMW} MW`,
+        drawHeavyCrtText(
+          ctx,
+          dispMW < opts.targetMW
+            ? `LOW MW! SET TO ${opts.targetMW} MW`
+            : `HIGH MW! SET TO ${opts.targetMW} MW`,
           x0 + 10,
-          y0 + 182,
+          y0 + 212,
+          "#ffd000",
+          0.8,
+          boxW - 20,
         );
       }
     };
 
-    // NODE 1 (North-West): PRIPYAT WORKERS' CITY (5 Khrushchyovka Towers + Ferris Wheel)
+    // NODE 1 (North-West): [1] PRIPYAT CITY
     drawNodeBadgeAndFrame({
       cx: nodes.pripyat.cx,
       cy: nodes.pripyat.cy,
       codeTitle: "[1] PRIPYAT CITY",
-      ruSub: "ГОРОД ПРИПЯТЬ",
       suppliedMW: smw.pripyat,
       targetMW: tsmw.pripyat,
       hasWater: true,
       zoneWaterPct: Math.round(state.pripyatWater),
       minWater: 30,
-      droughtStatusText: "STATUS: CITY PIPES DRY — CAVITATION!",
+      droughtStatusText: "DROUGHT! DRAIN BUBBLER",
       drawSilhouette: (sx, sy, sw, sh, powered, col) => {
-        const groundY = sy + sh - 8;
+        const groundY = sy + sh - 6;
         const towers = [
-          { dx: 16, w: 26, h: 56 },
-          { dx: 48, w: 30, h: 68 },
-          { dx: 84, w: 28, h: 52 },
-          { dx: 118, w: 32, h: 64 },
-          { dx: 156, w: 26, h: 48 },
+          { dx: 18, w: 30, h: 46 },
+          { dx: 56, w: 34, h: 56 },
+          { dx: 98, w: 32, h: 42 },
+          { dx: 138, w: 36, h: 52 },
+          { dx: 182, w: 30, h: 40 },
         ];
         for (const t of towers) {
           const tx = sx + t.dx;
@@ -3095,29 +2877,26 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           ctx.strokeRect(tx, ty, t.w, t.h);
           if (powered) {
             ctx.fillStyle = "#ffe066";
-            for (let wy = ty + 6; wy < groundY - 6; wy += 9) {
+            for (let wy = ty + 6; wy < groundY - 5; wy += 9) {
               for (let wx = tx + 5; wx < tx + t.w - 5; wx += 8) {
                 ctx.fillRect(wx, wy, 4, 5);
               }
             }
           }
         }
-        // Pripyat Iconic Ferris Wheel (Колесо Обозрения) on Right
-        const wheelCx = sx + sw - 46;
-        const wheelCy = groundY - 38;
-        const wheelR = 24;
+        const wheelCx = sx + sw - 52;
+        const wheelCy = groundY - 30;
+        const wheelR = 20;
         ctx.strokeStyle = col;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(wheelCx, wheelCy, wheelR, 0, Math.PI * 2);
         ctx.stroke();
-        // A-frame support legs
         ctx.beginPath();
-        ctx.moveTo(wheelCx - 16, groundY);
+        ctx.moveTo(wheelCx - 14, groundY);
         ctx.lineTo(wheelCx, wheelCy);
-        ctx.lineTo(wheelCx + 16, groundY);
+        ctx.lineTo(wheelCx + 14, groundY);
         ctx.stroke();
-        // Rotating spokes & yellow passenger cabins
         const rotOffset = powered ? timeBucket * 0.25 : 0;
         for (let i = 0; i < 8; i++) {
           const ang = rotOffset + (i * Math.PI) / 4;
@@ -3127,100 +2906,93 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           ctx.moveTo(wheelCx, wheelCy);
           ctx.lineTo(rx, ry);
           ctx.stroke();
-          ctx.fillStyle = powered ? "#ffb000" : "#1f4d2e";
-          ctx.fillRect(rx - 3, ry - 3, 6, 6);
+          ctx.fillStyle = powered ? "#ffd000" : "#1f4d2e";
+          ctx.fillRect(rx - 2.5, ry - 2.5, 5, 5);
         }
       },
     });
 
-    // NODE 2 (West): KOLKHOZ "ZARYA" AGRO-COLLECTIVE (Twin Grain Silos, Barn & Greenhouses)
+    // NODE 2 (West): [2] KOLKHOZ FARM
     drawNodeBadgeAndFrame({
       cx: nodes.kolkhoz.cx,
       cy: nodes.kolkhoz.cy,
       codeTitle: "[2] KOLKHOZ FARM",
-      ruSub: "СОВХОЗ «ЗАРЯ»",
       suppliedMW: smw.kolkhoz,
       targetMW: tsmw.kolkhoz,
       hasWater: true,
       zoneWaterPct: Math.round(state.kolkhozWater),
       minWater: 35,
-      droughtStatusText: "STATUS: IRRIGATION DRY — PUMP DRAG!",
+      droughtStatusText: "DROUGHT! DRAIN BUBBLER",
       drawSilhouette: (sx, sy, _sw, sh, powered, col) => {
-        const groundY = sy + sh - 8;
-        // Twin Cylindrical Grain Silos with Conical Roofs
+        const groundY = sy + sh - 6;
         for (let sIdx = 0; sIdx < 2; sIdx++) {
-          const gx = sx + 20 + sIdx * 32;
-          const gy = groundY - 54;
+          const gx = sx + 22 + sIdx * 36;
+          const gy = groundY - 44;
           ctx.fillStyle = "#0a2915";
           ctx.strokeStyle = col;
           ctx.lineWidth = 1.8;
-          ctx.fillRect(gx, gy, 24, 54);
-          ctx.strokeRect(gx, gy, 24, 54);
+          ctx.fillRect(gx, gy, 26, 44);
+          ctx.strokeRect(gx, gy, 26, 44);
           ctx.beginPath();
           ctx.moveTo(gx - 2, gy);
-          ctx.lineTo(gx + 12, gy - 14);
-          ctx.lineTo(gx + 26, gy);
+          ctx.lineTo(gx + 13, gy - 12);
+          ctx.lineTo(gx + 28, gy);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
         }
-        // Pitched-Roof Livestock Barn in Center
-        const bx = sx + 92;
-        const by = groundY - 34;
+        const bx = sx + 102;
+        const by = groundY - 28;
         ctx.fillStyle = "#0a2915";
         ctx.strokeStyle = col;
-        ctx.fillRect(bx, by, 76, 34);
-        ctx.strokeRect(bx, by, 76, 34);
+        ctx.fillRect(bx, by, 86, 28);
+        ctx.strokeRect(bx, by, 86, 28);
         ctx.beginPath();
         ctx.moveTo(bx - 4, by);
-        ctx.lineTo(bx + 38, by - 18);
-        ctx.lineTo(bx + 80, by);
+        ctx.lineTo(bx + 43, by - 14);
+        ctx.lineTo(bx + 90, by);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
         if (powered) {
           ctx.fillStyle = "#ffe066";
-          for (let wx = bx + 10; wx < bx + 68; wx += 14) {
-            ctx.fillRect(wx, by + 12, 8, 8);
+          for (let wx = bx + 10; wx < bx + 78; wx += 14) {
+            ctx.fillRect(wx, by + 9, 8, 8);
           }
         }
-        // Arched Glass Greenhouses on Right
         for (let gIdx = 0; gIdx < 2; gIdx++) {
-          const ghX = sx + 195 + gIdx * 36;
-          ctx.strokeStyle = powered ? "#38e8ff" : col;
+          const ghX = sx + 224 + gIdx * 42;
+          ctx.strokeStyle = powered ? "#00f0ff" : col;
           ctx.beginPath();
-          ctx.arc(ghX, groundY, 15, Math.PI, 0);
+          ctx.arc(ghX, groundY, 16, Math.PI, 0);
           ctx.stroke();
         }
       },
     });
 
-    // NODE 3 (North-East): DUGA-1 OTH RADAR ARRAY ("Russian Woodpecker" Steel Lattice Wall)
+    // NODE 3 (North-East): [3] DUGA-1 RADAR
     drawNodeBadgeAndFrame({
       cx: nodes.duga.cx,
       cy: nodes.duga.cy,
       codeTitle: "[3] DUGA-1 RADAR",
-      ruSub: "ЗГРЛС «ДУГА-1»",
       suppliedMW: smw.duga,
       targetMW: tsmw.duga,
       hasWater: false,
       minWater: 0,
-      extraStatus: state.ciaIntrusionActive ? "CIA JAMMING!" : "OTH SWEEP: OK",
+      extraStatus: state.ciaIntrusionActive ? "CIA JAM!" : "SWEEP OK",
       drawSilhouette: (sx, sy, sw, sh, powered, col) => {
-        const groundY = sy + sh - 8;
-        // 5 Tall Cross-Braced Steel Lattice Towers Connected by Horizontal Dipole Netting
-        const towerXs = [sx + 24, sx + 66, sx + 108, sx + 150, sx + 192];
+        const groundY = sy + sh - 6;
+        const towerXs = [sx + 28, sx + 76, sx + 124, sx + 172, sx + 220];
         ctx.strokeStyle = col;
         ctx.lineWidth = 1.8;
         for (const tx of towerXs) {
           ctx.beginPath();
           ctx.moveTo(tx - 8, groundY);
-          ctx.lineTo(tx - 4, sy + 10);
-          ctx.lineTo(tx + 4, sy + 10);
+          ctx.lineTo(tx - 4, sy + 8);
+          ctx.lineTo(tx + 4, sy + 8);
           ctx.lineTo(tx + 8, groundY);
           ctx.stroke();
-          // Cross-bracing X-bars
-          for (let y = sy + 14; y < groundY - 10; y += 14) {
+          for (let y = sy + 12; y < groundY - 8; y += 14) {
             ctx.beginPath();
             ctx.moveTo(tx - 6, y);
             ctx.lineTo(tx + 6, y + 12);
@@ -3229,209 +3001,180 @@ const Komrad84SplitScreenCrt3D: React.FC<{
             ctx.stroke();
           }
         }
-        // Horizontal Dipole Wire Netting Across All 5 Towers
-        ctx.strokeStyle = "rgba(51, 255, 102, 0.55)";
+        ctx.strokeStyle = "rgba(57, 255, 20, 0.55)";
         ctx.lineWidth = 1;
-        for (let wy = sy + 16; wy < groundY - 8; wy += 9) {
+        for (let wy = sy + 14; wy < groundY - 6; wy += 9) {
           ctx.beginPath();
           ctx.moveTo(towerXs[0], wy);
           ctx.lineTo(towerXs[towerXs.length - 1], wy);
           ctx.stroke();
         }
-        // Animated Radar Wave Arcs Sweeping Outward on Right
         if (powered) {
-          ctx.strokeStyle = state.ciaIntrusionActive ? "#ff2a2a" : "#ffb000";
+          ctx.strokeStyle = state.ciaIntrusionActive ? "#ff2a2a" : "#ffd000";
           ctx.lineWidth = 2;
           for (let r = 1; r <= 3; r++) {
-            const pulseR = 14 + ((timeBucket * 5 + r * 14) % 42);
+            const pulseR = 12 + ((timeBucket * 5 + r * 12) % 36);
             ctx.beginPath();
-            ctx.arc(sx + sw - 56, sy + 42, pulseR, -0.65, 0.65);
+            ctx.arc(sx + sw - 64, sy + 34, pulseR, -0.65, 0.65);
             ctx.stroke();
           }
         }
       },
     });
 
-    // NODE 4 (Far East): KGB SPECIAL BUNKER NO. 7 (Hexagonal Concrete Dome + Twin Radio Dishes)
+    // NODE 4 (Far East): [4] KGB BUNKER
     drawNodeBadgeAndFrame({
       cx: nodes.kgb.cx,
       cy: nodes.kgb.cy,
-      codeTitle: "[4] KGB BUNKER 07",
-      ruSub: "СПЕЦОБЪЕКТ КГБ №7",
+      codeTitle: "[4] KGB BUNKER",
       suppliedMW: smw.kgb,
       targetMW: tsmw.kgb,
       hasWater: false,
       minWater: 0,
-      extraStatus: state.kgbLineActive ? "KGB LINE: ON" : "KGB LINE: OFF",
+      extraStatus: state.kgbLineActive ? "LINE: ON" : "LINE: OFF",
       drawSilhouette: (sx, sy, sw, sh, powered, col) => {
-        const groundY = sy + sh - 8;
+        const groundY = sy + sh - 6;
         const cx = sx + sw * 0.5;
-        // Reinforced Hexagonal Concrete Bunker Dome Embedded in Hill
         ctx.fillStyle = "#0a2915";
         ctx.strokeStyle = col;
         ctx.lineWidth = 2.2;
         ctx.beginPath();
-        ctx.moveTo(cx - 72, groundY);
-        ctx.lineTo(cx - 52, groundY - 34);
-        ctx.lineTo(cx + 52, groundY - 34);
-        ctx.lineTo(cx + 72, groundY);
+        ctx.moveTo(cx - 78, groundY);
+        ctx.lineTo(cx - 56, groundY - 28);
+        ctx.lineTo(cx + 56, groundY - 28);
+        ctx.lineTo(cx + 78, groundY);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
 
-        // Heavy Blast Door & Red Star Emblem in Center of Bunker
         ctx.fillStyle = "#041208";
-        ctx.fillRect(cx - 18, groundY - 24, 36, 24);
-        ctx.strokeRect(cx - 18, groundY - 24, 36, 24);
+        ctx.fillRect(cx - 20, groundY - 20, 40, 20);
+        ctx.strokeRect(cx - 20, groundY - 20, 40, 20);
         ctx.fillStyle = powered ? "#ff2a2a" : "#3a1a1a";
-        ctx.font = 'bold 18px "VT323", monospace';
+        ctx.font = 'bold 17px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("★ КГБ", cx, groundY - 7);
+        ctx.fillText("★ КГБ", cx, groundY - 5);
 
-        // Twin Parabolic Radio Dish Antennas on Roof
-        for (const dx of [-36, 36]) {
+        for (const dx of [-38, 38]) {
           const ax = cx + dx;
-          const ay = groundY - 34;
+          const ay = groundY - 28;
           ctx.strokeStyle = col;
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(ax, ay);
-          ctx.lineTo(ax, ay - 16);
+          ctx.lineTo(ax, ay - 13);
           ctx.stroke();
           ctx.beginPath();
-          ctx.arc(ax, ay - 20, 12, Math.PI * 0.15, Math.PI * 0.85);
-          ctx.stroke();
-        }
-
-        // Security Perimeter Fence Posts Left & Right
-        for (const fx of [sx + 18, sx + 34, sx + sw - 34, sx + sw - 18]) {
-          ctx.beginPath();
-          ctx.moveTo(fx, groundY);
-          ctx.lineTo(fx, groundY - 22);
+          ctx.arc(ax, ay - 16, 10, Math.PI * 0.15, Math.PI * 0.85);
           ctx.stroke();
         }
       },
     });
 
-    // NODE 5 (South-West, on Riverbank): "RED OCTOBER" VODKA DISTILLERY (3 Copper Rectification Columns + Vats)
+    // NODE 5 (South-West): [5] VODKA PLANT
     drawNodeBadgeAndFrame({
       cx: nodes.vodka.cx,
       cy: nodes.vodka.cy,
-      codeTitle: "[5] VODKA DISTILLERY",
-      ruSub: "ВОДОЧНЫЙ ЗАВОД",
+      codeTitle: "[5] VODKA PLANT",
       suppliedMW: smw.vodka,
       targetMW: tsmw.vodka,
       hasWater: true,
       zoneWaterPct: Math.round(state.vodkaWater),
       minWater: 40,
-      droughtStatusText: `STATUS: H2O SIPHONED — VODKA VATS DRY! [${Math.max(0, Math.ceil(35 - state.vodkaDroughtTimer))}s]`,
+      droughtStatusText: `DROUGHT! [${Math.max(0, Math.ceil(35 - state.vodkaDroughtTimer))}s]`,
       drawSilhouette: (sx, sy, _sw, sh, powered, col) => {
-        const groundY = sy + sh - 8;
-        // 3 Tall Copper Distillation / Rectification Columns with Overhead Vapour Pipes
-        const colXs = [sx + 24, sx + 52, sx + 80];
-        ctx.strokeStyle = powered ? "#ffb000" : col;
+        const groundY = sy + sh - 6;
+        const colXs = [sx + 26, sx + 56, sx + 86];
+        ctx.strokeStyle = powered ? "#ffd000" : col;
         ctx.fillStyle = "#142e1b";
         ctx.lineWidth = 2;
         for (const cxCol of colXs) {
-          ctx.fillRect(cxCol, groundY - 64, 16, 64);
-          ctx.strokeRect(cxCol, groundY - 64, 16, 64);
-          // Porthole sight-glasses along column
-          for (let py = groundY - 52; py < groundY - 12; py += 14) {
-            ctx.fillStyle = powered ? "#38e8ff" : "#0b2414";
-            ctx.fillRect(cxCol + 5, py, 6, 6);
+          ctx.fillRect(cxCol, groundY - 50, 18, 50);
+          ctx.strokeRect(cxCol, groundY - 50, 18, 50);
+          for (let py = groundY - 40; py < groundY - 10; py += 12) {
+            ctx.fillStyle = powered ? "#00f0ff" : "#0b2414";
+            ctx.fillRect(cxCol + 6, py, 6, 6);
           }
           ctx.fillStyle = "#142e1b";
         }
-        // Overhead connecting vapour manifold pipe
         ctx.beginPath();
-        ctx.moveTo(colXs[0] + 8, groundY - 64);
-        ctx.lineTo(colXs[0] + 8, groundY - 72);
-        ctx.lineTo(colXs[2] + 8, groundY - 72);
-        ctx.lineTo(colXs[2] + 8, groundY - 64);
+        ctx.moveTo(colXs[0] + 9, groundY - 50);
+        ctx.lineTo(colXs[0] + 9, groundY - 57);
+        ctx.lineTo(colXs[2] + 9, groundY - 57);
+        ctx.lineTo(colXs[2] + 9, groundY - 50);
         ctx.stroke();
 
-        // Round Fermentation Vats & Brick Bottling Hall on Right
-        const hallX = sx + 112;
+        const hallX = sx + 124;
         ctx.fillStyle = "#0a2915";
         ctx.strokeStyle = col;
-        ctx.fillRect(hallX, groundY - 40, 128, 40);
-        ctx.strokeRect(hallX, groundY - 40, 128, 40);
+        ctx.fillRect(hallX, groundY - 34, 152, 34);
+        ctx.strokeRect(hallX, groundY - 34, 152, 34);
         if (powered) {
-          ctx.fillStyle = "#33ff66";
-          for (let wx = hallX + 10; wx < hallX + 115; wx += 18) {
-            ctx.fillRect(wx, groundY - 22, 10, 10);
+          ctx.fillStyle = "#39ff14";
+          for (let wx = hallX + 12; wx < hallX + 140; wx += 20) {
+            ctx.fillRect(wx, groundY - 18, 10, 10);
           }
         }
-        ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 15px "VT323", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText("КРАСНЫЙ ОКТЯБРЬ", hallX + 64, groundY - 26);
       },
     });
 
-    // NODE 6 (South-East): "AZOVSTAL" METALLURGICAL FOUNDRY (Sawtooth Roofs, 2 Blast Furnaces & 3 Smokestacks)
+    // NODE 6 (South-East): [6] STEEL WORKS
     drawNodeBadgeAndFrame({
       cx: nodes.steel.cx,
       cy: nodes.steel.cy,
       codeTitle: "[6] STEEL WORKS",
-      ruSub: "СТАЛЬЗАВОД",
       suppliedMW: smw.steel,
       targetMW: tsmw.steel,
       hasWater: false,
       minWater: 0,
-      extraStatus: smw.steel > 0 ? "FURNACES: HOT" : "FURNACES: COLD",
+      extraStatus: smw.steel > 0 ? "FURNACE HOT" : "COLD",
       drawSilhouette: (sx, sy, _sw, sh, powered, col) => {
-        const groundY = sy + sh - 8;
-        // Two Tapered Blast Furnace Towers on Left
+        const groundY = sy + sh - 6;
         for (let bIdx = 0; bIdx < 2; bIdx++) {
-          const bx = sx + 22 + bIdx * 42;
+          const bx = sx + 26 + bIdx * 46;
           ctx.fillStyle = "#0c2b17";
           ctx.strokeStyle = col;
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.moveTo(bx - 14, groundY);
-          ctx.lineTo(bx - 8, groundY - 56);
-          ctx.lineTo(bx + 8, groundY - 56);
-          ctx.lineTo(bx + 14, groundY);
+          ctx.moveTo(bx - 15, groundY);
+          ctx.lineTo(bx - 9, groundY - 46);
+          ctx.lineTo(bx + 9, groundY - 46);
+          ctx.lineTo(bx + 15, groundY);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
           if (powered) {
             ctx.fillStyle = "#ff5533";
-            ctx.fillRect(bx - 5, groundY - 18, 10, 10);
+            ctx.fillRect(bx - 5, groundY - 16, 10, 10);
           }
         }
 
-        // Sawtooth Factory Roof Hall & 3 Tall Smokestacks on Right
-        const fx = sx + 96;
-        const fw = 152;
-        const fy = groundY - 34;
+        const fx = sx + 108;
+        const fw = 178;
+        const fy = groundY - 28;
         ctx.fillStyle = "#0a2614";
         ctx.strokeStyle = col;
-        ctx.fillRect(fx, fy, fw, 34);
-        ctx.strokeRect(fx, fy, fw, 34);
-        // 4 Sawtooth roof teeth
+        ctx.fillRect(fx, fy, fw, 28);
+        ctx.strokeRect(fx, fy, fw, 28);
         ctx.beginPath();
         for (let t = 0; t < 4; t++) {
-          const tx = fx + t * 38;
+          const tx = fx + t * 44;
           ctx.moveTo(tx, fy);
-          ctx.lineTo(tx, fy - 14);
-          ctx.lineTo(tx + 38, fy);
+          ctx.lineTo(tx, fy - 12);
+          ctx.lineTo(tx + 44, fy);
         }
         ctx.fill();
         ctx.stroke();
 
-        // 3 Tall Smokestacks Belching Animated Pixel Smoke
         for (let sIdx = 0; sIdx < 3; sIdx++) {
-          const stX = fx + 28 + sIdx * 44;
+          const stX = fx + 32 + sIdx * 52;
           ctx.fillStyle = "#081f10";
-          ctx.fillRect(stX, fy - 38, 10, 38);
-          ctx.strokeRect(stX, fy - 38, 10, 38);
+          ctx.fillRect(stX, fy - 30, 10, 30);
+          ctx.strokeRect(stX, fy - 30, 10, 30);
           if (powered) {
             const smokeShift = ((timeBucket + sIdx) % 4) * 4;
             ctx.fillStyle = "#7be896";
-            ctx.fillRect(stX + 2 + smokeShift, fy - 48, 8, 6);
-            ctx.fillRect(stX + 8 + smokeShift, fy - 56, 10, 6);
+            ctx.fillRect(stX + 2 + smokeShift, fy - 38, 8, 5);
           }
         }
       },
@@ -3440,212 +3183,253 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     // =========================================================================
     // RIGHT 38% OF SCREEN: DEDICATED K.O.M.R.A.D.-84 AI CHAT & COMM LOG PANEL
     // =========================================================================
-    ctx.fillStyle = "rgba(4, 18, 9, 0.94)";
+    ctx.fillStyle = "rgba(2, 12, 6, 0.96)";
     ctx.fillRect(chatX, chatY, chatW, chatH);
-    ctx.strokeStyle = "#33ff66";
+    ctx.strokeStyle = "#39ff14";
     ctx.lineWidth = 3;
     ctx.strokeRect(chatX, chatY, chatW, chatH);
 
-    // Sub-window Header
-    ctx.fillStyle = "rgba(18, 68, 34, 0.9)";
-    ctx.fillRect(chatX + 2, chatY + 2, chatW - 4, 42);
-    ctx.fillStyle = "#33ff66";
-    ctx.font = 'bold 22px "VT323", monospace';
+    // Tall 2-Row Sub-window Header (+45% larger bold text, zero overlap!)
+    ctx.fillStyle = "rgba(14, 58, 28, 0.94)";
+    ctx.fillRect(chatX + 2, chatY + 2, chatW - 4, 72);
+    ctx.strokeStyle = "#39ff14";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(chatX + 2, chatY + 74);
+    ctx.lineTo(chatX + chatW - 2, chatY + 74);
+    ctx.stroke();
+
+    ctx.font = '900 30px "VT323", "Consolas", monospace';
     ctx.textAlign = "left";
-    ctx.fillText("K.O.M.R.A.D.-84 // COMMS", chatX + 14, chatY + 29);
+    drawHeavyCrtText(
+      ctx,
+      "K.O.M.R.A.D.-84 // COMMS",
+      chatX + 14,
+      chatY + 31,
+      "#39ff14",
+      0.85,
+    );
 
     const hasActivePrinterPaper =
       deskState.printingDoc !== null ||
       deskState.documents.length > 0 ||
       deskState.packedDoc !== null ||
       deskState.capsuleState !== "CRADLE_EMPTY";
-    ctx.textAlign = "right";
-    ctx.font = 'bold 19px "VT323", monospace';
+    ctx.font = '900 28px "VT323", "Consolas", monospace';
     if (state.komradOverrideLocked) {
-      ctx.fillStyle = "#ff2a2a";
-      ctx.fillText("AI LOCK ACTIVE!", chatX + chatW - 14, chatY + 29);
+      drawHeavyCrtText(
+        ctx,
+        "AI LOCK ACTIVE!",
+        chatX + 14,
+        chatY + 64,
+        "#ff2a2a",
+        0.85,
+      );
     } else if (hasActivePrinterPaper) {
-      ctx.fillStyle = "#ffb000";
-      ctx.fillText(
+      drawHeavyCrtText(
+        ctx,
         "PRINTER: DIRECTIVE IN CARRIAGE",
-        chatX + chatW - 14,
-        chatY + 29,
+        chatX + 14,
+        chatY + 64,
+        "#ffe600",
+        0.85,
       );
     } else {
-      ctx.fillStyle = "#38e8ff";
-      ctx.fillText(
+      drawHeavyCrtText(
+        ctx,
         `NEXT TRANSMISSION IN: [${Math.max(0, cdSec)}s]`,
-        chatX + chatW - 14,
-        chatY + 29,
+        chatX + 14,
+        chatY + 64,
+        "#00f0ff",
+        0.85,
       );
     }
 
     // Bottom Advisory Strip Across Regional Map Panel when an Alarm or Hover Diagnostic is Active
     if (contextualHint) {
-      const stripX = mapX + 6;
-      const stripY = mapY + mapH - 36;
-      const stripW = mapW - 12;
-      const stripH = 30;
-      ctx.fillStyle = "rgba(42, 28, 4, 0.95)";
+      const stripX = mapX + 8;
+      const stripY = mapY + mapH - 46;
+      const stripW = mapW - 16;
+      const stripH = 40;
+      ctx.fillStyle = "rgba(42, 24, 2, 0.97)";
       ctx.fillRect(stripX, stripY, stripW, stripH);
-      ctx.strokeStyle = timeBucket % 2 === 0 ? "#ffb000" : "#ff5533";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = timeBucket % 2 === 0 ? "#ffe600" : "#ff2a2a";
+      ctx.lineWidth = 3;
       ctx.strokeRect(stripX, stripY, stripW, stripH);
-      ctx.fillStyle = "#ffdd55";
-      ctx.font = 'bold 18px "VT323", monospace';
+      ctx.font = '900 26px "VT323", "Consolas", monospace';
       ctx.textAlign = "center";
-      ctx.fillText(contextualHint.slice(0, 108), stripX + stripW / 2, stripY + 21);
+      drawHeavyCrtText(
+        ctx,
+        contextualHint,
+        stripX + stripW / 2,
+        stripY + 29,
+        "#ffe600",
+        0.85,
+        stripW - 18,
+      );
     }
 
     // Live Encrypted KGB Verification Trunk Intel Box when KGB LINE (UNIT C Switch 3) is ON
-    let logStartOffset = 74;
+    let logStartOffset = 104;
     if (state.kgbLineActive) {
-      const kgbBoxY = chatY + 50;
-      const kgbBoxH = 88;
+      const kgbBoxY = chatY + 82;
+      const kgbBoxH = 112;
       const isSuspect = activeDeskDoc?.isForgery ?? false;
       ctx.fillStyle = activeDeskDoc
         ? isSuspect
-          ? "rgba(64, 10, 10, 0.92)"
-          : "rgba(6, 38, 22, 0.92)"
-        : "rgba(6, 28, 34, 0.88)";
+          ? "rgba(64, 10, 10, 0.94)"
+          : "rgba(6, 38, 22, 0.94)"
+        : "rgba(6, 28, 34, 0.92)";
       ctx.fillRect(chatX + 10, kgbBoxY, chatW - 20, kgbBoxH);
       ctx.strokeStyle = activeDeskDoc
         ? isSuspect
           ? "#ff2a2a"
-          : "#33ff66"
-        : "#38e8ff";
-      ctx.lineWidth = 2;
+          : "#39ff14"
+        : "#00f0ff";
+      ctx.lineWidth = 2.5;
       ctx.strokeRect(chatX + 10, kgbBoxY, chatW - 20, kgbBoxH);
 
       ctx.textAlign = "left";
-      ctx.font = 'bold 19px "VT323", monospace';
-      ctx.fillStyle = "#38e8ff";
-      ctx.fillText(
+      ctx.font = '900 26px "VT323", "Consolas", monospace';
+      drawHeavyCrtText(
+        ctx,
         activeDeskDoc
-          ? `[KGB LINE DECODE] REF: ${activeDeskDoc.referenceCode} // ${activeDeskDoc.ministry.slice(0, 26)}`
-          : "[KGB LINE DECODE] ENCRYPTED KGB TRUNK ONLINE (-0.35 HZ LOAD)",
-        chatX + 20,
-        kgbBoxY + 23,
+          ? `[KGB DECODE] ${activeDeskDoc.ministry.slice(0, 28)}`
+          : "[KGB DECODE] TRUNK ONLINE (-0.35 HZ LOAD)",
+        chatX + 18,
+        kgbBoxY + 30,
+        "#00f0ff",
+        0.8,
+        chatW - 36,
       );
 
-      ctx.font = 'bold 18px "VT323", monospace';
+      ctx.font = '900 25px "VT323", "Consolas", monospace';
       if (!activeDeskDoc) {
-        ctx.fillStyle = "#9be6b0";
-        ctx.fillText(
-          "AWAITING NEXT PRAVDA-84 DIRECTIVE ON INSPECTOR DESK...",
-          chatX + 20,
-          kgbBoxY + 48,
+        drawHeavyCrtText(
+          ctx,
+          "AWAITING NEXT PRAVDA-84 ORDER ON DESK...",
+          chatX + 18,
+          kgbBoxY + 62,
+          "#44ff66",
+          0.75,
+          chatW - 36,
         );
-        ctx.fillText(
-          "VERIFY SEAL, INK, FONT & DATE WITH KGB MANUAL [KEY 4].",
-          chatX + 20,
-          kgbBoxY + 72,
+        drawHeavyCrtText(
+          ctx,
+          "VERIFY SEAL, INK & FONT IN MANUAL [KEY 4].",
+          chatX + 18,
+          kgbBoxY + 94,
+          "#ffe600",
+          0.75,
+          chatW - 36,
         );
       } else if (activeDeskDoc.isForgery) {
-        ctx.fillStyle = "#ff4444";
         const hintLine =
           activeDeskDoc.forgeryReason ??
-          "WESTERN TAMPERING DETECTED IN SEAL / INK / FONT / CIPHER!";
+          "WESTERN FORGERY DETECTED IN SEAL/INK/FONT!";
         const wrappedHint = wrapText(
           ctx,
-          `ALERT: ${hintLine.toUpperCase()} — STAMP [УНИЧТОЖЕНО] & SHRED!`,
-          chatW - 40,
+          `FAKE: ${hintLine.toUpperCase()} — SHRED!`,
+          chatW - 36,
         );
         wrappedHint.slice(0, 2).forEach((ln, idx) => {
-          ctx.fillText(ln, chatX + 20, kgbBoxY + 48 + idx * 23);
+          drawHeavyCrtText(
+            ctx,
+            ln,
+            chatX + 18,
+            kgbBoxY + 62 + idx * 30,
+            "#ff2a2a",
+            0.8,
+            chatW - 36,
+          );
         });
       } else {
-        ctx.fillStyle = "#33ff66";
-        ctx.fillText(
-          `ORIGIN VERIFIED: AUTHENTIC ${activeDeskDoc.sealType} & ${activeDeskDoc.inkColor}.`,
-          chatX + 20,
-          kgbBoxY + 48,
+        drawHeavyCrtText(
+          ctx,
+          `GENUINE: ${activeDeskDoc.sealType} VERIFIED.`,
+          chatX + 18,
+          kgbBoxY + 62,
+          "#44ff66",
+          0.8,
+          chatW - 36,
         );
-        ctx.fillStyle = "#ffe082";
-        ctx.fillText(
-          "RECOMMENDATION: STAMP [ОДОБРЕНО] & DISPATCH IN OUTBOX TUBE!",
-          chatX + 20,
-          kgbBoxY + 72,
+        drawHeavyCrtText(
+          ctx,
+          "STAMP [ОДОБРЕНО] & LAUNCH IN LEFT TUBE!",
+          chatX + 18,
+          kgbBoxY + 94,
+          "#ffe600",
+          0.8,
+          chatW - 36,
         );
       }
-      logStartOffset = 158;
+      logStartOffset = 222;
     }
 
-    // Scrolling Timestamped Comm Log Messages
+    // Scrolling Timestamped Comm Log Messages (+45% larger bold text, 26px)
+    const aiBoxH = 268;
+    const aiBoxY = chatY + chatH - aiBoxH - 8;
     ctx.textAlign = "left";
-    ctx.font = '21px "VT323", monospace';
-    const logMaxW = chatW - 32;
+    ctx.font = '700 26px "Consolas", "Lucida Console", monospace';
+    const logMaxW = chatW - 28;
     const recentEntries = state.terminalEntries.slice(
-      state.kgbLineActive ? -7 : -11,
+      state.kgbLineActive ? -4 : -7,
     );
     let cursorY = chatY + logStartOffset;
-    const maxLogY = chatY + chatH - 210;
+    const maxLogY = aiBoxY - 14;
 
     for (const entry of recentEntries) {
       if (cursorY > maxLogY) break;
-      ctx.fillStyle =
+      const logCol =
         entry.level === "danger"
           ? "#ff2a2a"
           : entry.level === "warn"
-            ? "#ffb000"
-            : "#33ff66";
+            ? "#ffd000"
+            : "#39ff14";
       const rawLine = `[${entry.timestamp}] ${entry.sender}: ${entry.text}`;
       const wrapped = wrapText(ctx, rawLine, logMaxW);
       for (const line of wrapped.slice(0, 3)) {
         if (cursorY > maxLogY) break;
-        ctx.fillText(line, chatX + 16, cursorY);
-        cursorY += 24;
+        drawHeavyCrtText(ctx, line, chatX + 14, cursorY, logCol, 0.75);
+        cursorY += 32;
       }
-      cursorY += 6;
+      cursorY += 8;
     }
 
     // Blinking terminal block cursor
     if (timeBucket % 2 === 0 && !state.isBlackout) {
-      ctx.fillStyle = "#33ff66";
+      ctx.fillStyle = "#39ff14";
       ctx.fillRect(
-        chatX + 16,
-        Math.min(maxLogY, cursorY - 16),
-        12,
-        18,
+        chatX + 14,
+        Math.min(maxLogY, cursorY - 22),
+        14,
+        24,
       );
     }
 
-    // Bottom Yellow VOLKOV DISPATCH / K.O.M.R.A.D. AI Dark-Humor Chat Box
-    const aiBoxY = chatY + chatH - 196;
-    const aiBoxH = 184;
+    // Tall Bottom >> VOLKOV TRAINING DRILL / Advisory Box (+50% larger ultra-bold text in #ffe600 & #44ff66)
     const isDrillActive = state.tutorialStep !== "DONE";
     const drillBorderPulse =
-      isDrillActive && timeBucket % 2 === 0 ? "#33ff66" : "#ffb000";
+      isDrillActive && timeBucket % 2 === 0 ? "#44ff66" : "#ffe600";
     ctx.fillStyle = isDrillActive
-      ? "rgba(38, 28, 4, 0.96)"
-      : "rgba(28, 22, 4, 0.92)";
-    ctx.fillRect(chatX + 10, aiBoxY, chatW - 20, aiBoxH);
+      ? "rgba(32, 22, 2, 0.97)"
+      : "rgba(22, 16, 2, 0.95)";
+    ctx.fillRect(chatX + 8, aiBoxY, chatW - 16, aiBoxH);
     ctx.strokeStyle = drillBorderPulse;
-    ctx.lineWidth = isDrillActive ? 3.5 : 2.5;
-    ctx.strokeRect(chatX + 10, aiBoxY, chatW - 20, aiBoxH);
+    ctx.lineWidth = isDrillActive ? 4 : 3;
+    ctx.strokeRect(chatX + 8, aiBoxY, chatW - 16, aiBoxH);
 
-    const currentHour = Math.min(5, Math.floor(state.shiftTimeMinutes / 60));
-    const hourlyBanner =
-      HOURLY_CRT_BANNERS[currentHour] ?? HOURLY_CRT_BANNERS[0];
-
-    ctx.fillStyle = "#33ff66";
-    ctx.font = '19px "VT323", monospace';
-    ctx.fillText(
+    ctx.font = '700 26px "Consolas", "Lucida Console", monospace';
+    drawHeavyCrtText(
+      ctx,
       isDrillActive
-        ? "УЧЕБНАЯ ТРЕВОГА // 5-STAGE KGB QUALIFICATION DRILL ACTIVE"
-        : hourlyBanner.slice(0, 56),
-      chatX + 22,
-      aiBoxY + 28,
-    );
-
-    ctx.fillStyle = "#ffb000";
-    ctx.font = 'bold 22px "VT323", monospace';
-    ctx.fillText(
-      isDrillActive
-        ? `>> VOLKOV TRAINING DRILL (STEP ${state.tutorialStep}/5):`
-        : ">> VOLKOV DISPATCH / K.O.M.R.A.D. AI:",
-      chatX + 22,
-      aiBoxY + 58,
+        ? `>> VOLKOV DRILL (STEP ${state.tutorialStep}/5):`
+        : ">> VOLKOV DISPATCH // ADVISORY:",
+      chatX + 20,
+      aiBoxY + 36,
+      "#44ff66",
+      0.85,
+      chatW - 40,
     );
 
     const hasApprovedDeskDoc = deskState.documents.some(
@@ -3662,25 +3446,25 @@ const Komrad84SplitScreenCrt3D: React.FC<{
         deskState.capsuleState === "CRADLE_EMPTY"
       ) {
         drillInstruction =
-          "DRILL 1/5 [DESK]: ORDER IS GENUINE! CLICK GREEN STAMP [ОДОБРЕНО] -> STAMP THE PAPER.";
+          "DRILL 1/5 [DESK]: ORDER IS GENUINE! CLICK GREEN STAMP [ОДОБРЕНО] -> STAMP PAPER.";
       } else {
         drillInstruction =
-          "DRILL 1/5 [DESK]: PACK PAPER IN BRASS CAPSULE -> OPEN LEFT TUBE HATCH -> LOAD CAPSULE -> CLOSE HATCH & PULL RED LAUNCH LEVER!";
+          "DRILL 1/5 [DESK]: PACK PAPER IN CAPSULE -> OPEN LEFT HATCH -> LOAD -> CLOSE & PULL RED LEVER!";
       }
     } else if (state.tutorialStep === 2) {
       drillInstruction =
-        "DRILL 2/5 [PRESS KEY 1 -> UNIT A]: VODKA PLANT DEMANDS 25 MW! PULL LEVER [5. VODKA PLANT] UP UNTIL ITS READOUT SHOWS 25 / 25 MW.";
+        "DRILL 2/5 [PRESS KEY 1 -> UNIT A]: VODKA PLANT NEEDS 25 MW! PULL LEVER [5. VODKA PLANT] TO 25/25 MW.";
     } else if (state.tutorialStep === 3) {
       drillInstruction =
         state.pumpThrottle[0] <= 50
-          ? "DRILL 3/5 [KEY 1 -> UNIT A]: MORE MW CREATES CORE HEAT! TURN [COOLING PUMP A] WHEEL ABOVE 50% TO SIPHON COOLING WATER."
-          : "DRILL 3/5 [PRESS KEY 3 -> UNIT B]: WATER PUMPS DRAIN LOCAL TOWNS! TURN [HELIUM-N2 LOOP] WHEEL (>40%) FOR DRY COOLING & HOLD [BUBBLER DRAIN] LEVER TO PUMP WATER BACK TO TOWNS!";
+          ? "DRILL 3/5 [KEY 1 -> UNIT A]: TURN [COOLING PUMP A] WHEEL ABOVE 50% TO COOL THE CORE."
+          : "DRILL 3/5 [KEY 3 -> UNIT B]: TURN [HELIUM-N2] (>40%) & HOLD [BUBBLER DRAIN] LEVER TO REFILL TOWNS!";
     } else if (state.tutorialStep === 4) {
       drillInstruction =
-        "DRILL 4/5 [PRESS KEY 5 -> UNIT C]: POWER CHANGES SHIFT TURBINE FREQUENCY (48.8 HZ)! DRAG THE [50HZ RHEOSTAT] CENTER DIAL TO LOCK 50.0 HZ SO THE MAIN BREAKER STAYS CLOSED.";
+        "DRILL 4/5 [KEY 5 -> UNIT C]: DRAG [50HZ RHEOSTAT] DIAL TO LOCK 50.0 HZ SO BREAKER STAYS CLOSED!";
     } else if (state.tutorialStep === 5) {
       drillInstruction =
-        "DRILL 5/5 [PRESS KEY 4 -> DESK]: INSPECT NEW ORDER WITH [B] MANUAL OR [Z] LENS! IT HAS A FAKE SEAL — STAMP RED [УНИЧТОЖЕНО], DROP IN RIGHT SHREDDER & PULL HANDLE 5 TIMES!";
+        "DRILL 5/5 [KEY 4 -> DESK]: FAKE SEAL! STAMP RED [УНИЧТОЖЕНО], DROP IN SHREDDER & PULL HANDLE 5X!";
     }
 
     const activeBulletin = isDrillActive
@@ -3689,61 +3473,75 @@ const Komrad84SplitScreenCrt3D: React.FC<{
         KOMRAD_DARK_HUMOR_BULLETINS[
           bulletinIdx % KOMRAD_DARK_HUMOR_BULLETINS.length
         ]);
-    ctx.font = 'bold 21px "VT323", monospace';
-    ctx.fillStyle = isDrillActive ? "#ffea70" : "#ffe082";
-    const bLines = wrapText(ctx, `"${activeBulletin}"`, chatW - 48);
-    bLines.slice(0, 4).forEach((ln, idx) => {
-      ctx.fillText(ln, chatX + 22, aiBoxY + 86 + idx * 23);
+    ctx.font = '700 25px "Consolas", "Lucida Console", monospace';
+    const bLines = wrapText(ctx, `"${activeBulletin}"`, chatW - 44);
+    bLines.slice(0, 5).forEach((ln, idx) => {
+      drawHeavyCrtText(
+        ctx,
+        ln,
+        chatX + 20,
+        aiBoxY + 76 + idx * 34,
+        "#ffe600",
+        0.85,
+        chatW - 40,
+      );
     });
 
-    ctx.font = '18px "VT323", monospace';
-    ctx.fillStyle = isDrillActive ? "#33ff66" : "#9be6b0";
-    ctx.fillText(
+    ctx.font = '700 20px "Consolas", "Lucida Console", monospace';
+    drawHeavyCrtText(
+      ctx,
       isDrillActive
-        ? "[PRESS BACKSPACE AT ANY TIME TO SKIP DRILL FOR VETERAN OPERATORS]"
-        : "[CLICK SCREEN OR GREEN CONSOLE BUTTON TO CYCLE AI BULLETIN]",
-      chatX + 22,
-      aiBoxY + aiBoxH - 10,
+        ? "[BACKSPACE: SKIP DRILL]  [L-CTRL: CURSOR/LOOK]"
+        : "[CLICK SCREEN TO CYCLE]  [L-CTRL: CURSOR/LOOK]",
+      chatX + 20,
+      aiBoxY + aiBoxH - 14,
+      "#44ff66",
+      0.75,
+      chatW - 40,
     );
 
     // Prominent CRT Overlay Banner when in boot or end-of-shift state
     if (state.phase !== "playing") {
-      ctx.fillStyle = "rgba(6, 26, 12, 0.94)";
-      ctx.fillRect(260, 320, w - 520, 320);
-      ctx.strokeStyle = state.phase === "boot" ? "#ffb000" : "#ff2a2a";
-      ctx.lineWidth = 5;
-      ctx.strokeRect(260, 320, w - 520, 320);
+      ctx.fillStyle = "rgba(4, 20, 9, 0.96)";
+      ctx.fillRect(220, 300, w - 440, 340);
+      ctx.strokeStyle = state.phase === "boot" ? "#ffe600" : "#ff2a2a";
+      ctx.lineWidth = 6;
+      ctx.strokeRect(220, 300, w - 440, 340);
 
       ctx.textAlign = "center";
-      ctx.fillStyle = state.phase === "boot" ? "#ffb000" : "#ff2a2a";
-      ctx.font = 'bold 46px "Kremlin", monospace';
+      ctx.fillStyle = state.phase === "boot" ? "#ffe600" : "#ff2a2a";
+      ctx.font = 'bold 52px "Kremlin", monospace';
       const titleText =
         state.phase === "boot"
           ? "REACTOR NO. 4 // STANDBY"
           : `SHIFT TERMINATED: ${state.phase.toUpperCase()}`;
-      ctx.fillText(titleText, w / 2, 410);
+      ctx.fillText(titleText, w / 2, 398);
 
-      ctx.fillStyle = "#33ff66";
-      ctx.font = 'bold 34px "VT323", monospace';
-      ctx.fillText(
+      ctx.font = '900 38px "VT323", "Consolas", monospace';
+      drawHeavyCrtText(
+        ctx,
         state.phase === "boot"
           ? "CLICK SCREEN OR PULL 3D MAIN BREAKER LEVER ([SPACE])"
           : "CLICK SCREEN OR PULL 3D MAIN BREAKER LEVER ([SPACE]) TO RESET",
         w / 2,
-        485,
+        482,
+        "#39ff14",
+        0.9,
       );
 
-      ctx.fillStyle = "#e6dec3";
-      ctx.font = '28px "VT323", monospace';
-      ctx.fillText(
-        "[1-4] STATION ZOOM | [0/ESC] CHAIR | DRAG UNIT A LEVERS FOR POWER",
+      ctx.font = '900 32px "VT323", "Consolas", monospace';
+      drawHeavyCrtText(
+        ctx,
+        "[1-5] STATION ZOOM | [0/ESC] CHAIR | DRAG UNIT A LEVERS FOR POWER",
         w / 2,
-        565,
+        568,
+        "#ffe600",
+        0.8,
       );
     }
 
     // Subtle CRT Scanlines
-    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
     for (let y = 0; y < h; y += 6) {
       ctx.fillRect(0, y, w, 2);
     }
@@ -3755,7 +3553,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
   return (
     <mesh
       geometry={curvedCrtGeometry}
-      position={[0, 1.615, 0.138]}
+      position={[0, 1.74, 0.142]}
       onClick={(e) => {
         e.stopPropagation();
         playSwitchClank();
@@ -3814,22 +3612,22 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         ) {
           return;
         }
-        // Widen rear cabinet box slightly to frame the +40% wider CRT housing
+        // Widen rear cabinet box to frame the +20% scaled CRT housing
         if (
           (obj as THREE.Mesh).isMesh &&
           Math.abs(obj.position.y - 1.01) < 0.05 &&
           Math.abs(obj.position.z - -0.18) < 0.05
         ) {
-          obj.scale.set(1.36, 1.08, 1);
+          obj.scale.set(1.64, 1.25, 1);
         }
-        // Scale CRT outer bezel box (+40% width, +30% height) and center at y = 1.615
+        // Scale CRT outer bezel box (+20% additional scale) and shift Y upward to y = 1.74 while keeping bottom edge above desk buttons
         if (
           (obj as THREE.Mesh).isMesh &&
           Math.abs(obj.position.y - 1.4) < 0.03 &&
           Math.abs(obj.position.z - 0.02) < 0.03
         ) {
-          obj.position.y = 1.615;
-          obj.scale.set(1.4, 1.3, 1);
+          obj.position.y = 1.74;
+          obj.scale.set(1.68, 1.56, 1);
         }
         // Hide the legacy smaller 512x352 CRT glass mesh (replaced by <Komrad84SplitScreenCrt3D />)
         if (
@@ -3901,11 +3699,11 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         </mesh>
 
         <mesh
-          position={[0, 0.005, 1.4]}
+          position={[0, 0.005, 2.3]}
           rotation={[-Math.PI / 2, 0, 0]}
           receiveShadow
         >
-          <planeGeometry args={[6.4, 6.8]} />
+          <planeGeometry args={[6.4, 9.2]} />
           <meshStandardMaterial
             color="#23312b"
             roughness={0.85}
@@ -3947,7 +3745,7 @@ export const ControlRoomScene: React.FC = React.memo(() => {
           />
         </mesh>
 
-        <mesh position={[0, 3.05, 1.2]} rotation={[Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 3.42, 1.2]} rotation={[Math.PI / 2, 0, 0]}>
           <planeGeometry args={[12, 12]} />
           <meshStandardMaterial
             color="#141414"
@@ -3955,8 +3753,8 @@ export const ControlRoomScene: React.FC = React.memo(() => {
             metalness={0.3}
           />
         </mesh>
-        {[-1.6, -0.4, 0.8, 2.0, 3.2, 4.4].map((zPos) => (
-          <mesh key={zPos} position={[0, 2.94, zPos]} castShadow receiveShadow>
+        {[-1.6, -0.4, 0.8, 2.0, 3.2, 4.4, 5.6].map((zPos) => (
+          <mesh key={zPos} position={[0, 3.30, zPos]} castShadow receiveShadow>
             <boxGeometry args={[8.5, 0.14, 0.18]} />
             <meshStandardMaterial
               color="#141414"
@@ -3966,9 +3764,9 @@ export const ControlRoomScene: React.FC = React.memo(() => {
           </mesh>
         ))}
 
-        {/* Rear Bunker Concrete Bulkhead Wall enclosing the Wrap-Around Cockpit */}
-        <mesh position={[0, 1.6, 5.85]} receiveShadow>
-          <boxGeometry args={[9.2, 3.6, 0.25]} />
+        {/* Rear Bunker Concrete Bulkhead Wall enclosing the 3-Bay Left Console Row */}
+        <mesh position={[0, 1.75, 6.72]} receiveShadow>
+          <boxGeometry args={[9.2, 3.8, 0.25]} />
           <meshStandardMaterial
             color="#1c2621"
             roughness={0.85}
@@ -3992,12 +3790,20 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         </mesh>
       </group>
 
-      {/* 1. LEFT COCKPIT WING: <HighDetailReactorPanel3D /> (Shifted +0.42m along wall away from desk to z = 2.77 so levers 4, 5, 6 are 100% unobstructed!) */}
+      {/* ============================================================
+          1. CIRCULAR WRAP-AROUND 3-BAY CONSOLE AROUND CHAIR [0, 1.52, 2.42]
+             - Bay 1 (`UNIT A`):   pos = [-1.68, -0.02, 3.08], rotY = 1.8000 (103.1°) -> 1.80m from chair, Lever 6 at z = 2.53m (100% behind desk z = 2.16m)!
+             - Pillar 1 (Hinge 1): pos = [-1.46, 1.21, 4.04]
+             - Bay 2 (`UNIT A-2`): pos = [-0.61, -0.02, 4.54], rotY = 2.6029 (149.1°) -> 2.20m from chair, facing chair head-on!
+             - Pillar 2 (Hinge 2): pos = [0.24, 1.21, 5.05]
+             - Bay 3 (`UNIT B`):   pos = [1.18, -0.02, 4.76],  rotY = 3.4407 (197.1°) -> 2.62m from chair, facing chair head-on!
+             - Pillar 3 (End-Cap): pos = [2.12, 1.21, 4.47]
+         ============================================================ */}
       <group
         ref={reactorWrapRef}
-        position={[-2.12, 0.0, 2.77]}
-        rotation={[0, Math.PI / 2, 0]}
-        scale={[1.14, 1.1, 1.12]}
+        position={[-1.68, -0.02, 3.08]}
+        rotation={[0, 1.80, 0]}
+        scale={[1.04, 1.05, 1.04]}
       >
         <group rotation={[0, -0.42, 0]}>
           <group position={[2.15, 0, 1.08]}>
@@ -4006,47 +3812,61 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         </group>
       </group>
 
-      {/* 1B. LEFT-REAR WRAP-AROUND PANEL (`UNIT A-2`): Shifted +0.42m along wall to [-1.4, 0, 4.57] */}
-      <group
-        position={[-1.4, 0.0, 4.57]}
-        rotation={[0, (3 * Math.PI) / 4, 0]}
-        scale={[1.14, 1.1, 1.12]}
-      >
-        <LeftRearWrapAroundPanel3D variant="left-rear" />
-      </group>
-
-      {/* Heavy Bolted Cast-Iron Corner Junction Pillar at exact seam [-2.12, 1.24, 3.82] between `UNIT A` and `UNIT A-2` */}
-      <group position={[-2.12, 1.24, 3.82]}>
+      {/* Heavy Bolted Cast-Iron Divider Pillar 1 (Hinge 1 at [-1.46, 1.21, 4.04] between `UNIT A` and `UNIT A-2`) */}
+      <group position={[-1.46, 1.21, 4.04]} scale={[1.04, 1.05, 1.04]}>
         <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.095, 0.11, 2.52, 8]} />
+          <cylinderGeometry args={[0.062, 0.068, 2.48, 8]} />
           <meshStandardMaterial color="#18211b" metalness={0.7} roughness={0.42} />
         </mesh>
         {[-0.85, -0.35, 0.15, 0.65, 1.05].map((py, pIdx) => (
           <mesh key={pIdx} position={[0, py, 0]} castShadow>
-            <cylinderGeometry args={[0.125, 0.125, 0.055, 8]} />
+            <cylinderGeometry args={[0.078, 0.078, 0.048, 8]} />
             <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
           </mesh>
         ))}
       </group>
 
-      {/* 1C. REAR OPERATOR BULKHEAD PANEL (`БЛОК В`): Shifted +0.42m along rear wall to [0.4, 0, 5.31] */}
+      {/* 1B. MIDDLE-LEFT PANEL (`UNIT A-2`): Hinged +46° inward from Pillar 1 at [-0.61, -0.02, 4.54] (2.20m from chair!) */}
       <group
-        position={[0.4, 0.0, 5.31]}
-        rotation={[0, Math.PI, 0]}
-        scale={[1.14, 1.1, 1.12]}
+        position={[-0.61, -0.02, 4.54]}
+        rotation={[0, 2.6029, 0]}
+        scale={[1.04, 1.05, 1.04]}
       >
-        <LeftRearWrapAroundPanel3D variant="rear" />
+        <LeftRearWrapAroundPanel3D variant="left-rear" />
       </group>
 
-      {/* Heavy Bolted Corner Junction Pillar at exact seam [-0.65, 1.24, 5.30] between `UNIT A-2` and `БЛОК В` */}
-      <group position={[-0.65, 1.24, 5.3]}>
+      {/* Heavy Bolted Cast-Iron Divider Pillar 2 (Hinge 2 at [0.24, 1.21, 5.05] between `UNIT A-2` and `UNIT B`) */}
+      <group position={[0.24, 1.21, 5.05]} scale={[1.04, 1.05, 1.04]}>
         <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.095, 0.11, 2.52, 8]} />
+          <cylinderGeometry args={[0.062, 0.068, 2.48, 8]} />
           <meshStandardMaterial color="#18211b" metalness={0.7} roughness={0.42} />
         </mesh>
         {[-0.85, -0.35, 0.15, 0.65, 1.05].map((py, pIdx) => (
           <mesh key={pIdx} position={[0, py, 0]} castShadow>
-            <cylinderGeometry args={[0.125, 0.125, 0.055, 8]} />
+            <cylinderGeometry args={[0.078, 0.078, 0.048, 8]} />
+            <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* 1C. BACK-LEFT PANEL (`UNIT B`): Hinged +48° further inward from Pillar 2 at [1.18, -0.02, 4.76] (2.62m from chair!) */}
+      <group
+        position={[1.18, -0.02, 4.76]}
+        rotation={[0, 3.4407, 0]}
+        scale={[1.04, 1.05, 1.04]}
+      >
+        <LeftRearWrapAroundPanel3D variant="rear" />
+      </group>
+
+      {/* Heavy Bolted End-Cap Pillar 3 at Far Edge of `UNIT B` [2.12, 1.21, 4.47] */}
+      <group position={[2.12, 1.21, 4.47]} scale={[1.04, 1.05, 1.04]}>
+        <mesh castShadow receiveShadow>
+          <cylinderGeometry args={[0.062, 0.068, 2.48, 8]} />
+          <meshStandardMaterial color="#18211b" metalness={0.7} roughness={0.42} />
+        </mesh>
+        {[-0.85, -0.35, 0.15, 0.65, 1.05].map((py, pIdx) => (
+          <mesh key={pIdx} position={[0, py, 0]} castShadow>
+            <cylinderGeometry args={[0.078, 0.078, 0.048, 8]} />
             <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
           </mesh>
         ))}

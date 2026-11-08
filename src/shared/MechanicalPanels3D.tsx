@@ -53,10 +53,11 @@ function createCrispPanelTexture(
 }
 
 /**
- * Draws centered plaque text guaranteed to stay within `w - 32` (16px minimum padding on left & right)
- * by measuring the rendered width and horizontally condensing if needed so zero letters ever clip!
+ * Draws centered plaque text guaranteed to stay within `w - 20` (10px minimum padding on left & right)
+ * using `font-weight: 900`, clean letter-spacing, and a dark `#000000` outer outline drawn BEHIND
+ * `fillText` so bright letter interiors (`O`, `P`, `A`, `B`, `R`, `8`, `6`) stay 100% crisp and open!
  */
-function drawFittedPlaqueText(
+export function drawFittedPlaqueText( // oxlint-disable-line react/only-export-components
   ctx: CanvasRenderingContext2D,
   text: string,
   cx: number,
@@ -64,20 +65,120 @@ function drawFittedPlaqueText(
   canvasWidth: number,
   font: string,
   color: string,
+  strokeColor?: string,
+  strokeWidth = 2.8,
+  letterSpacing = "2px",
 ): void {
   ctx.save();
-  ctx.font = font;
+  const heavyFont = font.replace(/^bold\s+/i, "900 ");
+  ctx.font = heavyFont;
+  const ctxWithSpacing = ctx as CanvasRenderingContext2D & {
+    letterSpacing?: string;
+  };
+  if ("letterSpacing" in ctxWithSpacing) {
+    ctxWithSpacing.letterSpacing = letterSpacing;
+  }
   ctx.fillStyle = color;
+  // Never stroke in the same bright color as fill (which blobs counters shut); always use a dark outline behind fill!
+  const effectiveStroke =
+    strokeColor && strokeColor.toLowerCase() !== color.toLowerCase()
+      ? strokeColor
+      : "#000000";
+  ctx.strokeStyle = effectiveStroke;
+  ctx.lineWidth = strokeWidth > 0 ? Math.max(2.4, strokeWidth) : 0;
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
   ctx.textAlign = "center";
-  const maxAllowedW = Math.max(40, canvasWidth - 32);
+  const maxAllowedW = Math.max(40, canvasWidth - 20);
   const measuredW = ctx.measureText(text).width;
   const scaleX = measuredW > maxAllowedW ? maxAllowedW / measuredW : 1;
   ctx.translate(cx, y);
   if (scaleX < 1) {
     ctx.scale(scaleX, 1);
   }
+  if (ctx.lineWidth > 0) {
+    ctx.strokeText(text, 0, 0);
+  }
   ctx.fillText(text, 0, 0);
   ctx.restore();
+}
+
+/**
+ * Shared generator for brass-bordered 3D station plaques across UNIT A, UNIT A-2, UNIT B, and UNIT C.
+ * Uses clean wide industrial sans-serif (`Segoe UI Black` / `Arial Black` / `Consolas`) with letter-spacing
+ * and a dark `#000000` outer drop-shadow/outline so letter interiors never blob together.
+ */
+export function makePlaqueTex( // oxlint-disable-line react/only-export-components
+  title: string,
+  subtitle: string,
+  options?: {
+    width?: number;
+    height?: number;
+    bgColor?: string;
+    borderColor?: string;
+    titleColor?: string;
+    titleStroke?: string;
+    subColor?: string;
+    subStroke?: string;
+    titleSize?: number;
+    subSize?: number;
+  },
+): THREE.CanvasTexture {
+  const w = options?.width ?? 384;
+  const h = options?.height ?? 128;
+  const bgColor = options?.bgColor ?? "#121614";
+  const borderColor = options?.borderColor ?? "#c8b06b";
+  const titleColor = options?.titleColor ?? "#ffffff";
+  const subColor = options?.subColor ?? "#ffe066";
+  const titleSize = options?.titleSize ?? 48;
+  const subSize = options?.subSize ?? 36;
+
+  return createCrispPanelTexture(w, h, (ctx, cw, ch) => {
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(3, 3, cw - 6, ch - 6);
+    if (!subtitle.trim()) {
+      drawFittedPlaqueText(
+        ctx,
+        title,
+        cw / 2,
+        Math.round(ch * 0.66),
+        cw,
+        `900 ${Math.round(titleSize * 1.22)}px "Segoe UI Black", "Arial Black", "Impact", "Consolas", sans-serif`,
+        titleColor,
+        "#000000",
+        3.8,
+        "3px",
+      );
+    } else {
+      drawFittedPlaqueText(
+        ctx,
+        title,
+        cw / 2,
+        Math.round(ch * 0.44),
+        cw,
+        `900 ${titleSize}px "Segoe UI Black", "Arial Black", "Impact", "Consolas", sans-serif`,
+        titleColor,
+        "#000000",
+        3.6,
+        "3px",
+      );
+      drawFittedPlaqueText(
+        ctx,
+        subtitle,
+        cw / 2,
+        Math.round(ch * 0.85),
+        cw,
+        `900 ${subSize}px "Segoe UI Black", "Arial Black", "Consolas", sans-serif`,
+        subColor,
+        "#000000",
+        3.2,
+        "2.5px",
+      );
+    }
+  });
 }
 
 let cachedRibbedGlassTex: THREE.CanvasTexture | null = null;
@@ -458,7 +559,7 @@ export const SovietCRTMonitorBay3D: React.FC<SovietCRTMonitorBay3DProps> = ({
   );
 };
 
-function paintSovietCRTScreen(
+export function paintSovietCRTScreen( // oxlint-disable-line react/only-export-components
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
@@ -514,99 +615,114 @@ function paintSovietCRTScreen(
   // Rounded CRT Corner Vignette Border
   ctx.strokeStyle = options.statusDanger ? "#ff2a2a" : "#2be85d";
   ctx.lineWidth = 3;
-  ctx.strokeRect(6, 6, w - 12, h - 12);
-
-  // Corner CRT Calibration Crosshairs
-  const crossCorners = [
-    [16, 16],
-    [w - 16, 16],
-    [16, h - 16],
-    [w - 16, h - 16],
-  ] as const;
-  ctx.strokeStyle = "#33ff66";
-  ctx.lineWidth = 1.5;
-  for (const [cx, cy] of crossCorners) {
-    ctx.beginPath();
-    ctx.moveTo(cx - 5, cy);
-    ctx.lineTo(cx + 5, cy);
-    ctx.moveTo(cx, cy - 5);
-    ctx.lineTo(cx, cy + 5);
-    ctx.stroke();
-  }
+  ctx.strokeRect(4, 4, w - 8, h - 8);
 
   if (options.isBlackout) {
-    ctx.fillStyle = "#ff2a2a";
-    ctx.font = 'bold 34px "VT323", monospace';
-    ctx.textAlign = "center";
-    ctx.fillText("/// CRT SIGNAL LOST — MAIN BREAKER TRIPPED ///", w / 2, h / 2 + 10);
+    drawFittedPlaqueText(
+      ctx,
+      "/// CRT SIGNAL LOST — MAIN BREAKER TRIPPED ///",
+      w / 2,
+      h / 2 + 12,
+      w - 16,
+      '900 40px "VT323", monospace',
+      "#ff2a2a",
+      "#ff2a2a",
+      1.1,
+    );
     return;
   }
 
-  // 3. Three Framed CRT Telemetry Readout Boxes
-  const cellW = 232;
-  const cellCenters = [134, 384, 634];
+  // 3. Three Framed CRT Telemetry Readout Boxes (+45% Category Titles & +25% Heavy Values)
+  const cellW = 238;
+  const cellCenters = [132, 384, 636];
   options.cells.forEach((c, idx) => {
     const cx = cellCenters[idx] ?? 384;
     const x0 = cx - cellW / 2;
 
-    // Subtle darkened CRT sub-window
+    // Darkened CRT sub-window
     ctx.fillStyle = c.danger
-      ? "rgba(90, 12, 12, 0.55)"
-      : "rgba(4, 18, 9, 0.65)";
-    ctx.fillRect(x0, 12, cellW, 68);
-    ctx.strokeStyle = c.danger ? "#ff2a2a" : "#248f46";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x0, 12, cellW, 68);
+      ? "rgba(95, 12, 12, 0.65)"
+      : "rgba(3, 16, 8, 0.78)";
+    ctx.fillRect(x0, 8, cellW, 72);
+    ctx.strokeStyle = c.danger ? "#ff2a2a" : "#2be85d";
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(x0, 8, cellW, 72);
 
-    // Top Phosphor Header Strip inside Cell
-    ctx.fillStyle = c.danger ? "#ff2a2a" : "#1f6e39";
-    ctx.fillRect(x0 + 2, 14, cellW - 4, 18);
-    ctx.fillStyle = c.danger ? "#ffffff" : "#d8ffe2";
-    ctx.font = 'bold 14px "Courier Prime", monospace';
-    ctx.textAlign = "center";
-    ctx.fillText(c.label, cx, 28);
+    // Top Phosphor Header Strip inside Cell (Crisp dark #001a00 outline + 2px letter spacing)
+    ctx.fillStyle = c.danger ? "#d41e1e" : "#1b6935";
+    ctx.fillRect(x0 + 2, 10, cellW - 4, 23);
+    drawFittedPlaqueText(
+      ctx,
+      c.label,
+      cx,
+      27,
+      cellW + 8,
+      '900 19px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
+      "#ffffff",
+      "#001a00",
+      2.6,
+      "2px",
+    );
 
-    // Glowing CRT Primary Readout
+    // Glowing CRT Primary Readout (Razor-sharp #001a00 outline behind fill instead of same-color stroke bleed)
     ctx.save();
     ctx.shadowColor = c.danger ? "#ff2a2a" : "#33ff66";
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = c.danger ? "#ff4444" : "#44ff77";
-    ctx.font = 'bold 40px "VT323", monospace';
-    ctx.fillText(c.val, cx, 69);
+    ctx.shadowBlur = 5;
+    const valCol = c.danger ? "#ff4444" : "#55ff55";
+    drawFittedPlaqueText(
+      ctx,
+      c.val,
+      cx,
+      71,
+      cellW + 8,
+      '900 50px "VT323", monospace',
+      valCol,
+      "#001a00",
+      3.0,
+      "2px",
+    );
     ctx.restore();
   });
 
-  // 4. Lower CRT Terminal Command & Status Bar
-  ctx.fillStyle = "rgba(3, 14, 7, 0.78)";
-  ctx.fillRect(18, 86, w - 36, 48);
+  // 4. Lower CRT Terminal Command & Status Bar (Crisp #001a00 outline for razor-sharp characters)
+  ctx.fillStyle = "rgba(2, 12, 6, 0.88)";
+  ctx.fillRect(12, 83, w - 24, 55);
   ctx.strokeStyle = options.statusDanger ? "#ff2a2a" : "#248f46";
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(18, 86, w - 36, 48);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(12, 83, w - 24, 55);
 
-  ctx.save();
-  ctx.textAlign = "center";
-  ctx.shadowColor = options.statusDanger ? "#ff2a2a" : "#33ff66";
-  ctx.shadowBlur = 6;
-  ctx.fillStyle = options.statusDanger ? "#ff3b3b" : "#33ff66";
-  ctx.font = 'bold 23px "VT323", monospace';
-  ctx.fillText(`> ${options.statusLine}`, w / 2, 108);
-  ctx.restore();
+  const statusCol = options.statusDanger ? "#ff4444" : "#55ff55";
+  drawFittedPlaqueText(
+    ctx,
+    `> ${options.statusLine}`,
+    w / 2,
+    110,
+    w - 16,
+    '900 32px "VT323", monospace',
+    statusCol,
+    "#001a00",
+    2.8,
+    "1.5px",
+  );
 
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#ffb000";
-  ctx.font = 'bold 14px "Courier Prime", monospace';
-  ctx.fillText(`[${options.headerCode}] ${options.footerLine}`, w / 2, 128);
+  drawFittedPlaqueText(
+    ctx,
+    `[${options.headerCode}] ${options.footerLine}`,
+    w / 2,
+    133,
+    w - 16,
+    '900 19px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
+    "#ffcc00",
+    "#001a00",
+    2.6,
+    "1.5px",
+  );
 
   // 5. Crisp Horizontal CRT Scanline Overlay & Top Glass Specular Sheen
-  ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
   for (let y = 0; y < h; y += 3) {
     ctx.fillRect(0, y, w, 1);
   }
-  const glassSheen = ctx.createLinearGradient(0, 0, 0, 38);
-  glassSheen.addColorStop(0, "rgba(180, 255, 205, 0.09)");
-  glassSheen.addColorStop(1, "rgba(180, 255, 205, 0.0)");
-  ctx.fillStyle = glassSheen;
-  ctx.fillRect(8, 8, w - 16, 32);
 }
 
 interface CagedJewelLamp3DProps {
@@ -666,9 +782,9 @@ export const CagedSovietJewelLamp3D: React.FC<CagedJewelLamp3DProps> = ({
 interface HighDetailManometer3DProps {
   position: [number, number, number];
   title: string;
-  cyrillicSub: string;
+  cyrillicSub?: string;
   unit: string;
-  serial: string;
+  serial?: string;
   min: number;
   max: number;
   dangerThreshold: number;
@@ -680,9 +796,6 @@ interface HighDetailManometer3DProps {
 export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
   position,
   title,
-  cyrillicSub,
-  unit,
-  serial,
   min,
   max,
   dangerThreshold,
@@ -700,24 +813,24 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
       const cx = w / 2;
       const cy = h / 2;
 
-      // Aged Soviet Manometer Dial Face (#e6dec3 with subtle radial vignette)
+      // Crisp High-Contrast Soviet Manometer Dial Face (#f4eee0 with subtle radial vignette)
       const grad = ctx.createRadialGradient(cx, cy, 40, cx, cy, 240);
-      grad.addColorStop(0, "#efe8d2");
-      grad.addColorStop(0.82, "#e2d9bc");
-      grad.addColorStop(1, "#bfb599");
+      grad.addColorStop(0, "#f7f2e4");
+      grad.addColorStop(0.82, "#ebe2c8");
+      grad.addColorStop(1, "#c8bea2");
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(cx, cy, 242, 0, Math.PI * 2);
       ctx.fill();
 
       // Double Outer Scale Rings
-      ctx.strokeStyle = "#141414";
+      ctx.strokeStyle = "#0a0a0a";
       ctx.lineWidth = 6;
       ctx.beginPath();
       ctx.arc(cx, cy, 232, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(cx, cy, 218, 0, Math.PI * 2);
       ctx.stroke();
@@ -771,19 +884,19 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
         ctx.stroke();
       }
 
-      // Fine Minor & Major Tick Marks (50 subdivisions) + Numeric Scale Labels
+      // Fine Minor & Major Tick Marks (50 subdivisions) + +30% Larger Bold Numeric Scale Labels
       for (let i = 0; i <= 50; i++) {
         const ratio = i / 50;
         const ang = Math.PI * 0.75 + ratio * Math.PI * 1.5;
         const isMajor = i % 5 === 0;
         const isMed = i % 5 === 2 || i % 5 === 3;
-        const innerR = isMajor ? 156 : isMed ? 172 : 180;
+        const innerR = isMajor ? 158 : isMed ? 172 : 180;
         const outerR = 212;
         const inRed =
           ratio >= dangerRatio ||
           (lowDangerRatio > 0 && ratio <= lowDangerRatio);
-        ctx.strokeStyle = inRed ? "#c81e1e" : "#141414";
-        ctx.lineWidth = isMajor ? 5 : 2.2;
+        ctx.strokeStyle = inRed ? "#c81e1e" : "#0a0a0a";
+        ctx.lineWidth = isMajor ? 5.5 : 2.5;
         ctx.beginPath();
         ctx.moveTo(cx + Math.cos(ang) * innerR, cy + Math.sin(ang) * innerR);
         ctx.lineTo(cx + Math.cos(ang) * outerR, cy + Math.sin(ang) * outerR);
@@ -791,52 +904,43 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
 
         if (isMajor && i % 10 === 0) {
           const val = Math.round(min + ratio * (max - min));
-          const labelR = 128;
-          ctx.fillStyle = inRed ? "#c81e1e" : "#141414";
-          ctx.font = 'bold 24px "Courier Prime", monospace';
+          const isTopTick = Math.sin(ang) < -0.55;
+          const labelR = isTopTick ? 136 : 128;
+          const numColor = inRed ? "#c81e1e" : "#0a0a0a";
+          const lx = cx + Math.cos(ang) * labelR;
+          const ly = cy + Math.sin(ang) * labelR;
+          ctx.save();
+          ctx.fillStyle = numColor;
+          ctx.font = '900 31px "Segoe UI Black", "Arial Black", "Consolas", sans-serif';
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(
-            String(val),
-            cx + Math.cos(ang) * labelR,
-            cy + Math.sin(ang) * labelR,
-          );
+          ctx.fillText(String(val), lx, ly);
+          ctx.restore();
         }
       }
 
-      // ГОСТ-84 Header & Cyrillic Sub-Labels (Positioned well above the central needle cap so hub never blocks text)
-      ctx.fillStyle = "#141414";
-      ctx.font = 'bold 26px "Kremlin", monospace';
-      ctx.textAlign = "center";
-      ctx.fillText(title, cx, cy - 98);
-
-      ctx.fillStyle = "#2b3a32";
-      ctx.font = 'bold 16px "Courier Prime", monospace';
-      ctx.fillText(cyrillicSub, cx, cy - 70);
-
-      // Red Star Emblem & Unit Box (Positioned well below the central needle cap & counterweight)
-      ctx.fillStyle = "#c81e1e";
-      ctx.font = 'bold 22px "Courier Prime", monospace';
-      ctx.fillText("★ СССР ★", cx, cy + 78);
-
-      ctx.fillStyle = "#141414";
-      ctx.font = 'bold 28px "VT323", monospace';
-      ctx.fillText(unit, cx, cy + 112);
-
-      ctx.fillStyle = "#454238";
-      ctx.font = 'bold 14px "Courier Prime", monospace';
-      ctx.fillText(`ГОСТ-84 • ${serial}`, cx, cy + 148);
+      // Bottom Dead-Zone Wedge (strictly between 0% and 100% stops & well below center cap):
+      // Redundant range text removed so center hub cap is 100% clear, and main title never intersects the needle!
+      drawFittedPlaqueText(
+        ctx,
+        title,
+        cx,
+        cy + 136,
+        212,
+        '900 54px "Segoe UI Black", "Arial Black", "Impact", "Consolas", sans-serif',
+        "#060606",
+        undefined,
+        0,
+        "2px",
+      );
     });
   }, [
     centerNominal,
-    cyrillicSub,
     dangerThreshold,
     lowDangerThreshold,
     max,
     min,
-    serial,
     title,
-    unit,
   ]);
 
   useFrame(({ clock }) => {
@@ -1058,58 +1162,47 @@ const SculptedPumpValveAssembly3D: React.FC<
   const wheelRef = useRef<THREE.Group>(null);
   const leverArmRef = useRef<THREE.Group>(null);
   const lampMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const heatScaleMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const heatBarMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const heatBarMeshRef = useRef<THREE.Mesh>(null);
   const lastPumpOnRef = useRef<boolean | null>(null);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
-  const nameplateTex = useMemo(() => {
-    return createCrispPanelTexture(256, 64, (ctx, w, h) => {
-      ctx.fillStyle = "#141816";
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = "#b8a46b";
-      ctx.lineWidth = 4;
-      ctx.strokeRect(3, 3, w - 6, h - 6);
-      drawFittedPlaqueText(
-        ctx,
-        label,
-        w / 2,
-        29,
-        w,
-        'bold 22px "Kremlin", monospace',
-        "#e6dec3",
-      );
-      drawFittedPlaqueText(
-        ctx,
-        subLabel ?? "FLOW VALVE • BEARING HEAT",
-        w / 2,
-        52,
-        w,
-        'bold 14px "Courier Prime", monospace',
-        "#d99b26",
-      );
-    });
-  }, [label, subLabel]);
+  const nameplateTex = useMemo(
+    () =>
+      makePlaqueTex(label, subLabel ?? "FLOW VALVE", {
+        width: 384,
+        height: 140,
+        titleSize: 48,
+        subSize: 36,
+      }),
+    [label, subLabel],
+  );
 
+  const lastBearingDegRef = useRef<number>(-1);
   const heatScaleTex = useMemo(() => {
-    return createCrispPanelTexture(256, 56, (ctx, w, h) => {
+    return createCrispPanelTexture(360, 84, (ctx, w, h) => {
       ctx.fillStyle = "#101613";
       ctx.fillRect(0, 0, w, h);
       ctx.strokeStyle = "#b8a46b";
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 4;
       ctx.strokeRect(2, 2, w - 4, h - 4);
-      ctx.fillStyle = "#ffb000";
-      ctx.font = 'bold 15px "Courier Prime", monospace';
-      ctx.textAlign = "left";
-      ctx.fillText("BEARING HEAT:", 10, 20);
-      ctx.textAlign = "right";
-      ctx.fillStyle = "#e6dec3";
-      ctx.font = 'bold 15px "VT323", monospace';
-      ctx.fillText("0% — 50% — 100%", w - 10, 20);
+      drawFittedPlaqueText(
+        ctx,
+        "BEARING: 20°C",
+        w / 2,
+        35,
+        w - 12,
+        '900 30px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
+        "#ffe066",
+        "#000000",
+        3.2,
+        "2px",
+      );
       ctx.strokeStyle = "#364940";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(10, 28, w - 20, 18);
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(14, 48, w - 28, 24);
     });
   }, []);
 
@@ -1118,6 +1211,39 @@ const SculptedPumpValveAssembly3D: React.FC<
     const throttle = state.isBlackout ? 0 : state.pumpThrottle[pumpIndex];
     const isPumpOn = state.pumpsActive[pumpIndex] && !state.isBlackout;
     const bearingHeat = pumpIndex === 0 ? state.pumpAHeat : state.pumpBHeat;
+    const bearingDegC = Math.round(20 + bearingHeat);
+
+    if (bearingDegC !== lastBearingDegRef.current) {
+      lastBearingDegRef.current = bearingDegC;
+      const tex = heatScaleMatRef.current?.map as THREE.CanvasTexture | undefined;
+      const canvas = tex?.image as HTMLCanvasElement | undefined;
+      const ctx = canvas?.getContext("2d");
+      if (tex && canvas && ctx) {
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.fillStyle = "#101613";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = bearingHeat >= 80 ? "#ff2a2a" : "#b8a46b";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        drawFittedPlaqueText(
+          ctx,
+          `BEARING: ${bearingDegC}°C`,
+          w / 2,
+          35,
+          w - 12,
+          '900 30px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
+          bearingHeat >= 80 ? "#ff5555" : "#ffe066",
+          "#000000",
+          3.2,
+          "2px",
+        );
+        ctx.strokeStyle = "#364940";
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(14, 48, w - 28, 24);
+        tex.needsUpdate = true;
+      }
+    }
 
     // Continuous smooth rotational angle on the 6-spoke cast-iron valve wheel
     if (wheelRef.current) {
@@ -1143,11 +1269,11 @@ const SculptedPumpValveAssembly3D: React.FC<
       );
     }
 
-    // Update Horizontal Bearing Heat Bar cleanly below the wheel & switch
+    // Update Horizontal Bearing Heat Bar cleanly below the wheel & switch (+35% wider & taller)
     if (heatBarMeshRef.current && heatBarMatRef.current) {
       const hRatio = THREE.MathUtils.clamp(bearingHeat / 100, 0.04, 1);
       heatBarMeshRef.current.scale.x = hRatio;
-      heatBarMeshRef.current.position.x = -0.115 + hRatio * 0.115;
+      heatBarMeshRef.current.position.x = -0.156 + hRatio * 0.156;
       const heatColor =
         bearingHeat >= 80
           ? "#ff2a2a"
@@ -1213,9 +1339,9 @@ const SculptedPumpValveAssembly3D: React.FC<
         }
       }}
     >
-      {/* Raised Engraved Brass & Iron Nameplate */}
-      <mesh position={[0, 0.168, 0.032]} castShadow>
-        <boxGeometry args={[0.31, 0.078, 0.012]} />
+      {/* Raised Engraved Brass & Iron Nameplate (+35% taller 3D geometry) */}
+      <mesh position={[0, 0.184, 0.032]} castShadow>
+        <boxGeometry args={[0.398, 0.128, 0.012]} />
         <meshStandardMaterial
           color="#8c7a4b"
           metalness={0.85}
@@ -1224,20 +1350,26 @@ const SculptedPumpValveAssembly3D: React.FC<
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[0, 0.168, 0.039]}>
-        <planeGeometry args={[0.295, 0.068]} />
-        <meshStandardMaterial map={nameplateTex} roughness={0.55} />
+      <mesh position={[0, 0.184, 0.039]}>
+        <planeGeometry args={[0.382, 0.114]} />
+        <meshStandardMaterial
+          map={nameplateTex}
+          emissive="#ffffff"
+          emissiveMap={nameplateTex}
+          emissiveIntensity={0.35}
+          roughness={0.55}
+        />
       </mesh>
 
-      {/* Caged Soviet Jewel Lamp & Horizontal Bearing Heat Bar Below Wheel (`BEARING HEAT: 0-100%`) */}
+      {/* Caged Soviet Jewel Lamp & Horizontal Bearing Heat Bar Below Wheel (+35% wider & taller: `BEARING: XX°C`) */}
       <CagedSovietJewelLamp3D
         position={[-0.125, 0.096, 0.038]}
         lampMatRef={lampMatRef}
         scale={0.84}
       />
-      <group position={[0.005, -0.156, 0.038]}>
+      <group position={[0.005, -0.158, 0.038]}>
         <mesh castShadow receiveShadow>
-          <boxGeometry args={[0.268, 0.052, 0.016]} />
+          <boxGeometry args={[0.362, 0.07, 0.016]} />
           <meshStandardMaterial
             color="#101513"
             roughness={0.5}
@@ -1247,17 +1379,18 @@ const SculptedPumpValveAssembly3D: React.FC<
           />
         </mesh>
         <mesh position={[0, 0, 0.009]}>
-          <planeGeometry args={[0.256, 0.046]} />
+          <planeGeometry args={[0.346, 0.062]} />
           <meshStandardMaterial
+            ref={heatScaleMatRef}
             map={heatScaleTex}
             emissive="#ffffff"
             emissiveMap={heatScaleTex}
-            emissiveIntensity={0.42}
+            emissiveIntensity={0.45}
             roughness={0.75}
           />
         </mesh>
-        <mesh ref={heatBarMeshRef} position={[0, -0.009, 0.013]}>
-          <boxGeometry args={[0.23, 0.012, 0.008]} />
+        <mesh ref={heatBarMeshRef} position={[0, -0.013, 0.013]}>
+          <boxGeometry args={[0.312, 0.016, 0.008]} />
           <meshStandardMaterial
             ref={heatBarMatRef}
             color="#33ff66"
@@ -1524,11 +1657,11 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
 
   const readoutTex = useMemo(() => {
     const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 72;
+    canvas.width = 320;
+    canvas.height = 88;
     const tex = new THREE.CanvasTexture(canvas);
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
     return tex;
   }, []);
 
@@ -1541,9 +1674,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         ctx.lineWidth = 3;
         ctx.strokeRect(2, 2, w - 4, h - 4);
         ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 28px "VT323", monospace';
+        ctx.font = '900 30px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("-5", w / 2, 38);
+        ctx.fillText("-5", w / 2, 39);
       }),
     [],
   );
@@ -1557,40 +1690,24 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         ctx.lineWidth = 3;
         ctx.strokeRect(2, 2, w - 4, h - 4);
         ctx.fillStyle = "#33ff66";
-        ctx.font = 'bold 28px "VT323", monospace';
+        ctx.font = '900 30px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("+5", w / 2, 38);
+        ctx.fillText("+5", w / 2, 39);
       }),
     [],
   );
 
-  const labelTex = useMemo(() => {
-    return createCrispPanelTexture(256, 64, (ctx, w, h) => {
-      ctx.fillStyle = "#141816";
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = "#b8a46b";
-      ctx.lineWidth = 4;
-      ctx.strokeRect(3, 3, w - 6, h - 6);
-      drawFittedPlaqueText(
-        ctx,
-        label,
-        w / 2,
-        29,
-        w,
-        'bold 21px "Kremlin", monospace',
-        "#e6dec3",
-      );
-      drawFittedPlaqueText(
-        ctx,
-        subLabel ?? "POWER BUS // 0–50 MW",
-        w / 2,
-        52,
-        w,
-        'bold 15px "Courier Prime", monospace',
-        ledColor,
-      );
-    });
-  }, [label, subLabel, ledColor]);
+  const labelTex = useMemo(
+    () =>
+      makePlaqueTex(label, subLabel ?? "ПРИПЯТЬ", {
+        width: 340,
+        height: 82,
+        titleSize: 30,
+        subSize: 26,
+        subColor: "#ffe066",
+      }),
+    [label, subLabel],
+  );
 
   const mwScalePlateTex = useMemo(
     () =>
@@ -1695,31 +1812,21 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         ctx.lineWidth = 4;
         ctx.strokeRect(2, 2, w - 4, h - 4);
 
-        // Top mini status tag
-        ctx.fillStyle = highlightVodkaTut
-          ? "#33ff66"
-          : isMatched
-            ? "#33ff66"
-            : "#ffb000";
-        ctx.font = 'bold 15px "Courier Prime", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText(
+        // Giant Full-Box Nixie / Phosphor Readout: "20 / 20 MW" (+45% larger & taller, filling the green box!)
+        drawFittedPlaqueText(
+          ctx,
           state.isBlackout
-            ? "TRIP // 0 MW"
-            : highlightVodkaTut
-              ? "▲ DRILL: SET 25 MW"
-              : isMatched
-                ? "● LOCKED TO TARGET"
-                : `▲ SET TO ${targetMW} MW`,
+            ? "0 / 0 MW"
+            : `${currentMW} / ${targetMW} MW`,
           w / 2,
-          18,
+          68,
+          w + 6,
+          '900 82px "VT323", monospace',
+          primaryColor,
+          "#001a00",
+          3.2,
+          "1.5px",
         );
-
-        // Giant Nixie / Phosphor Readout: "30 / 30 MW"
-        ctx.fillStyle = primaryColor;
-        ctx.font = 'bold 42px "VT323", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText(`${currentMW} / ${targetMW} MW`, w / 2, 58);
 
         tex.needsUpdate = true;
       }
@@ -1810,9 +1917,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
 
   return (
     <group position={position} scale={[0.74, 0.94, 0.92]}>
-      {/* Raised Engraved Brass Header Plate */}
-      <mesh position={[0, 0.258, 0.03]} castShadow>
-        <boxGeometry args={[0.31, 0.064, 0.01]} />
+      {/* Raised Engraved Brass Header Plate (+25% larger) */}
+      <mesh position={[0, 0.266, 0.03]} castShadow>
+        <boxGeometry args={[0.335, 0.08, 0.01]} />
         <meshStandardMaterial
           color="#8c7a4b"
           metalness={0.85}
@@ -1821,15 +1928,21 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[0, 0.258, 0.036]}>
-        <planeGeometry args={[0.296, 0.056]} />
-        <meshStandardMaterial map={labelTex} roughness={0.55} />
+      <mesh position={[0, 0.266, 0.036]}>
+        <planeGeometry args={[0.32, 0.07]} />
+        <meshStandardMaterial
+          map={labelTex}
+          emissive="#ffffff"
+          emissiveMap={labelTex}
+          emissiveIntensity={0.32}
+          roughness={0.55}
+        />
       </mesh>
 
       {/* Recessed Soviet Nixie / Digital Readout Window ("30 / 30 MW" or "20 / 45 MW") */}
       <group position={[0, 0.194, 0.034]}>
         <mesh castShadow receiveShadow>
-          <boxGeometry args={[0.31, 0.056, 0.022]} />
+          <boxGeometry args={[0.33, 0.066, 0.022]} />
           <meshStandardMaterial
             color="#121715"
             roughness={0.38}
@@ -1839,7 +1952,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           />
         </mesh>
         <mesh position={[0, 0, 0.012]}>
-          <planeGeometry args={[0.294, 0.046]} />
+          <planeGeometry args={[0.314, 0.056]} />
           <meshStandardMaterial
             ref={readoutMatRef}
             map={readoutTex}
@@ -2280,30 +2393,14 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
   const boronPlateTex = useMemo(
     () =>
-      createCrispPanelTexture(256, 68, (ctx, w, h) => {
-        ctx.fillStyle = "#101b14";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#28b862";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        drawFittedPlaqueText(
-          ctx,
-          "BORON INJECTION",
-          w / 2,
-          26,
-          w,
-          'bold 18px "Courier Prime", monospace',
-          "#28b862",
-        );
-        drawFittedPlaqueText(
-          ctx,
-          "QUENCH -140°C // 45% B",
-          w / 2,
-          52,
-          w,
-          'bold 17px "VT323", monospace',
-          "#d99b26",
-        );
+      makePlaqueTex("BORON INJECTION", "-140°C // 45%", {
+        width: 384,
+        height: 104,
+        titleSize: 30,
+        subSize: 28,
+        titleColor: "#33ff66",
+        subColor: "#ffcc00",
+        borderColor: "#28b862",
       }),
     [],
   );
@@ -2320,13 +2417,13 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         ctx.strokeStyle = "#c8d6cd";
         ctx.lineWidth = 5;
         ctx.stroke();
-        ctx.fillStyle = "#e6dec3";
-        ctx.font = 'bold 24px "Courier Prime", monospace';
+        ctx.fillStyle = "#ffffff";
+        ctx.font = '900 26px "Courier Prime", monospace';
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("BORON", cx, cy - 12);
-        ctx.fillStyle = "#d99b26";
-        ctx.font = 'bold 22px "VT323", monospace';
+        ctx.fillStyle = "#ffcc00";
+        ctx.font = '900 24px "VT323", monospace';
         ctx.fillText("-140°C", cx, cy + 16);
       }),
     [],
@@ -2337,60 +2434,34 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
   const topHeaderPlateTex = useMemo(
     () =>
-      createCrispPanelTexture(512, 72, (ctx, w, h) => {
-        ctx.fillStyle = "#141816";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        drawFittedPlaqueText(
-          ctx,
-          "REACTOR CONTROL PANEL // UNIT A",
-          w / 2,
-          30,
-          w,
-          'bold 22px "Kremlin", monospace',
-          "#e6dec3",
-        );
-        drawFittedPlaqueText(
-          ctx,
-          "CORE NO. 4 • COOLING PUMPS • MW POWER ROUTING",
-          w / 2,
-          56,
-          w,
-          'bold 17px "VT323", monospace',
-          "#28b862",
-        );
-      }),
+      makePlaqueTex(
+        "REACTOR CONTROL PANEL // UNIT A",
+        "CORE NO. 4 • PUMPS A/B • MW ROUTING",
+        {
+          width: 768,
+          height: 112,
+          titleSize: 32,
+          subSize: 24,
+          titleColor: "#ffffff",
+          titleStroke: "#ffffff",
+          subColor: "#44ff77",
+          subStroke: "#44ff77",
+          borderColor: "#b8a46b",
+        },
+      ),
     [],
   );
 
   const az5PlateTex = useMemo(
     () =>
-      createCrispPanelTexture(256, 64, (ctx, w, h) => {
-        ctx.fillStyle = "#1a1010";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#c92a1d";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        drawFittedPlaqueText(
-          ctx,
-          "AZ-5 SCRAM",
-          w / 2,
-          30,
-          w,
-          'bold 23px "Kremlin", monospace',
-          "#e03b2d",
-        );
-        drawFittedPlaqueText(
-          ctx,
-          "EMERGENCY CORE DROP // АЗ-5",
-          w / 2,
-          52,
-          w,
-          'bold 14px "Courier Prime", monospace',
-          "#d99b26",
-        );
+      makePlaqueTex("AZ-5 SCRAM", "EMERGENCY SCRAM", {
+        width: 384,
+        height: 104,
+        titleSize: 35,
+        subSize: 27,
+        titleColor: "#ff4444",
+        subColor: "#ffcc00",
+        borderColor: "#c92a1d",
       }),
     [],
   );
@@ -2426,12 +2497,12 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         ctx.strokeStyle = "#d4be7f";
         ctx.lineWidth = 4;
         ctx.stroke();
-        ctx.fillStyle = "#e6dec3";
-        ctx.font = 'bold 28px "Courier Prime", monospace';
+        ctx.fillStyle = "#ffffff";
+        ctx.font = '900 32px "Courier Prime", monospace';
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("AZ-5", cx, cy - 10);
-        ctx.font = 'bold 18px "Kremlin", monospace';
+        ctx.font = '900 22px "Kremlin", monospace';
         ctx.fillText("SCRAM", cx, cy + 18);
       }),
     [],
@@ -2445,10 +2516,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         ctx.strokeStyle = "#ffb000";
         ctx.lineWidth = 4;
         ctx.strokeRect(3, 3, w - 6, h - 6);
-        ctx.fillStyle = "#ffb000";
-        ctx.font = 'bold 32px "VT323", monospace';
+        ctx.fillStyle = "#ffcc00";
+        ctx.font = '900 38px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("-10", w / 2, 43);
+        ctx.fillText("-10", w / 2, 45);
       }),
     [],
   );
@@ -2461,10 +2532,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         ctx.strokeStyle = "#33ff66";
         ctx.lineWidth = 4;
         ctx.strokeRect(3, 3, w - 6, h - 6);
-        ctx.fillStyle = "#33ff66";
-        ctx.font = 'bold 32px "VT323", monospace';
+        ctx.fillStyle = "#44ff77";
+        ctx.font = '900 38px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("+10", w / 2, 43);
+        ctx.fillText("+10", w / 2, 45);
       }),
     [],
   );
@@ -2604,14 +2675,14 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
     const mandateText =
       state.boronPoisoningTimer > 0
-        ? `● BORON REACTIVITY DAMPING ACTIVE (-20% MW SAG — ${Math.ceil(state.boronPoisoningTimer)}S)`
+        ? `● BORON DAMPING (-20% MW — ${Math.ceil(state.boronPoisoningTimer)}S)`
         : state.activeMandate && !state.activeMandate.fulfilled
           ? state.activeMandate.requirementText
           : state.isShiftKeyHeld
-            ? "● [SHIFT] SYNC ACTIVE — GRID STABILIZED TO 50.0 HZ"
+            ? "● [SHIFT] SYNC ACTIVE — GRID LOCKED 50.0 HZ"
             : all6Matched
-              ? "● ALL 6 SECTORS BALANCED — STAMP [ОДОБРЕНО] IN OUTBOX TUBE FOR NEXT MANDATE"
-              : "● MATCH ALL 6 SUBSTATION LEVERS TO DIRECTIVE TARGETS BELOW";
+              ? "● ALL 6 SECTORS BALANCED — STAMP [ОДОБРЕНО]"
+              : "● MATCH ALL 6 LEVERS TO TARGETS BELOW";
     const sig = `${Math.round(state.coreTemp / 2) * 2}|${Math.round(state.pressureBar)}|${state.radiationLevel.toFixed(1)}|${totalMW}|${totalSuppliedMW}|${totalTargetMW}|${all6Matched}|${Math.round(state.redlineInstability)}|${state.isShiftKeyHeld}|${state.az5Cooldown}|${Math.ceil(state.boronPoisoningTimer)}|${state.isBlackout}|${mandateText}`;
     const tex = statusMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (tex && tex.userData.lastSig !== sig) {
@@ -2639,9 +2710,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
               danger: state.radiationLevel >= 7.5,
             },
           ],
-          statusLine: `TOTAL: ${totalSuppliedMW} / ${totalTargetMW} MW (${all6Matched ? "BALANCED" : "RE-ROUTE LEVERS!"}) | INSTAB: ${Math.round(state.redlineInstability)}%`,
+          statusLine: `LOAD: ${totalSuppliedMW}/${totalTargetMW} MW (${all6Matched ? "BALANCED" : "RE-ROUTE!"}) | INSTAB: ${Math.round(state.redlineInstability)}%`,
           statusDanger: !all6Matched || totalMW > 130 || state.coreTemp >= 750,
-          footerLine: mandateText.slice(0, 62),
+          footerLine: mandateText.slice(0, 52),
           isBlackout: state.isBlackout,
         });
         tex.needsUpdate = true;
@@ -2656,8 +2727,8 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       rotation={[0, 0.42, 0]}
     >
       {/* 1. Main Hammered Cast-Iron Reactor Console Body & Corner Gusset Framing */}
-      <mesh position={[0, 1.12, -0.18]} castShadow receiveShadow>
-        <boxGeometry args={[1.66, 2.24, 0.42]} />
+      <mesh position={[0, 1.18, -0.18]} castShadow receiveShadow>
+        <boxGeometry args={[1.66, 2.38, 0.42]} />
         <meshStandardMaterial
           color="#23312b"
           roughness={0.45}
@@ -2667,8 +2738,8 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           roughnessMap={ironTex.roughnessMap}
         />
       </mesh>
-      <mesh position={[0, 1.12, -0.22]} castShadow receiveShadow>
-        <boxGeometry args={[1.74, 2.32, 0.36]} />
+      <mesh position={[0, 1.18, -0.22]} castShadow receiveShadow>
+        <boxGeometry args={[1.74, 2.46, 0.36]} />
         <meshStandardMaterial
           color="#141414"
           roughness={0.5}
@@ -2679,14 +2750,14 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         />
       </mesh>
 
-      {/* Top Raised Engraved Brass Header Plaque (Raised cleanly above green jewel lamps) */}
-      <mesh position={[0, 2.275, 0.042]}>
-        <planeGeometry args={[1.48, 0.14]} />
+      {/* Top Raised Engraved Brass Header Plaque (Centered cleanly inside frame with generous top margin) */}
+      <mesh position={[0, 2.13, 0.044]}>
+        <planeGeometry args={[1.40, 0.148]} />
         <meshStandardMaterial
           map={topHeaderPlateTex}
           emissive="#ffffff"
           emissiveMap={topHeaderPlateTex}
-          emissiveIntensity={0.32}
+          emissiveIntensity={0.35}
           roughness={0.85}
           metalness={0.05}
         />
@@ -2695,8 +2766,8 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       {/* Corner Gusset Plates & Overhead Hooded Panel Work-Lights */}
       {(
         [
-          [-0.78, 2.22],
-          [0.78, 2.22],
+          [-0.78, 2.32],
+          [0.78, 2.32],
           [-0.78, 0.14],
           [0.78, 0.14],
         ] as const
@@ -2739,7 +2810,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         </group>
       ))}
       {[-0.48, 0.48].map((lx, lIdx) => (
-        <group key={lIdx} position={[lx, 2.34, 0.08]}>
+        <group key={lIdx} position={[lx, 2.43, 0.08]}>
           {/* Curved Gooseneck Arm */}
           <mesh position={[0, 0, -0.04]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <cylinderGeometry args={[0.012, 0.014, 0.11, 8]} />
@@ -2769,7 +2840,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       ))}
 
       {/* 2. Top Row: 3 High-Res 16-Part Bolted Soviet Manometer Gauges */}
-      <group position={[0, 1.8, 0.03]}>
+      <group position={[0, 1.775, 0.03]}>
         <HighDetailManometer3D
           position={[-0.51, 0, 0]}
           title="CORE TEMP"
@@ -2783,7 +2854,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         />
         <HighDetailManometer3D
           position={[0, 0, 0]}
-          title="PRESSURE"
+          title="LOOP BAR"
           cyrillicSub="ДАВЛЕНИЕ КОНТУРА"
           unit="0-120 BAR"
           serial="№ 84-П2"
@@ -2794,7 +2865,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         />
         <HighDetailManometer3D
           position={[0.51, 0, 0]}
-          title="DOSIMETER"
+          title="RADIATION"
           cyrillicSub="ДОЗИМЕТР Р/Ч"
           unit="0-15 R/H"
           serial="№ 84-Д3"
@@ -2819,29 +2890,35 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           position={[-0.52, 0, 0]}
           pumpIndex={0}
           label="COOLING PUMP A"
-          subLabel="NORTH H2O: CITY & FARM"
+          subLabel="NORTH H2O: CITY/FARM"
         />
         <SculptedPumpValveAssembly3D
           position={[0, 0, 0]}
           pumpIndex={1}
           label="COOLING PUMP B"
-          subLabel="SOUTH H2O: VODKA PLANT"
+          subLabel="SOUTH H2O: VODKA"
         />
 
         {/* Multi-Part AZ-5 Emergency Scram Assembly */}
         <group position={[0.52, 0.02, 0.02]}>
-          {/* Raised Brass & Crimson Nameplate */}
-          <mesh position={[0, 0.178, 0.016]} castShadow>
-            <boxGeometry args={[0.3, 0.078, 0.012]} />
+          {/* Raised Brass & Crimson Nameplate (+25% larger) */}
+          <mesh position={[0, 0.184, 0.016]} castShadow>
+            <boxGeometry args={[0.375, 0.098, 0.012]} />
             <meshStandardMaterial
               color="#8c7a4b"
               metalness={0.85}
               roughness={0.28}
             />
           </mesh>
-          <mesh position={[0, 0.178, 0.023]}>
-            <planeGeometry args={[0.286, 0.068]} />
-            <meshStandardMaterial map={az5PlateTex} roughness={0.55} />
+          <mesh position={[0, 0.184, 0.023]}>
+            <planeGeometry args={[0.358, 0.085]} />
+            <meshStandardMaterial
+              map={az5PlateTex}
+              emissive="#ffffff"
+              emissiveMap={az5PlateTex}
+              emissiveIntensity={0.35}
+              roughness={0.55}
+            />
           </mesh>
 
           {/* Yellow/Black Hazard-Striped Cast-Iron Collar */}
@@ -3032,9 +3109,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
               s.injectBoronAcid();
             }}
           >
-            {/* Bolted Cast-Iron Boron Housing Plate (Compact to stay well above 3. FACILITY) */}
+            {/* Bolted Cast-Iron Boron Housing Plate (+25% larger plaque) */}
             <mesh position={[0, 0, 0.004]} castShadow receiveShadow>
-              <boxGeometry args={[0.275, 0.064, 0.016]} />
+              <boxGeometry args={[0.325, 0.076, 0.016]} />
               <meshStandardMaterial
                 color="#141816"
                 roughness={0.44}
@@ -3043,8 +3120,8 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
                 bumpScale={0.006}
               />
             </mesh>
-            <mesh position={[-0.024, 0, 0.014]} castShadow>
-              <planeGeometry args={[0.168, 0.05]} />
+            <mesh position={[-0.018, 0, 0.014]} castShadow>
+              <planeGeometry args={[0.21, 0.062]} />
               <meshStandardMaterial
                 map={boronPlateTex}
                 emissive="#ffffff"
@@ -3054,13 +3131,13 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
               />
             </mesh>
             <CagedSovietJewelLamp3D
-              position={[-0.118, 0, 0.014]}
+              position={[-0.138, 0, 0.014]}
               lampMatRef={boronLampMatRef}
-              scale={0.65}
+              scale={0.68}
             />
             {/* Brass Outer Collar */}
             <mesh
-              position={[0.092, 0, 0.018]}
+              position={[0.116, 0, 0.018]}
               rotation={[Math.PI / 2, 0, 0]}
               castShadow
             >
@@ -3074,7 +3151,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
               />
             </mesh>
             {/* Depressible Boron Plunger Cap with Engraved Top Face */}
-            <group ref={boronPlungerMeshRef} position={[0.092, 0, 0.036]}>
+            <group ref={boronPlungerMeshRef} position={[0.116, 0, 0.036]}>
               <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
                 <cylinderGeometry args={[0.025, 0.027, 0.034, 16]} />
                 <meshStandardMaterial
@@ -3099,13 +3176,13 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         </group>
       </group>
 
-      {/* 5. Bottom Row: 6-Lever Regional Substation Bank (0–50 MW each) + 18-Segment Redline Bar (Raised +0.10m and shifted -0.06m left so all 6 levers & buttons sit well above desk plane!) */}
-      <group position={[-0.06, 0.49, 0.04]}>
+      {/* 5. Bottom Row: 6-Lever Regional Substation Bank (0–50 MW each) + 18-Segment Redline Bar (Raised +0.13m and shifted -0.09m left so all 6 levers & buttons sit well above and behind desk plane!) */}
+      <group position={[-0.09, 0.52, 0.04]}>
         <IndustrialPowerColumn3D
           position={[-0.625, 0.02, 0]}
           sector="pripyat"
           label="1. PRIPYAT CITY"
-          subLabel="ПРИПЯТЬ // 0-50 MW"
+          subLabel="ПРИПЯТЬ"
           accentColor="#28b862"
           ledColor="#28b862"
           minusBtnTex={minusBtnTex}
@@ -3115,7 +3192,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           position={[-0.375, 0.02, 0]}
           sector="kolkhoz"
           label="2. KOLKHOZ FARM"
-          subLabel="СОВХОЗ // 0-50 MW"
+          subLabel="СОВХОЗ"
           accentColor="#28b862"
           ledColor="#28b862"
           minusBtnTex={minusBtnTex}
@@ -3125,7 +3202,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           position={[-0.125, 0.02, 0]}
           sector="duga"
           label="3. DUGA-1 RADAR"
-          subLabel="ДУГА-1 // 0-50 MW"
+          subLabel="ДУГА-1"
           accentColor="#d99b26"
           ledColor="#d99b26"
           minusBtnTex={minusBtnTex}
@@ -3135,7 +3212,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           position={[0.125, 0.02, 0]}
           sector="kgb"
           label="4. KGB BUNKER 07"
-          subLabel="КГБ-07 // 0-50 MW"
+          subLabel="КГБ-07"
           accentColor="#d99b26"
           ledColor="#d99b26"
           minusBtnTex={minusBtnTex}
@@ -3145,7 +3222,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           position={[0.375, 0.02, 0]}
           sector="vodka"
           label="5. VODKA PLANT"
-          subLabel="ВОДКА // 0-50 MW"
+          subLabel="ВОДКА"
           accentColor="#2ad4c8"
           ledColor="#2ad4c8"
           minusBtnTex={minusBtnTex}
@@ -3155,7 +3232,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           position={[0.625, 0.02, 0]}
           sector="steel"
           label="6. STEEL WORKS"
-          subLabel="СТАЛЬ // 0-50 MW"
+          subLabel="СТАЛЬ"
           accentColor="#2ad4c8"
           ledColor="#2ad4c8"
           minusBtnTex={minusBtnTex}
@@ -3311,8 +3388,12 @@ export const HighDetailKnifeBreaker3D: React.FC<
       onPointerUp={handleBreakerUp}
       onLostPointerCapture={handleBreakerUp}
     >
-      <mesh position={[0, 0.21, 0.01]}>
-        <planeGeometry args={[0.42, 0.09]} />
+      <mesh position={[0, 0.22, 0.005]} castShadow>
+        <boxGeometry args={[0.515, 0.12, 0.01]} />
+        <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+      </mesh>
+      <mesh position={[0, 0.22, 0.012]}>
+        <planeGeometry args={[0.50, 0.112]} />
         <meshStandardMaterial
           map={breakerPlateTex}
           emissive="#ffffff"
@@ -3545,35 +3626,25 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
   const headerTex = useMemo(
     () =>
-      createCrispPanelTexture(512, 72, (ctx, w, h) => {
-        ctx.fillStyle = "#141816";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        drawFittedPlaqueText(
-          ctx,
-          variant === "rear"
-            ? "CONTAINMENT & GAS LOOP // UNIT B"
-            : "BIO-SHIELD & RBMK CORE MAP // UNIT A-2",
-          w / 2,
-          30,
-          w,
-          'bold 21px "Kremlin", monospace',
-          "#e6dec3",
-        );
-        drawFittedPlaqueText(
-          ctx,
-          variant === "rear"
-            ? "HELIUM-N2 MANIFOLD • BULKHEAD SEAL • BUBBLER SIGHT-GLASS"
-            : "OCTAGONAL RBMK SHIELD • OIL COOLER • BORON PISTON PUMP",
-          w / 2,
-          56,
-          w,
-          'bold 17px "VT323", monospace',
-          "#28b862",
-        );
-      }),
+      makePlaqueTex(
+        variant === "rear"
+          ? "CONTAINMENT GAS LOOP // UNIT B"
+          : "BIO-SHIELD RBMK CORE MAP // UNIT A-2",
+        variant === "rear"
+          ? "HELIUM-N2 • CONTAINMENT SEAL • BUBBLER DRAIN"
+          : "37-TILE RBMK SHIELD • OIL COOLER • BORON PUMP",
+        {
+          width: 768,
+          height: 112,
+          titleSize: 31,
+          subSize: 24,
+          titleColor: "#ffffff",
+          titleStroke: "#ffffff",
+          subColor: "#44ff77",
+          subStroke: "#44ff77",
+          borderColor: "#b8a46b",
+        },
+      ),
     [variant],
   );
 
@@ -3582,97 +3653,61 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
   const leftPlateTex = useMemo(
     () =>
-      createCrispPanelTexture(288, 64, (ctx, w, h) => {
-        ctx.fillStyle = "#141816";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        drawFittedPlaqueText(
-          ctx,
-          variant === "rear" ? "HELIUM-N2 LOOP" : "OIL COOLER VALVE",
-          w / 2,
-          27,
-          w,
-          'bold 20px "Kremlin", monospace',
-          "#e6dec3",
-        );
-        drawFittedPlaqueText(
-          ctx,
-          variant === "rear" ? "DUAL-PIPE GAS REGULATOR" : "BEARING LUBE FLOW 0-100%",
-          w / 2,
-          50,
-          w,
-          'bold 14px "Courier Prime", monospace',
-          "#d99b26",
-        );
-      }),
+      makePlaqueTex(
+        variant === "rear" ? "HELIUM-N2" : "OIL COOLER",
+        variant === "rear" ? "GAS WHEEL" : "VALVE WHEEL",
+        {
+          width: 416,
+          height: 140,
+          titleSize: 50,
+          subSize: 38,
+          titleColor: "#ffffff",
+          titleStroke: "#000000",
+          subColor: "#ffcc00",
+          subStroke: "#000000",
+          borderColor: "#b8a46b",
+        },
+      ),
     [variant],
   );
 
   const centerPlateTex = useMemo(
     () =>
-      createCrispPanelTexture(384, 64, (ctx, w, h) => {
-        ctx.fillStyle = "#141816";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        drawFittedPlaqueText(
-          ctx,
-          variant === "rear"
-            ? "CONTAINMENT SEAL & SCRUBBERS"
-            : "RBMK-1000 CORE BIO-SHIELD",
-          w / 2,
-          26,
-          w,
-          'bold 18px "Kremlin", monospace',
-          "#e6dec3",
-        );
-        drawFittedPlaqueText(
-          ctx,
-          variant === "rear"
-            ? "4 AIRLOCK LAMPS • 3 SEAL TOGGLES"
-            : "CLICK FLASHING TILES TO INSERT RODS",
-          w / 2,
-          49,
-          w,
-          'bold 14px "Courier Prime", monospace',
-          "#28b862",
-        );
-      }),
+      makePlaqueTex(
+        variant === "rear" ? "SEAL SCRUBBERS" : "RBMK CORE",
+        variant === "rear" ? "4 TOGGLES" : "37 ROD TILES",
+        {
+          width: 544,
+          height: 140,
+          titleSize: 50,
+          subSize: 38,
+          titleColor: "#ffffff",
+          titleStroke: "#000000",
+          subColor: "#44ff77",
+          subStroke: "#000000",
+          borderColor: "#b8a46b",
+        },
+      ),
     [variant],
   );
 
   const rightPlateTex = useMemo(
     () =>
-      createCrispPanelTexture(288, 64, (ctx, w, h) => {
-        ctx.fillStyle = "#141816";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(3, 3, w - 6, h - 6);
-        drawFittedPlaqueText(
-          ctx,
-          variant === "rear" ? "BUBBLER DRAIN" : "BORON PISTON PUMP",
-          w / 2,
-          27,
-          w,
-          'bold 20px "Kremlin", monospace',
-          "#e6dec3",
-        );
-        drawFittedPlaqueText(
-          ctx,
-          variant === "rear"
-            ? "PULL LEVER • H2O SIGHT-GLASS"
-            : "PUMP HANDLE UP/DOWN TO REFILL",
-          w / 2,
-          50,
-          w,
-          'bold 14px "Courier Prime", monospace',
-          "#d99b26",
-        );
-      }),
+      makePlaqueTex(
+        variant === "rear" ? "BUBBLER DRAIN" : "BORON PUMP",
+        variant === "rear" ? "RETURN H2O" : "REFILL TANK",
+        {
+          width: 416,
+          height: 140,
+          titleSize: 50,
+          subSize: 38,
+          titleColor: "#ffffff",
+          titleStroke: "#000000",
+          subColor: "#ffcc00",
+          subStroke: "#000000",
+          borderColor: "#b8a46b",
+        },
+      ),
     [variant],
   );
 
@@ -3688,7 +3723,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         marks.forEach((m, idx) => {
           const y = 26 + idx * 52;
           ctx.fillStyle = idx === 0 ? "#6e1a14" : "#141414";
-          ctx.font = 'bold 15px "VT323", monospace';
+          ctx.font = '900 18px "VT323", monospace';
           ctx.textAlign = "center";
           ctx.fillText(m, w / 2 + 4, y + 5);
           ctx.fillRect(4, y, 8, 3);
@@ -3706,14 +3741,14 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         ctx.lineWidth = 3;
         ctx.strokeRect(2, 2, w - 4, h - 4);
         const grads = [
-          { lbl: "80%", y: 52, col: "#c92a1d" },
-          { lbl: "60%", y: 102, col: "#d98218" },
-          { lbl: "40%", y: 152, col: "#e6dec3" },
-          { lbl: "20%", y: 202, col: "#28b862" },
+          { lbl: "80%", y: 52, col: "#ff4444" },
+          { lbl: "60%", y: 102, col: "#ffcc00" },
+          { lbl: "40%", y: 152, col: "#ffffff" },
+          { lbl: "20%", y: 202, col: "#44ff77" },
         ];
         grads.forEach((g) => {
           ctx.fillStyle = g.col;
-          ctx.font = 'bold 16px "VT323", monospace';
+          ctx.font = '900 19px "VT323", monospace';
           ctx.textAlign = "center";
           ctx.fillText(g.lbl, w / 2, g.y + 5);
           ctx.fillRect(4, g.y, 10, 2);
@@ -3724,32 +3759,54 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
   const containmentSynopticTex = useMemo(
     () =>
-      createCrispPanelTexture(384, 192, (ctx, w, h) => {
+      createCrispPanelTexture(512, 256, (ctx, w, h) => {
         ctx.fillStyle = "#111715";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#364940";
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 4;
         ctx.strokeRect(4, 4, w - 8, h - 8);
 
         const labels = ["AIRLOCK A", "AIRLOCK B", "GRAPHITE N2", "BUBBLER SEAL"];
         labels.forEach((lbl, idx) => {
-          const cx = 48 + idx * 96;
-          ctx.fillStyle = "#d99b26";
-          ctx.font = 'bold 12px "Courier Prime", monospace';
-          ctx.textAlign = "center";
-          ctx.fillText(lbl, cx, 22);
+          const cx = 64 + idx * 128;
+          // 30% taller framed label box at top
+          ctx.fillStyle = "#17231e";
+          ctx.fillRect(cx - 60, 8, 120, 32);
+          ctx.strokeStyle = "#8c7a4b";
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(cx - 60, 8, 120, 32);
+          drawFittedPlaqueText(
+            ctx,
+            lbl,
+            cx,
+            30,
+            116,
+            '900 18px "Courier Prime", monospace',
+            "#ffe066",
+          );
           ctx.strokeStyle = "#6e6240";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(cx - 38, 28, 76, 56);
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(cx - 52, 42, 104, 72);
         });
 
-        const toggleLabels = ["N2 PURGE", "RAD FILTER", "SEAL LOCK", "EMERG SEAL"];
+        const toggleLabels = ["N2 PURGE", "RAD FILTER", "SEAL LOCK", "DRAIN VENT"];
         toggleLabels.forEach((tlbl, idx) => {
-          const cx = 48 + idx * 96;
-          ctx.fillStyle = idx === 3 ? "#e03b2d" : "#28b862";
-          ctx.font = 'bold 12px "Courier Prime", monospace';
-          ctx.textAlign = "center";
-          ctx.fillText(tlbl, cx, 106);
+          const cx = 64 + idx * 128;
+          // 30% taller framed label box above bottom row switches
+          ctx.fillStyle = "#17231e";
+          ctx.fillRect(cx - 60, 120, 120, 32);
+          ctx.strokeStyle = idx === 3 ? "#c92a1d" : "#28b862";
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(cx - 60, 120, 120, 32);
+          drawFittedPlaqueText(
+            ctx,
+            tlbl,
+            cx,
+            142,
+            116,
+            '900 18px "Courier Prime", monospace',
+            idx === 3 ? "#ff5555" : "#44ff77",
+          );
         });
       }),
     [],
@@ -4030,7 +4087,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   danger: s.graphiteTemp >= 650,
                 },
                 {
-                  label: "BUBBLER H2O",
+                  label: "BUBBLER MAX",
                   val: `${Math.round(s.bubblerLevel)}%`,
                   danger: s.bubblerLevel >= 85,
                 },
@@ -4059,19 +4116,19 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
           statusLine:
             variant === "rear"
               ? s.heliumPressure > 68
-                ? `GAS SATURATED (>68 BAR)! DIAL N2 < 35% & FLIP SCRUBBERS ON!`
-                : `CONTAINMENT: ${sealAllLocked ? "SEALED" : "UNSEALED!"} | N2 VALVE: ${Math.round(s.nitrogenLoopValve)}% | DRAIN: ${s.bubblerDraining ? "PUMPING TO ZONES" : "SHUT"}`
+                ? `GAS >68 BAR! DIAL N2 <35% & SCRUBBERS ON!`
+                : `SEAL: ${sealAllLocked ? "LOCKED" : "OPEN!"} | N2: ${Math.round(s.nitrogenLoopValve)}% | DRAIN: ${s.bubblerDraining ? "PUMPING" : "SHUT"}`
               : s.lubeOilPressure < 25
-                ? `OIL BREAKDOWN (<25%)! DIAL OIL < 30% TO RECOVER! | HOTSPOTS: ${activeHotspots}`
-                : `OIL VALVE: ${Math.round(s.oilCoolerValve)}% | HOTSPOTS: ${activeHotspots} ACTIVE (-6% B/TILE)`,
+                ? `OIL <25%! DIAL OIL <30% TO RECOVER! | HOT: ${activeHotspots}`
+                : `OIL VALVE: ${Math.round(s.oilCoolerValve)}% | HOTSPOTS: ${activeHotspots} ACTIVE (-6% B)`,
           statusDanger:
             variant === "rear"
               ? !sealAllLocked || s.bubblerLevel >= 85 || s.heliumPressure > 68
               : activeHotspots > 0 || s.lubeOilPressure < 25,
           footerLine:
             variant === "rear"
-              ? "TURN GAS WHEEL (<35% VENTS BAR) • HOLD DRAIN TO REFILL ZONES"
-              : `BORON RESERVES LEFT: ${boronTanksLeft} TANKS (+3.5%/STROKE)`,
+              ? "TURN GAS WHEEL (<35% VENTS) • HOLD DRAIN LEVER"
+              : `BORON RESERVES: ${boronTanksLeft} TANKS (+3.5%/STROKE)`,
           isBlackout: s.isBlackout,
         });
         tex.needsUpdate = true;
@@ -4082,8 +4139,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
   return (
     <group ref={groupRef}>
       {/* Main Heavy Cast-Iron Cabinet Chassis */}
-      <mesh position={[0, 1.12, -0.18]} castShadow receiveShadow>
-        <boxGeometry args={[1.66, 2.24, 0.42]} />
+      <mesh position={[0, 1.18, -0.18]} castShadow receiveShadow>
+        <boxGeometry args={[1.66, 2.38, 0.42]} />
         <meshStandardMaterial
           color="#23312b"
           roughness={0.45}
@@ -4093,8 +4150,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
           roughnessMap={ironTex.roughnessMap}
         />
       </mesh>
-      <mesh position={[0, 1.12, -0.22]} castShadow receiveShadow>
-        <boxGeometry args={[1.74, 2.32, 0.36]} />
+      <mesh position={[0, 1.18, -0.22]} castShadow receiveShadow>
+        <boxGeometry args={[1.74, 2.46, 0.36]} />
         <meshStandardMaterial
           color="#141414"
           roughness={0.5}
@@ -4107,8 +4164,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
       {/* Beveled L-Angle Iron Trim & Hex Bolt Rows */}
       {[-0.84, 0.84].map((ex, idx) => (
-        <mesh key={idx} position={[ex, 1.12, 0.032]} castShadow receiveShadow>
-          <boxGeometry args={[0.042, 2.26, 0.036]} />
+        <mesh key={idx} position={[ex, 1.18, 0.032]} castShadow receiveShadow>
+          <boxGeometry args={[0.042, 2.40, 0.036]} />
           <meshStandardMaterial
             color="#18211b"
             metalness={0.7}
@@ -4119,9 +4176,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         </mesh>
       ))}
 
-      {/* Top Engraved Header Plaque (Lowered -0.035m on Y so it sits cleanly inside the top frame) */}
-      <mesh position={[0, 2.24, 0.042]}>
-        <planeGeometry args={[1.48, 0.14]} />
+      {/* Top Engraved Header Plaque (Centered cleanly inside top frame with generous margin) */}
+      <mesh position={[0, 2.13, 0.044]}>
+        <planeGeometry args={[1.40, 0.148]} />
         <meshStandardMaterial
           map={headerTex}
           emissive="#ffffff"
@@ -4134,7 +4191,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
       {/* Overhead Hooded Tungsten Work-Lamps */}
       {[-0.48, 0.48].map((lx, lIdx) => (
-        <group key={lIdx} position={[lx, 2.34, 0.08]}>
+        <group key={lIdx} position={[lx, 2.43, 0.08]}>
           <mesh position={[0, 0, -0.04]} rotation={[Math.PI / 2, 0, 0]} castShadow>
             <cylinderGeometry args={[0.012, 0.014, 0.11, 8]} />
             <meshStandardMaterial color="#18211b" metalness={0.75} roughness={0.38} />
@@ -4161,12 +4218,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       ))}
 
       {/* Top Row: 3 High-Res 512x512 ГОСТ-84 Manometer Gauges (Aligned 1:1 with VFD Columns Below) */}
-      <group position={[0, 1.8, 0.03]}>
+      <group position={[0, 1.775, 0.03]}>
         {variant === "rear" ? (
           <>
             <HighDetailManometer3D
               position={[-0.51, 0, 0]}
-              title="HELIUM PRESS"
+              title="HELIUM BAR"
               cyrillicSub="ГЕЛИЕВЫЙ КОНТУР"
               unit="0-80 BAR"
               serial="№ 84-ГЛ1"
@@ -4178,7 +4235,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             />
             <HighDetailManometer3D
               position={[0, 0, 0]}
-              title="GRAPHITE TEMP"
+              title="GRAPHITE"
               cyrillicSub="КЛАДКА БЛОКА В"
               unit="0-850 °C"
               serial="№ 84-ГР4"
@@ -4189,7 +4246,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             />
             <HighDetailManometer3D
               position={[0.51, 0, 0]}
-              title="CONDENSER H2O"
+              title="BUBBLER H2O"
               cyrillicSub="УРОВЕНЬ БАРБОТ."
               unit="0-100 %"
               serial="№ 84-ВК5"
@@ -4203,7 +4260,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
           <>
             <HighDetailManometer3D
               position={[-0.51, 0, 0]}
-              title="MAX BEARING"
+              title="BEARINGS"
               cyrillicSub="ТЕМП. ПОДШИПНИКА"
               unit="0-120 °C"
               serial="№ 84-ТП1"
@@ -4217,7 +4274,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             />
             <HighDetailManometer3D
               position={[0, 0, 0]}
-              title="LUBE OIL PRESS"
+              title="OIL PRESS"
               cyrillicSub="ДАВЛЕНИЕ МАСЛА"
               unit="0-100 %"
               serial="№ 84-МН2"
@@ -4229,7 +4286,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             />
             <HighDetailManometer3D
               position={[0.51, 0, 0]}
-              title="BORON TANK"
+              title="BORON"
               cyrillicSub="БАК БОРНОЙ К-ТЫ"
               unit="0-100 %"
               serial="№ 84-БР3"
@@ -4266,12 +4323,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         <group position={[0, 0.78, 0.03]}>
           {/* 1. LEFT: Full Cast-Iron Valve Manifold & Brass Scale Arc (`OIL COOLER VALVE`) */}
           <group position={[-0.53, 0.02, 0.02]}>
-            <mesh position={[0, 0.25, 0.012]} castShadow>
-              <boxGeometry args={[0.31, 0.076, 0.01]} />
+            <mesh position={[0, 0.272, 0.012]} castShadow>
+              <boxGeometry args={[0.398, 0.128, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.25, 0.018]}>
-              <planeGeometry args={[0.296, 0.066]} />
+            <mesh position={[0, 0.272, 0.018]}>
+              <planeGeometry args={[0.382, 0.114]} />
               <meshStandardMaterial
                 map={leftPlateTex}
                 emissive="#ffffff"
@@ -4476,13 +4533,19 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               }
             }}
           >
-            <mesh position={[0, 0.265, 0.012]} castShadow>
-              <boxGeometry args={[0.42, 0.074, 0.01]} />
+            <mesh position={[0, 0.286, 0.012]} castShadow>
+              <boxGeometry args={[0.535, 0.126, 0.01]} />
               <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.265, 0.018]}>
-              <planeGeometry args={[0.406, 0.064]} />
-              <meshStandardMaterial map={centerPlateTex} roughness={0.55} />
+            <mesh position={[0, 0.286, 0.018]}>
+              <planeGeometry args={[0.518, 0.112]} />
+              <meshStandardMaterial
+                map={centerPlateTex}
+                emissive="#ffffff"
+                emissiveMap={centerPlateTex}
+                emissiveIntensity={0.35}
+                roughness={0.55}
+              />
             </mesh>
 
             {/* Heavy Recessed Octagonal Cast-Iron Reactor Pit Flange (dark gunmetal #222629) */}
@@ -4670,12 +4733,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
           {/* 3. RIGHT: Heavy Bolted Quadrant Housing & Reciprocating Piston Lever Pump (`BORON PISTON PUMP`) */}
           <group position={[0.53, 0.02, 0.02]}>
-            <mesh position={[0, 0.25, 0.012]} castShadow>
-              <boxGeometry args={[0.31, 0.076, 0.01]} />
+            <mesh position={[0, 0.272, 0.012]} castShadow>
+              <boxGeometry args={[0.398, 0.128, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.25, 0.018]}>
-              <planeGeometry args={[0.296, 0.066]} />
+            <mesh position={[0, 0.272, 0.018]}>
+              <planeGeometry args={[0.382, 0.114]} />
               <meshStandardMaterial
                 map={rightPlateTex}
                 emissive="#ffffff"
@@ -4978,12 +5041,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
           {/* 1. LEFT: Dual-Pipe Finned Copper Gas Manifold & Oxidized Crimson Handwheel (`HELIUM-N2 LOOP`) */}
           <group position={[-0.53, 0.02, 0.02]}>
-            <mesh position={[0, 0.25, 0.012]} castShadow>
-              <boxGeometry args={[0.31, 0.076, 0.01]} />
+            <mesh position={[0, 0.272, 0.012]} castShadow>
+              <boxGeometry args={[0.398, 0.128, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.25, 0.018]}>
-              <planeGeometry args={[0.296, 0.066]} />
+            <mesh position={[0, 0.272, 0.018]}>
+              <planeGeometry args={[0.382, 0.114]} />
               <meshStandardMaterial
                 map={leftPlateTex}
                 emissive="#ffffff"
@@ -5186,13 +5249,19 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
           {/* 2. CENTER: Square Bolted Containment Bulkhead Synoptic Panel (4 Caged Jewel Lamps + 3 Chunky Guarded Toggles + Oxidized Crimson Mushroom Button) */}
           <group position={[0, 0.0, 0.02]}>
-            <mesh position={[0, 0.265, 0.012]} castShadow>
-              <boxGeometry args={[0.44, 0.074, 0.01]} />
+            <mesh position={[0, 0.286, 0.012]} castShadow>
+              <boxGeometry args={[0.535, 0.126, 0.01]} />
               <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.265, 0.018]}>
-              <planeGeometry args={[0.426, 0.064]} />
-              <meshStandardMaterial map={centerPlateTex} roughness={0.55} />
+            <mesh position={[0, 0.286, 0.018]}>
+              <planeGeometry args={[0.518, 0.112]} />
+              <meshStandardMaterial
+                map={centerPlateTex}
+                emissive="#ffffff"
+                emissiveMap={centerPlateTex}
+                emissiveIntensity={0.35}
+                roughness={0.55}
+              />
             </mesh>
 
             {/* Square Bolted Steel Containment Housing */}
@@ -5363,12 +5432,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
           {/* 3. RIGHT: Heavy Bolted Quadrant Pull-Lever & Armored Sight-Glass (`BUBBLER DRAIN`) */}
           <group position={[0.53, 0.02, 0.02]}>
-            <mesh position={[0, 0.25, 0.012]} castShadow>
-              <boxGeometry args={[0.31, 0.076, 0.01]} />
+            <mesh position={[0, 0.272, 0.012]} castShadow>
+              <boxGeometry args={[0.398, 0.128, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.25, 0.018]}>
-              <planeGeometry args={[0.296, 0.066]} />
+            <mesh position={[0, 0.272, 0.018]}>
+              <planeGeometry args={[0.382, 0.114]} />
               <meshStandardMaterial
                 map={rightPlateTex}
                 emissive="#ffffff"
