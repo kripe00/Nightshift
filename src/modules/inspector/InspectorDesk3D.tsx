@@ -3286,9 +3286,13 @@ export function InspectorDesk3D() {
       )
     }
 
+    const hasDeskDoc = deskState.documents.some((d) => d.status === 'desk')
     const stApp = stampStateRef.current.APPROVED
     if (stApp.pointerDown) {
       stApp.holdElapsedMs += dt * 1000
+    } else if (!stApp.draggingBody && !hasDeskDoc) {
+      stApp.targetX = stApp.homeX
+      stApp.targetZ = stApp.homeZ
     }
     const appLerpFactor = stApp.draggingBody ? Math.min(1, dt * 32) : 0.28
     stApp.x = THREE.MathUtils.lerp(stApp.x, stApp.targetX, appLerpFactor)
@@ -3309,6 +3313,9 @@ export function InspectorDesk3D() {
     const stShr = stampStateRef.current.SHREDDED
     if (stShr.pointerDown) {
       stShr.holdElapsedMs += dt * 1000
+    } else if (!stShr.draggingBody && !hasDeskDoc) {
+      stShr.targetX = stShr.homeX
+      stShr.targetZ = stShr.homeZ
     }
     const shrLerpFactor = stShr.draggingBody ? Math.min(1, dt * 32) : 0.28
     stShr.x = THREE.MathUtils.lerp(stShr.x, stShr.targetX, shrLerpFactor)
@@ -3765,6 +3772,40 @@ export function InspectorDesk3D() {
     })
   }
 
+  // Magnetic Stamp Holder Snap: snaps stamp cleanly into its dedicated holder slot if released near the dock,
+  // colliding with the other stamp, or dropped off-paper so stamps never clutter the desk!
+  const snapStampToHolderIfNearOrCluttered = (type: StampType): boolean => {
+    const st = stampStateRef.current[type]
+    const otherType: StampType = type === 'APPROVED' ? 'SHREDDED' : 'APPROVED'
+    const otherSt = stampStateRef.current[otherType]
+
+    const distToOwnHome = Math.hypot(
+      st.targetX - st.homeX,
+      st.targetZ - st.homeZ
+    )
+    const inDockZone =
+      st.targetX >= 0.02 &&
+      st.targetX <= 0.58 &&
+      st.targetZ >= -0.46 &&
+      st.targetZ <= 0.02
+    const collidingWithOtherStamp =
+      Math.hypot(st.targetX - otherSt.targetX, st.targetZ - otherSt.targetZ) <
+      0.16
+    const overPaper = isOverAnyDeskDoc(st.targetX, st.targetZ)
+
+    if (
+      distToOwnHome <= 0.28 ||
+      inDockZone ||
+      collidingWithOtherStamp ||
+      !overPaper
+    ) {
+      st.targetX = st.homeX
+      st.targetZ = st.homeZ
+      return true
+    }
+    return false
+  }
+
   const handleStampMoveInternal = (
     type: StampType,
     e: ThreeEvent<PointerEvent>
@@ -3776,6 +3817,7 @@ export function InspectorDesk3D() {
       st.pointerId = null
       st.holdElapsedMs = 0
       st.draggingBody = false
+      snapStampToHolderIfNearOrCluttered(type)
       return
     }
     e.stopPropagation()
@@ -3792,8 +3834,18 @@ export function InspectorDesk3D() {
     if (!hit) return
     const nextX = Math.max(-1.02, Math.min(1.02, hit.x - st.dx))
     const nextZ = Math.max(-0.48, Math.min(0.52, hit.z - st.dz))
-    st.targetX = nextX
-    st.targetZ = nextZ
+
+    // Live magnetic pull when hovering close to the stamp holder dock
+    const distToHome = Math.hypot(nextX - st.homeX, nextZ - st.homeZ)
+    const overDockTray =
+      nextX >= 0.08 && nextX <= 0.52 && nextZ >= -0.36 && nextZ <= -0.08
+    if (distToHome <= 0.14 || overDockTray) {
+      st.targetX = THREE.MathUtils.lerp(nextX, st.homeX, 0.65)
+      st.targetZ = THREE.MathUtils.lerp(nextZ, st.homeZ, 0.65)
+    } else {
+      st.targetX = nextX
+      st.targetZ = nextZ
+    }
   }
 
   const handleStampUpInternal = (
@@ -3818,8 +3870,13 @@ export function InspectorDesk3D() {
     st.draggingBody = false
 
     if (wasDrag) {
-      // Hold & Drag Mode: set the stamp down cleanly at this spot on the desk/paper without firing the plunger!
-      playDetentClick(0)
+      // Hold & Drag Mode: if released near the holder (or off-paper / colliding), snap cleanly into its holder slot!
+      const snappedHome = snapStampToHolderIfNearOrCluttered(type)
+      if (snappedHome) {
+        playSwitchClank(false)
+      } else {
+        playDetentClick(0)
+      }
       return
     }
 
@@ -3887,7 +3944,12 @@ export function InspectorDesk3D() {
           st.holdElapsedMs = 0
           st.draggingBody = false
           if (wasDrag) {
-            playDetentClick(0)
+            const snappedHome = snapStampToHolderIfNearOrCluttered(type)
+            if (snappedHome) {
+              playSwitchClank(false)
+            } else {
+              playDetentClick(0)
+            }
           }
         }
         window.removeEventListener('pointerup', handleWinUp)
@@ -6312,14 +6374,24 @@ export function InspectorDesk3D() {
 
       {/* ============================================================
           6. HINGED 105° CLAMSHELL INK PADS & FULL-SIZE (1.0x) LATHE-TURNED WOODEN RUBBER STAMPS
-          (UNOBSTRUCTED DOCK AT `x: +0.22, z: -0.22` AND `x: +0.38, z: -0.22`!)
+          (MAGNETIC SNAP-CRADLE DOCK AT `x: +0.22, z: -0.22` AND `x: +0.38, z: -0.22`!)
          ============================================================ */}
-      <group position={[0.22, 0.926, -0.22]} scale={0.78}>
+      <group
+        position={[0.22, 0.926, -0.22]}
+        scale={0.78}
+        onClick={(e) => {
+          e.stopPropagation()
+          const st = stampStateRef.current.APPROVED
+          st.targetX = st.homeX
+          st.targetZ = st.homeZ
+          playSwitchClank(false)
+        }}
+      >
         {deskPropNodes.inkPadApprove && (
           <primitive object={deskPropNodes.inkPadApprove} />
         )}
         <mesh castShadow receiveShadow>
-          <boxGeometry args={[0.19, 0.012, 0.13]} />
+          <boxGeometry args={[0.19, 0.014, 0.13]} />
           <meshStandardMaterial
             color="#2a362b"
             roughness={0.45}
@@ -6329,12 +6401,29 @@ export function InspectorDesk3D() {
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        <mesh position={[0, 0.007, 0]} receiveShadow>
-          <boxGeometry args={[0.16, 0.004, 0.1]} />
-          <meshStandardMaterial color="#1b6e32" roughness={0.9} />
+        {/* Brass-Trimmed Magnetic Cradle Rim (Raised above GLB tin so it is 100% visible) */}
+        <mesh position={[0, 0.015, 0]} receiveShadow>
+          <boxGeometry args={[0.178, 0.006, 0.118]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            roughness={0.32}
+            metalness={0.82}
+            bumpMap={brassTex.bumpMap}
+            bumpScale={0.004}
+          />
         </mesh>
-        {/* Hinged Metal Clamshell Lid Propped Open at 105° */}
-        <group position={[0, 0.008, -0.064]} rotation={[-1.83, 0, 0]}>
+        {/* Unmistakable Emerald-Green Felt Ink Pad Socket */}
+        <mesh position={[0, 0.018, 0]} receiveShadow>
+          <boxGeometry args={[0.162, 0.005, 0.102]} />
+          <meshStandardMaterial
+            color="#249e44"
+            emissive="#0d3b18"
+            emissiveIntensity={0.35}
+            roughness={0.88}
+          />
+        </mesh>
+        {/* Hinged Metal Clamshell Lid Propped Open at 105° with ОДОБРЕНО Plaque */}
+        <group position={[0, 0.014, -0.064]} rotation={[-1.83, 0, 0]}>
           <mesh position={[0, 0, 0.062]} castShadow>
             <boxGeometry args={[0.188, 0.006, 0.124]} />
             <meshStandardMaterial
@@ -6345,15 +6434,37 @@ export function InspectorDesk3D() {
               bumpScale={0.008}
             />
           </mesh>
+          <mesh
+            position={[0, -0.005, 0.062]}
+            rotation={[Math.PI / 2, 0, 0]}
+          >
+            <planeGeometry args={[0.156, 0.052]} />
+            <meshStandardMaterial
+              map={approveBadgeTex}
+              emissive="#1b6e32"
+              emissiveIntensity={0.25}
+              roughness={0.6}
+            />
+          </mesh>
         </group>
       </group>
 
-      <group position={[0.38, 0.926, -0.22]} scale={0.78}>
+      <group
+        position={[0.38, 0.926, -0.22]}
+        scale={0.78}
+        onClick={(e) => {
+          e.stopPropagation()
+          const st = stampStateRef.current.SHREDDED
+          st.targetX = st.homeX
+          st.targetZ = st.homeZ
+          playSwitchClank(false)
+        }}
+      >
         {deskPropNodes.inkPadShred && (
           <primitive object={deskPropNodes.inkPadShred} />
         )}
         <mesh castShadow receiveShadow>
-          <boxGeometry args={[0.19, 0.012, 0.13]} />
+          <boxGeometry args={[0.19, 0.014, 0.13]} />
           <meshStandardMaterial
             color="#2b1a12"
             roughness={0.45}
@@ -6363,12 +6474,29 @@ export function InspectorDesk3D() {
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        <mesh position={[0, 0.007, 0]} receiveShadow>
-          <boxGeometry args={[0.16, 0.004, 0.1]} />
-          <meshStandardMaterial color="#8b1e1e" roughness={0.9} />
+        {/* Brass-Trimmed Magnetic Cradle Rim (Raised above GLB tin so it is 100% visible) */}
+        <mesh position={[0, 0.015, 0]} receiveShadow>
+          <boxGeometry args={[0.178, 0.006, 0.118]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            roughness={0.32}
+            metalness={0.82}
+            bumpMap={brassTex.bumpMap}
+            bumpScale={0.004}
+          />
         </mesh>
-        {/* Hinged Metal Clamshell Lid Propped Open at 105° */}
-        <group position={[0, 0.008, -0.064]} rotation={[-1.83, 0, 0]}>
+        {/* Unmistakable Crimson-Red Felt Ink Pad Socket */}
+        <mesh position={[0, 0.018, 0]} receiveShadow>
+          <boxGeometry args={[0.162, 0.005, 0.102]} />
+          <meshStandardMaterial
+            color="#c92828"
+            emissive="#3d0a0a"
+            emissiveIntensity={0.35}
+            roughness={0.88}
+          />
+        </mesh>
+        {/* Hinged Metal Clamshell Lid Propped Open at 105° with УНИЧТОЖЕНО Plaque */}
+        <group position={[0, 0.014, -0.064]} rotation={[-1.83, 0, 0]}>
           <mesh position={[0, 0, 0.062]} castShadow>
             <boxGeometry args={[0.188, 0.006, 0.124]} />
             <meshStandardMaterial
@@ -6377,6 +6505,18 @@ export function InspectorDesk3D() {
               metalness={0.65}
               bumpMap={ironTex.bumpMap}
               bumpScale={0.008}
+            />
+          </mesh>
+          <mesh
+            position={[0, -0.005, 0.062]}
+            rotation={[Math.PI / 2, 0, 0]}
+          >
+            <planeGeometry args={[0.156, 0.052]} />
+            <meshStandardMaterial
+              map={shredBadgeTex}
+              emissive="#8b1e1e"
+              emissiveIntensity={0.25}
+              roughness={0.6}
             />
           </mesh>
         </group>

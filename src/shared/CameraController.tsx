@@ -29,7 +29,7 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
   },
   reactor: {
     position: [-0.05, 1.24, 2.58],
-    target: [-1.68, 1.16, 3.08],
+    target: [-1.72, 1.16, 3.12],
     fov: 58,
   },
   power: {
@@ -48,7 +48,7 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     fov: 56,
   },
   aux: {
-    position: [0.12, 1.24, 2.02],
+    position: [-0.12, 1.24, 2.02],
     target: [1.76, 1.16, 2.02],
     fov: 58,
   },

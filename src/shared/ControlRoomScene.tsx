@@ -1033,9 +1033,9 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         rotation={[0, -Math.PI / 2, 0]}
         scale={[1.04, 1.05, 1.04]}
       >
-        {/* Main Right-Wing Steel Cabinet Body (Mirrors Left ReactorStation3D) */}
+        {/* Main Right-Wing Steel Cabinet Body (Widened to 1.98m for spacious, zero-overlap layout) */}
         <mesh position={[0, 1.18, -0.18]} castShadow receiveShadow>
-          <boxGeometry args={[1.66, 2.38, 0.42]} />
+          <boxGeometry args={[1.98, 2.38, 0.42]} />
           <meshStandardMaterial
             color="#23312b"
             roughness={0.45}
@@ -1046,7 +1046,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           />
         </mesh>
         <mesh position={[0, 1.18, -0.22]} castShadow receiveShadow>
-          <boxGeometry args={[1.74, 2.46, 0.36]} />
+          <boxGeometry args={[2.06, 2.46, 0.36]} />
           <meshStandardMaterial
             color="#141414"
             roughness={0.5}
@@ -1058,7 +1058,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         </mesh>
 
         {/* Heavy Stepped Bevel Plates, Welded Seams, Corner L-Angle Iron Trim & Hex Bolts */}
-        <mesh position={[-0.84, 1.18, 0.032]} castShadow receiveShadow>
+        <mesh position={[-1.0, 1.18, 0.032]} castShadow receiveShadow>
           <boxGeometry args={[0.042, 2.40, 0.036]} />
           <meshStandardMaterial
             color="#18211b"
@@ -1068,7 +1068,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             bumpScale={0.008}
           />
         </mesh>
-        <mesh position={[0.84, 1.18, 0.032]} castShadow receiveShadow>
+        <mesh position={[1.0, 1.18, 0.032]} castShadow receiveShadow>
           <boxGeometry args={[0.042, 2.40, 0.036]} />
           <meshStandardMaterial
             color="#18211b"
@@ -1081,7 +1081,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         {[0.32, 0.76, 1.28, 1.64, 2.04].map((by, bIdx) => (
           <group key={bIdx}>
             <mesh
-              position={[-0.84, by, 0.054]}
+              position={[-1.0, by, 0.054]}
               rotation={[Math.PI / 2, 0, 0]}
               castShadow
             >
@@ -1095,7 +1095,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               />
             </mesh>
             <mesh
-              position={[0.84, by, 0.054]}
+              position={[1.0, by, 0.054]}
               rotation={[Math.PI / 2, 0, 0]}
               castShadow
             >
@@ -1113,7 +1113,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
         {/* Top Riveted Header Plaque: TURBINE & 50HZ GRID PANEL (Centered cleanly inside top frame with generous margin) */}
         <mesh position={[0, 2.13, 0.044]}>
-          <planeGeometry args={[1.40, 0.148]} />
+          <planeGeometry args={[1.64, 0.148]} />
           <meshStandardMaterial
             map={rightHeaderPlateTex}
             emissive="#ffffff"
@@ -1126,10 +1126,10 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         {/* Corner Gusset Plates & Overhead Hooded Panel Work-Lights */}
         {(
           [
-            [-0.78, 2.32],
-            [0.78, 2.32],
-            [-0.78, 0.14],
-            [0.78, 0.14],
+            [-0.93, 2.32],
+            [0.93, 2.32],
+            [-0.93, 0.14],
+            [0.93, 0.14],
           ] as const
         ).map(([gx, gy], gIdx) => (
           <group key={gIdx} position={[gx, gy, 0.032]}>
@@ -1169,7 +1169,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             ))}
           </group>
         ))}
-        {[-0.48, 0.48].map((lx, lIdx) => (
+        {[-0.58, 0.58].map((lx, lIdx) => (
           <group key={lIdx} position={[lx, 2.43, 0.08]}>
             <mesh position={[0, 0, -0.04]} rotation={[Math.PI / 2, 0, 0]} castShadow>
               <cylinderGeometry args={[0.012, 0.014, 0.11, 8]} />
@@ -1199,7 +1199,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         {/* 3 High-Res 16-Part Bolted Turbine, 50Hz Grid Frequency & Generator Load Gauges */}
         <group position={[0, 1.775, 0.03]}>
           <HighDetailManometer3D
-            position={[-0.51, 0, 0]}
+            position={[-0.60, 0, 0]}
             title="RPM"
             cyrillicSub="ТУРБИНА №1"
             unit="0-3600 RPM"
@@ -1223,7 +1223,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             getValue={() => useGameStore.getState().gridHz}
           />
           <HighDetailManometer3D
-            position={[0.51, 0, 0]}
+            position={[0.60, 0, 0]}
             title="MW LOAD"
             cyrillicSub="НАГРУЗКА МВТ"
             unit="0-180 MW"
@@ -1256,7 +1256,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         <group position={[0, 1.0, 0.04]}>
           {/* 1. Spring-Loaded Steam Relief Pull-Lever (`СБРОС ПАРА / STEAM VENT`) */}
           <group
-            position={[-0.52, 0, 0.015]}
+            position={[-0.62, 0, 0.015]}
             onPointerDown={(e: ThreeEvent<PointerEvent>) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
@@ -1375,7 +1375,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
           {/* 2. Rotary Generator Excitation Rheostat Wheel (`ВОЗБУЖДЕНИЕ 50 ГЦ`) */}
           <group
-            position={[-0.05, 0, 0.015]}
+            position={[-0.04, 0, 0.015]}
             onPointerOver={(e) => {
               e.stopPropagation();
               useGameStore.getState().setHoveredDiagnosticId("grid");
@@ -1415,28 +1415,59 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 releasePointerCapture?: (id: number) => void;
               };
               r3fTarget?.setPointerCapture?.(e.pointerId);
+
+              // Project the 3D center of the rheostat wheel onto screen pixels so circular mouse motion tracks 1:1 around the knob center!
+              const domElem =
+                (e.nativeEvent.target as HTMLElement | null) ??
+                document.querySelector("canvas");
+              const rect = domElem?.getBoundingClientRect();
+              let centerX = e.nativeEvent.clientX;
+              let centerY = e.nativeEvent.clientY;
+              const wheelObj = rheostatWheelRef.current;
+              if (wheelObj && rect && rect.width > 0 && rect.height > 0) {
+                const worldPos = new THREE.Vector3();
+                wheelObj.getWorldPosition(worldPos);
+                worldPos.project(e.camera);
+                centerX = rect.left + (worldPos.x * 0.5 + 0.5) * rect.width;
+                centerY = rect.top + (-worldPos.y * 0.5 + 0.5) * rect.height;
+              }
+
               const startX = e.nativeEvent.clientX;
               const startY = e.nativeEvent.clientY;
               let totalMove = 0;
               let currentVal = useGameStore.getState().excitationTrim;
-              let prevX = e.nativeEvent.clientX;
-              let prevY = e.nativeEvent.clientY;
+              const initR = Math.hypot(startX - centerX, startY - centerY);
+              let hasValidAngle = initR >= 6;
+              let prevAngle = hasValidAngle
+                ? Math.atan2(startY - centerY, startX - centerX)
+                : 0;
               let lastDetent = Math.round(currentVal * 4);
 
               const handleMove = (ev: PointerEvent) => {
-                const dx = ev.clientX - prevX;
-                const dy = ev.clientY - prevY;
-                prevX = ev.clientX;
-                prevY = ev.clientY;
-                if (dx === 0 && dy === 0) return;
-
                 totalMove = Math.max(
                   totalMove,
                   Math.hypot(ev.clientX - startX, ev.clientY - startY),
                 );
 
-                // Smooth, monotonic linear drag (right or up = clockwise +Hz; left or down = counter-clockwise -Hz)
-                const deltaTrim = ((dx - dy) / 130) * 5.0;
+                const rx = ev.clientX - centerX;
+                const ry = ev.clientY - centerY;
+                const r = Math.hypot(rx, ry);
+                if (r < 6) return;
+
+                const curAngle = Math.atan2(ry, rx);
+                if (!hasValidAngle) {
+                  hasValidAngle = true;
+                  prevAngle = curAngle;
+                  return;
+                }
+
+                let dTheta = curAngle - prevAngle;
+                while (dTheta > Math.PI) dTheta -= Math.PI * 2;
+                while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+                prevAngle = curAngle;
+
+                // Pure 1:1 circular mouse rotation around the knob center (clockwise = +Hz, counter-clockwise = -Hz)
+                const deltaTrim = (dTheta / (Math.PI * 0.85)) * 5.0;
 
                 const nextTrim = THREE.MathUtils.clamp(
                   currentVal + deltaTrim,
@@ -1575,7 +1606,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         {/* Lower Row: 4 Guarded Metal Toggle Switches (with U-Shaped Side Safety Guards & Caged Jewel Lamps) in a Clean Unobstructed Horizontal Row */}
         <group position={[0, 0.54, 0.04]}>
           <mesh position={[0, 0.02, -0.01]} castShadow receiveShadow>
-            <boxGeometry args={[1.48, 0.34, 0.04]} />
+            <boxGeometry args={[1.82, 0.34, 0.04]} />
             <meshStandardMaterial
               color="#141414"
               roughness={0.45}
@@ -1602,7 +1633,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             return (
               <group
                 key={`toggle-${tSpec.id}`}
-                position={[-0.51 + tIdx * 0.34, -0.02, 0.018]}
+                position={[-0.63 + tIdx * 0.42, -0.02, 0.018]}
                 onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                   if (useCameraLookStore.getState().isFreeLookMode) return;
                   e.stopPropagation();
@@ -2140,11 +2171,15 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     const smw = state.sectorMW;
     const tsmw = state.targetSectorMW;
     const cdSec = Math.ceil(deskState.directiveCooldown);
-    const contextualHint =
+    const rawHint =
       state.hoveredDiagnosticId !== null || state.tutorialStep === "DONE"
         ? getContextualDiagnosticHint(state, deskState.printingDoc !== null)
         : null;
-    const sig = `${timeBucket}|${state.phase}|${state.tutorialStep}|${cdSec}|${contextualHint ?? ""}|${deskState.printingDoc?.id ?? ""}|${deskState.capsuleState}|${deskState.hatchOpen}|${lastEntryId}|${smw.pripyat}|${smw.kolkhoz}|${smw.duga}|${smw.kgb}|${smw.vodka}|${smw.steel}|${tsmw.pripyat}|${tsmw.kolkhoz}|${tsmw.duga}|${tsmw.kgb}|${tsmw.vodka}|${tsmw.steel}|${Math.round(state.pripyatWater)}|${Math.round(state.kolkhozWater)}|${Math.round(state.vodkaWater)}|${Math.ceil(state.vodkaDroughtTimer)}|${state.bubblerDraining}|${state.auxLoopBActive}|${state.kgbLineActive}|${activeDeskDoc?.id ?? "NONE"}|${activeDeskDoc?.stamps.length ?? 0}|${Math.round(state.pumpThrottle[0])}|${Math.round(state.pumpThrottle[1])}|${Math.round(state.waterReservoir)}|${Math.round(state.waterUsage)}|${Math.round(state.coreTemp / 2) * 2}|${state.ciaIntrusionActive}|${Math.round(state.ciaIntrusionProgress)}|${state.komradOverrideLocked}|${state.isBlackout}|${bulletinIdx}`;
+    const contextualHint =
+      state.coreTemp > 520 && state.controlRodLevel > 75
+        ? "⚠️ HIGH REACTIVITY: INSERT CONTROL RODS (UNIT A-2) OR BOOST PUMPS TO AVOID OVERHEAT!"
+        : rawHint;
+    const sig = `${timeBucket}|${state.phase}|${state.tutorialStep}|${cdSec}|${contextualHint ?? ""}|${Math.round(state.controlRodLevel)}|${deskState.printingDoc?.id ?? ""}|${deskState.capsuleState}|${deskState.hatchOpen}|${lastEntryId}|${smw.pripyat}|${smw.kolkhoz}|${smw.duga}|${smw.kgb}|${smw.vodka}|${smw.steel}|${tsmw.pripyat}|${tsmw.kolkhoz}|${tsmw.duga}|${tsmw.kgb}|${tsmw.vodka}|${tsmw.steel}|${Math.round(state.pripyatWater)}|${Math.round(state.kolkhozWater)}|${Math.round(state.vodkaWater)}|${Math.ceil(state.vodkaDroughtTimer)}|${state.bubblerDraining}|${state.auxLoopBActive}|${state.kgbLineActive}|${activeDeskDoc?.id ?? "NONE"}|${activeDeskDoc?.stamps.length ?? 0}|${Math.round(state.pumpThrottle[0])}|${Math.round(state.pumpThrottle[1])}|${Math.round(state.waterReservoir)}|${Math.round(state.waterUsage)}|${Math.round(state.coreTemp / 2) * 2}|${state.ciaIntrusionActive}|${Math.round(state.ciaIntrusionProgress)}|${state.komradOverrideLocked}|${state.isBlackout}|${bulletinIdx}`;
     const tex = crtMatRef.current?.map as THREE.CanvasTexture | undefined;
     const canvas = tex?.image as HTMLCanvasElement | undefined;
     if (!canvas || !tex || tex.userData.lastSig === sig) return;
@@ -3586,6 +3621,744 @@ const Komrad84SplitScreenCrt3D: React.FC<{
   );
 });
 
+/**
+ * Heavy Soviet-Era Hermetic Steel Bunker Door (`Гермодверь ГД-84`) with Industrial Overhead Bulkhead Warning Light (`Плафон ВЗГ-200`)
+ * Placed in the recessed wall gaps between control panels to seal the bunker perimeter with authentic 1984 Chernobyl-4 industrial detail.
+ */
+const SovietHermeticBunkerDoor3D: React.FC<{
+  position: [number, number, number];
+  rotation: [number, number, number];
+  doorCode?: string;
+  subLabel?: string;
+}> = React.memo(
+  ({
+    position,
+    rotation,
+    doorCode = "ГЕРМОДВЕРЬ № 4 // БЛОК А",
+    subLabel = "РАДИАЦИОННАЯ ЗАЩИТА • НЕ ОТКРЫВАТЬ",
+  }) => {
+    const wheelGroupRef = useRef<THREE.Group>(null);
+    const dogBarsGroupRef = useRef<THREE.Group>(null);
+    const bulbMatRef = useRef<THREE.MeshStandardMaterial>(null);
+    const glassMatRef = useRef<THREE.MeshStandardMaterial>(null);
+    const pointLightRef = useRef<THREE.PointLight>(null);
+    const wheelAngleRef = useRef(0);
+    const targetWheelAngleRef = useRef(0);
+
+    const ironTex = useMemo(() => getHammeredIronTextures(), []);
+    const brassTex = useMemo(() => getBrushedBrassTextures(), []);
+
+    // Procedural weathered olive-drab steel door texture (#2a3328 / #343b35) with grease grime halo around locking hub & rivets
+    const doorSteelTex = useMemo(
+      () =>
+        createNearestCanvasTexture(256, 512, (ctx, w, h) => {
+          ctx.fillStyle = "#2a3328";
+          ctx.fillRect(0, 0, w, h);
+
+          // Subtle vertical rolled-steel brushing & weld seam bands
+          for (let y = 0; y < h; y += 4) {
+            ctx.fillStyle =
+              y % 8 === 0
+                ? "rgba(52, 59, 53, 0.55)"
+                : "rgba(20, 26, 20, 0.35)";
+            ctx.fillRect(0, y, w, 2);
+          }
+
+          // Dark oil/grease grime halo around the central locking wheel shaft (x: 148, y: 268)
+          const grimeGrad = ctx.createRadialGradient(148, 268, 8, 148, 268, 72);
+          grimeGrad.addColorStop(0, "rgba(10, 12, 10, 0.85)");
+          grimeGrad.addColorStop(0.55, "rgba(18, 22, 16, 0.48)");
+          grimeGrad.addColorStop(1, "rgba(42, 51, 40, 0)");
+          ctx.fillStyle = grimeGrad;
+          ctx.beginPath();
+          ctx.arc(148, 268, 72, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Industrial edge wear & chipped primer scuffs along bottom threshold
+          const bottomWear = ctx.createLinearGradient(0, h - 68, 0, h);
+          bottomWear.addColorStop(0, "rgba(20, 24, 19, 0)");
+          bottomWear.addColorStop(1, "rgba(14, 16, 13, 0.82)");
+          ctx.fillStyle = bottomWear;
+          ctx.fillRect(0, h - 68, w, 68);
+
+          // Perimeter rivet dots
+          ctx.fillStyle = "#181e18";
+          for (let ry = 18; ry < h - 14; ry += 32) {
+            ctx.fillRect(10, ry, 5, 5);
+            ctx.fillRect(w - 15, ry, 5, 5);
+          }
+        }),
+      [],
+    );
+
+    // Worn yellow/black diagonal ГОСТ safety hazard stripes for the stepped door threshold sill & side jambs
+    const gostHazardTex = useMemo(
+      () =>
+        createNearestCanvasTexture(256, 64, (ctx, w, h) => {
+          ctx.fillStyle = "#141414";
+          ctx.fillRect(0, 0, w, h);
+          ctx.fillStyle = "#d99b16";
+          const stripeW = 24;
+          for (let x = -h; x < w + h; x += stripeW * 2) {
+            ctx.beginPath();
+            ctx.moveTo(x, h);
+            ctx.lineTo(x + stripeW, h);
+            ctx.lineTo(x + stripeW + h, 0);
+            ctx.lineTo(x + h, 0);
+            ctx.closePath();
+            ctx.fill();
+          }
+          // Grime & boot-scuff weathering across threshold hazard stripes
+          ctx.fillStyle = "rgba(16, 18, 15, 0.36)";
+          for (let y = 0; y < h; y += 6) {
+            ctx.fillRect(0, y, w, 2);
+          }
+          ctx.strokeStyle = "#2b302c";
+          ctx.lineWidth = 4;
+          ctx.strokeRect(2, 2, w - 4, h - 4);
+        }),
+      [],
+    );
+
+    // Stenciled Soviet ГОСТ Hermetic Door Warning Plaque
+    const doorPlaqueTex = useMemo(
+      () =>
+        makePlaqueTex(doorCode, subLabel, {
+          width: 448,
+          height: 112,
+          titleSize: 32,
+          subSize: 22,
+          titleColor: "#ffb000",
+          subColor: "#e6dec3",
+          borderColor: "#b8a46b",
+          bgColor: "#1a211c",
+        }),
+      [doorCode, subLabel],
+    );
+
+    useFrame(({ clock }, dt) => {
+      const t = clock.getElapsedTime();
+      const s = useGameStore.getState();
+      const totalMW =
+        s.powerAllocation.cooling +
+        s.powerAllocation.defense +
+        s.powerAllocation.facility +
+        (s.ventilationActive ? 10 : 0);
+      const isDanger =
+        s.coreTemp >= 700 ||
+        s.radiationLevel >= 2.2 ||
+        totalMW > s.maxSafePower ||
+        s.ciaIntrusionActive;
+
+      // Smoothly interpolate locking wheel (`штурвал`) and radiating dog bars
+      wheelAngleRef.current = THREE.MathUtils.lerp(
+        wheelAngleRef.current,
+        targetWheelAngleRef.current,
+        Math.min(1, dt * 14),
+      );
+      if (wheelGroupRef.current) {
+        wheelGroupRef.current.rotation.z = wheelAngleRef.current;
+      }
+      if (dogBarsGroupRef.current) {
+        const lockShift = Math.sin(wheelAngleRef.current) * 0.012;
+        dogBarsGroupRef.current.scale.setScalar(1 + lockShift);
+      }
+
+      // Animate overhead industrial bulkhead warning fixture (`#ffaa33` warm amber vs `#ff2a2a` alarm pulse)
+      const subtleFlicker =
+        0.92 +
+        Math.sin(t * 23.0 + position[0]) * 0.05 +
+        Math.cos(t * 47.0) * 0.03;
+      const alarmPulse = 0.55 + 0.45 * Math.sin(t * 10.5);
+
+      if (s.isBlackout) {
+        if (pointLightRef.current) pointLightRef.current.intensity = 0.12;
+        if (bulbMatRef.current) bulbMatRef.current.emissiveIntensity = 0.15;
+        if (glassMatRef.current) glassMatRef.current.emissiveIntensity = 0.08;
+      } else if (isDanger) {
+        if (pointLightRef.current) {
+          pointLightRef.current.color.set("#ff2a2a");
+          pointLightRef.current.intensity = (1.6 + alarmPulse * 1.8) * subtleFlicker;
+        }
+        if (bulbMatRef.current) {
+          bulbMatRef.current.color.set("#ff4433");
+          bulbMatRef.current.emissive.set("#ff2a2a");
+          bulbMatRef.current.emissiveIntensity = 1.8 + alarmPulse * 1.6;
+        }
+        if (glassMatRef.current) {
+          glassMatRef.current.color.set("#ff5533");
+          glassMatRef.current.emissive.set("#ff2a2a");
+          glassMatRef.current.emissiveIntensity = 0.9 + alarmPulse * 0.9;
+        }
+      } else {
+        if (pointLightRef.current) {
+          pointLightRef.current.color.set("#ffaa33");
+          pointLightRef.current.intensity = 1.75 * subtleFlicker;
+        }
+        if (bulbMatRef.current) {
+          bulbMatRef.current.color.set("#ffcf75");
+          bulbMatRef.current.emissive.set("#ffaa33");
+          bulbMatRef.current.emissiveIntensity = 1.65 * subtleFlicker;
+        }
+        if (glassMatRef.current) {
+          glassMatRef.current.color.set("#ffba52");
+          glassMatRef.current.emissive.set("#ff9922");
+          glassMatRef.current.emissiveIntensity = 0.72 * subtleFlicker;
+        }
+      }
+    });
+
+    return (
+      <group position={position} rotation={rotation}>
+        {/* 1. RECESSED CONCRETE & WELDED STEEL BULKHEAD SURROUND WALL */}
+        <mesh position={[0, 1.24, -0.14]} castShadow receiveShadow>
+          <boxGeometry args={[1.64, 2.52, 0.18]} />
+          <meshStandardMaterial
+            color="#1c241e"
+            roughness={0.62}
+            metalness={0.52}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.009}
+            roughnessMap={ironTex.roughnessMap}
+          />
+        </mesh>
+
+        {/* Left & Right Vertical Steel Bulkhead Stiffener Columns */}
+        {[-0.74, 0.74].map((cx, cIdx) => (
+          <mesh
+            key={`stiff-${cIdx}`}
+            position={[cx, 1.22, -0.04]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[0.12, 2.46, 0.08]} />
+            <meshStandardMaterial
+              color="#222a24"
+              roughness={0.48}
+              metalness={0.68}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+        ))}
+
+        {/* 2. HEAVY BOLTED STEEL OUTER DOOR FRAME (`КОРОБКА ГЕРМОДВЕРИ`) */}
+        {/* Left & Right Outer Frame Jambs */}
+        {[-0.54, 0.54].map((jx, jIdx) => (
+          <group key={`jamb-${jIdx}`} position={[jx, 1.09, 0.01]}>
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[0.11, 2.16, 0.11]} />
+              <meshStandardMaterial
+                color="#2a3328"
+                roughness={0.46}
+                metalness={0.68}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.008}
+                roughnessMap={ironTex.roughnessMap}
+              />
+            </mesh>
+            {/* 7 Heavy Protruding Perimeter Hex Bolts per Jamb */}
+            {[-0.92, -0.62, -0.32, 0, 0.32, 0.62, 0.92].map((by, bIdx) => (
+              <mesh
+                key={`jbolt-${bIdx}`}
+                position={[jIdx === 0 ? -0.015 : 0.015, by, 0.06]}
+                rotation={[Math.PI / 2, 0, 0]}
+                castShadow
+              >
+                <cylinderGeometry args={[0.013, 0.013, 0.018, 6]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.86}
+                  roughness={0.28}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+            ))}
+          </group>
+        ))}
+
+        {/* Top Lintel Beam & Bottom Hermetic Coaming Sill (`Порог Гермодвери`) */}
+        <mesh position={[0, 2.12, 0.015]} castShadow receiveShadow>
+          <boxGeometry args={[1.22, 0.12, 0.12]} />
+          <meshStandardMaterial
+            color="#2a3328"
+            roughness={0.46}
+            metalness={0.68}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+          />
+        </mesh>
+        <mesh position={[0, 0.07, 0.02]} castShadow receiveShadow>
+          <boxGeometry args={[1.22, 0.14, 0.13]} />
+          <meshStandardMaterial
+            color="#242b23"
+            roughness={0.5}
+            metalness={0.68}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+          />
+        </mesh>
+
+        {/* Worn Yellow/Black Diagonal ГОСТ Hazard Stripes across Threshold Sill & Upper Lintel */}
+        <mesh position={[0, 0.07, 0.087]}>
+          <planeGeometry args={[1.14, 0.095]} />
+          <meshStandardMaterial
+            map={gostHazardTex}
+            roughness={0.65}
+            metalness={0.25}
+          />
+        </mesh>
+        <mesh position={[0, 2.12, 0.077]}>
+          <planeGeometry args={[1.14, 0.065]} />
+          <meshStandardMaterial
+            map={gostHazardTex}
+            roughness={0.65}
+            metalness={0.25}
+          />
+        </mesh>
+
+        {/* Top Lintel Hex Bolts */}
+        {[-0.42, -0.21, 0, 0.21, 0.42].map((bx, bIdx) => (
+          <mesh
+            key={`tbolt-${bIdx}`}
+            position={[bx, 2.12, 0.08]}
+            rotation={[Math.PI / 2, 0, 0]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.013, 0.013, 0.018, 6]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.28}
+            />
+          </mesh>
+        ))}
+
+        {/* 4 Welded Corner Gusset Plates */}
+        {(
+          [
+            [-0.48, 2.04],
+            [0.48, 2.04],
+            [-0.48, 0.16],
+            [0.48, 0.16],
+          ] as const
+        ).map(([gx, gy], gIdx) => (
+          <mesh
+            key={`gusset-${gIdx}`}
+            position={[gx, gy, 0.062]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[0.13, 0.13, 0.016]} />
+            <meshStandardMaterial
+              color="#1e241e"
+              metalness={0.75}
+              roughness={0.4}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+            />
+          </mesh>
+        ))}
+
+        {/* 3. RECESSED ARMORED STEEL DOOR LEAF (`ПОЛОТНО ГЕРМОДВЕРИ`) */}
+        <mesh position={[0, 1.09, -0.02]} castShadow receiveShadow>
+          <boxGeometry args={[0.98, 1.92, 0.065]} />
+          <meshStandardMaterial
+            map={doorSteelTex}
+            color="#343b35"
+            roughness={0.52}
+            metalness={0.62}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+            roughnessMap={ironTex.roughnessMap}
+          />
+        </mesh>
+
+        {/* Inner Rubber Compression Gasket Frame around Door Leaf */}
+        <mesh position={[0, 1.09, -0.04]}>
+          <boxGeometry args={[1.02, 1.96, 0.02]} />
+          <meshStandardMaterial color="#121412" roughness={0.92} />
+        </mesh>
+
+        {/* 4 Horizontal Welded Steel Reinforcing Ribs across the Door Leaf */}
+        {[0.34, 0.76, 1.44, 1.84].map((ry, rIdx) => (
+          <group key={`rib-${rIdx}`} position={[0, ry, 0.022]}>
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[0.94, 0.048, 0.032]} />
+              <meshStandardMaterial
+                color="#2a3328"
+                roughness={0.44}
+                metalness={0.7}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.007}
+              />
+            </mesh>
+            {[-0.38, -0.19, 0, 0.19, 0.38].map((rx, bIdx) => (
+              <mesh
+                key={`rbolt-${bIdx}`}
+                position={[rx, 0, 0.02]}
+                rotation={[Math.PI / 2, 0, 0]}
+              >
+                <cylinderGeometry args={[0.008, 0.008, 0.01, 6]} />
+                <meshStandardMaterial
+                  color="#8a929a"
+                  metalness={0.85}
+                  roughness={0.3}
+                />
+              </mesh>
+            ))}
+          </group>
+        ))}
+
+        {/* 3 Massive Cylindrical Industrial Barrel Hinges on Left Side (`Петли Гермодвери`) */}
+        {[0.42, 1.09, 1.76].map((hy, hIdx) => (
+          <group key={`hinge-${hIdx}`} position={[-0.50, hy, 0.052]}>
+            {/* Upper & Lower Hinge knuckles */}
+            <mesh castShadow receiveShadow>
+              <cylinderGeometry args={[0.038, 0.038, 0.18, 12]} />
+              <meshStandardMaterial
+                color="#242b24"
+                roughness={0.42}
+                metalness={0.74}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.008}
+              />
+            </mesh>
+            {/* Central Brass Hinge Pin & Grease Nipple */}
+            <mesh castShadow>
+              <cylinderGeometry args={[0.024, 0.024, 0.21, 10]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.86}
+                roughness={0.26}
+              />
+            </mesh>
+            {/* Welded Hinge Leaf Strap onto Door Plate */}
+            <mesh position={[0.09, 0, -0.022]} castShadow receiveShadow>
+              <boxGeometry args={[0.16, 0.075, 0.026]} />
+              <meshStandardMaterial
+                color="#2a3328"
+                roughness={0.44}
+                metalness={0.7}
+              />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Stenciled ГОСТ Warning Plaque & Armored Inspection Peep-Port (`Смотровое Окно`) */}
+        <mesh position={[0, 1.63, 0.02]}>
+          <boxGeometry args={[0.66, 0.155, 0.012]} />
+          <meshStandardMaterial
+            color="#b8a46b"
+            metalness={0.82}
+            roughness={0.3}
+          />
+        </mesh>
+        <mesh position={[0, 1.63, 0.028]}>
+          <planeGeometry args={[0.64, 0.14]} />
+          <meshStandardMaterial
+            map={doorPlaqueTex}
+            emissive="#ffffff"
+            emissiveMap={doorPlaqueTex}
+            emissiveIntensity={0.28}
+            roughness={0.65}
+          />
+        </mesh>
+
+        {/* Armored Circular Peep-Port above Locking Wheel */}
+        <group position={[-0.24, 1.29, 0.022]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <cylinderGeometry args={[0.068, 0.076, 0.028, 16]} />
+            <meshStandardMaterial
+              color="#1e241e"
+              metalness={0.76}
+              roughness={0.38}
+            />
+          </mesh>
+          <mesh position={[0, 0, 0.015]}>
+            <circleGeometry args={[0.052, 16]} />
+            <meshStandardMaterial
+              color="#0a1610"
+              emissive="#123020"
+              emissiveIntensity={0.35}
+              roughness={0.18}
+              metalness={0.4}
+            />
+          </mesh>
+          {/* Cross-Bar Guard over Peep-Port */}
+          {[0, Math.PI / 2].map((ang, idx) => (
+            <mesh
+              key={`pguard-${idx}`}
+              position={[0, 0, 0.018]}
+              rotation={[0, 0, ang]}
+            >
+              <boxGeometry args={[0.105, 0.008, 0.006]} />
+              <meshStandardMaterial
+                color="#2a3328"
+                metalness={0.78}
+                roughness={0.35}
+              />
+            </mesh>
+          ))}
+        </group>
+
+        {/* 4. CENTRAL LOCKING WHEEL MECHANISM (`ШТУРВАЛ ГЕРМОДВЕРИ`) & RADIATING LOCKING BARS (`РИГЕЛИ`) */}
+        <group
+          position={[0.08, 1.06, 0.024]}
+          onClick={(e) => {
+            if (useCameraLookStore.getState().isFreeLookMode) return;
+            e.stopPropagation();
+            targetWheelAngleRef.current += Math.PI / 3;
+            playSwitchClank(true);
+            playLeverRatchet(0.9);
+          }}
+        >
+          {/* Central Cast-Iron Gearbox Boss & Brass Stuffing Gland */}
+          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.125, 0.145, 0.044, 16]} />
+            <meshStandardMaterial
+              color="#181e19"
+              roughness={0.46}
+              metalness={0.72}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+          <mesh
+            position={[0, 0, 0.032]}
+            rotation={[Math.PI / 2, 0, 0]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.052, 0.062, 0.042, 12]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+
+          {/* 4 Radiating Steel Locking Bars / Wedges (`Запоры`) engaging the Frame Keepers */}
+          <group ref={dogBarsGroupRef}>
+            {/* Left & Right Horizontal Locking Bars */}
+            <mesh position={[-0.31, 0, 0.008]} castShadow>
+              <boxGeometry args={[0.42, 0.034, 0.022]} />
+              <meshStandardMaterial
+                color="#8a929a"
+                metalness={0.84}
+                roughness={0.32}
+              />
+            </mesh>
+            <mesh position={[0.25, 0, 0.008]} castShadow>
+              <boxGeometry args={[0.32, 0.034, 0.022]} />
+              <meshStandardMaterial
+                color="#8a929a"
+                metalness={0.84}
+                roughness={0.32}
+              />
+            </mesh>
+            {/* Top & Bottom Diagonal/Vertical Locking Wedges */}
+            <mesh
+              position={[0.16, 0.24, 0.008]}
+              rotation={[0, 0, 0.72]}
+              castShadow
+            >
+              <boxGeometry args={[0.38, 0.028, 0.02]} />
+              <meshStandardMaterial
+                color="#8a929a"
+                metalness={0.84}
+                roughness={0.32}
+              />
+            </mesh>
+            <mesh
+              position={[0.16, -0.24, 0.008]}
+              rotation={[0, 0, -0.72]}
+              castShadow
+            >
+              <boxGeometry args={[0.38, 0.028, 0.02]} />
+              <meshStandardMaterial
+                color="#8a929a"
+                metalness={0.84}
+                roughness={0.32}
+              />
+            </mesh>
+          </group>
+
+          {/* Heavy Frame Locking Dog Keeper Brackets on Right Jamb */}
+          {[-0.26, 0, 0.26].map((ky, kIdx) => (
+            <mesh
+              key={`keeper-${kIdx}`}
+              position={[0.39, ky, 0.018]}
+              castShadow
+            >
+              <boxGeometry args={[0.068, 0.064, 0.044]} />
+              <meshStandardMaterial
+                color="#1e241e"
+                metalness={0.78}
+                roughness={0.38}
+              />
+            </mesh>
+          ))}
+
+          {/* 6-Spoke Circular Steel Locking Handwheel (`Штурвал`) */}
+          <group ref={wheelGroupRef} position={[0, 0, 0.078]}>
+            {/* Invisible Hit-Cylinder */}
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.22, 0.22, 0.08, 16]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
+            {/* Heavy Cast-Iron Rim painted weathered Soviet crimson-oxide (#7a1f18) */}
+            <mesh castShadow receiveShadow>
+              <torusGeometry args={[0.175, 0.02, 12, 28]} />
+              <meshStandardMaterial
+                color="#7a1f18"
+                roughness={0.44}
+                metalness={0.52}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.008}
+                roughnessMap={ironTex.roughnessMap}
+              />
+            </mesh>
+            {/* 3 Intersecting Steel Bars = 6 Spokes */}
+            {[0, Math.PI / 3, (2 * Math.PI) / 3].map((ang, sIdx) => (
+              <mesh key={`spoke-${sIdx}`} rotation={[0, 0, ang]} castShadow>
+                <cylinderGeometry args={[0.011, 0.011, 0.34, 8]} />
+                <meshStandardMaterial
+                  color="#8a929a"
+                  metalness={0.85}
+                  roughness={0.32}
+                />
+              </mesh>
+            ))}
+            {/* Central Machined Steel Cap & Brass Nut */}
+            <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.038, 0.042, 0.036, 12]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.88}
+                roughness={0.24}
+              />
+            </mesh>
+          </group>
+        </group>
+
+        {/* 5. INDUSTRIAL OVERHEAD SOVIET BULKHEAD WARNING LIGHT FIXTURE (`ПЛАФОН ВЗГ-200`) */}
+        <group position={[0, 2.33, 0.08]}>
+          {/* Cast-Iron Conduit Pipe & Wall Mounting Flange */}
+          <mesh position={[0, 0.02, -0.05]} castShadow>
+            <boxGeometry args={[0.18, 0.14, 0.04]} />
+            <meshStandardMaterial
+              color="#18211b"
+              metalness={0.75}
+              roughness={0.4}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+            />
+          </mesh>
+          <mesh
+            position={[0, 0.04, 0.01]}
+            rotation={[Math.PI / 2, 0, 0]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.024, 0.028, 0.12, 10]} />
+            <meshStandardMaterial
+              color="#222b25"
+              metalness={0.75}
+              roughness={0.38}
+            />
+          </mesh>
+          {/* Heavy Cast-Iron Lamp Dome Cap */}
+          <mesh position={[0, 0.015, 0.06]} castShadow>
+            <cylinderGeometry args={[0.068, 0.082, 0.055, 14]} />
+            <meshStandardMaterial
+              color="#23312b"
+              metalness={0.72}
+              roughness={0.4}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+            />
+          </mesh>
+          {/* Thick Ribbed Amber/Red Glass Lens Cylinder */}
+          <mesh position={[0, -0.055, 0.06]}>
+            <cylinderGeometry args={[0.064, 0.056, 0.11, 14]} />
+            <meshStandardMaterial
+              ref={glassMatRef}
+              color="#ffba52"
+              emissive="#ff9922"
+              emissiveIntensity={0.72}
+              transparent
+              opacity={0.86}
+              roughness={0.22}
+              metalness={0.1}
+            />
+          </mesh>
+          {/* Inner Glowing Tungsten Filament Bulb */}
+          <mesh position={[0, -0.05, 0.06]}>
+            <sphereGeometry args={[0.036, 10, 10]} />
+            <meshStandardMaterial
+              ref={bulbMatRef}
+              color="#ffcf75"
+              emissive="#ffaa33"
+              emissiveIntensity={1.65}
+            />
+          </mesh>
+          {/* Protective Brass & Cast-Iron Wire Guard Cage */}
+          <mesh
+            position={[0, -0.02, 0.06]}
+            rotation={[Math.PI / 2, 0, 0]}
+            castShadow
+          >
+            <torusGeometry args={[0.072, 0.006, 8, 16]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.28}
+            />
+          </mesh>
+          <mesh
+            position={[0, -0.09, 0.06]}
+            rotation={[Math.PI / 2, 0, 0]}
+            castShadow
+          >
+            <torusGeometry args={[0.064, 0.005, 8, 16]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.28}
+            />
+          </mesh>
+          {[0, Math.PI / 2, Math.PI / 4, -Math.PI / 4].map((cAng, cIdx) => (
+            <mesh
+              key={`cage-${cIdx}`}
+              position={[0, -0.062, 0.06]}
+              rotation={[Math.PI, cAng, 0]}
+              castShadow
+            >
+              <torusGeometry args={[0.068, 0.0045, 6, 12, Math.PI]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.86}
+                roughness={0.28}
+              />
+            </mesh>
+          ))}
+          {/* Atmospheric Warm Amber/Red PointLight casting glow onto the steel door and wheel below */}
+          <pointLight
+            ref={pointLightRef}
+            position={[0, -0.12, 0.18]}
+            color="#ffaa33"
+            intensity={1.75}
+            distance={3.2}
+            decay={1.4}
+          />
+        </group>
+      </group>
+    );
+  },
+);
+
 export const ControlRoomScene: React.FC = React.memo(() => {
   const bunkerArchRef = useRef<THREE.Group>(null);
   const reactorWrapRef = useRef<THREE.Group>(null);
@@ -3795,16 +4568,16 @@ export const ControlRoomScene: React.FC = React.memo(() => {
 
       {/* ============================================================
           1. CIRCULAR WRAP-AROUND 3-BAY CONSOLE AROUND CHAIR [0, 1.52, 2.42]
-             - Bay 1 (`UNIT A`):   pos = [-1.68, -0.02, 3.08], rotY = 1.8000 (103.1°) -> 1.80m from chair, Lever 6 at z = 2.53m (100% behind desk z = 2.16m)!
-             - Pillar 1 (Hinge 1): pos = [-1.46, 1.21, 4.04]
-             - Bay 2 (`UNIT A-2`): pos = [-0.61, -0.02, 4.54], rotY = 2.6029 (149.1°) -> 2.20m from chair, facing chair head-on!
-             - Pillar 2 (Hinge 2): pos = [0.24, 1.21, 5.05]
-             - Bay 3 (`UNIT B`):   pos = [1.18, -0.02, 4.76],  rotY = 3.4407 (197.1°) -> 2.62m from chair, facing chair head-on!
-             - Pillar 3 (End-Cap): pos = [2.12, 1.21, 4.47]
+             - Bay 1 (`UNIT A`, widened 1.98m): pos = [-1.72, -0.02, 3.12], rotY = 1.8000 (103.1°) -> Lever 1 clear of Pillar 1 & Lever 6 clear of desk!
+             - Pillar 1 (Hinge 1):              pos = [-1.46, 1.21, 4.14]
+             - Bay 2 (`UNIT A-2`):              pos = [-0.61, -0.02, 4.62], rotY = 2.6029 (149.1°) -> facing chair head-on!
+             - Pillar 2 (Hinge 2):              pos = [0.24, 1.21, 5.12]
+             - Bay 3 (`UNIT B`):                pos = [1.18, -0.02, 4.82],  rotY = 3.4407 (197.1°) -> facing chair head-on!
+             - Pillar 3 (End-Cap):              pos = [2.12, 1.21, 4.52]
          ============================================================ */}
       <group
         ref={reactorWrapRef}
-        position={[-1.68, -0.02, 3.08]}
+        position={[-1.72, -0.02, 3.12]}
         rotation={[0, 1.80, 0]}
         scale={[1.04, 1.05, 1.04]}
       >
@@ -3815,8 +4588,8 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         </group>
       </group>
 
-      {/* Heavy Bolted Cast-Iron Divider Pillar 1 (Hinge 1 at [-1.46, 1.21, 4.04] between `UNIT A` and `UNIT A-2`) */}
-      <group position={[-1.46, 1.21, 4.04]} scale={[1.04, 1.05, 1.04]}>
+      {/* Heavy Bolted Cast-Iron Divider Pillar 1 (Hinge 1 at [-1.46, 1.21, 4.14] between `UNIT A` and `UNIT A-2`) */}
+      <group position={[-1.46, 1.21, 4.14]} scale={[1.04, 1.05, 1.04]}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.062, 0.068, 2.48, 8]} />
           <meshStandardMaterial color="#18211b" metalness={0.7} roughness={0.42} />
@@ -3829,17 +4602,17 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         ))}
       </group>
 
-      {/* 1B. MIDDLE-LEFT PANEL (`UNIT A-2`): Hinged +46° inward from Pillar 1 at [-0.61, -0.02, 4.54] (2.20m from chair!) */}
+      {/* 1B. MIDDLE-LEFT PANEL (`UNIT A-2`): Hinged +46° inward from Pillar 1 at [-0.61, -0.02, 4.62] */}
       <group
-        position={[-0.61, -0.02, 4.54]}
+        position={[-0.61, -0.02, 4.62]}
         rotation={[0, 2.6029, 0]}
         scale={[1.04, 1.05, 1.04]}
       >
         <LeftRearWrapAroundPanel3D variant="left-rear" />
       </group>
 
-      {/* Heavy Bolted Cast-Iron Divider Pillar 2 (Hinge 2 at [0.24, 1.21, 5.05] between `UNIT A-2` and `UNIT B`) */}
-      <group position={[0.24, 1.21, 5.05]} scale={[1.04, 1.05, 1.04]}>
+      {/* Heavy Bolted Cast-Iron Divider Pillar 2 (Hinge 2 at [0.24, 1.21, 5.12] between `UNIT A-2` and `UNIT B`) */}
+      <group position={[0.24, 1.21, 5.12]} scale={[1.04, 1.05, 1.04]}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.062, 0.068, 2.48, 8]} />
           <meshStandardMaterial color="#18211b" metalness={0.7} roughness={0.42} />
@@ -3852,17 +4625,17 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         ))}
       </group>
 
-      {/* 1C. BACK-LEFT PANEL (`UNIT B`): Hinged +48° further inward from Pillar 2 at [1.18, -0.02, 4.76] (2.62m from chair!) */}
+      {/* 1C. BACK-LEFT PANEL (`UNIT B`): Hinged +48° further inward from Pillar 2 at [1.18, -0.02, 4.82] */}
       <group
-        position={[1.18, -0.02, 4.76]}
+        position={[1.18, -0.02, 4.82]}
         rotation={[0, 3.4407, 0]}
         scale={[1.04, 1.05, 1.04]}
       >
         <LeftRearWrapAroundPanel3D variant="rear" />
       </group>
 
-      {/* Heavy Bolted End-Cap Pillar 3 at Far Edge of `UNIT B` [2.12, 1.21, 4.47] */}
-      <group position={[2.12, 1.21, 4.47]} scale={[1.04, 1.05, 1.04]}>
+      {/* Heavy Bolted End-Cap Pillar 3 at Far Edge of `UNIT B` [2.12, 1.21, 4.52] */}
+      <group position={[2.12, 1.21, 4.52]} scale={[1.04, 1.05, 1.04]}>
         <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.062, 0.068, 2.48, 8]} />
           <meshStandardMaterial color="#18211b" metalness={0.7} roughness={0.42} />
@@ -3874,6 +4647,14 @@ export const ControlRoomScene: React.FC = React.memo(() => {
           </mesh>
         ))}
       </group>
+
+      {/* 1D. HERMETIC SOVIET STEEL BUNKER DOOR (`ГЕРМОДВЕРЬ ГД-84`) IN THE GAP BETWEEN `UNIT B` AND `UNIT C` */}
+      <SovietHermeticBunkerDoor3D
+        position={[2.08, -0.02, 3.76]}
+        rotation={[0, -1.80, 0]}
+        doorCode="ГЕРМОДВЕРЬ № 4 // СЕКТОР 84"
+        subLabel="ТАМБУР-ШЛЮЗ МАШЗАЛА ТГ-1 • КОНТУР ГЕРМЕТИЗАЦИИ"
+      />
 
       {/* 2. CENTER COCKPIT LOOMING TERMINAL: <TerminalStation3D /> + Enlarged Split-Screen CRT + High-Detail Soviet DVK-84 Console */}
       <group ref={terminalWrapRef} position={[0, 0.14, 2.18]}>

@@ -265,24 +265,57 @@ function startSmoothWheelSwivelDrag(
   };
   r3fTarget?.setPointerCapture?.(e.pointerId);
 
+  const domElem =
+    (e.nativeEvent.target as HTMLElement | null) ??
+    document.querySelector("canvas");
+  const rect = domElem?.getBoundingClientRect();
+  let centerX = e.nativeEvent.clientX;
+  let centerY = e.nativeEvent.clientY;
+  if (wheelObject && rect && rect.width > 0 && rect.height > 0) {
+    const worldPos = new THREE.Vector3();
+    wheelObject.getWorldPosition(worldPos);
+    worldPos.project(e.camera);
+    centerX = rect.left + (worldPos.x * 0.5 + 0.5) * rect.width;
+    centerY = rect.top + (-worldPos.y * 0.5 + 0.5) * rect.height;
+  }
+
+  const startX = e.nativeEvent.clientX;
+  const startY = e.nativeEvent.clientY;
   let currentVal = initialValue;
-  let prevX = e.nativeEvent.clientX;
-  let prevY = e.nativeEvent.clientY;
   let totalMoveDist = 0;
+  const initR = Math.hypot(startX - centerX, startY - centerY);
+  let hasValidAngle = initR >= 6;
+  let prevAngle = hasValidAngle
+    ? Math.atan2(startY - centerY, startX - centerX)
+    : 0;
   const range = maxVal - minVal;
   let lastSoundStep = Math.floor(((currentVal - minVal) / range) * 16);
 
   const handleMove = (ev: PointerEvent) => {
-    const dx = ev.clientX - prevX;
-    const dy = ev.clientY - prevY;
-    prevX = ev.clientX;
-    prevY = ev.clientY;
-    if (dx === 0 && dy === 0) return;
+    totalMoveDist = Math.max(
+      totalMoveDist,
+      Math.hypot(ev.clientX - startX, ev.clientY - startY),
+    );
 
-    totalMoveDist += Math.hypot(dx, dy);
+    const rx = ev.clientX - centerX;
+    const ry = ev.clientY - centerY;
+    const r = Math.hypot(rx, ry);
+    if (r < 6) return;
 
-    // Smooth, monotonic linear drag (right or up = increase; left or down = decrease)
-    const deltaRatio = (dx - dy) / 110;
+    const curAngle = Math.atan2(ry, rx);
+    if (!hasValidAngle) {
+      hasValidAngle = true;
+      prevAngle = curAngle;
+      return;
+    }
+
+    let dTheta = curAngle - prevAngle;
+    while (dTheta > Math.PI) dTheta -= Math.PI * 2;
+    while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+    prevAngle = curAngle;
+
+    // Pure circular rotation around the wheel center (clockwise = increase, counter-clockwise = decrease)
+    const deltaRatio = dTheta / (Math.PI * 1.25);
 
     currentVal = THREE.MathUtils.clamp(
       currentVal + deltaRatio * range,
@@ -290,7 +323,7 @@ function startSmoothWheelSwivelDrag(
       maxVal,
     );
     if (wheelObject) {
-      wheelObject.rotation.z -= deltaRatio * Math.PI * 1.5;
+      wheelObject.rotation.z -= dTheta;
     }
     onChange(currentVal);
 
@@ -1243,7 +1276,7 @@ const SculptedPumpValveAssembly3D: React.FC<
 
     if (leverArmRef.current) {
       const ratio = 1 - throttle / 100;
-      const targetAngleX = -0.58 + ratio * 1.16;
+      const targetAngleX = -0.52 + ratio * 0.96;
       leverArmRef.current.rotation.x = THREE.MathUtils.lerp(
         leverArmRef.current.rotation.x,
         targetAngleX,
@@ -1349,7 +1382,7 @@ const SculptedPumpValveAssembly3D: React.FC<
         lampMatRef={lampMatRef}
         scale={0.84}
       />
-      <group position={[0.005, -0.158, 0.038]}>
+      <group position={[0.005, -0.176, 0.038]}>
         <mesh castShadow receiveShadow>
           <boxGeometry args={[0.362, 0.07, 0.016]} />
           <meshStandardMaterial
@@ -1384,7 +1417,7 @@ const SculptedPumpValveAssembly3D: React.FC<
 
       {/* Heavy Bolted Cast-Iron Valve Manifold & 6-Spoke Handwheel */}
       <group
-        position={[-0.072, -0.025, 0.038]}
+        position={[-0.072, -0.012, 0.038]}
         onPointerDown={handlePointerDown}
       >
         {/* Pipe Manifold Flange & Brushed-Brass Degree Scale Plate */}
@@ -1487,7 +1520,7 @@ const SculptedPumpValveAssembly3D: React.FC<
 
       {/* Dual-Blade Copper Knife-Switch Throw Lever with Dark Phenolic Bakelite Crossbar & Steel Ferrules */}
       <group
-        position={[0.088, -0.025, 0.036]}
+        position={[0.088, -0.012, 0.036]}
         onPointerDown={handlePointerDown}
       >
         <mesh castShadow receiveShadow>
@@ -2708,9 +2741,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       position={[-2.15, 0, -1.08]}
       rotation={[0, 0.42, 0]}
     >
-      {/* 1. Main Hammered Cast-Iron Reactor Console Body & Corner Gusset Framing */}
+      {/* 1. Main Hammered Cast-Iron Reactor Console Body & Corner Gusset Framing (Widened to 1.98m for spacious, non-overlapping layout) */}
       <mesh position={[0, 1.18, -0.18]} castShadow receiveShadow>
-        <boxGeometry args={[1.66, 2.38, 0.42]} />
+        <boxGeometry args={[1.98, 2.38, 0.42]} />
         <meshStandardMaterial
           color="#23312b"
           roughness={0.45}
@@ -2721,7 +2754,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         />
       </mesh>
       <mesh position={[0, 1.18, -0.22]} castShadow receiveShadow>
-        <boxGeometry args={[1.74, 2.46, 0.36]} />
+        <boxGeometry args={[2.06, 2.46, 0.36]} />
         <meshStandardMaterial
           color="#141414"
           roughness={0.5}
@@ -2734,7 +2767,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
       {/* Top Raised Engraved Brass Header Plaque (Centered cleanly inside frame with generous top margin) */}
       <mesh position={[0, 2.13, 0.044]}>
-        <planeGeometry args={[1.40, 0.148]} />
+        <planeGeometry args={[1.64, 0.148]} />
         <meshStandardMaterial
           map={topHeaderPlateTex}
           emissive="#ffffff"
@@ -2748,10 +2781,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       {/* Corner Gusset Plates & Overhead Hooded Panel Work-Lights */}
       {(
         [
-          [-0.78, 2.32],
-          [0.78, 2.32],
-          [-0.78, 0.14],
-          [0.78, 0.14],
+          [-0.93, 2.32],
+          [0.93, 2.32],
+          [-0.93, 0.14],
+          [0.93, 0.14],
         ] as const
       ).map(([gx, gy], gIdx) => (
         <group key={gIdx} position={[gx, gy, 0.032]}>
@@ -2791,7 +2824,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           ))}
         </group>
       ))}
-      {[-0.48, 0.48].map((lx, lIdx) => (
+      {[-0.58, 0.58].map((lx, lIdx) => (
         <group key={lIdx} position={[lx, 2.43, 0.08]}>
           {/* Curved Gooseneck Arm */}
           <mesh position={[0, 0, -0.04]} rotation={[Math.PI / 2, 0, 0]} castShadow>
@@ -2822,9 +2855,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       ))}
 
       {/* 2. Top Row: 3 High-Res 16-Part Bolted Soviet Manometer Gauges */}
-      <group position={[0, 1.775, 0.03]}>
+      <group position={[0, 1.785, 0.03]}>
         <HighDetailManometer3D
-          position={[-0.51, 0, 0]}
+          position={[-0.60, 0, 0]}
           title="CORE TEMP"
           cyrillicSub="°С АКТИВНОЙ ЗОНЫ"
           unit="0-1000 °C"
@@ -2846,7 +2879,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           getValue={() => useGameStore.getState().pressureBar}
         />
         <HighDetailManometer3D
-          position={[0.51, 0, 0]}
+          position={[0.60, 0, 0]}
           title="RADIATION"
           cyrillicSub="ДОЗИМЕТР Р/Ч"
           unit="0-15 R/H"
@@ -2860,16 +2893,16 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
       {/* 3. Molded Phosphor-Green CRT Monitor Bay (`ЭЛТ ВЛ-84А`) */}
       <SovietCRTMonitorBay3D
-        position={[0, 1.46, 0.03]}
+        position={[0, 1.475, 0.03]}
         screenMatRef={statusMatRef}
         screenTexture={statusTexture}
         modelBadge="ЭЛТ ВЛ-84А"
       />
 
       {/* 4. Middle Row: 2 Sculpted Cast-Iron Pump Valves + Multi-Part Hinged AZ-5 Safety Cage */}
-      <group position={[0, 1.09, 0.03]}>
+      <group position={[0, 1.065, 0.03]}>
         <SculptedPumpValveAssembly3D
-          position={[-0.52, 0, 0]}
+          position={[-0.60, 0, 0]}
           pumpIndex={0}
           label="COOLING PUMP A"
           subLabel="NORTH H2O: CITY/FARM"
@@ -2882,9 +2915,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         />
 
         {/* Multi-Part AZ-5 Emergency Scram Assembly */}
-        <group position={[0.52, 0.02, 0.02]}>
-          {/* Raised Brass & Crimson Nameplate (+25% larger) */}
-          <mesh position={[0, 0.184, 0.016]} castShadow>
+        <group position={[0.60, 0, 0.02]}>
+          {/* Raised Brass & Crimson Nameplate (+25% larger, lowered slightly so it sits cleanly below CRT bay) */}
+          <mesh position={[0, 0.172, 0.016]} castShadow>
             <boxGeometry args={[0.375, 0.098, 0.012]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -2892,7 +2925,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
               roughness={0.28}
             />
           </mesh>
-          <mesh position={[0, 0.184, 0.023]}>
+          <mesh position={[0, 0.172, 0.023]}>
             <planeGeometry args={[0.358, 0.085]} />
             <meshStandardMaterial
               map={az5PlateTex}
@@ -3158,10 +3191,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         </group>
       </group>
 
-      {/* 5. Bottom Row: 6-Lever Regional Substation Bank (0–50 MW each) + 18-Segment Redline Bar (Raised +0.13m and shifted -0.09m left so all 6 levers & buttons sit well above and behind desk plane!) */}
-      <group position={[-0.09, 0.52, 0.04]}>
+      {/* 5. Bottom Row: 6-Lever Regional Substation Bank (0–50 MW each) + 18-Segment Redline Bar (Spaced at 0.285m across widened 1.98m panel with zero overlap!) */}
+      <group position={[0, 0.50, 0.04]}>
         <IndustrialPowerColumn3D
-          position={[-0.625, 0.02, 0]}
+          position={[-0.7125, 0.02, 0]}
           sector="pripyat"
           label="1. PRIPYAT CITY"
           subLabel="ПРИПЯТЬ"
@@ -3171,7 +3204,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[-0.375, 0.02, 0]}
+          position={[-0.4275, 0.02, 0]}
           sector="kolkhoz"
           label="2. KOLKHOZ FARM"
           subLabel="СОВХОЗ"
@@ -3181,7 +3214,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[-0.125, 0.02, 0]}
+          position={[-0.1425, 0.02, 0]}
           sector="duga"
           label="3. DUGA-1 RADAR"
           subLabel="ДУГА-1"
@@ -3191,7 +3224,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[0.125, 0.02, 0]}
+          position={[0.1425, 0.02, 0]}
           sector="kgb"
           label="4. KGB BUNKER 07"
           subLabel="КГБ-07"
@@ -3201,7 +3234,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[0.375, 0.02, 0]}
+          position={[0.4275, 0.02, 0]}
           sector="vodka"
           label="5. VODKA PLANT"
           subLabel="ВОДКА"
@@ -3211,7 +3244,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[0.625, 0.02, 0]}
+          position={[0.7125, 0.02, 0]}
           sector="steel"
           label="6. STEEL WORKS"
           subLabel="СТАЛЬ"
@@ -3222,9 +3255,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         />
 
         {/* 18-Segment Recessed Ribbed Phosphor Glass Total MW & Redline Bar */}
-        <group position={[0.06, -0.27, 0.03]}>
+        <group position={[0, -0.27, 0.03]}>
           <mesh position={[0, 0, -0.006]} castShadow receiveShadow>
-            <boxGeometry args={[1.5, 0.088, 0.026]} />
+            <boxGeometry args={[1.68, 0.088, 0.026]} />
             <meshStandardMaterial
               color="#161c19"
               roughness={0.44}
@@ -3237,10 +3270,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           {/* 4 Corner Hex Bolts on Total MW Housing */}
           {(
             [
-              [-0.725, 0.032],
-              [0.725, 0.032],
-              [-0.725, -0.032],
-              [0.725, -0.032],
+              [-0.815, 0.032],
+              [0.815, 0.032],
+              [-0.815, -0.032],
+              [0.815, -0.032],
             ] as const
           ).map(([bx, by], bIdx) => (
             <mesh
@@ -3257,7 +3290,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             </mesh>
           ))}
           {Array.from({ length: 18 }).map((_, idx) => (
-            <group key={idx} position={[-0.64 + idx * 0.075, 0, 0.006]}>
+            <group key={idx} position={[-0.7225 + idx * 0.085, 0, 0.006]}>
               <mesh>
                 <boxGeometry args={[0.056, 0.048, 0.016]} />
                 <meshStandardMaterial
@@ -3344,7 +3377,7 @@ export const HighDetailKnifeBreaker3D: React.FC<
 
   return (
     <group
-      position={[0.42, 0, 0.02]}
+      position={[0.56, 0, 0.02]}
       onPointerDown={(e) => {
         if (useCameraLookStore.getState().isFreeLookMode) return;
         e.stopPropagation();
@@ -3874,12 +3907,18 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
     // 2. UNIT A-2: 37 Octagonal Stainless-Steel RBMK Bio-Shield Tiles & Pop-Out Control Rod Pins
     let activeHotspots = 0;
     if (variant === "left-rear") {
+      // 2. UNIT A-2: 37 Octagonal Stainless-Steel RBMK Bio-Shield Tiles & Pop-Out Control Rod Pins
+      const activeRodCount = Math.round(
+        (s.controlRodLevel / 100) * RBMK_OCTAGON_TILES.length,
+      );
       for (let i = 0; i < RBMK_OCTAGON_TILES.length; i++) {
         const lensMat = channelLensMatRefs.current[i];
         const pinGrp = channelPinGroupRefs.current[i];
         const severity = s.channelHotspots[i];
         const isRedHotspot = severity === "red";
         const isAmberHotspot = severity === "amber";
+        const isRodWithdrawn = i < activeRodCount;
+        const isHighReactivity = s.controlRodLevel > 75 || i >= 26;
 
         if (isRedHotspot || isAmberHotspot) {
           activeHotspots += 1;
@@ -3900,17 +3939,34 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             lensMat.color.set("#d98218");
             lensMat.emissive.set("#ffb000");
             lensMat.emissiveIntensity = pulse;
+          } else if (isRodWithdrawn) {
+            // Withdrawn rod (active/hot): glows bright green (<=75%) or bright amber (>75% / high rod index)
+            if (isHighReactivity) {
+              lensMat.color.set("#d98218");
+              lensMat.emissive.set("#ffb000");
+              lensMat.emissiveIntensity = 1.05;
+            } else {
+              lensMat.color.set("#227846");
+              lensMat.emissive.set("#33ff66");
+              lensMat.emissiveIntensity = 0.95;
+            }
           } else {
-            lensMat.color.set("#193826");
-            lensMat.emissive.set("#28b862");
-            lensMat.emissiveIntensity = 0.32;
+            // Inserted rod (poisoned/safe): glows dark red
+            lensMat.color.set("#4a1412");
+            lensMat.emissive.set("#991818");
+            lensMat.emissiveIntensity = 0.38;
           }
         }
 
         if (pinGrp) {
-          // Overheating channels pop their mechanical rod-indicator pin OUT (+0.023m); normal/quenched sit flush (+0.005m)
-          const targetPinZ =
-            isRedHotspot ? 0.023 : isAmberHotspot ? 0.016 : 0.005;
+          // Withdrawn rods or overheating channels pop their mechanical rod-indicator pin OUT; inserted sit flush (+0.005m)
+          const targetPinZ = isRedHotspot
+            ? 0.023
+            : isAmberHotspot
+              ? 0.018
+              : isRodWithdrawn
+                ? 0.014
+                : 0.005;
           pinGrp.position.z = THREE.MathUtils.lerp(
             pinGrp.position.z,
             targetPinZ,
@@ -3919,21 +3975,24 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         }
       }
 
-      // Reciprocating Boron Piston Pump & 10-Segment Ribbed Phosphor Glass Boron Pressure Bar
+      // Master Control Rod / Boron Lever & 10-Segment Ribbed Phosphor Glass Rod/Boron Bar
       if (boronPistonGroupRef.current) {
-        const targetY = 0.055 - boronPistonPos * 0.11;
+        const rodDragRatio = pistonDragRef.current.active
+          ? boronPistonPos
+          : 1 - s.controlRodLevel / 100;
+        const targetY = 0.055 - rodDragRatio * 0.11;
         boronPistonGroupRef.current.position.y = THREE.MathUtils.lerp(
           boronPistonGroupRef.current.position.y,
           targetY,
           0.3,
         );
       }
-      const activeBoronSegs = Math.round((s.boronTankLevel / 100) * 10);
+      const activeRodSegs = Math.round((s.controlRodLevel / 100) * 10);
       for (let i = 0; i < 10; i++) {
         const mat = boronBarMatRefs.current[i];
         if (!mat) continue;
-        const isLit = !s.isBlackout && i < activeBoronSegs;
-        const col = i < 3 ? "#c92a1d" : i < 6 ? "#d98218" : "#28b862";
+        const isLit = !s.isBlackout && i < activeRodSegs;
+        const col = i >= 8 ? "#c92a1d" : i >= 6 ? "#d98218" : "#28b862";
         mat.color.set(isLit ? col : "#141916");
         mat.emissive.set(isLit ? col : "#000000");
         mat.emissiveIntensity = isLit ? 1.15 : 0;
@@ -4047,7 +4106,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
     if (t - lastVfdDrawRef.current < 0.08) return;
     const sealAllLocked = s.containmentSealLocked;
     const boronTanksLeft = (s.boronReservePool / 100).toFixed(1);
-    const sig = `${variant}|${Math.round(s.coreTemp / 2) * 2}|${Math.round(s.pressureBar)}|${Math.round(s.pumpAHeat)}|${Math.round(s.pumpBHeat)}|${Math.round(s.lubeOilPressure)}|${Math.round(s.boronTankLevel)}|${boronTanksLeft}|${s.oilCoolerValve}|${s.nitrogenLoopValve}|${Math.round(s.heliumPressure)}|${Math.round(s.graphiteTemp)}|${activeHotspots}|${sealAllLocked}|${Math.round(s.bubblerLevel)}|${s.bubblerDraining}|${s.isBlackout}`;
+    const rodPct = Math.round(s.controlRodLevel);
+    const isReactivityDanger =
+      s.controlRodLevel > 75 || activeHotspots > 0 || s.coreTemp > 520;
+    const sig = `${variant}|${Math.round(s.coreTemp / 2) * 2}|${Math.round(s.pressureBar)}|${Math.round(s.pumpAHeat)}|${Math.round(s.pumpBHeat)}|${Math.round(s.lubeOilPressure)}|${Math.round(s.boronTankLevel)}|${rodPct}|${boronTanksLeft}|${s.oilCoolerValve}|${s.nitrogenLoopValve}|${Math.round(s.heliumPressure)}|${Math.round(s.graphiteTemp)}|${activeHotspots}|${sealAllLocked}|${Math.round(s.bubblerLevel)}|${s.bubblerDraining}|${s.isBlackout}`;
     const tex = vfdMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (tex && tex.userData.lastSig !== sig) {
       lastVfdDrawRef.current = t;
@@ -4086,9 +4148,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   danger: s.lubeOilPressure < 25,
                 },
                 {
-                  label: "BORON TANK",
-                  val: `${Math.round(s.boronTankLevel)}%`,
-                  danger: s.boronTankLevel < 40,
+                  label: "BORON RODS",
+                  val: `${rodPct}%`,
+                  danger: s.controlRodLevel > 75,
                 },
               ];
 
@@ -4100,17 +4162,15 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               ? s.heliumPressure > 68
                 ? `GAS >68 BAR! DIAL N2 <35% & SCRUBBERS ON!`
                 : `SEAL: ${sealAllLocked ? "LOCKED" : "OPEN!"} | N2: ${Math.round(s.nitrogenLoopValve)}% | DRAIN: ${s.bubblerDraining ? "PUMPING" : "SHUT"}`
-              : s.lubeOilPressure < 25
-                ? `OIL <25%! DIAL OIL <30% TO RECOVER! | HOT: ${activeHotspots}`
-                : `OIL VALVE: ${Math.round(s.oilCoolerValve)}% | HOTSPOTS: ${activeHotspots} ACTIVE (-6% B)`,
+              : `CONTROL RODS: ${rodPct}% WITHDRAWN | REACTIVITY: ${isReactivityDanger ? "DANGER" : "SAFE"}`,
           statusDanger:
             variant === "rear"
               ? !sealAllLocked || s.bubblerLevel >= 85 || s.heliumPressure > 68
-              : activeHotspots > 0 || s.lubeOilPressure < 25,
+              : isReactivityDanger || s.lubeOilPressure < 25,
           footerLine:
             variant === "rear"
               ? "TURN GAS WHEEL (<35% VENTS) • HOLD DRAIN LEVER"
-              : `BORON RESERVES: ${boronTanksLeft} TANKS (+3.5%/STROKE)`,
+              : `OIL: ${Math.round(s.oilCoolerValve)}% | HOTSPOTS: ${activeHotspots} | BORON TANK: ${Math.round(s.boronTankLevel)}% (${boronTanksLeft}T)`,
           isBlackout: s.isBlackout,
         });
         tex.needsUpdate = true;
@@ -4269,14 +4329,13 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             <HighDetailManometer3D
               position={[0.51, 0, 0]}
               title="BORON"
-              cyrillicSub="БАК БОРНОЙ К-ТЫ"
+              cyrillicSub="СТЕРЖНИ СУЗ (%)"
               unit="0-100 %"
               serial="№ 84-БР3"
               min={0}
               max={100}
-              lowDangerThreshold={35}
-              dangerThreshold={999}
-              getValue={() => useGameStore.getState().boronTankLevel}
+              dangerThreshold={75}
+              getValue={() => useGameStore.getState().controlRodLevel}
             />
           </>
         )}
@@ -4503,16 +4562,55 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
           {/* 2. CENTER: Heavy Recessed Cast-Iron Reactor Pit Flange & 37 Machined Stainless-Steel Bio-Shield Caps (`ПЯТАЧОК`) */}
           <group
             position={[0, 0.0, 0.02]}
+            onWheel={(e: ThreeEvent<WheelEvent>) => {
+              if (useCameraLookStore.getState().isFreeLookMode) return;
+              e.stopPropagation();
+              const deltaPct = e.deltaY < 0 ? 5 : -5;
+              playDetentClick(2);
+              useGameStore.getState().adjustControlRodLevel(deltaPct);
+            }}
             onPointerDown={(e) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
+              e.stopPropagation();
               const s = useGameStore.getState();
               const activeKeys = Object.keys(s.channelHotspots).map(Number);
-              if (activeKeys.length > 0) {
-                e.stopPropagation();
-                playSwitchClank(true);
-                playDetentClick(3);
-                s.quenchChannelHotspot(activeKeys[0]);
-              }
+              const startY = e.nativeEvent.clientY;
+              const startRod = s.controlRodLevel;
+              let moved = false;
+              let lastDetent = Math.round(startRod / 5);
+
+              const handleMove = (ev: PointerEvent) => {
+                const dy = startY - ev.clientY;
+                if (Math.abs(dy) >= 5) {
+                  moved = true;
+                  const nextRod = THREE.MathUtils.clamp(
+                    startRod + (dy / 90) * 100,
+                    0,
+                    100,
+                  );
+                  const curDetent = Math.round(nextRod / 5);
+                  if (curDetent !== lastDetent) {
+                    lastDetent = curDetent;
+                    playDetentClick((Math.abs(curDetent) % 5) + 1);
+                  }
+                  useGameStore.getState().setControlRodLevel(nextRod);
+                }
+              };
+
+              const handleUp = () => {
+                window.removeEventListener("pointermove", handleMove);
+                window.removeEventListener("pointerup", handleUp);
+                window.removeEventListener("pointercancel", handleUp);
+                if (!moved && activeKeys.length > 0) {
+                  playSwitchClank(true);
+                  playDetentClick(3);
+                  useGameStore.getState().quenchChannelHotspot(activeKeys[0]);
+                }
+              };
+
+              window.addEventListener("pointermove", handleMove);
+              window.addEventListener("pointerup", handleUp);
+              window.addEventListener("pointercancel", handleUp);
             }}
           >
             <mesh position={[0, 0.286, 0.012]} castShadow>
@@ -4625,16 +4723,44 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   onPointerDown={(e) => {
                     if (useCameraLookStore.getState().isFreeLookMode) return;
                     e.stopPropagation();
-                    playSwitchClank(true);
-                    playDetentClick((tIdx % 5) + 2);
-                    useGameStore.getState().quenchChannelHotspot(tIdx);
-                  }}
-                  onClick={(e) => {
-                    if (useCameraLookStore.getState().isFreeLookMode) return;
-                    e.stopPropagation();
-                    playSwitchClank(true);
-                    playDetentClick((tIdx % 5) + 2);
-                    useGameStore.getState().quenchChannelHotspot(tIdx);
+                    const s = useGameStore.getState();
+                    const startY = e.nativeEvent.clientY;
+                    const startRod = s.controlRodLevel;
+                    let moved = false;
+                    let lastDetent = Math.round(startRod / 5);
+
+                    const handleMove = (ev: PointerEvent) => {
+                      const dy = startY - ev.clientY;
+                      if (Math.abs(dy) >= 5) {
+                        moved = true;
+                        const nextRod = THREE.MathUtils.clamp(
+                          startRod + (dy / 90) * 100,
+                          0,
+                          100,
+                        );
+                        const curDetent = Math.round(nextRod / 5);
+                        if (curDetent !== lastDetent) {
+                          lastDetent = curDetent;
+                          playDetentClick((Math.abs(curDetent) % 5) + 1);
+                        }
+                        useGameStore.getState().setControlRodLevel(nextRod);
+                      }
+                    };
+
+                    const handleUp = () => {
+                      window.removeEventListener("pointermove", handleMove);
+                      window.removeEventListener("pointerup", handleUp);
+                      window.removeEventListener("pointercancel", handleUp);
+                      if (!moved) {
+                        playSwitchClank(true);
+                        playDetentClick((tIdx % 5) + 2);
+                        useGameStore.getState().quenchChannelHotspot(tIdx);
+                      }
+                    };
+
+                    window.addEventListener("pointermove", handleMove);
+                    window.addEventListener("pointerup", handleUp);
+                    window.addEventListener("pointercancel", handleUp);
                   }}
                 >
                   {/* Generous Invisible Hit-Box so clicking a glowing hotspot cap never misses */}
@@ -4753,31 +4879,34 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                const startRod = useGameStore.getState().controlRodLevel;
+                const initPos = 1 - startRod / 100;
                 pistonDragRef.current = {
                   active: true,
                   startY: e.nativeEvent.clientY,
-                  startPos: boronPistonPos,
-                  lastHalfStroke: Math.round(boronPistonPos),
+                  startPos: initPos,
+                  lastHalfStroke: Math.round(initPos * 10),
                 };
+                setBoronPistonPos(initPos);
                 const handleMove = (ev: PointerEvent) => {
                   if (!pistonDragRef.current.active) return;
                   const dy = ev.clientY - pistonDragRef.current.startY;
                   const nextPos = THREE.MathUtils.clamp(
-                    pistonDragRef.current.startPos + dy / 75,
+                    pistonDragRef.current.startPos + dy / 110,
                     0,
                     1,
                   );
                   setBoronPistonPos(nextPos);
-                  const halfStroke =
-                    nextPos >= 0.72
-                      ? 1
-                      : nextPos <= 0.28
-                        ? 0
-                        : pistonDragRef.current.lastHalfStroke;
-                  if (halfStroke !== pistonDragRef.current.lastHalfStroke) {
-                    pistonDragRef.current.lastHalfStroke = halfStroke;
-                    playSwitchClank(halfStroke === 1);
-                    if (halfStroke === 1) {
+                  const nextRodPct = Math.round((1 - nextPos) * 100);
+                  useGameStore.getState().setControlRodLevel(nextRodPct);
+
+                  const stepIdx = Math.round(nextPos * 10);
+                  if (stepIdx !== pistonDragRef.current.lastHalfStroke) {
+                    const prevStep = pistonDragRef.current.lastHalfStroke;
+                    pistonDragRef.current.lastHalfStroke = stepIdx;
+                    playDetentClick((Math.abs(stepIdx) % 5) + 1);
+                    if (stepIdx >= 8 && prevStep < 8) {
+                      playSwitchClank(true);
                       playBoronHydraulicPumpStroke();
                       useGameStore.getState().pumpBoronTank(3.5);
                     }
@@ -4785,7 +4914,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 };
                 const handleUp = () => {
                   pistonDragRef.current.active = false;
-                  setBoronPistonPos(0);
+                  playSwitchClank(false);
                   window.removeEventListener("pointermove", handleMove);
                   window.removeEventListener("pointerup", handleUp);
                   window.removeEventListener("pointercancel", handleUp);

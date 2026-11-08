@@ -21,7 +21,9 @@ export function getContextualDiagnosticHint(
   const hintForAlarm = (id: DiagnosticAlarmId): string => {
     switch (id) {
       case 'core':
-        return '⚡ HIGH CORE TEMP: TURN [PUMP A/B] ON UNIT A [KEY 1] OR [HELIUM-N2] ON UNIT B [KEY 3] — OR CLICK RED RBMK TILES!'
+        return state.coreTemp > 520 && state.controlRodLevel > 75
+          ? '⚠️ HIGH REACTIVITY: INSERT CONTROL RODS (UNIT A-2) OR BOOST PUMPS TO AVOID OVERHEAT!'
+          : '⚡ HIGH CORE TEMP: TURN [PUMP A/B] ON UNIT A [KEY 1] OR [HELIUM-N2] ON UNIT B [KEY 3] — OR CLICK RED RBMK TILES!'
       case 'water':
         return '💧 ZONE WATER LOW: REDUCE SIPHONING PUMP ON UNIT A [KEY 1] — OR PULL & HOLD [BUBBLER DRAIN] ON UNIT B [KEY 3] TO RETURN H2O!'
       case 'gas_oil':
@@ -361,6 +363,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   pumpBHeat: 0,
   lubeOilPressure: 88,
   oilCoolerValve: 45,
+  controlRodLevel: 50,
   boronTankLevel: 100,
   boronReservePool: 300,
   boronPoisoningTimer: 0,
@@ -452,6 +455,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         pumpBHeat: 0,
         lubeOilPressure: 88,
         oilCoolerValve: 45,
+        controlRodLevel: 50,
         nitrogenLoopValve: 42,
         channelHotspots: {},
         activeMandate: null,
@@ -539,6 +543,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       kolkhozWater: 85,
       vodkaWater: 85,
       vodkaDroughtTimer: 0,
+      controlRodLevel: 50,
       boronTankLevel: 100,
       boronReservePool: 300,
       boronPoisoningTimer: 0,
@@ -618,6 +623,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       pumpBHeat: 0,
       lubeOilPressure: 88,
       oilCoolerValve: 45,
+      controlRodLevel: 50,
       boronTankLevel: 100,
       boronReservePool: 300,
       boronPoisoningTimer: 0,
@@ -727,7 +733,30 @@ export const useGameStore = create<GameState>((set, get) => ({
       [system]: clamped,
     }
     const totalMW = nextAlloc.cooling + nextAlloc.defense + nextAlloc.facility
-    if (totalMW > 240) {
+    const mwCeiling =
+      state.tutorialStep !== 'DONE'
+        ? 240
+        : Math.round(
+            40 +
+              (state.controlRodLevel / 100) * 140 +
+              (state.controlRodLevel > 50 ? (state.controlRodLevel - 50) * 1.2 : 0)
+          )
+    if (totalMW > 240 || (clamped > prevMW && totalMW > mwCeiling)) {
+      const warnMsg = `MW CEILING REACHED (${mwCeiling} MW @ ${Math.round(state.controlRodLevel)}% RODS)! WITHDRAW CONTROL RODS ON UNIT A-2 (>50%) TO UNLOCK HIGHER MEGAWATT CAPACITY!`
+      const warnEntry = createLogEntry(
+        state.shiftTimeMinutes,
+        'K.O.M.R.A.D.-84',
+        warnMsg,
+        'warn'
+      )
+      set({
+        lastDecisionFeedback: warnMsg,
+        terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
+        ],
+      })
       return
     }
     const halfA = Math.min(50, Math.round(clamped / 10) * 5)
@@ -782,7 +811,30 @@ export const useGameStore = create<GameState>((set, get) => ({
       facility: nextSectorMW.vodka + nextSectorMW.steel,
     }
     const totalMW = nextAlloc.cooling + nextAlloc.defense + nextAlloc.facility
-    if (totalMW > 240) {
+    const mwCeiling =
+      state.tutorialStep !== 'DONE'
+        ? 240
+        : Math.round(
+            40 +
+              (state.controlRodLevel / 100) * 140 +
+              (state.controlRodLevel > 50 ? (state.controlRodLevel - 50) * 1.2 : 0)
+          )
+    if (totalMW > 240 || (clamped > prevMW && totalMW > mwCeiling)) {
+      const warnMsg = `MW CEILING REACHED (${mwCeiling} MW @ ${Math.round(state.controlRodLevel)}% RODS)! WITHDRAW CONTROL RODS ON UNIT A-2 (>50%) TO UNLOCK HIGHER MEGAWATT CAPACITY!`
+      const warnEntry = createLogEntry(
+        state.shiftTimeMinutes,
+        'K.O.M.R.A.D.-84',
+        warnMsg,
+        'warn'
+      )
+      set({
+        lastDecisionFeedback: warnMsg,
+        terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
+        ],
+      })
       return
     }
     const deltaTenMW = (clamped - prevMW) / 10
@@ -899,10 +951,31 @@ export const useGameStore = create<GameState>((set, get) => ({
     })
   },
 
+  setControlRodLevel: (levelPct: number) => {
+    set((state) => {
+      const clamped = Math.max(0, Math.min(100, Number(levelPct.toFixed(1))))
+      if (Math.abs(clamped - state.controlRodLevel) < 0.05) return state
+      return {
+        controlRodLevel: clamped,
+      }
+    })
+  },
+
+  adjustControlRodLevel: (deltaPct: number) => {
+    const state = get()
+    state.setControlRodLevel(state.controlRodLevel + deltaPct)
+  },
+
   pumpBoronTank: (amountPct = 3.5) => {
     set((state) => {
+      const nextRodLevel = Math.max(
+        0,
+        Number((state.controlRodLevel - 5).toFixed(1))
+      )
       if (state.boronTankLevel >= 100 || state.boronReservePool <= 0) {
-        return state
+        return nextRodLevel !== state.controlRodLevel
+          ? { controlRodLevel: nextRodLevel }
+          : state
       }
       const needed = 100 - state.boronTankLevel
       const actualGain = Math.min(amountPct, needed, state.boronReservePool)
@@ -914,6 +987,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       )
       const nextCooldown = Math.max(0, state.boronCooldown - 4.0)
       return {
+        controlRodLevel: nextRodLevel,
         boronTankLevel: nextLevel,
         boronReservePool: nextPool,
         boronCooldown: nextCooldown,
@@ -932,7 +1006,17 @@ export const useGameStore = create<GameState>((set, get) => ({
             ? activeKeys[0]
             : undefined
 
-      if (state.boronTankLevel < 6) {
+      // Clicking a tile in the 37-tile matrix also maps to local rod depth / controlRodLevel (0..100%)
+      const clickedRodPct = Math.round(((channelIndex + 1) / 37) * 100)
+      const nextRodLevel = hadAnyHotspot
+        ? Math.max(0, Number((state.controlRodLevel - 5).toFixed(1)))
+        : Math.abs(state.controlRodLevel - clickedRodPct) <= 4
+          ? state.controlRodLevel >= 50
+            ? Math.max(0, state.controlRodLevel - 10)
+            : Math.min(100, state.controlRodLevel + 10)
+          : clickedRodPct
+
+      if (hadAnyHotspot && state.boronTankLevel < 6) {
         const warnEntry = createLogEntry(
           state.shiftTimeMinutes,
           'K.O.M.R.A.D.-84',
@@ -940,6 +1024,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           'danger'
         )
         return {
+          controlRodLevel: nextRodLevel,
           lastDecisionFeedback:
             'BORON TANK < 6%! PUMP BORON PISTON ON UNIT A-2 TO QUENCH HOTSPOTS!',
           terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
@@ -965,23 +1050,24 @@ export const useGameStore = create<GameState>((set, get) => ({
         30,
         Number((state.pressureBar - pressDrop).toFixed(1))
       )
-      const nextBoron = Number(
-        Math.max(0, state.boronTankLevel - 6).toFixed(1)
-      )
+      const nextBoron = hadAnyHotspot
+        ? Number(Math.max(0, state.boronTankLevel - 6).toFixed(1))
+        : state.boronTankLevel
 
       if (typeof targetKey === 'number' || hadAnyHotspot) {
         const entry = createLogEntry(
           state.shiftTimeMinutes,
           'OPERATOR',
-          `LOCAL BORON ROD INSERTED IN RBMK CHANNEL #${(targetKey ?? channelIndex) + 1} (HOTSPOT QUENCHED, -${tempDrop}°C, -6% BORON TANK).`,
+          `LOCAL BORON ROD INSERTED IN RBMK CHANNEL #${(targetKey ?? channelIndex) + 1} (RODS: ${Math.round(nextRodLevel)}% WITHDRAWN, HOTSPOT QUENCHED, -${tempDrop}°C).`,
           'normal'
         )
         return {
+          controlRodLevel: nextRodLevel,
           channelHotspots: nextHotspots,
           coreTemp: nextTemp,
           pressureBar: nextPress,
           boronTankLevel: nextBoron,
-          lastDecisionFeedback: `RBMK CHANNEL #${(targetKey ?? channelIndex) + 1} HOTSPOT QUENCHED (-${tempDrop}°C, -6% BORON -> ${Math.round(nextBoron)}%)!`,
+          lastDecisionFeedback: `RBMK CHANNEL #${(targetKey ?? channelIndex) + 1} HOTSPOT QUENCHED (-${tempDrop}°C, RODS ${Math.round(nextRodLevel)}% WITHDRAWN)!`,
           terminalEntries: [...state.terminalEntries.slice(-24), entry],
           terminalLogs: [
             ...state.terminalLogs.slice(-24),
@@ -990,6 +1076,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
       return {
+        controlRodLevel: nextRodLevel,
         channelHotspots: nextHotspots,
         coreTemp: nextTemp,
         pressureBar: nextPress,
@@ -2072,21 +2159,38 @@ export const useGameStore = create<GameState>((set, get) => ({
     const dryGasCoolingFactor = Math.min(0.4, effectiveN2Flow * 0.45)
     const dryOilCoolingBonus = oilBrokenDown ? 0 : oilValveRatio * 18
 
-    // Equilibrium Core Temp at baseline (Cooling=35-40MW, 1 pump @ 80%): ~330°C!
+    // Equilibrium Core Temp at baseline (Cooling=35-40MW, 1 pump @ 80%, controlRodLevel=50%): ~330°C!
+    // Reactivity & Heat Generation:
+    // - Base thermal production rate (`coreTemp` and `pressureBar` climb rate) scales directly with `controlRodLevel` (0..100%).
+    // - Withdrawing rods (`100%`) supercharges fission heat and steam pressure; inserting them (`0%`) chokes the reaction and cools the core down.
+    // - Positive Void Interaction: If `controlRodLevel > 80%` while zone water levels drop below 40%, trigger rapid thermal spikes (simulating RBMK positive void coefficient danger).
+    const rodRatio = state.controlRodLevel / 100
+    const rodThermalScale = 0.25 + 1.5 * rodRatio
+    const rodEquilibriumShift = (state.controlRodLevel - 50) * 1.4
+    const rodContinuousHeatRate =
+      ((state.controlRodLevel - 50) / 50) * 2.4 * graceFactor
+    const anyZoneBelow40 =
+      nextPripyatWater < 40 || nextKolkhozWater < 40 || nextVodkaWater < 40
+    const rodVoidSpikeRate =
+      state.controlRodLevel > 80 && anyZoneBelow40
+        ? (4.5 + ((state.controlRodLevel - 80) / 20) * 4.5) * graceFactor
+        : 0
+
     const rawHeatLoad = Math.max(
       0,
-      (rawTotalMW - 90) * 1.05 + (rawNonCoolingMW - 50) * 0.8
+      ((rawTotalMW - 90) * 1.05 + (rawNonCoolingMW - 50) * 0.8) * rodThermalScale
     )
     const effectiveHeatLoad = rawHeatLoad * (1 - dryGasCoolingFactor)
     const pumpDeficitHeat =
       pumpFlowSum < 0.35
-        ? (0.35 - pumpFlowSum) * 165 * (1 - dryGasCoolingFactor)
+        ? (0.35 - pumpFlowSum) * 165 * (1 - dryGasCoolingFactor) * rodThermalScale
         : 0
     const pumpExtraCooling = Math.max(0, pumpFlowSum - 0.8) * 52
     // When MAIN BREAKER is tripped open (isBlackout === true), the turbine generator is no longer converting reactor thermal energy into electricity (+140°C bottleneck)!
     const blackoutHeatBottleneck = state.isBlackout ? 140 : 0
     const equilibriumTemp =
       328 +
+      rodEquilibriumShift +
       effectiveHeatLoad +
       blackoutHeatBottleneck -
       (coolingMW - 35) * 1.65 -
@@ -2104,14 +2208,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     const hotspotHeatRate =
       (redHotspotCount * 1.6 + amberHotspotCount * 0.5) * graceFactor
     const positiveVoidRate =
-      nextGraphite > 650
+      (nextGraphite > 650
         ? ((nextGraphite - 650) / 50) * 2.0 * graceFactor
-        : 0
+        : 0) + rodVoidSpikeRate
 
     // Reactor Heat Bottleneck: coreTemp climbs 1.8x faster while MAIN BREAKER is open!
     // STEAM VENT: pulling STEAM VENT rapidly drops coreTemp by -10°C/s!
     const rawNetHeatRate =
-      relaxationRate + activeCoolingBoost + hotspotHeatRate + positiveVoidRate
+      relaxationRate +
+      rodContinuousHeatRate +
+      activeCoolingBoost +
+      hotspotHeatRate +
+      positiveVoidRate
     const blackoutMultipliedHeatRate =
       state.isBlackout && rawNetHeatRate > 0
         ? rawNetHeatRate * 1.8
@@ -2130,16 +2238,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Steam Pressure (0-120 BAR):
     // - Pulling STEAM VENT rapidly drops pressureBar by -5.5 BAR/s!
     // - While MAIN BREAKER is open (isBlackout), pressureBar climbs 1.8x faster!
+    // - Steam pressure climb and equilibrium also scale with `controlRodLevel` and RBMK positive void spikes!
     const coolingPressureRelief = ((coolingMW - 35) / 40) * 8.0
     const lowPumpPressurePush = Math.max(0, 0.7 - pumpFlowSum) * 14
+    const rodPressureShift = (state.controlRodLevel - 50) * 0.22
     const targetPressureFromTemp =
       48 +
-      ((nextCoreTemp - 330) / 670) * 65 +
+      rodPressureShift +
+      ((nextCoreTemp - 330) / 670) * 65 * rodThermalScale +
       (state.isBlackout ? 18 : 0) -
       coolingPressureRelief +
       lowPumpPressurePush
     const hotspotPressurePush =
       (redHotspotCount * 0.42 + amberHotspotCount * 0.14) * graceFactor * dt
+    const voidPressureSpike =
+      rodVoidSpikeRate > 0 ? rodVoidSpikeRate * 0.25 * dt : 0
     const bubblerBackPressure = bubblerFlooded ? 0.65 * graceFactor * dt : 0
 
     let nextPressure = state.pressureBar
@@ -2150,7 +2263,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         state.pressureBar - ventRate * dt + hotspotPressurePush
       )
     } else {
-      const rawPressDrift = (targetPressureFromTemp - state.pressureBar) * 0.32
+      const rawPressDrift =
+        (targetPressureFromTemp - state.pressureBar) * 0.32 * rodThermalScale
       const blackoutPressMultiplier =
         state.isBlackout && rawPressDrift > 0 ? 1.8 : 1.0
       const pressureDrift =
@@ -2164,6 +2278,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           state.pressureBar +
             pressureDrift +
             hotspotPressurePush +
+            voidPressureSpike +
             bubblerBackPressure
         )
       )
@@ -2451,6 +2566,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       pressureBar: Math.max(36, state.pressureBar - 24),
       redlineInstability: Math.max(0, state.redlineInstability - 40),
       channelHotspots: {},
+      controlRodLevel: 0,
       boronTankLevel: nextBoronTank,
       az5Available: false,
       az5Cooldown: 45,

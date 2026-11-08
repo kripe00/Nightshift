@@ -138,6 +138,7 @@ export interface GameState {
   pumpBHeat: number // 0 to 100% bearing heat & cavitation
   lubeOilPressure: number // 0 to 100% bearing lube pressure (UNIT A-2)
   oilCoolerValve: number // 0 to 100% oil cooler handwheel opening (UNIT A-2)
+  controlRodLevel: number // 0% = fully inserted/poisoned, 100% = fully withdrawn/extracted (UNIT A-2)
   boronTankLevel: number // 0 to 100% boron reserve tank level (UNIT A-2)
   boronReservePool: number // 0 to 300% finite Boron Concentrate Carboy pool (3.0 TANKS)
   boronPoisoningTimer: number // 0 to 15s Boron Reactivity Damping (-20% MW output sag)
@@ -193,6 +194,8 @@ export interface GameState {
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => void
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => void
   setOilCoolerValve: (valvePct: number) => void
+  setControlRodLevel: (levelPct: number) => void
+  adjustControlRodLevel: (deltaPct: number) => void
   pumpBoronTank: (amountPct?: number) => void
   quenchChannelHotspot: (channelIndex: number) => void
   setNitrogenLoopValve: (valvePct: number) => void
