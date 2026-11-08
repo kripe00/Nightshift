@@ -3289,21 +3289,16 @@ export function InspectorDesk3D() {
     const stApp = stampStateRef.current.APPROVED
     if (stApp.pointerDown) {
       stApp.holdElapsedMs += dt * 1000
-      if (!stApp.draggingBody && stApp.holdElapsedMs > 150) {
-        stApp.draggingBody = true
-        playDetentClick(1)
-      }
     }
-    if (!stApp.draggingBody) {
-      stApp.x = THREE.MathUtils.lerp(stApp.x, stApp.targetX, 0.24)
-      stApp.z = THREE.MathUtils.lerp(stApp.z, stApp.targetZ, 0.24)
-    }
+    const appLerpFactor = stApp.draggingBody ? Math.min(1, dt * 32) : 0.28
+    stApp.x = THREE.MathUtils.lerp(stApp.x, stApp.targetX, appLerpFactor)
+    stApp.z = THREE.MathUtils.lerp(stApp.z, stApp.targetZ, appLerpFactor)
     if (approveStampGroupRef.current) {
-      const targetAppY = stApp.draggingBody ? 0.96 : 0.935
+      const targetAppY = stApp.draggingBody ? 0.958 : 0.935
       const nextAppY = THREE.MathUtils.lerp(
         approveStampGroupRef.current.position.y || targetAppY,
         targetAppY,
-        0.38
+        0.32
       )
       approveStampGroupRef.current.position.set(stApp.x, nextAppY, stApp.z)
     }
@@ -3314,21 +3309,16 @@ export function InspectorDesk3D() {
     const stShr = stampStateRef.current.SHREDDED
     if (stShr.pointerDown) {
       stShr.holdElapsedMs += dt * 1000
-      if (!stShr.draggingBody && stShr.holdElapsedMs > 150) {
-        stShr.draggingBody = true
-        playDetentClick(1)
-      }
     }
-    if (!stShr.draggingBody) {
-      stShr.x = THREE.MathUtils.lerp(stShr.x, stShr.targetX, 0.24)
-      stShr.z = THREE.MathUtils.lerp(stShr.z, stShr.targetZ, 0.24)
-    }
+    const shrLerpFactor = stShr.draggingBody ? Math.min(1, dt * 32) : 0.28
+    stShr.x = THREE.MathUtils.lerp(stShr.x, stShr.targetX, shrLerpFactor)
+    stShr.z = THREE.MathUtils.lerp(stShr.z, stShr.targetZ, shrLerpFactor)
     if (shredStampGroupRef.current) {
-      const targetShrY = stShr.draggingBody ? 0.96 : 0.935
+      const targetShrY = stShr.draggingBody ? 0.958 : 0.935
       const nextShrY = THREE.MathUtils.lerp(
         shredStampGroupRef.current.position.y || targetShrY,
         targetShrY,
-        0.38
+        0.32
       )
       shredStampGroupRef.current.position.set(stShr.x, nextShrY, stShr.z)
     }
@@ -3527,6 +3517,14 @@ export function InspectorDesk3D() {
       if (hit) updateTearingSlipMove(hit, e.nativeEvent.timeStamp)
       return
     }
+    if (stampStateRef.current.APPROVED.pointerDown) {
+      handleStampMoveInternal('APPROVED', e)
+      return
+    }
+    if (stampStateRef.current.SHREDDED.pointerDown) {
+      handleStampMoveInternal('SHREDDED', e)
+      return
+    }
     if (manualPosRef.current.pointerDown) {
       handleManualDragMove(e)
       return
@@ -3547,6 +3545,12 @@ export function InspectorDesk3D() {
     if (slipGrabRef.current.dragging) {
       e.stopPropagation()
       finishTearingSlipUp()
+    }
+    if (stampStateRef.current.APPROVED.pointerDown) {
+      handleStampUpInternal('APPROVED', e)
+    }
+    if (stampStateRef.current.SHREDDED.pointerDown) {
+      handleStampUpInternal('SHREDDED', e)
     }
     if (manualPosRef.current.pointerDown) {
       handleManualDragUp(e)
@@ -3576,10 +3580,23 @@ export function InspectorDesk3D() {
         dz: hit.z - lensPosRef.current.z,
       }
     }
+    const handleWinUp = () => {
+      lensPosRef.current.dragging = false
+      lensDirtyRef.current = true
+      window.removeEventListener('pointerup', handleWinUp)
+      window.removeEventListener('pointercancel', handleWinUp)
+    }
+    window.addEventListener('pointerup', handleWinUp)
+    window.addEventListener('pointercancel', handleWinUp)
   }
 
   const handleLensPointerMove = (e: ThreeEvent<PointerEvent>) => {
     if (!lensPosRef.current.dragging) return
+    if ((e.nativeEvent.buttons & 1) === 0) {
+      lensPosRef.current.dragging = false
+      lensDirtyRef.current = true
+      return
+    }
     e.stopPropagation()
     const hit = getDeskLocalHitFromEvent(e, deskGroupRef.current, 0.975)
     if (!hit) return
@@ -3597,6 +3614,10 @@ export function InspectorDesk3D() {
   const handleLensPointerUp = (e: ThreeEvent<PointerEvent>) => {
     if (!lensPosRef.current.dragging) return
     e.stopPropagation()
+    const target = e.target as Element & {
+      releasePointerCapture?: (id: number) => void
+    }
+    target.releasePointerCapture?.(e.pointerId)
     lensPosRef.current.dragging = false
     lensDirtyRef.current = true
   }
@@ -3616,8 +3637,9 @@ export function InspectorDesk3D() {
     if (useCameraLookStore.getState().isFreeLookMode) return
     e.stopPropagation()
     if (isManualHeldRef.current) return
-    const target = (e.nativeEvent.target ?? e.target) as Element & {
+    const target = e.target as Element & {
       setPointerCapture?: (id: number) => void
+      releasePointerCapture?: (id: number) => void
     }
     target?.setPointerCapture?.(e.pointerId)
     const mp = manualPosRef.current
@@ -3640,11 +3662,37 @@ export function InspectorDesk3D() {
       mp.dx = 0
       mp.dz = 0
     }
+    const handleWinUp = () => {
+      if (mp.pointerDown) {
+        const wasDragging = mp.dragging
+        mp.pointerDown = false
+        mp.pointerId = null
+        mp.dragging = false
+        if (wasDragging) {
+          mp.suppressNextClick = true
+          playPaperRustle(true)
+          lensDirtyRef.current = true
+          window.setTimeout(() => {
+            manualPosRef.current.suppressNextClick = false
+          }, 60)
+        }
+      }
+      window.removeEventListener('pointerup', handleWinUp)
+      window.removeEventListener('pointercancel', handleWinUp)
+    }
+    window.addEventListener('pointerup', handleWinUp)
+    window.addEventListener('pointercancel', handleWinUp)
   }
 
   const handleManualDragMove = (e: ThreeEvent<PointerEvent>) => {
     const mp = manualPosRef.current
     if (!mp.pointerDown) return
+    if ((e.nativeEvent.buttons & 1) === 0) {
+      mp.pointerDown = false
+      mp.pointerId = null
+      mp.dragging = false
+      return
+    }
     e.stopPropagation()
     const moveDistPx = Math.hypot(
       e.clientX - mp.downClientX,
@@ -3672,6 +3720,10 @@ export function InspectorDesk3D() {
     const mp = manualPosRef.current
     if (!mp.pointerDown) return
     e.stopPropagation()
+    const target = e.target as Element & {
+      releasePointerCapture?: (id: number) => void
+    }
+    target?.releasePointerCapture?.(e.pointerId)
     const moveDistPx = Math.hypot(
       e.clientX - mp.downClientX,
       e.clientY - mp.downClientY
@@ -3713,12 +3765,102 @@ export function InspectorDesk3D() {
     })
   }
 
+  const handleStampMoveInternal = (
+    type: StampType,
+    e: ThreeEvent<PointerEvent>
+  ) => {
+    const st = stampStateRef.current[type]
+    if (!st.pointerDown) return
+    if ((e.nativeEvent.buttons & 1) === 0) {
+      st.pointerDown = false
+      st.pointerId = null
+      st.holdElapsedMs = 0
+      st.draggingBody = false
+      return
+    }
+    e.stopPropagation()
+    const moveDistPx = Math.hypot(
+      e.clientX - st.downClientX,
+      e.clientY - st.downClientY
+    )
+    if (!st.draggingBody && moveDistPx > 4) {
+      st.draggingBody = true
+      playDetentClick(1)
+    }
+    if (!st.draggingBody) return
+    const hit = getDeskLocalHitFromEvent(e, deskGroupRef.current, 0.935)
+    if (!hit) return
+    const nextX = Math.max(-1.02, Math.min(1.02, hit.x - st.dx))
+    const nextZ = Math.max(-0.48, Math.min(0.52, hit.z - st.dz))
+    st.targetX = nextX
+    st.targetZ = nextZ
+  }
+
+  const handleStampUpInternal = (
+    type: StampType,
+    e: ThreeEvent<PointerEvent>
+  ) => {
+    const st = stampStateRef.current[type]
+    if (!st.pointerDown) return
+    e.stopPropagation()
+    const target = e.target as Element & {
+      releasePointerCapture?: (id: number) => void
+    }
+    target?.releasePointerCapture?.(e.pointerId)
+    const moveDistPx = Math.hypot(
+      e.clientX - st.downClientX,
+      e.clientY - st.downClientY
+    )
+    const wasDrag = st.draggingBody || moveDistPx > 5
+    st.pointerDown = false
+    st.pointerId = null
+    st.holdElapsedMs = 0
+    st.draggingBody = false
+
+    if (wasDrag) {
+      // Hold & Drag Mode: set the stamp down cleanly at this spot on the desk/paper without firing the plunger!
+      playDetentClick(0)
+      return
+    }
+
+    // Quick Click (< 5px movement):
+    // Bonus convenience: if the stamp is sitting away from any paper (e.g. in its ink cradle/dock) and there is a paper on the desk,
+    // automatically slide it onto the paper and stamp it (or bring it over the paper) so clicking in the dock never feels wasted!
+    if (!isOverAnyDeskDoc(st.x, st.z)) {
+      const deskDocs = useDeskStore
+        .getState()
+        .documents.filter((d) => d.status === 'desk')
+      const topDoc = deskDocs[deskDocs.length - 1]
+      if (topDoc) {
+        const livePos = liveDocPosMapRef.current[topDoc.id] ?? {
+          x: topDoc.x,
+          z: topDoc.z,
+        }
+        const targetPaperX =
+          livePos.x + (type === 'APPROVED' ? -0.025 : 0.025)
+        const targetPaperZ = livePos.z + 0.025
+        st.x = targetPaperX
+        st.z = targetPaperZ
+        st.targetX = targetPaperX
+        st.targetZ = targetPaperZ
+      }
+    }
+
+    // Fire the Stamp Plunger Animation (stampDown) & apply ink onto the directive paper!
+    st.plungerStep = 3
+    execute3DStampImpact(type)
+    window.setTimeout(() => {
+      st.plungerStep = 0
+    }, 160)
+  }
+
   const makeUnifiedStampHandlers = (type: StampType) => ({
     onPointerDown: (e: ThreeEvent<PointerEvent>) => {
       if (useCameraLookStore.getState().isFreeLookMode) return
       e.stopPropagation()
-      const target = (e.nativeEvent.target ?? e.target) as Element & {
+      const target = e.target as Element & {
         setPointerCapture?: (id: number) => void
+        releasePointerCapture?: (id: number) => void
       }
       target?.setPointerCapture?.(e.pointerId)
       const st = stampStateRef.current[type]
@@ -3737,86 +3879,28 @@ export function InspectorDesk3D() {
         st.dx = 0
         st.dz = 0
       }
+      const handleWinUp = () => {
+        if (st.pointerDown) {
+          const wasDrag = st.draggingBody
+          st.pointerDown = false
+          st.pointerId = null
+          st.holdElapsedMs = 0
+          st.draggingBody = false
+          if (wasDrag) {
+            playDetentClick(0)
+          }
+        }
+        window.removeEventListener('pointerup', handleWinUp)
+        window.removeEventListener('pointercancel', handleWinUp)
+      }
+      window.addEventListener('pointerup', handleWinUp)
+      window.addEventListener('pointercancel', handleWinUp)
     },
     onPointerMove: (e: ThreeEvent<PointerEvent>) => {
-      const st = stampStateRef.current[type]
-      if (!st.pointerDown) return
-      e.stopPropagation()
-      const moveDistPx = Math.hypot(
-        e.clientX - st.downClientX,
-        e.clientY - st.downClientY
-      )
-      const heldMs = Math.max(
-        st.holdElapsedMs,
-        e.nativeEvent.timeStamp - st.downTimeMs
-      )
-      if (!st.draggingBody && (moveDistPx > 5 || heldMs > 150)) {
-        st.draggingBody = true
-        playDetentClick(1)
-      }
-      if (!st.draggingBody) return
-      const hit = getDeskLocalHitFromEvent(e, deskGroupRef.current, 0.935)
-      if (!hit) return
-      st.x = Math.max(-1.02, Math.min(1.02, hit.x - st.dx))
-      st.z = Math.max(-0.48, Math.min(0.52, hit.z - st.dz))
-      st.targetX = st.x
-      st.targetZ = st.z
+      handleStampMoveInternal(type, e)
     },
     onPointerUp: (e: ThreeEvent<PointerEvent>) => {
-      const st = stampStateRef.current[type]
-      if (!st.pointerDown) return
-      e.stopPropagation()
-      const moveDistPx = Math.hypot(
-        e.clientX - st.downClientX,
-        e.clientY - st.downClientY
-      )
-      const heldMs = Math.max(
-        st.holdElapsedMs,
-        e.nativeEvent.timeStamp - st.downTimeMs
-      )
-      const wasDragOrHold = st.draggingBody || moveDistPx > 5 || heldMs >= 150
-      st.pointerDown = false
-      st.pointerId = null
-      st.holdElapsedMs = 0
-      st.draggingBody = false
-
-      if (wasDragOrHold) {
-        // Hold & Drag Mode: set the stamp down cleanly at this spot on the desk/paper without firing the plunger!
-        st.targetX = st.x
-        st.targetZ = st.z
-        playDetentClick(0)
-        return
-      }
-
-      // Quick Click (< 150ms and < 5px movement):
-      // Bonus convenience: if the stamp is sitting away from any paper (e.g. in its ink cradle/dock) and there is a paper on the desk,
-      // automatically slide it onto the paper and stamp it (or bring it over the paper) so clicking in the dock never feels wasted!
-      if (!isOverAnyDeskDoc(st.x, st.z)) {
-        const deskDocs = useDeskStore
-          .getState()
-          .documents.filter((d) => d.status === 'desk')
-        const topDoc = deskDocs[deskDocs.length - 1]
-        if (topDoc) {
-          const livePos = liveDocPosMapRef.current[topDoc.id] ?? {
-            x: topDoc.x,
-            z: topDoc.z,
-          }
-          const targetPaperX =
-            livePos.x + (type === 'APPROVED' ? -0.025 : 0.025)
-          const targetPaperZ = livePos.z + 0.025
-          st.x = targetPaperX
-          st.z = targetPaperZ
-          st.targetX = targetPaperX
-          st.targetZ = targetPaperZ
-        }
-      }
-
-      // Fire the Stamp Plunger Animation (stampDown) & apply ink onto the directive paper!
-      st.plungerStep = 3
-      execute3DStampImpact(type)
-      window.setTimeout(() => {
-        st.plungerStep = 0
-      }, 160)
+      handleStampUpInternal(type, e)
     },
     onPointerCancel: (e: ThreeEvent<PointerEvent>) => {
       const st = stampStateRef.current[type]
@@ -3824,6 +3908,7 @@ export function InspectorDesk3D() {
       e.stopPropagation()
       st.pointerDown = false
       st.pointerId = null
+      st.holdElapsedMs = 0
       st.draggingBody = false
     },
     onDoubleClick: (e: ThreeEvent<MouseEvent>) => {

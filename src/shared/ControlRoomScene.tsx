@@ -891,7 +891,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
   const rightStatusTex = useMemo(() => createCrispPanelTexture(768, 144), []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, dt) => {
     const s = useGameStore.getState();
     const t = clock.getElapsedTime();
     const totalMW =
@@ -927,10 +927,11 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
     // 2. Animate Rotary Generator Excitation Rheostat Wheel (`ВОЗБУЖДЕНИЕ 50 ГЦ`)
     if (rheostatWheelRef.current) {
       const targetRotZ = -(s.excitationTrim / 5.0) * (Math.PI * 0.85);
+      const alpha = Math.min(1, dt * 28);
       rheostatWheelRef.current.rotation.z = THREE.MathUtils.lerp(
         rheostatWheelRef.current.rotation.z,
         targetRotZ,
-        0.72,
+        alpha,
       );
     }
 
@@ -1386,28 +1387,40 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 g.setHoveredDiagnosticId(null);
               }
             }}
+            onWheel={(e: ThreeEvent<WheelEvent>) => {
+              if (useCameraLookStore.getState().isFreeLookMode) return;
+              e.stopPropagation();
+              const step = e.deltaY < 0 ? 0.25 : -0.25;
+              const s = useGameStore.getState();
+              const nextTrim = THREE.MathUtils.clamp(
+                s.excitationTrim + step,
+                -5.0,
+                5.0,
+              );
+              const applied = nextTrim - s.excitationTrim;
+              if (Math.abs(applied) >= 0.005) {
+                playRheostatDetentClick(Math.round(nextTrim * 4));
+                s.adjustExcitationTrim(applied);
+                if (rheostatWheelRef.current) {
+                  rheostatWheelRef.current.rotation.z =
+                    -(nextTrim / 5.0) * (Math.PI * 0.85);
+                }
+              }
+            }}
             onPointerDown={(e: ThreeEvent<PointerEvent>) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
-              const domElem = e.nativeEvent.target as HTMLElement | null;
-              const rect = domElem?.getBoundingClientRect();
-              let centerX = e.nativeEvent.clientX;
-              let centerY = e.nativeEvent.clientY;
-              const wheelObj = rheostatWheelRef.current;
-              if (wheelObj && rect && rect.width > 0 && rect.height > 0) {
-                const worldPos = new THREE.Vector3();
-                wheelObj.getWorldPosition(worldPos);
-                worldPos.project(e.camera);
-                centerX = rect.left + (worldPos.x * 0.5 + 0.5) * rect.width;
-                centerY = rect.top + (-worldPos.y * 0.5 + 0.5) * rect.height;
-              }
+              const r3fTarget = e.target as unknown as {
+                setPointerCapture?: (id: number) => void;
+                releasePointerCapture?: (id: number) => void;
+              };
+              r3fTarget?.setPointerCapture?.(e.pointerId);
               const startX = e.nativeEvent.clientX;
               const startY = e.nativeEvent.clientY;
               let totalMove = 0;
               let currentVal = useGameStore.getState().excitationTrim;
               let prevX = e.nativeEvent.clientX;
               let prevY = e.nativeEvent.clientY;
-              let prevAngle = Math.atan2(prevY - centerY, prevX - centerX);
               let lastDetent = Math.round(currentVal * 4);
 
               const handleMove = (ev: PointerEvent) => {
@@ -1422,23 +1435,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                   Math.hypot(ev.clientX - startX, ev.clientY - startY),
                 );
 
-                const rx = ev.clientX - centerX;
-                const ry = ev.clientY - centerY;
-                const r = Math.hypot(rx, ry);
-                const curAngle = Math.atan2(ry, rx);
-
-                let dTheta = curAngle - prevAngle;
-                while (dTheta > Math.PI) dTheta -= Math.PI * 2;
-                while (dTheta < -Math.PI) dTheta += Math.PI * 2;
-                prevAngle = curAngle;
-
-                const linearDelta = ((-dy + dx) / 40) * 5.0;
-                const circularDelta =
-                  r > 10 ? (dTheta / (Math.PI * 0.75)) * 5.0 : 0;
-                const deltaTrim =
-                  Math.abs(linearDelta) >= Math.abs(circularDelta)
-                    ? linearDelta
-                    : circularDelta;
+                // Smooth, monotonic linear drag (right or up = clockwise +Hz; left or down = counter-clockwise -Hz)
+                const deltaTrim = ((dx - dy) / 130) * 5.0;
 
                 const nextTrim = THREE.MathUtils.clamp(
                   currentVal + deltaTrim,
@@ -1446,8 +1444,12 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                   5.0,
                 );
                 const appliedDelta = nextTrim - currentVal;
-                if (Math.abs(appliedDelta) >= 0.005) {
+                if (Math.abs(appliedDelta) >= 0.002) {
                   currentVal = nextTrim;
+                  if (rheostatWheelRef.current) {
+                    rheostatWheelRef.current.rotation.z =
+                      -(currentVal / 5.0) * (Math.PI * 0.85);
+                  }
                   const nextDetent = Math.round(currentVal * 4);
                   if (nextDetent !== lastDetent) {
                     lastDetent = nextDetent;
@@ -1457,10 +1459,11 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 }
               };
               const handleUp = () => {
+                r3fTarget?.releasePointerCapture?.(e.pointerId);
                 window.removeEventListener("pointermove", handleMove);
                 window.removeEventListener("pointerup", handleUp);
                 window.removeEventListener("pointercancel", handleUp);
-                if (totalMove < 6) {
+                if (totalMove < 5) {
                   const s = useGameStore.getState();
                   const err = 50.0 - s.gridHz;
                   const step =

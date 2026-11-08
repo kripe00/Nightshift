@@ -259,23 +259,16 @@ function startSmoothWheelSwivelDrag(
   if (useCameraLookStore.getState().isFreeLookMode) return;
   e.stopPropagation();
 
-  const domElem = e.nativeEvent.target as HTMLElement | null;
-  const rect = domElem?.getBoundingClientRect();
-  let centerX = e.nativeEvent.clientX;
-  let centerY = e.nativeEvent.clientY;
-  if (wheelObject && rect && rect.width > 0 && rect.height > 0) {
-    const worldPos = new THREE.Vector3();
-    wheelObject.getWorldPosition(worldPos);
-    worldPos.project(e.camera);
-    centerX = rect.left + (worldPos.x * 0.5 + 0.5) * rect.width;
-    centerY = rect.top + (-worldPos.y * 0.5 + 0.5) * rect.height;
-  }
+  const r3fTarget = e.target as unknown as {
+    setPointerCapture?: (id: number) => void;
+    releasePointerCapture?: (id: number) => void;
+  };
+  r3fTarget?.setPointerCapture?.(e.pointerId);
 
   let currentVal = initialValue;
   let prevX = e.nativeEvent.clientX;
   let prevY = e.nativeEvent.clientY;
   let totalMoveDist = 0;
-  let prevAngle = Math.atan2(prevY - centerY, prevX - centerX);
   const range = maxVal - minVal;
   let lastSoundStep = Math.floor(((currentVal - minVal) / range) * 16);
 
@@ -288,29 +281,17 @@ function startSmoothWheelSwivelDrag(
 
     totalMoveDist += Math.hypot(dx, dy);
 
-    const rx = ev.clientX - centerX;
-    const ry = ev.clientY - centerY;
-    const r = Math.hypot(rx, ry);
-    const curAngle = Math.atan2(ry, rx);
-
-    let dTheta = curAngle - prevAngle;
-    while (dTheta > Math.PI) dTheta -= Math.PI * 2;
-    while (dTheta < -Math.PI) dTheta += Math.PI * 2;
-    prevAngle = curAngle;
-
-    // Combine responsive 40px linear drag with circular swivel so BOTH gestures work effortlessly!
-    const linearRatio = (-dy + dx) / 40;
-    const angularRatio = r > 8 ? dTheta / (Math.PI * 0.85) : 0;
-    const deltaRatio =
-      Math.abs(linearRatio) >= Math.abs(angularRatio)
-        ? linearRatio
-        : angularRatio;
+    // Smooth, monotonic linear drag (right or up = increase; left or down = decrease)
+    const deltaRatio = (dx - dy) / 110;
 
     currentVal = THREE.MathUtils.clamp(
       currentVal + deltaRatio * range,
       minVal,
       maxVal,
     );
+    if (wheelObject) {
+      wheelObject.rotation.z -= deltaRatio * Math.PI * 1.5;
+    }
     onChange(currentVal);
 
     const soundStep = Math.floor(((currentVal - minVal) / range) * 16);
@@ -321,6 +302,7 @@ function startSmoothWheelSwivelDrag(
   };
 
   const handleUp = () => {
+    r3fTarget?.releasePointerCapture?.(e.pointerId);
     window.removeEventListener("pointermove", handleMove);
     window.removeEventListener("pointerup", handleUp);
     window.removeEventListener("pointercancel", handleUp);

@@ -1050,11 +1050,24 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   adjustExcitationTrim: (deltaHz: number) => {
-    set((state) => ({
-      excitationTrim: Number(
+    set((state) => {
+      const nextTrim = Number(
         Math.max(-5.0, Math.min(5.0, state.excitationTrim + deltaHz)).toFixed(3)
-      ),
-    }))
+      )
+      const actualDelta = nextTrim - state.excitationTrim
+      if (Math.abs(actualDelta) < 0.0001) return state
+      const nextGridHz = Number(
+        Math.max(45.0, Math.min(55.0, state.gridHz + actualDelta)).toFixed(2)
+      )
+      const nextTurbineRpm = Math.round(
+        Math.max(0, Math.min(3600, state.turbineRpm + actualDelta * 115))
+      )
+      return {
+        excitationTrim: nextTrim,
+        gridHz: nextGridHz,
+        turbineRpm: nextTurbineRpm,
+      }
+    })
   },
 
   toggleVentilation: (active?: boolean) => {
