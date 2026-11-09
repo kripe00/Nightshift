@@ -2611,18 +2611,18 @@ export function drawSecurityManualCanvas(
       },
       {
         icon: 'route_mw_water',
-        badge: '4. STEP 3 — ROUTE MW & BALANCE H2O!',
+        badge: '4. HOW TO INCREASE vs DECREASE MW (+/- ORDERS)',
         useLines: [
-          'Adjust matching sector lever (1..6) on',
-          'UNIT A [Key 1] to match the new Map MW.',
+          '+MW ORDER: 1. Withdraw Boron Rods (A-2) -> 2. Boost',
+          'Cooling Pumps (A/B) & pull MW Lever -> 3. Turn 50Hz',
         ],
         effectLines: [
-          'PUMP A/B siphon zone H2O into BUBBLER MAX.',
-          'Hold BUBBLER DRAIN on UNIT B to refill!',
+          'Rheostat / Steam Valve (UNIT C) up to lock 50.0 Hz!',
+          '-MW ORDER: 1. Lower MW Lever (A) -> 2. Lower 50Hz',
         ],
         reactionLines: [
-          'Sucking Pripyat (<30%), Kolkhoz (<35%) or',
-          'Vodka (<40%) dry triggers Drought Penalties!',
+          'Rheostat (C) & open Steam Vent if BAR spikes ->',
+          '3. Insert Boron Rods (A-2) to cool the core!',
         ],
       },
     ]
@@ -2816,18 +2816,18 @@ export function drawSecurityManualCanvas(
       },
       {
         icon: 'rheostat',
-        badge: '[KEY 5] 50HZ RHEOSTAT (EXCITATION DIAL)',
+        badge: '[KEY 5] 50HZ RHEOSTAT (+MW vs -MW CHECKLIST)',
         useLines: [
-          'Drag the center ceramic dial left/right on UNIT C',
-          'whenever you move MW levers on UNIT A or BAR climbs.',
+          'HOW TO INCREASE MW (+MW ORDER): 1. Withdraw Boron',
+          'Rods (A-2) -> 2. Boost Pumps & MW Lever (A) -> 3. Turn',
         ],
         effectLines: [
-          'Raising UNIT A levers slows turbine (-0.4 Hz & -45 RPM',
-          'per +10 MW); Kolkhoz drought & Steel >35MW drag Hz.',
+          '50Hz Rheostat / Steam Valve (C) UP to hold 50.0 Hz!',
+          'HOW TO DECREASE MW (-MW ORDER): 1. Lower MW Lever (A)',
         ],
         reactionLines: [
-          'Turn 50HZ RHEOSTAT to lock TURBINE RPM at 3000',
-          'and GRID FREQUENCY cleanly at 50.0 HZ!',
+          '-> 2. Lower 50Hz Rheostat (C) so RPM <3060 (<51 Hz) &',
+          'Vent Steam -> 3. Insert Boron Rods (A-2) & Dump Steam!',
         ],
       },
       {
@@ -3143,18 +3143,21 @@ export function drawWePad84ScreenCanvas(
     ctx.lineWidth = 4
     ctx.strokeRect(vpX + 4, objY, vpW - 8, objH)
 
+    const isActiveMultiPanelOrder =
+      isCompletedShift && payload.tutorialHeader.startsWith('>> ACTIVE')
     ctx.textAlign = 'left'
     ctx.fillStyle = '#39ff14'
     ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
-    const topBoxHeader = isCompletedShift
-      ? '>> K.O.M.R.A.D.-84 // LIVE DISPATCH'
-      : payload.tutorialHeader
+    const topBoxHeader =
+      isCompletedShift && !isActiveMultiPanelOrder
+        ? '>> K.O.M.R.A.D.-84 // LIVE DISPATCH'
+        : payload.tutorialHeader
     ctx.fillText(topBoxHeader, vpX + 24, objY + 46, vpW - 48)
 
     ctx.fillStyle = '#ffe600'
     ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
     const rawActiveText =
-      isCompletedShift && latestLiveMsg
+      isCompletedShift && !isActiveMultiPanelOrder && latestLiveMsg
         ? `[${latestLiveMsg.timestamp}] ${latestLiveMsg.sender}: ${latestLiveMsg.text}`
         : payload.tutorialBody
     const cleanBody = rawActiveText.replace(/^"|"$/g, '')
@@ -3368,10 +3371,10 @@ export function drawWePad84ScreenCanvas(
       )
 
       drawBullets('UNIT A-2 // CORE & REACTIVITY (СИУР)', [
-        '• ROD POSITION (0–100%): 55% = ~2000 MWt (600 MWe baseline); 90% = 3200 MWt (1000 MWe surge).',
-        '• AUTO REGULATOR (АР): Flip ON (Right Box) — auto-trims rods to hold stable ~69 BAR pressure!',
-        '• WHY RAISE RODS: Opening the Turbine Valve wider drains steam pressure unless Rods produce more MWt.',
-        '• XENON & VOID: Auto-Regulator smoothly compensates for Void & Xenon-135 poisoning.',
+        '• ROD POSITION (0–100%): 55% = 1920 MWt (600 MWe baseline); 90% = 3200 MWt (1000 MWe surge).',
+        '• AUTO REGULATOR (АР): Micro-trims ±40 MWt (±1.5% rods) ONLY — saturates & trips OFF on >=50 MWe orders!',
+        '• WHY RAISE RODS: Opening Turbine Valve without raising Control Rods & Feedwater starves Drum BAR (<45 BAR).',
+        '• XENON & VOID: Click glowing cyan/red tiles on the 37-ROD CORE MAP or use Boron / Feedwater.',
       ])
     } else if (activeTab === 4) {
       // UNIT A Schematic: AZ-5 Warning + 6 Substation Sliders
@@ -3391,9 +3394,9 @@ export function drawWePad84ScreenCanvas(
       drawBullets(
         'UNIT A // AZ-5 & 6 SUBSTATION LEVERS (0–250 MW)',
         [
-          '• BASELINE QUOTA: All 6 substations start at 100 MW each (600 MWe total baseline).',
-          '• LEVER HEADROOM: Each lever goes up to 250 MW (25 MW steps) for Printer Surge Orders!',
-          '• GENERATION DEFICIT: If Levers > Generator MWe, raise Rods (A-2) + Turbine Valve (C)!',
+          '• +MW ORDER: 1.[A-2] Withdraw Control Rods -> 2.[B/A] Raise Feedwater & Pumps A/B -> 3.[A] Set Sector MW Lever -> 4.[C] Match Turbine Steam Valve (50.0 Hz)!',
+          '• -MW ORDER: 1.[A] Lower Sector MW Lever -> 2.[C] Lower Turbine Steam Valve -> 3.[A-2] Insert Control Rods (<75 BAR) -> 4.[B] Adjust Feedwater & Steam Dump!',
+          '• STEAM STARVATION (<45 BAR): Pulling MW Lever & Valve without raising Rods & Feedwater drops Drum Level <-80mm!',
           '• AZ-5 DEFECT: Graphite rod tips cause a 3.5s power spike if Void > 20%!',
         ],
         '#ff2a2a'
@@ -3419,13 +3422,13 @@ export function drawWePad84ScreenCanvas(
       ctx.fillStyle = '#ffd000'
       ctx.fillText('1. 20% VALVE -> 3000 RPM GOVERNOR', vpX + 290, schemY + 146)
       ctx.fillStyle = '#00f0ff'
-      ctx.fillText('2. 60% = 600 MWe | 100% = 1000 MWe', vpX + 290, schemY + 206)
+      ctx.fillText('2. LOCK 50.0 HZ EQUILIBRIUM (+/- MW)', vpX + 290, schemY + 206)
 
-      drawBullets('UNIT C // TURBINE & GRID SYNC (БЩУ-Э)', [
-        '• 3000 RPM GOVERNOR: Click STEAM VALVE to 20% — auto-stabilizes at 3000 RPM (50 HZ)!',
-        '• SYNCHROSCOPE: Click MAIN BREAKER [SPACE] when needle passes 12 o\'clock (top green)!',
-        '• BASELINE (600 MWe): Set STEAM VALVE to 60% after sync to power all 6 substations at 100 MW.',
-        '• SURGE (800–1000 MWe): Raise Rods (A-2) + Feedwater (B) + Steam Valve (C) together!',
+      drawBullets('UNIT C // TURBINE & 50.0 HZ EQUILIBRIUM (БЩУ-Э)', [
+        '• 3000 RPM GOVERNOR: Set STEAM VALVE to 20%, then click MAIN BREAKER [SPACE] at 12 o\'clock!',
+        '• +MW ORDER: 1. Withdraw Rods (A-2) -> 2. Boost Pumps & MW Lever (A) -> 3. Turn 50Hz Rheostat / Valve UP (C) so Grid Drag doesn\'t pull Hz <49.0!',
+        '• -MW ORDER: 1. Lower MW Lever (A) -> 2. Lower 50Hz Rheostat / Valve (C) so Turbine doesn\'t Overspeed (>51.0 Hz) & Vent Steam -> 3. Insert Rods (A-2)!',
+        '• BREAKER TRIP: Staying outside 48.5–51.5 Hz for >14s or >3220 RPM trips the Main Breaker!',
       ])
     } else {
       // TAB 6: HAZARDS — POSITIVE VOID & XENON-135 COUNTERMEASURES

@@ -1948,22 +1948,10 @@ export function InspectorDesk3D() {
   })
 
   // Guardrail 4: Immediate WE-PAD 84 Texture & Lens Refresh when tab, scroll, chat or handheld state changes
+  const lastWePadSigRef = useRef<string>('')
   useEffect(() => {
-    const mTex = manualMatRef.current?.map as THREE.CanvasTexture | undefined
-    if (!mTex) return
-    const canvas = mTex.image as HTMLCanvasElement
-    const ctx = canvas.getContext('2d')
-    if (ctx) {
-      drawWePad84ScreenCanvas(
-        ctx,
-        canvas.width,
-        canvas.height,
-        buildWePadPayload(),
-        manualScrollY
-      )
-      mTex.needsUpdate = true
-      lensDirtyRef.current = true
-    }
+    lastWePadSigRef.current = ''
+    lensDirtyRef.current = true
   }, [manualPage, manualScrollY, isManualHeld, isManualInspecting, wePadChatLen])
 
   // Static 16-Color Bayer-Dithered Hardware Plaques (Dither metal background first, then render crisp un-dithered text)
@@ -2049,13 +2037,12 @@ export function InspectorDesk3D() {
           new THREE.Vector3(-1.468, 1.85, -0.544),
           new THREE.Vector3(-1.468, 2.65, -0.544),
           new THREE.Vector3(-1.468, 3.12, -0.544),
-          new THREE.Vector3(-1.328, 3.26, -0.544),
-          new THREE.Vector3(-0.74, 3.26, -0.544),
-          new THREE.Vector3(-0.14, 3.26, -0.56),
-          new THREE.Vector3(0.0, 3.2, -0.82),
-          new THREE.Vector3(0.0, 3.04, -1.16),
-          new THREE.Vector3(0.0, 2.35, -1.16),
-          new THREE.Vector3(0.0, 1.72, -1.16),
+          new THREE.Vector3(-1.468, 3.26, -0.684),
+          new THREE.Vector3(-1.468, 3.26, -1.54),
+          new THREE.Vector3(-1.21, 3.26, -1.68),
+          new THREE.Vector3(-0.95, 3.12, -1.68),
+          new THREE.Vector3(-0.95, 2.35, -1.68),
+          new THREE.Vector3(-0.95, 1.72, -1.68),
         ],
         false,
         'catmullrom',
@@ -3295,8 +3282,8 @@ export function InspectorDesk3D() {
     const gsNow = useGameStore.getState()
     const wePadSig = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${gsNow.tutorialPhase}|${gsNow.wePadChatLog.length}|${manualScrollY}|${Math.round(gsNow.thermalPower / 10)}|${Math.round(gsNow.drumPressure)}|${Math.round(gsNow.drumWaterLevel / 5)}|${Math.round(gsNow.turbines[0].valve * 100)}|${Math.round(gsNow.turbines[0].rpm / 20)}|${Math.round(gsNow.totalElectricalMW / 5)}|${gsNow.plantWaterDrainPct}`
     const mTex = manualMatRef.current?.map as THREE.CanvasTexture | undefined
-    if (mTex && mTex.userData.lastSig !== wePadSig) {
-      mTex.userData.lastSig = wePadSig
+    if (mTex && lastWePadSigRef.current !== wePadSig) {
+      lastWePadSigRef.current = wePadSig
       const canvas = mTex.image as HTMLCanvasElement
       const ctx = canvas.getContext('2d')
       if (ctx) {
@@ -5874,9 +5861,9 @@ export function InspectorDesk3D() {
           ))}
         </group>
 
-        {/* 2. 90° Flanged Brass Ceiling Elbow Bend (`x = -1.468 -> -1.328, y = 3.12 -> 3.26, z = -0.544`) */}
-        <group position={[-1.328, 3.12, -0.544]}>
-          <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+        {/* 2. 90° Flanged Brass Ceiling Elbow Bend (`x = -1.468, y = 3.12 -> 3.26, z = -0.544 -> -0.684`) */}
+        <group position={[-1.468, 3.12, -0.684]}>
+          <mesh rotation={[0, Math.PI / 2, 0]} castShadow receiveShadow>
             <torusGeometry args={[0.14, 0.06, 16, 24, Math.PI / 2]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -5887,7 +5874,7 @@ export function InspectorDesk3D() {
             />
           </mesh>
           {/* End Flanges on 90° Elbow */}
-          <mesh position={[-0.14, 0, 0]} castShadow>
+          <mesh position={[0, 0, 0.14]} castShadow>
             <cylinderGeometry args={[0.072, 0.072, 0.024, 18]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -5897,7 +5884,7 @@ export function InspectorDesk3D() {
           </mesh>
           <mesh
             position={[0, 0.14, 0]}
-            rotation={[0, 0, Math.PI / 2]}
+            rotation={[Math.PI / 2, 0, 0]}
             castShadow
           >
             <cylinderGeometry args={[0.072, 0.072, 0.024, 18]} />
@@ -5909,10 +5896,10 @@ export function InspectorDesk3D() {
           </mesh>
         </group>
 
-        {/* 3. Extended Horizontal Ceiling Glass-and-Brass Pipeline (`x = -1.328 .. -0.14, y = 3.26, z = -0.544`) with 4 Ceiling Hanger Brackets */}
-        <group position={[-0.734, 3.26, -0.544]}>
-          <mesh rotation={[0, 0, Math.PI / 2]} receiveShadow>
-            <cylinderGeometry args={[0.056, 0.056, 1.19, 20, 1, true]} />
+        {/* 3. Extended Rearward Ceiling Glass-and-Brass Pipeline (`x = -1.468, y = 3.26, z = -0.684 .. -1.54`) Clear of Shift Clock */}
+        <group position={[-1.468, 3.26, -1.112]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+            <cylinderGeometry args={[0.056, 0.056, 0.86, 20, 1, true]} />
             <meshStandardMaterial
               color="#bce6d4"
               transparent
@@ -5924,9 +5911,9 @@ export function InspectorDesk3D() {
             />
           </mesh>
           {/* Brass Collar Rings & Heavy Steel Ceiling Hanger Straps Bolted to Overhead Bunker Ceiling */}
-          {[-0.45, -0.15, 0.15, 0.45].map((hx, hIdx) => (
-            <group key={hIdx} position={[hx, 0, 0]}>
-              <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+          {[-0.32, 0.0, 0.32].map((hz, hIdx) => (
+            <group key={hIdx} position={[0, 0, hz]}>
+              <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
                 <cylinderGeometry args={[0.068, 0.068, 0.026, 18]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -5957,10 +5944,10 @@ export function InspectorDesk3D() {
           ))}
         </group>
 
-        {/* 4. Terminal Intake Bend (`-Z`) & Vertical Plunge Behind `K.O.M.R.A.D.-84` Mainframe (`x = 0.0, z = -1.16, y = 3.26 -> 1.68`) */}
-        {/* Horizontal-to-Rear (-Z) Brass Elbow above K.O.M.R.A.D.-84 */}
-        <group position={[-0.14, 3.26, -0.684]}>
-          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+        {/* 4. Terminal Intake Bend (`x = -0.95, z = -1.68`) & Vertical Plunge Well Left & Behind `K.O.M.R.A.D.-84` (100% Clear of Shift Clock!) */}
+        {/* Rear-Left Brass Elbow */}
+        <group position={[-1.328, 3.26, -1.54]}>
+          <mesh rotation={[Math.PI / 2, 0, Math.PI]} castShadow>
             <torusGeometry args={[0.14, 0.06, 14, 20, Math.PI / 2]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -5971,13 +5958,13 @@ export function InspectorDesk3D() {
             />
           </mesh>
         </group>
-        {/* Rearward Horizontal Connector Pipe Passing High Above K.O.M.R.A.D.-84 (`x = 0.0, y = 3.26, z = -0.684 .. -1.02`) */}
+        {/* Lateral Connector Pipe Behind K.O.M.R.A.D.-84 (`x = -1.328 .. -1.09, y = 3.26, z = -1.68`) */}
         <mesh
-          position={[0.0, 3.26, -0.852]}
-          rotation={[Math.PI / 2, 0, 0]}
+          position={[-1.21, 3.26, -1.68]}
+          rotation={[0, 0, Math.PI / 2]}
           castShadow
         >
-          <cylinderGeometry args={[0.058, 0.058, 0.34, 16]} />
+          <cylinderGeometry args={[0.058, 0.058, 0.24, 16]} />
           <meshStandardMaterial
             color="#8c7a4b"
             metalness={0.86}
@@ -5986,9 +5973,9 @@ export function InspectorDesk3D() {
             bumpScale={0.005}
           />
         </mesh>
-        {/* Downward 90° Brass Elbow Plunging Behind `K.O.M.R.A.D.-84` (`x = 0.0, y = 3.12, z = -1.02 -> -1.16`) */}
-        <group position={[0.0, 3.12, -1.02]}>
-          <mesh rotation={[0, Math.PI / 2, 0]} castShadow>
+        {/* Downward 90° Brass Elbow Plunging Behind Left Rear Corner (`x = -0.95, y = 3.12, z = -1.68`) */}
+        <group position={[-1.09, 3.12, -1.68]}>
+          <mesh rotation={[0, 0, 0]} castShadow>
             <torusGeometry args={[0.14, 0.06, 14, 20, Math.PI / 2]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -5999,8 +5986,8 @@ export function InspectorDesk3D() {
             />
           </mesh>
         </group>
-        {/* Vertical Intake Drop Pipe Plunging into Rear Housing of `K.O.M.R.A.D.-84` (`x = 0.0, y = 2.39, z = -1.16`) */}
-        <group position={[0.0, 2.39, -1.16]}>
+        {/* Vertical Intake Drop Pipe Plunging at `x = -0.95, z = -1.68` (0.95m Left & 0.52m Further Back — 100% Clear of Shift Clock!) */}
+        <group position={[-0.95, 2.39, -1.68]}>
           <mesh receiveShadow>
             <cylinderGeometry args={[0.056, 0.056, 1.46, 18, 1, true]} />
             <meshStandardMaterial
@@ -6023,7 +6010,7 @@ export function InspectorDesk3D() {
               />
             </mesh>
           ))}
-          {/* Heavy Flanged Cast-Iron Receiver Manifold Bolted to Rear of `K.O.M.R.A.D.-84` Mainframe */}
+          {/* Heavy Flanged Cast-Iron Receiver Manifold Bolted to Rear Left of `K.O.M.R.A.D.-84` Mainframe */}
           <mesh position={[0, -0.71, 0.04]} castShadow>
             <boxGeometry args={[0.22, 0.16, 0.18]} />
             <meshStandardMaterial

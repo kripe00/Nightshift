@@ -1582,6 +1582,174 @@ export function playBoronHydraulicPumpStroke(): void {
   src.start(now)
 }
 
+/**
+ * Heavy metallic high-voltage contactor CLUNK-THUD + 50Hz/100Hz magnetic transformer hum swell
+ * Triggered when throwing or scrolling a Sector MW Lever on UNIT A (`|ΔMW| >= 5 MW`).
+ */
+export function playContactorInrushClunk(deltaMW: number): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+  const absDelta = Math.abs(deltaMW)
+  if (absDelta < 5) return
+  const intensity = Math.min(1.0, Math.max(0.35, absDelta / 50))
+  const isInrush = deltaMW > 0
+
+  // 1. Sub-bass cabinet contactor thump
+  const thud = audio.createOscillator()
+  const thudGain = audio.createGain()
+  thud.type = 'sine'
+  thud.frequency.setValueAtTime(isInrush ? 115 : 145, now)
+  thud.frequency.exponentialRampToValueAtTime(isInrush ? 26 : 36, now + 0.14)
+  thudGain.gain.setValueAtTime(0.42 * intensity, now)
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16)
+  thud.connect(thudGain).connect(audio.destination)
+  thud.start(now)
+  thud.stop(now + 0.17)
+
+  // 2. Bandpass-filtered copper contact jaw slam + arc snap
+  const snapDur = 0.055
+  const bufSize = Math.floor(audio.sampleRate * snapDur)
+  const buf = audio.createBuffer(1, bufSize, audio.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.28))
+  }
+  const noise = audio.createBufferSource()
+  noise.buffer = buf
+  const bp = audio.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(isInrush ? 1180 : 1680, now)
+  bp.Q.setValueAtTime(3.2, now)
+  const ng = audio.createGain()
+  ng.gain.setValueAtTime(0.34 * intensity, now)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + snapDur)
+  noise.connect(bp).connect(ng).connect(audio.destination)
+  noise.start(now)
+
+  // 3. 50Hz / 100Hz magnetic transformer hum swell (groans down on +MW inrush, whines up on -MW load rejection)
+  const humDur = 0.38
+  const hum50 = audio.createOscillator()
+  const hum100 = audio.createOscillator()
+  const lp = audio.createBiquadFilter()
+  const humGain = audio.createGain()
+
+  hum50.type = 'sawtooth'
+  hum100.type = 'triangle'
+  const fStart = isInrush ? 51.0 : 49.5
+  const fEnd = isInrush ? 46.5 : 54.0
+  hum50.frequency.setValueAtTime(fStart, now + 0.02)
+  hum50.frequency.linearRampToValueAtTime(fEnd, now + 0.18)
+  hum50.frequency.linearRampToValueAtTime(50.0, now + humDur)
+
+  hum100.frequency.setValueAtTime(fStart * 2, now + 0.02)
+  hum100.frequency.linearRampToValueAtTime(fEnd * 2, now + 0.18)
+  hum100.frequency.linearRampToValueAtTime(100.0, now + humDur)
+
+  lp.type = 'lowpass'
+  lp.frequency.setValueAtTime(isInrush ? 240 : 320, now)
+  lp.Q.setValueAtTime(2.8, now)
+
+  humGain.gain.setValueAtTime(0.001, now)
+  humGain.gain.linearRampToValueAtTime(0.16 * intensity, now + 0.05)
+  humGain.gain.exponentialRampToValueAtTime(0.001, now + humDur)
+
+  hum50.connect(lp)
+  hum100.connect(lp)
+  lp.connect(humGain).connect(audio.destination)
+
+  hum50.start(now)
+  hum100.start(now)
+  hum50.stop(now + humDur + 0.02)
+  hum100.stop(now + humDur + 0.02)
+}
+
+interface TurbineHumController {
+  osc50: OscillatorNode
+  osc100: OscillatorNode
+  filter: BiquadFilterNode
+  gain: GainNode
+  lastUpdateSec: number
+}
+
+let turbineHumCtrl: TurbineHumController | null = null
+
+/**
+ * Continuous background turbogenerator harmonic hum tied directly to `turbineRpm / 3000`.
+ * Lets the operator hear the 1000 MWe turbine groan lower in pitch under heavy MW drag
+ * or whine higher in pitch during load-rejection overspeed.
+ */
+export function updateTurbinePitchHum(
+  rpm: number,
+  totalAllocatedMW: number,
+  voltageDipIntensity: number,
+  isBlackout: boolean
+): void {
+  if (typeof window === 'undefined') return
+  const state = useGameStore.getState()
+  if (state.isMusicMuted || isBlackout || rpm < 250 || state.phase !== 'playing') {
+    if (turbineHumCtrl && ctx) {
+      turbineHumCtrl.gain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.08)
+    }
+    return
+  }
+
+  // Only start or update if AudioContext has already been unlocked by user interaction
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+
+  if (!turbineHumCtrl) {
+    const osc50 = ctx.createOscillator()
+    const osc100 = ctx.createOscillator()
+    const filter = ctx.createBiquadFilter()
+    const gain = ctx.createGain()
+
+    osc50.type = 'sawtooth'
+    osc100.type = 'triangle'
+    osc50.frequency.setValueAtTime(50, now)
+    osc100.frequency.setValueAtTime(100, now)
+
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(165, now)
+    filter.Q.setValueAtTime(2.2, now)
+
+    gain.gain.setValueAtTime(0.0001, now)
+
+    osc50.connect(filter)
+    osc100.connect(filter)
+    filter.connect(gain).connect(ctx.destination)
+
+    osc50.start(now)
+    osc100.start(now)
+
+    turbineHumCtrl = {
+      osc50,
+      osc100,
+      filter,
+      gain,
+      lastUpdateSec: now,
+    }
+  }
+
+  if (now - turbineHumCtrl.lastUpdateSec < 0.04) return
+  turbineHumCtrl.lastUpdateSec = now
+
+  const pitchRatio = Math.max(0.25, Math.min(1.35, rpm / 3000))
+  const fBase = 50.0 * pitchRatio
+  const loadFactor = Math.min(1.0, totalAllocatedMW / 1000)
+  const targetGain = Math.min(
+    0.048,
+    0.012 + loadFactor * 0.018 + voltageDipIntensity * 0.022
+  )
+  const targetCutoff = 135 + pitchRatio * 55 + voltageDipIntensity * 95
+
+  turbineHumCtrl.osc50.frequency.setTargetAtTime(fBase, now, 0.05)
+  turbineHumCtrl.osc100.frequency.setTargetAtTime(fBase * 2, now, 0.05)
+  turbineHumCtrl.filter.frequency.setTargetAtTime(targetCutoff, now, 0.06)
+  turbineHumCtrl.gain.gain.setTargetAtTime(targetGain, now, 0.06)
+}
+
+
 
 
 

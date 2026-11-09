@@ -7,6 +7,7 @@ import {
   playKnifeSwitchSlam,
   playRheostatDetentClick,
   playSteamVentHiss,
+  updateTurbinePitchHum,
 } from "../modules/inspector/audio";
 import { useDeskStore } from "../modules/inspector/useDeskStore";
 import {
@@ -26,6 +27,7 @@ import {
   type MimicSegmentSpec,
   makePlaqueTex,
   paintSovietCRTScreen,
+  SovietBacklitIndicatorBlock3D,
   SovietCRTMonitorBay3D,
   SovietDvk84KeyboardConsole3D,
   SovietModularSteelCabinet3D,
@@ -129,6 +131,7 @@ function drawHeavyCrtText(
     "1.6px";
   const isDarkText =
     colorHex === "#020804" ||
+    colorHex === "#020a04" ||
     colorHex === "#041208" ||
     colorHex === "#141414";
   ctx.lineJoin = "round";
@@ -662,15 +665,16 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
 
   const gostNameplateTex = useMemo(
     () =>
-      makePlaqueTex("ЧАСЫ СМЕНЫ 00:00 - 06:00", "ЭЛЕКТРОНИКА-7 // ГОСТ 84", {
-        width: 448,
-        height: 64,
-        titleSize: 22,
-        subSize: 16,
-        bgColor: "#1a1812",
-        borderColor: "#b8a46b",
-        titleColor: "#ffcc44",
-        subColor: "#e6dec3",
+      createCrispPanelTexture(512, 64, (ctx, w, h) => {
+        ctx.fillStyle = "#1a1812";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#b8a46b";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(3, 3, w - 6, h - 6);
+        ctx.fillStyle = "#ffcc44";
+        ctx.font = 'bold 21px "Kremlin", "Consolas", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("SHIFT CLOCK 00:00 - 06:00 // KOMRAD-7", w / 2, 40, w - 24);
       }),
     [],
   );
@@ -762,11 +766,11 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
     // Top micro-telemetry strip inside the clock glass
     ctx.fillStyle = "rgba(20, 26, 24, 0.92)";
     ctx.fillRect(8, 8, w - 16, 32);
-    ctx.font = '700 18px "Consolas", "Lucida Console", monospace';
+    ctx.font = '700 18px "Kremlin", "Consolas", "Lucida Console", monospace';
     ctx.textAlign = "left";
     ctx.fillStyle = "#b8c4be";
     ctx.fillText(
-      `СМЕНА № ${s.shiftNumber} // ТЕКУЩЕЕ ВРЕМЯ СМЕНЫ`,
+      `SHIFT NO. ${s.shiftNumber} // CURRENT SHIFT TIME`,
       18,
       30,
     );
@@ -778,12 +782,12 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
         : "#39ff14";
     ctx.fillText(
       s.isBlackout
-        ? "АВАРИЯ ПИТАНИЯ"
+        ? "POWER FAILURE"
         : isEmergency
-          ? "ТРЕВОГА БЛОКА 4"
+          ? "UNIT 4 ALERT"
           : isFinalHour
-            ? "ФИНАЛЬНЫЙ ЧАС"
-            : "НОРМАЛЬНЫЙ РЕЖИМ",
+            ? "FINAL HOUR"
+            : "NORMAL MODE",
       w - 18,
       30,
     );
@@ -844,7 +848,7 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
   });
 
   return (
-    <group position={[0, 2.66, 0.12]} rotation={[0.14, 0, 0]}>
+    <group position={[0, 2.66, 0.18]} rotation={[0.14, 0, 0]}>
       {/* 1. Twin Heavy Bolted Steel Mounting Stanchions Anchoring Clock to Top of K.O.M.R.A.D.-84 */}
       {[-0.44, 0.44].map((sx, idx) => (
         <group key={`clk-stanchion-${idx}`} position={[sx, -0.145, -0.02]}>
@@ -1454,6 +1458,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   }, []);
 
   const rightPanelGroupRef = useRef<THREE.Group>(null);
+  const rheostatDraggingRef = useRef(false);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
@@ -1632,19 +1637,26 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       const canvas = rTex.image as HTMLCanvasElement;
       const ctx = canvas.getContext("2d");
       if (ctx) {
+        const curHz = t0?.freqHz ?? 0;
+        const isOverspeed = Boolean(t0?.gridConnected) && curHz > 50.8;
+        const isGridDrag = Boolean(t0?.gridConnected) && curHz < 49.0;
         const syncDanger =
-          !t0?.gridConnected &&
-          (Math.abs((t0?.freqHz ?? 0) - 50) > 0.5 || Math.abs(phaseVal) > 20);
+          (!t0?.gridConnected &&
+            (Math.abs(curHz - 50) > 0.5 || Math.abs(phaseVal) > 20)) ||
+          isOverspeed ||
+          isGridDrag;
         const statusDanger =
           Boolean(t0?.tripped) ||
-          rpmVal > 3300 ||
+          rpmVal > 3060 ||
+          isOverspeed ||
+          isGridDrag ||
           s.steamDumpValve;
 
         const cells = [
           {
             label: "TURBINE RPM",
             val: `${rpmVal} RPM`,
-            danger: rpmVal > 3300 || Boolean(t0?.tripped),
+            danger: rpmVal > 3060 || rpmVal < 2940 || Boolean(t0?.tripped),
           },
           {
             label: "SYNCHROSCOPE",
@@ -1658,12 +1670,16 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           },
         ];
 
-        const statusLineText = `RPM: ${Math.round(t0?.rpm ?? 0)} | FREQ: ${(t0?.freqHz ?? 0).toFixed(1)} HZ | PHASE: ${Math.round(t0?.syncPhase ?? 0)}° | VALVE: ${Math.round((t0?.valve ?? 0) * 100)}%`;
+        const statusLineText = `RPM: ${Math.round(t0?.rpm ?? 0)} | FREQ: ${curHz.toFixed(1)} HZ | PHASE: ${Math.round(t0?.syncPhase ?? 0)}° | VALVE: ${Math.round((t0?.valve ?? 0) * 100)}%`;
         const footerLineText = t0?.tripped
           ? `⚠️ TURBINE TRIPPED! CLICK [TRIP RESET] (BOTTOM RIGHT) OR CLICK STEAM VALVE!`
           : !t0?.gridConnected
             ? `1) SET STEAM VALVE TO 15–20% (3000 RPM) -> 2) PULL MAIN BREAKER AT 0° (12 O'CLOCK)`
-            : `GRID SYNCHRONIZED AT 50.0 HZ // GEN OUTPUT: ${Math.round(s.totalElectricalMW)} / 1000 MWe`;
+            : isOverspeed
+              ? `⚠️ TURBINE OVERSPEED (>50.8 HZ): LOWER STEAM VALVE OR VENT STEAM (UNIT C)!`
+              : isGridDrag
+                ? `⚠️ GRID DRAG (<49.0 HZ): RAISE RODS (A-2) & OPEN TURBINE VALVE TO MATCH MW!`
+                : `GRID SYNCHRONIZED AT ${curHz.toFixed(1)} HZ // GEN OUTPUT: ${Math.round(s.totalElectricalMW)} / 1000 MWe`;
 
         paintSovietCRTScreen(ctx, 768, 144, {
           headerCode: "CRT-84C",
@@ -1747,12 +1763,12 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           width={1.98}
           unitCode="C"
           annunciatorLabels={[
-            "ТУРБИНА ТГ-1",
-            "ЧАСТОТА 50ГЦ",
-            "РАЗГОН >3300",
-            "СБРОС ПАРА",
-            "АВР ПИТАНИЕ",
-            "ГЛАВ. АВТОМАТ",
+            "TURBINE 1",
+            "GRID 50HZ",
+            "OVERSPEED",
+            "STEAM VENT",
+            "BREAKER",
+            "GEN LOAD",
           ]}
           mimicSegments={unitCMimicSegments}
           mimicNodes={unitCMimicNodes}
@@ -1913,6 +1929,14 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             nominalMark={3000}
             dangerThreshold={3300}
             getValue={() => useGameStore.getState().turbines[0]?.rpm ?? 0}
+            getAlertLevel={(s) => {
+              const rpm = s.turbines[0]?.rpm ?? 0;
+              return rpm < 2850 || rpm > 3150
+                ? "critical"
+                : rpm < 2950 || rpm > 3050
+                  ? "warn"
+                  : "normal";
+            }}
           />
           <HighDetailManometer3D
             position={[0, 0, 0]}
@@ -1925,6 +1949,13 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             dangerThreshold={180}
             synchroscopeMode={true}
             getValue={() => useGameStore.getState().turbines[0]?.syncPhase ?? 0}
+            getAlertLevel={(s) =>
+              s.gridHz < 49.0 || s.gridHz > 51.0
+                ? "critical"
+                : s.gridHz < 49.4 || s.gridHz > 50.6
+                  ? "warn"
+                  : "normal"
+            }
           />
           <HighDetailManometer3D
             position={[0.60, 0, 0]}
@@ -1936,6 +1967,18 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             max={1000}
             dangerThreshold={950}
             getValue={() => useGameStore.getState().totalElectricalMW}
+            getAlertLevel={(s) => {
+              const gc = s.turbines[0]?.gridConnected ?? false;
+              const totTgt = Object.values(s.targetSectorMW).reduce(
+                (a, b) => a + b,
+                0,
+              );
+              return s.isBlackout || !gc || s.turbines[0]?.tripped
+                ? "critical"
+                : Math.abs(s.totalElectricalMW - totTgt) > 25
+                  ? "warn"
+                  : "normal";
+            }}
           />
         </group>
 
@@ -2038,6 +2081,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 roughness={0.55}
               />
             </mesh>
+            <SovietBacklitIndicatorBlock3D
+              position={[0, 0.184, 0.022]}
+              label="ТАБЛО СБРОС"
+              getAlertState={(s) => ({
+                level:
+                  s.pressureBar > 68 || s.gridHz > 51.0
+                    ? "critical"
+                    : s.pressureBar > 62 || s.gridHz > 50.8
+                      ? "warn"
+                      : "normal",
+                acknowledged: steamDragRef.current.active,
+              })}
+            />
             {/* Heavy Cast-Iron Quadrant Housing & Return Coil Spring */}
             <mesh castShadow receiveShadow>
               <boxGeometry args={[0.24, 0.32, 0.064]} />
@@ -2151,6 +2207,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             onPointerDown={(e: ThreeEvent<PointerEvent>) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
+              rheostatDraggingRef.current = true;
               const r3fTarget = e.target as unknown as {
                 setPointerCapture?: (id: number) => void;
                 releasePointerCapture?: (id: number) => void;
@@ -2227,6 +2284,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 }
               };
               const handleUp = () => {
+                rheostatDraggingRef.current = false;
                 r3fTarget?.releasePointerCapture?.(e.pointerId);
                 window.removeEventListener("pointermove", handleMove);
                 window.removeEventListener("pointerup", handleUp);
@@ -2271,6 +2329,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 roughness={0.55}
               />
             </mesh>
+            <SovietBacklitIndicatorBlock3D
+              position={[0, 0.184, 0.022]}
+              label="ТАБЛО 50 ГЦ"
+              getAlertState={(s) => ({
+                level:
+                  s.gridHz < 49.0 || s.gridHz > 51.0
+                    ? "critical"
+                    : s.gridHz < 49.4 || s.gridHz > 50.6
+                      ? "warn"
+                      : "normal",
+                acknowledged: rheostatDraggingRef.current,
+              })}
+            />
             {/* Stepped Cast-Iron & Brushed-Brass Rheostat Bezel */}
             <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
               <cylinderGeometry args={[0.145, 0.16, 0.048, 18]} />
@@ -2341,6 +2412,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             breakerArmRef={breakerArmRef}
             breakerDragRef={breakerDragRef}
             breakerPlateTex={breakerPlateTex}
+          />
+          <SovietBacklitIndicatorBlock3D
+            position={[0.56, 0.184, 0.038]}
+            label="ТАБЛО СЕТЬ"
+            getAlertState={(s) => ({
+              level:
+                s.isBlackout ||
+                !s.turbines[0]?.gridConnected ||
+                s.turbines[0]?.tripped
+                  ? "critical"
+                  : "normal",
+              acknowledged: breakerDragRef.current.active,
+            })}
           />
         </group>
 
@@ -2612,6 +2696,8 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
   const reactorSpotRef = useRef<THREE.PointLight>(null);
   const az5GlowRef = useRef<THREE.PointLight>(null);
   const crtLightRef = useRef<THREE.PointLight>(null);
+  const rearPoolLightRef = useRef<THREE.PointLight>(null);
+  const rightPoolLightRef = useRef<THREE.PointLight>(null);
   const klaxonLightRef = useRef<THREE.PointLight>(null);
   const klaxonSpinnerRef = useRef<THREE.Group>(null);
   const klaxonLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -2638,7 +2724,29 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       powerAllocation.cooling +
       powerAllocation.defense +
       powerAllocation.facility;
+    const totalAllocatedMW = Object.values(state.sectorMW).reduce(
+      (a, b) => a + b,
+      0,
+    );
     const isAlarmActive = coreTemp >= 750 || totalMW > maxSafePower;
+
+    // Continuous 50Hz / 3000 RPM Turbine-Generator Pitch Hum
+    updateTurbinePitchHum(
+      state.turbineRpm,
+      totalAllocatedMW,
+      state.voltageDipIntensity,
+      isBlackout,
+    );
+
+    // Room Voltage Dip Brownout Flicker (25%-45% dip with 50Hz hum flicker when pulling MW levers or gridHz sags)
+    const hzSag = Math.max(0, 49.7 - state.gridHz) * 0.45;
+    const dipStrength = Math.min(1, state.voltageDipIntensity + hzSag);
+    const humFlicker =
+      dipStrength > 0.02
+        ? 1 -
+          dipStrength *
+            (0.32 + 0.14 * Math.sin(t * 62.8) * Math.cos(t * 94.2))
+        : 1.0;
 
     if (deskSpotRef.current) {
       if (isBlackout || powerAllocation.facility <= 0) {
@@ -2646,20 +2754,32 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       } else if (powerAllocation.facility <= 10) {
         const heavyFlicker =
           Math.sin(t * 37) * 0.35 + Math.cos(t * 63) * 0.25 > 0.1 ? 0.2 : 0.95;
-        deskSpotRef.current.intensity = 1.9 * heavyFlicker;
+        deskSpotRef.current.intensity = 1.9 * heavyFlicker * humFlicker;
       } else if (powerAllocation.facility <= 20) {
         const subtleFlicker = 0.88 + Math.sin(t * 24) * 0.12;
-        deskSpotRef.current.intensity = 2.8 * subtleFlicker;
+        deskSpotRef.current.intensity = 2.8 * subtleFlicker * humFlicker;
       } else {
         const boost = Math.min(1.35, powerAllocation.facility / 30);
-        deskSpotRef.current.intensity = 3.2 * boost;
+        deskSpotRef.current.intensity = 3.2 * boost * humFlicker;
       }
     }
 
     if (reactorSpotRef.current) {
       reactorSpotRef.current.intensity = isBlackout
         ? 0.35
-        : 2.1 + Math.sin(t * 17.0) * 0.08;
+        : (2.1 + Math.sin(t * 17.0) * 0.08) * humFlicker;
+    }
+
+    if (rearPoolLightRef.current) {
+      rearPoolLightRef.current.intensity = isBlackout
+        ? 0.25
+        : 2.9 * humFlicker;
+    }
+
+    if (rightPoolLightRef.current) {
+      rightPoolLightRef.current.intensity = isBlackout
+        ? 0.25
+        : 2.6 * humFlicker;
     }
 
     if (az5GlowRef.current) {
@@ -2667,7 +2787,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
         ? 0.3
         : isAlarmActive
           ? 1.45 + Math.sin(t * 12.0) * 0.35
-          : 0.85;
+          : 0.85 * humFlicker;
     }
 
     if (deskBulbMeshRef.current) {
@@ -2675,7 +2795,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
         .material as THREE.MeshStandardMaterial;
       const lampOn = !isBlackout && powerAllocation.facility > 0;
       mat.emissiveIntensity = lampOn
-        ? Math.min(2.6, 0.7 + (powerAllocation.facility / 40) * 1.7)
+        ? Math.min(2.6, 0.7 + (powerAllocation.facility / 40) * 1.7) * humFlicker
         : 0.02;
     }
 
@@ -2801,6 +2921,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
 
       {/* Consolidated Rear-Left (`UNIT B`) + Right Wing Pool Light */}
       <pointLight
+        ref={rearPoolLightRef}
         position={[-1.12, 2.22, 5.25]}
         color="#ffba5c"
         intensity={2.9}
@@ -2808,6 +2929,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
         decay={1.15}
       />
       <pointLight
+        ref={rightPoolLightRef}
         position={[1.15, 2.15, 2.15]}
         color="#ffba5c"
         intensity={2.6}
@@ -2933,7 +3055,8 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     const subSig = state.substations
       .map((s) => `${s.id}:${s.allocatedMW}:${s.targetMW}:${s.statusText}:${s.quotaOk ? 1 : 0}`)
       .join(",");
-    const sig = `${timeBucket}|${state.phase}|${state.tutorialPhase}|${state.tutorialPrompt.header}|${state.tutorialPrompt.body}|${latestChatMsg?.id ?? ""}|${cdSec}|${contextualHint ?? ""}|${Math.round(state.controlRods * 100)}|${Math.round(state.totalElectricalMW)}|${Math.round(state.drumWaterLevel)}|${Math.round(state.drumPressure)}|${subSig}|${deskState.printingDoc?.id ?? ""}|${deskState.capsuleState}|${deskState.hatchOpen}|${lastEntryId}|${state.bubblerDraining}|${state.auxLoopBActive}|${state.kgbLineActive}|${activeDeskDoc?.id ?? "NONE"}|${activeDeskDoc?.stamps.length ?? 0}|${Math.round(state.pumpThrottle[0])}|${Math.round(state.pumpThrottle[1])}|${Math.round(state.waterReservoir)}|${Math.round(state.waterUsage)}|${Math.round(state.coreTemp / 2) * 2}|${state.ciaIntrusionActive}|${Math.round(state.ciaIntrusionProgress)}|${state.komradOverrideLocked}|${state.isBlackout}|${bulletinIdx}`;
+    const skalaSig = `${Math.round(state.heliumPressure)}:${Math.round(state.graphiteTemp)}:${Math.round(state.bubblerLevel)}:${state.sealToggles.join("")}:${Math.round(state.pumpAHeat)}:${Math.round(state.pumpBHeat)}:${Math.round(state.boronTankLevel)}:${Object.keys(state.channelHotspots).length}:${Math.round(state.pressureBar)}:${Math.round(state.gridHz * 10)}:${Math.round(state.turbines[0]?.rpm ?? 0)}:${Boolean(state.turbines[0]?.gridConnected)}:${Boolean(state.turbines[0]?.tripped)}`;
+    const sig = `${timeBucket}|${skalaSig}|${state.phase}|${state.tutorialPhase}|${state.tutorialPrompt.header}|${state.tutorialPrompt.body}|${latestChatMsg?.id ?? ""}|${cdSec}|${contextualHint ?? ""}|${Math.round(state.controlRods * 100)}|${Math.round(state.totalElectricalMW)}|${Math.round(state.drumWaterLevel)}|${Math.round(state.drumPressure)}|${subSig}|${deskState.printingDoc?.id ?? ""}|${deskState.capsuleState}|${deskState.hatchOpen}|${lastEntryId}|${state.bubblerDraining}|${state.auxLoopBActive}|${state.kgbLineActive}|${activeDeskDoc?.id ?? "NONE"}|${activeDeskDoc?.stamps.length ?? 0}|${Math.round(state.pumpThrottle[0])}|${Math.round(state.pumpThrottle[1])}|${Math.round(state.waterReservoir)}|${Math.round(state.waterUsage)}|${Math.round(state.coreTemp / 2) * 2}|${state.ciaIntrusionActive}|${Math.round(state.ciaIntrusionProgress)}|${state.komradOverrideLocked}|${state.isBlackout}|${bulletinIdx}`;
     const tex = crtMatRef.current?.map as THREE.CanvasTexture | undefined;
     const canvas = tex?.image as HTMLCanvasElement | undefined;
     if (!canvas || !tex || tex.userData.lastSig === sig) return;
@@ -3031,17 +3154,242 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     );
 
     // =========================================================================
+    // СКАЛА-84 (SKALA-84) 4-BAY CENTRALIZED CONTROL & DIAGNOSTIC MATRIX (y = 86..170)
+    // =========================================================================
+    {
+      const skalaY = 86;
+      const skalaH = 84;
+      const bayW = 390;
+      const bayGap = 8;
+
+      const bearingTemp = Math.round(
+        20 + Math.max(state.pumpAHeat, state.pumpBHeat),
+      );
+      const hotspotCount = Object.keys(state.channelHotspots).length;
+      const unmetSub = state.substations.find(
+        (s) => Math.abs(s.allocatedMW - s.targetMW) >= 15,
+      );
+      const t0 = state.turbines[0];
+      const rpmVal = Math.round(t0?.rpm ?? 0);
+
+      // 1. UNIT B (`[KEY 3] UNIT B // GAS & BUBBLER`)
+      const activePumpCount = state.mcpActive.filter(Boolean).length;
+      const isCoreOperating =
+        state.thermalPower > 180 || state.tutorialPhase === "COMPLETED";
+      const bayBStatus: "OK" | "WARN" | "ALERT" =
+        state.bubblerLevel > 82 || Math.abs(state.drumWaterLevel) > 250
+          ? "ALERT"
+          : state.graphiteTemp > 580 ||
+              state.drumWaterLevel < -80 ||
+              Math.abs(state.drumWaterLevel) > 160 ||
+              state.pressureBar > 75 ||
+              (isCoreOperating && state.sealToggles.some((on) => !on))
+            ? "WARN"
+            : "OK";
+      const bayBLine =
+        state.bubblerLevel > 82 || state.drumWaterLevel > 250
+          ? "🚨 BUBBLER FULL! PULL [DRAIN]"
+          : state.drumWaterLevel < -250
+            ? "🚨 DRUM WATER LOW! TURN [FEEDWATER]"
+            : state.drumWaterLevel < -80
+              ? "⚠️ DRUM <-80MM! RAISE [FEEDWATER]!"
+              : state.pressureBar > 75
+                ? "⚠️ STEAM >75 BAR! USE [STEAM DUMP]!"
+                : state.graphiteTemp > 580
+                  ? "⚠️ GRAPHITE HOT! TURN [HELIUM-N2]"
+                  : isCoreOperating && state.sealToggles.some((on) => !on)
+                    ? "⚠️ SEAL LEAK! FLIP [SCRUBBERS]"
+                    : Math.abs(state.drumWaterLevel) > 160
+                      ? "⚠️ WATER LEVEL DRIFT! TURN [FEEDWATER]"
+                      : `PUMPS: ${activePumpCount}/4 | GRAPHITE: ${Math.round(state.graphiteTemp)}°C | POOL: ${Math.round(state.bubblerLevel)}%`;
+
+      // 2. UNIT A-2 (`[KEY 3] UNIT A-2 // CORE & BORON`)
+      const totalTargetGridMW = state.substations.reduce(
+        (s, x) => s + x.targetMW,
+        0,
+      );
+      const targetMWtForOrder = (totalTargetGridMW / 1000) * 3200;
+      const steamDrawMWtEst = (t0?.valve ?? 0) * 3200;
+      const apSaturated =
+        isCoreOperating &&
+        !state.autoRodEnabled &&
+        (Math.abs(targetMWtForOrder - state.thermalPower) > 100 ||
+          Math.abs(steamDrawMWtEst - state.thermalPower) > 120);
+      const bayA2Status: "OK" | "WARN" | "ALERT" =
+        hotspotCount >= 2 || bearingTemp > 84
+          ? "ALERT"
+          : hotspotCount > 0 ||
+              apSaturated ||
+              bearingTemp > 72 ||
+              state.boronTankLevel < 30 ||
+              (isCoreOperating && state.pressureBar < 45)
+            ? "WARN"
+            : "OK";
+      const bayA2Line =
+        hotspotCount > 0
+          ? "⚠️ CORE HOTSPOT! CLICK [37-TILE MAP]"
+          : apSaturated
+            ? "⚠️ AP SATURATED! MOVE [CONTROL RODS] MANUALLY!"
+            : bearingTemp > 72
+              ? "⚠️ BEARINGS HOT! TURN [BEARING COOLING]"
+              : state.boronTankLevel < 30
+                ? "⚠️ BORON LOW! PUMP [BORON PUMP]"
+                : isCoreOperating && state.pressureBar < 45
+                  ? "⚡ LOW STEAM! RAISE [BORON RODS]"
+                  : `RODS: ${Math.round(state.controlRods * 100)}% | BEARINGS: ${bearingTemp}°C | BORON: ${Math.round(state.boronTankLevel)}%`;
+
+      // 3. UNIT A (`[KEY 1] UNIT A // LOOP & MW`)
+      const bayAStatus: "OK" | "WARN" | "ALERT" =
+        state.coreTemp > 540 || state.pressureBar >= 78
+          ? "ALERT"
+          : state.pressureBar > 75 ||
+              (isCoreOperating && state.pressureBar < 36) ||
+              Boolean(unmetSub)
+            ? "WARN"
+            : "OK";
+      const bayALine =
+        state.coreTemp > 540
+          ? "🚨 CORE OVERHEAT! BOOST [PUMPS A/B]!"
+          : state.pressureBar >= 78
+            ? "🚨 HIGH STEAM BAR! VENT / LOWER RODS!"
+            : state.pressureBar > 75
+              ? "⚠️ STEAM >75 BAR! VENT OR LOWER RODS"
+              : isCoreOperating && state.pressureBar < 36
+                ? "⚠️ LOW STEAM BAR! [PUMPS + RODS]"
+                : unmetSub
+                  ? `⚡ MW ORDER: SET SECTOR [${unmetSub.id}] -> ${unmetSub.targetMW} MW`
+                  : `CORE: ${Math.round(state.coreTemp)}°C | STEAM: ${Math.round(state.pressureBar)} BAR | MW: ${totalSuppliedMW}`;
+
+      // 4. UNIT C (`[KEY 5] UNIT C // TURBINE 50HZ`)
+      const bayCStatus: "OK" | "WARN" | "ALERT" =
+        state.isBlackout ||
+        !t0?.gridConnected ||
+        Boolean(t0?.tripped) ||
+        state.gridHz > 50.6
+          ? "ALERT"
+          : state.gridHz < 49.4 || state.pressureBar > 75
+            ? "WARN"
+            : "OK";
+      const bayCLine =
+        state.isBlackout || !t0?.gridConnected || Boolean(t0?.tripped)
+          ? "🚨 GRID TRIPPED! PULL [MAIN BREAKER]"
+          : state.gridHz > 50.6
+            ? "🚨 OVERSPEED! LOWER [RHEOSTAT/VENT]"
+            : state.gridHz < 49.4
+              ? "⚠️ LOW 50HZ! OPEN [50HZ RHEOSTAT]"
+              : state.pressureBar > 75
+                ? "⚠️ PRESSURE >75 BAR! PULL [STEAM VENT]"
+                : `GRID: ${state.gridHz.toFixed(1)} HZ | RPM: ${rpmVal} | LOAD: ${totalGenMW} MW`;
+
+      const skalaBays = [
+        {
+          header: "[KEY 3] UNIT B // GAS & BUBBLER",
+          status: bayBStatus,
+          line: bayBLine,
+        },
+        {
+          header: "[KEY 3] UNIT A-2 // CORE & BORON",
+          status: bayA2Status,
+          line: bayA2Line,
+        },
+        {
+          header: "[KEY 1] UNIT A // LOOP & MW",
+          status: bayAStatus,
+          line: bayALine,
+        },
+        {
+          header: "[KEY 5] UNIT C // TURBINE 50HZ",
+          status: bayCStatus,
+          line: bayCLine,
+        },
+      ] as const;
+
+      skalaBays.forEach((bay, idx) => {
+        const bx = 8 + idx * (bayW + bayGap);
+        const isCrit = bay.status === "ALERT";
+        const isWarn = bay.status === "WARN";
+        const blinkOn = timeBucket % 2 === 0;
+        const borderCol = isCrit
+          ? blinkOn
+            ? "#ff2a2a"
+            : "#881414"
+          : isWarn
+            ? blinkOn
+              ? "#ffaa11"
+              : "#b87408"
+            : "#28ff66";
+
+        ctx.fillStyle = isCrit
+          ? blinkOn
+            ? "rgba(62, 8, 8, 0.96)"
+            : "rgba(28, 4, 4, 0.95)"
+          : isWarn
+            ? "rgba(38, 22, 4, 0.95)"
+            : "rgba(4, 22, 10, 0.95)";
+        ctx.fillRect(bx, skalaY, bayW, skalaH);
+        ctx.strokeStyle = borderCol;
+        ctx.lineWidth = isCrit || isWarn ? 3.2 : 2.4;
+        ctx.strokeRect(bx, skalaY, bayW, skalaH);
+
+        // Top Bay Header Strip (Kremlin font)
+        ctx.fillStyle = borderCol;
+        ctx.fillRect(bx + 2, skalaY + 2, bayW - 4, 28);
+        ctx.font = '700 17px "Kremlin", "Consolas", "Lucida Console", monospace';
+        ctx.textAlign = "left";
+        drawHeavyCrtText(
+          ctx,
+          bay.header,
+          bx + 8,
+          skalaY + 22,
+          "#020a04",
+          0.85,
+          bayW - 86,
+        );
+        ctx.textAlign = "right";
+        drawHeavyCrtText(
+          ctx,
+          bay.status,
+          bx + bayW - 8,
+          skalaY + 22,
+          "#020a04",
+          0.85,
+          64,
+        );
+
+        // Diagnostic / Telemetry Body Line
+        const textCol = isCrit
+          ? blinkOn
+            ? "#ffffff"
+            : "#ff4444"
+          : isWarn
+            ? "#ffbb22"
+            : "#28ff66";
+        ctx.font = '700 19px "Consolas", "Lucida Console", monospace';
+        ctx.textAlign = "left";
+        drawHeavyCrtText(
+          ctx,
+          bay.line,
+          bx + 10,
+          skalaY + 62,
+          textCol,
+          0.85,
+          bayW - 20,
+        );
+      });
+    }
+
+    // =========================================================================
     // SPLIT-SCREEN DIVIDER (Left 62% Regional Vector Map: x=8..994, Right 38% AI Log: x=1002..1592)
     // =========================================================================
     const mapX = 8;
-    const mapY = 86;
+    const mapY = 174;
     const mapW = 986;
-    const mapH = h - 94;
+    const mapH = h - 182;
 
     const chatX = 1002;
-    const chatY = 86;
+    const chatY = 174;
     const chatW = w - chatX - 8;
-    const chatH = h - 94;
+    const chatH = h - 182;
 
     // Frame Left Map Panel
     ctx.fillStyle = "rgba(3, 14, 7, 0.96)";
@@ -3132,16 +3480,16 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     ctx.stroke();
     ctx.restore();
 
-    // Map Sub-Header Banner
+    // Map Sub-Header Banner (Kremlin font + 100% English ORDER banner)
     ctx.fillStyle = "rgba(14, 58, 28, 0.96)";
     ctx.fillRect(mapX + 2, mapY + 2, mapW - 4, 42);
-    ctx.font = '900 28px "VT323", "Consolas", monospace';
+    ctx.font = '700 21px "Kremlin", "Consolas", monospace';
     ctx.textAlign = "left";
     drawHeavyCrtText(
       ctx,
       "SECTOR 84 ELECTRICAL GRID // 6 SUBSTATIONS",
       mapX + 12,
-      mapY + 31,
+      mapY + 30,
       "#39ff14",
       0.8,
       510,
@@ -3149,11 +3497,26 @@ const Komrad84SplitScreenCrt3D: React.FC<{
 
     ctx.textAlign = "right";
     if (state.activeMandate) {
+      const englishTitle = state.activeMandate.title
+        .replace(/ДИРЕКТИВА/gi, "DIRECTIVE")
+        .replace(/ПРИКАЗ/gi, "ORDER")
+        .replace(/КРАСНЫЙ ОКТЯБРЬ/gi, "RED PRIORITY")
+        .replace(/АТОМЩИК-84/gi, "ATOM-84")
+        .replace(/УРОЖАЙ-84/gi, "HARVEST-84")
+        .replace(/КРАСНАЯ ЗВЕЗДА/gi, "RED STAR")
+        .replace(/ГОРИЗОНТ-84/gi, "HORIZON-84")
+        .replace(/ЩИТ РОДИНЫ/gi, "SHIELD-84")
+        .replace(/ПЯТИЛЕТКА-4/gi, "QUOTA-84")
+        .replace(/УЧЕБНЫЙ ПУСК/gi, "DRILL BOOST")
+        .replace(/УЧЕБНЫЙ СБРОС/gi, "DRILL DROP")
+        .replace(/А/g, "A")
+        .replace(/Б/g, "B")
+        .replace(/В/g, "V");
       drawHeavyCrtText(
         ctx,
-        `ORDER: ${state.activeMandate.title.slice(0, 26)}`,
+        `ORDER: ${englishTitle.slice(0, 26)}`,
         mapX + mapW - 12,
-        mapY + 31,
+        mapY + 30,
         "#ffd000",
         0.8,
         430,
@@ -3164,15 +3527,15 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     // COORDINATES OF ENLARGED CENTER REACTOR (+25%) & 6 ENLARGED SECTOR CARDS (+20%)
     // -------------------------------------------------------------------------
     const reactorCx = mapX + 493;
-    const reactorCy = mapY + 450;
+    const reactorCy = mapY + 412;
 
     const nodes = {
-      pripyat: { cx: mapX + 178, cy: mapY + 168 },
-      kolkhoz: { cx: mapX + 178, cy: mapY + 450 },
-      vodka: { cx: mapX + 178, cy: mapY + 732 },
-      duga: { cx: mapX + 808, cy: mapY + 168 },
-      kgb: { cx: mapX + 808, cy: mapY + 450 },
-      steel: { cx: mapX + 808, cy: mapY + 732 },
+      pripyat: { cx: mapX + 178, cy: mapY + 152 },
+      kolkhoz: { cx: mapX + 178, cy: mapY + 412 },
+      vodka: { cx: mapX + 178, cy: mapY + 672 },
+      duga: { cx: mapX + 808, cy: mapY + 152 },
+      kgb: { cx: mapX + 808, cy: mapY + 412 },
+      steel: { cx: mapX + 808, cy: mapY + 672 },
     };
 
     // Helper: Draw +50% Thicker High-Voltage Transmission Line (MW) + Cyan Water Main (H2O) with Enlarged Siphon Arrows
@@ -3465,7 +3828,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       ) => void;
     }) => {
       const boxW = 336;
-      const boxH = 232;
+      const boxH = 208;
       const x0 = opts.cx - boxW / 2;
       const y0 = opts.cy - boxH / 2;
       const dispMW = state.isBlackout ? 0 : opts.suppliedMW;
@@ -3492,24 +3855,24 @@ const Komrad84SplitScreenCrt3D: React.FC<{
 
       // Single-Language Bold English Title Banner
       ctx.fillStyle = borderCol;
-      ctx.fillRect(x0, y0, boxW, 34);
+      ctx.fillRect(x0, y0, boxW, 32);
       ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
       ctx.textAlign = "left";
       drawHeavyCrtText(
         ctx,
         opts.codeTitle,
         x0 + 10,
-        y0 + 25,
+        y0 + 24,
         "#020804",
         0.85,
         boxW - 20,
       );
 
-      // Architectural Silhouette Viewport (reduced height by 20% -> silH = 70 so numbers get max space)
+      // Architectural Silhouette Viewport
       const silX = x0 + 8;
-      const silY = y0 + 38;
+      const silY = y0 + 36;
       const silW = boxW - 16;
-      const silH = 70;
+      const silH = 56;
       ctx.fillStyle = "rgba(2, 10, 4, 0.92)";
       ctx.fillRect(silX, silY, silW, silH);
       ctx.strokeStyle = "rgba(57, 255, 20, 0.28)";
@@ -3531,20 +3894,22 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       ctx.restore();
 
       // Massive Telemetry Readouts (`MW: XX / XX` & `H2O: XX/85%` or statusText)
+      // Constrained with strict non-overlapping left (135px) & right (165px) maxWidths so they never collide!
       const mwReadoutCol = state.isBlackout
         ? "#ff2a2a"
         : mwOk
           ? "#39ff14"
           : "#ffd000";
       ctx.textAlign = "left";
-      ctx.font = '700 23px "Consolas", "Lucida Console", monospace';
+      ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
       drawHeavyCrtText(
         ctx,
         `MW: ${dispMW}/${opts.targetMW}`,
         x0 + 10,
-        y0 + 141,
+        y0 + 123,
         mwReadoutCol,
         0.85,
+        134,
       );
 
       ctx.textAlign = "right";
@@ -3555,28 +3920,32 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           : droughtFlash
             ? "#ffffff"
             : "#ff2a2a";
+        ctx.font = '700 20px "Consolas", "Lucida Console", monospace';
         drawHeavyCrtText(
           ctx,
           `H2O: ${zWater}/${tgtWater}%`,
           x0 + boxW - 10,
-          y0 + 141,
+          y0 + 123,
           h2oCol,
           0.85,
+          164,
         );
       } else {
+        ctx.font = '700 19px "Consolas", "Lucida Console", monospace';
         drawHeavyCrtText(
           ctx,
           opts.statusText,
           x0 + boxW - 10,
-          y0 + 141,
+          y0 + 123,
           opts.quotaOk ? "#39ff14" : "#ff2a2a",
           0.8,
+          166,
         );
       }
 
       // High-Contrast MW Bar Graph (0..maxMW)
       const barX = x0 + 10;
-      const barY = y0 + 154;
+      const barY = y0 + 135;
       const barW = boxW - 20;
       const barH = 18;
       ctx.fillStyle = "#041208";
@@ -3606,7 +3975,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
         ctx,
         bottomStatus,
         x0 + 10,
-        y0 + 212,
+        y0 + 190,
         opts.quotaOk ? "#39ff14" : "#ffd000",
         0.8,
         boxW - 20,
@@ -4194,9 +4563,12 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     ctx.lineWidth = isDrillActive ? 4 : 3;
     ctx.strokeRect(chatX + 8, aiBoxY, chatW - 16, aiBoxH);
 
-    const activeBoxHeader = isDrillActive
-      ? state.tutorialPrompt.header
-      : ">> K.O.M.R.A.D.-84 // LIVE DISPATCH";
+    const isMultiPanelOrderActive =
+      !isDrillActive && state.tutorialPrompt.header.startsWith(">> ACTIVE");
+    const activeBoxHeader =
+      isDrillActive || isMultiPanelOrderActive
+        ? state.tutorialPrompt.header
+        : ">> K.O.M.R.A.D.-84 // LIVE DISPATCH";
     ctx.font = '700 24px "Consolas", "Lucida Console", monospace';
     drawHeavyCrtText(
       ctx,
@@ -4208,14 +4580,15 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       chatW - 40,
     );
 
-    const activeBody = isDrillActive
-      ? state.tutorialPrompt.body
-      : (latestChatMsg?.text ??
-        contextualHint ??
-        KOMRAD_DARK_HUMOR_BULLETINS[
-          bulletinIdx % KOMRAD_DARK_HUMOR_BULLETINS.length
-        ] ??
-        state.tutorialPrompt.body);
+    const activeBody =
+      isDrillActive || isMultiPanelOrderActive
+        ? state.tutorialPrompt.body
+        : (latestChatMsg?.text ??
+          contextualHint ??
+          KOMRAD_DARK_HUMOR_BULLETINS[
+            bulletinIdx % KOMRAD_DARK_HUMOR_BULLETINS.length
+          ] ??
+          state.tutorialPrompt.body);
     ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
     const bLines = wrapText(ctx, activeBody, chatW - 44);
     bLines.slice(0, 4).forEach((ln, idx) => {
@@ -4230,9 +4603,10 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       );
     });
 
-    const activeHintText = isDrillActive
-      ? state.tutorialPrompt.hint
-      : (contextualHint ?? state.tutorialPrompt.hint);
+    const activeHintText =
+      isDrillActive || isMultiPanelOrderActive
+        ? state.tutorialPrompt.hint
+        : (contextualHint ?? state.tutorialPrompt.hint);
     ctx.font = '700 20px "Consolas", "Lucida Console", monospace';
     const hLines = wrapText(ctx, activeHintText, chatW - 44);
     hLines.slice(0, 2).forEach((ln, idx) => {
@@ -4343,8 +4717,8 @@ const SovietHermeticBunkerDoor3D: React.FC<{
   ({
     position,
     rotation,
-    doorCode = "ГЕРМОДВЕРЬ № 4 // БЛОК А",
-    subLabel = "РАДИАЦИОННАЯ ЗАЩИТА • НЕ ОТКРЫВАТЬ",
+    doorCode = "AIRLOCK DOOR NO. 4 // SECTOR 04",
+    subLabel = "TURBINE HALL TG-1 AIRLOCK • CONTAINMENT SEAL",
   }) => {
     const wheelGroupRef = useRef<THREE.Group>(null);
     const dogBarsGroupRef = useRef<THREE.Group>(null);
@@ -5076,7 +5450,6 @@ const SovietHermeticBunkerDoor3D: React.FC<{
  */
 const SovietLuminousCeilingGrid3D: React.FC = React.memo(() => {
   const diffuserMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const lastCeilSigRef = useRef("");
 
   const diffuserGridTex = useMemo(
     () =>
@@ -5118,17 +5491,23 @@ const SovietLuminousCeilingGrid3D: React.FC = React.memo(() => {
     [],
   );
 
-  useFrame(() => {
+  useFrame(({ clock }) => {
     const s = useGameStore.getState();
+    const t = clock.getElapsedTime();
     const isAlarm =
       s.coreTemp >= 750 ||
       s.powerAllocation.cooling +
         s.powerAllocation.defense +
         s.powerAllocation.facility >
         s.maxSafePower;
-    const sig = `${s.isBlackout}|${isAlarm}|${s.powerAllocation.facility <= 10}`;
-    if (sig === lastCeilSigRef.current) return;
-    lastCeilSigRef.current = sig;
+    const hzSag = Math.max(0, 49.7 - s.gridHz) * 0.45;
+    const dipStrength = Math.min(1, s.voltageDipIntensity + hzSag);
+    const humFlicker =
+      dipStrength > 0.02
+        ? 1 -
+          dipStrength *
+            (0.32 + 0.14 * Math.sin(t * 62.8) * Math.cos(t * 94.2))
+        : 1.0;
 
     if (diffuserMatRef.current) {
       if (s.isBlackout) {
@@ -5136,13 +5515,13 @@ const SovietLuminousCeilingGrid3D: React.FC = React.memo(() => {
         diffuserMatRef.current.emissiveIntensity = 0.02;
       } else if (isAlarm) {
         diffuserMatRef.current.emissive.set("#d86848");
-        diffuserMatRef.current.emissiveIntensity = 0.22;
+        diffuserMatRef.current.emissiveIntensity = 0.22 * humFlicker;
       } else if (s.powerAllocation.facility <= 10) {
         diffuserMatRef.current.emissive.set("#a89874");
-        diffuserMatRef.current.emissiveIntensity = 0.11;
+        diffuserMatRef.current.emissiveIntensity = 0.11 * humFlicker;
       } else {
         diffuserMatRef.current.emissive.set("#c8be9e");
-        diffuserMatRef.current.emissiveIntensity = 0.18;
+        diffuserMatRef.current.emissiveIntensity = 0.18 * humFlicker;
       }
     }
   });
@@ -5514,8 +5893,8 @@ export const ControlRoomScene: React.FC = React.memo(() => {
       <SovietHermeticBunkerDoor3D
         position={[2.34, -0.02, 4.18]}
         rotation={[0, -1.88, 0]}
-        doorCode="ГЕРМОДВЕРЬ № 4 // СЕКТОР 84"
-        subLabel="ТАМБУР-ШЛЮЗ МАШЗАЛА ТГ-1 • КОНТУР ГЕРМЕТИЗАЦИИ"
+        doorCode="AIRLOCK DOOR NO. 4 // SECTOR 04"
+        subLabel="TURBINE HALL TG-1 AIRLOCK • CONTAINMENT SEAL"
       />
 
       {/* 2. CENTER COCKPIT LOOMING TERMINAL: <TerminalStation3D /> + Enlarged Split-Screen CRT + High-Detail Soviet DVK-84 Console */}

@@ -260,7 +260,7 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   // ============================================================================
   const activePumps = state.mcpActive.filter(Boolean).length;
   const targetFlow = 0.12 + activePumps * 0.22;
-  state.coolantFlow += (targetFlow - state.coolantFlow) * 0.5 * delta;
+  state.coolantFlow += (targetFlow - state.coolantFlow) * 1.35 * delta;
 
   // Kavitasjon i pumpene hvis vannstanden i dampseparatorene synker under -350 mm
   if (state.drumWaterLevel < -350) {
@@ -277,7 +277,7 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   const activeCooling = Math.max(0, state.coreTemp - 200) * state.coolantFlow * 3.8;
   const heatRemoval = ambientCooling + activeCooling;
 
-  state.coreTemp += (heatInput - heatRemoval) * 0.15 * delta;
+  state.coreTemp += (heatInput - heatRemoval) * 0.42 * delta;
   state.coreTemp = Math.max(20, state.coreTemp);
 
   // Tell aktive 'void'- og 'xenon'-lommer på 37-ROD CORE MAP
@@ -321,7 +321,7 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   const voidTileFloor = voidTileCount * 0.145;
   const effectiveTargetVoid = Math.max(targetVoid, voidTileFloor);
 
-  state.voidFraction += (effectiveTargetVoid - state.voidFraction) * 1.35 * delta;
+  state.voidFraction += (effectiveTargetVoid - state.voidFraction) * 3.2 * delta;
 
   // Mottiltak #1: Kaldt fødevann (hver prosent feedwaterValve ligger over dampforbruket kjøler ned kanalene)
   if (surplusFeedwater > 0.02 && state.voidFraction > 0.08) {
@@ -426,13 +426,6 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   // ============================================================================
   // 5. REAKTIVITET, PROPORSJONAL & STABIL TERMISK EFFEKT (0-3200 MWt) & 37-ROD CORE MAP
   // ============================================================================
-  if (state.autoRodEnabled && !state.az5Active && state.controlRods > 0.10) {
-    if (state.drumPressure > 78) {
-      const pressureTrim = (state.drumPressure - 78) * 0.008;
-      state.controlRods = Math.max(0.35, state.controlRods - pressureTrim * delta);
-    }
-  }
-
   const rodReactivity = (state.controlRods - 0.48) * 0.08;
   const voidReactivity = state.voidFraction * VOID_COEFFICIENT;
   const xenonReactivity = -state.xenon * XENON_SCALE;
@@ -445,23 +438,26 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
     dopplerReactivity +
     az5TipReactivityBonus;
 
+  // Calibrated manual rod thermal curve:
+  // At controlRods = 0.55 (55%), the reactor produces 1920 MWt (~600 MWe equivalent steam).
   let baseEquilibriumMW = 0;
   if (state.controlRods <= 0.10) {
     baseEquilibriumMW = 0;
   } else if (state.controlRods <= 0.55) {
-    baseEquilibriumMW = ((state.controlRods - 0.10) / 0.45) * 2000;
+    baseEquilibriumMW = ((state.controlRods - 0.10) / 0.45) * 1920;
   } else if (state.controlRods <= 0.90) {
-    baseEquilibriumMW = 2000 + ((state.controlRods - 0.55) / 0.35) * 1200;
+    baseEquilibriumMW = 1920 + ((state.controlRods - 0.55) / 0.35) * 1280;
   } else {
     baseEquilibriumMW = 3200 + ((state.controlRods - 0.90) / 0.10) * 350;
   }
 
-  // Positiv Void over 30% presser thermalPower oppover av seg selv;
-  // høy Xenon over 35% trekker fra reaktivitet og kveler thermalPower;
+  // Positiv Void over nominal (14%) presser thermalPower oppover;
+  // høy Xenon over 15% trekker fra reaktivitet og kveler thermalPower;
   // aktiv Boron Injection demper reaktoren trygt med -500 MWt i 5 sekunder.
   const voidPowerBonus =
     state.controlRods > 0.10
-      ? state.voidFraction * 240 + Math.max(0, state.voidFraction - 0.30) * 420
+      ? Math.max(0, state.voidFraction - 0.14) * 240 +
+        Math.max(0, state.voidFraction - 0.30) * 420
       : 0;
   const xenonPowerPenalty =
     state.controlRods > 0.10
@@ -469,6 +465,34 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
       : 0;
   const boronDampingPenalty = state.boronDampingTimer > 0 ? 500 : 0;
   const az5SpikeMW = az5TipReactivityBonus > 0 ? az5TipReactivityBonus * 25000 : 0;
+
+  // Limit AUTO REGULATOR (AP) authority to small micro-trimming only (±40 MWt / ±1.5% rod travel):
+  // Whenever a power directive changes target electrical demand by >= 50 MWe (~160 MWt) OR
+  // turbine steam draw (steamDrawMWt) differs from manual rod thermal capacity by > 120 MWt,
+  // AUTO REGULATOR saturates and automatically trips OFF (autoRodEnabled = false)!
+  const turbineValveAvg = (state.turbines[0].valve + state.turbines[1].valve) * 0.5;
+  const steamDrawMWe = state.turbines[0].tripped
+    ? 0
+    : state.turbines[0].gridConnected
+      ? turbineValveAvg * 1000
+      : turbineValveAvg * 250;
+  const steamDrawMWt = (steamDrawMWe / 1000) * NOMINAL_THERMAL_MW;
+  const totalTargetGridMW = state.substations.reduce((s, x) => s + x.targetMW, 0);
+  const targetDemandMWt = (totalTargetGridMW / 1000) * NOMINAL_THERMAL_MW;
+
+  if (state.autoRodEnabled && !state.az5Active && state.turbines[0].gridConnected) {
+    if (
+      Math.abs(steamDrawMWt - baseEquilibriumMW) > 120 ||
+      Math.abs(targetDemandMWt - baseEquilibriumMW) >= 160
+    ) {
+      state.autoRodEnabled = false;
+    }
+  }
+
+  const apMicroTrimMWt =
+    state.autoRodEnabled && !state.az5Active && state.controlRods > 0.10
+      ? Math.max(-40, Math.min(40, -(voidPowerBonus - xenonPowerPenalty)))
+      : 0;
 
   const targetThermalMW =
     state.controlRods <= 0.10 && az5SpikeMW === 0
@@ -481,11 +505,12 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
               voidPowerBonus -
               xenonPowerPenalty -
               boronDampingPenalty +
+              apMicroTrimMWt +
               az5SpikeMW
           )
         );
 
-  const powerRate = state.az5Active && az5SpikeMW === 0 ? 2.4 : 1.15;
+  const powerRate = state.az5Active && az5SpikeMW === 0 ? 4.2 : 2.85;
   state.thermalPower += (targetThermalMW - state.thermalPower) * powerRate * delta;
   if (state.controlRods <= 0.10 && state.thermalPower < 8 && az5SpikeMW === 0) {
     state.thermalPower = 0;
@@ -507,48 +532,104 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   }
 
   // ============================================================================
-  // 6. DAMPSEPARATORER (70 BAR Trykk og -400/+400 mm Vannstand)
+  // 6. COUPLED STEAM-DRUM MASS BALANCE (pressureBar / drumPressure AS REAL CURRENCY)
   // ============================================================================
-  if (state.controlRods >= 0.20 && state.feedwaterValve < 0.40) {
-    state.feedwaterValve = 0.50;
+  if (state.controlRods >= 0.20 && state.feedwaterValve < 0.15) {
+    state.feedwaterValve = 0.25;
   }
 
-  const steamProduced = state.coreTemp > boilingPoint - 18
-    ? (state.thermalPower / NOMINAL_THERMAL_MW) * 100
-    : (state.thermalPower / NOMINAL_THERMAL_MW) * 32;
+  // Strict Steam Production Ceiling tied directly to Manual CONTROL ROD DRIVE (thermalPower),
+  // FEEDWATER VALVE (UNIT B), and COOLING PUMPS A/B (coolantFlow on UNIT A):
+  // At controlRods = 0.55 (1920 MWt) and feedwaterValve = 0.50 (50%) with 4/4 pumps (coolantFlow >= 0.8),
+  // the reactor produces exactly 600 MWe equivalent steam (~1920 MWt).
+  const voidStarvationPenalty =
+    state.voidFraction > 0.32 ? Math.max(0.35, 1 - (state.voidFraction - 0.32) * 1.1) : 1.0;
+  const heatSteamMWe =
+    state.coreTemp > boilingPoint - 18
+      ? (state.thermalPower / NOMINAL_THERMAL_MW) * 1000
+      : (state.thermalPower / NOMINAL_THERMAL_MW) * 320;
+  const feedwaterCapMWe = (state.feedwaterValve / 0.50) * 600;
+  const pumpFlowCapMWe = state.coolantFlow * 850;
+  const steamGenMWeEquivalent =
+    Math.min(heatSteamMWe, Math.min(feedwaterCapMWe, pumpFlowCapMWe)) * voidStarvationPenalty;
+  const steamProduced = steamGenMWeEquivalent * 0.1;
 
   const feedwaterIn = state.feedwaterValve * 115;
   state.plantWaterDrainPct = 0;
 
-  if (state.feedwaterValve >= 0.40) {
-    const targetWaterMm = (state.feedwaterValve - requiredFeedwater) * 180;
-    state.drumWaterLevel += (targetWaterMm - state.drumWaterLevel) * 1.2 * delta;
-    state.drumWaterLevel = Math.max(-140, Math.min(220, state.drumWaterLevel));
+  // Coupled Drum Water Level (drumWaterLevel on UNIT B):
+  // At 600 MWe steam draw, feedwaterValve = 0.50 (50%) keeps drumWaterLevel at 0mm.
+  // If steamDrawMWe exceeds feedwaterCapMWe during a +MW order without raising FEEDWATER VALVE,
+  // drumWaterLevel drops below -80mm!
+  const requiredFeedwaterForDraw = state.turbines[0].gridConnected
+    ? (steamDrawMWe / 600) * 0.50
+    : requiredFeedwater;
+  if (state.turbines[0].gridConnected && steamDrawMWe > feedwaterCapMWe + 25) {
+    const targetLowWaterMm = -Math.min(240, 95 + (steamDrawMWe - feedwaterCapMWe) * 1.15);
+    state.drumWaterLevel += (targetLowWaterMm - state.drumWaterLevel) * 1.45 * delta;
+    state.drumWaterLevel = Math.max(-280, Math.min(280, state.drumWaterLevel));
+  } else if (state.feedwaterValve >= 0.35 && activePumps >= 2) {
+    const targetWaterMm = (state.feedwaterValve - requiredFeedwaterForDraw) * 240;
+    state.drumWaterLevel += (targetWaterMm - state.drumWaterLevel) * 1.25 * delta;
+    state.drumWaterLevel = Math.max(-280, Math.min(280, state.drumWaterLevel));
   } else {
-    const waterLoss = totalSteamConsumed + steamProduced * 0.15;
-    state.drumWaterLevel += (feedwaterIn - waterLoss) * 0.4 * delta;
+    const waterLoss = totalSteamConsumed + steamProduced * 0.18;
+    state.drumWaterLevel += (feedwaterIn - waterLoss) * 0.45 * delta;
     state.drumWaterLevel = Math.max(-400, Math.min(400, state.drumWaterLevel));
   }
 
-  const steamDeficit = Math.max(0, totalSteamConsumed - steamProduced);
-  const steamSurplus = Math.max(0, steamProduced - totalSteamConsumed - 28);
-  const naturalEquilibriumPressure =
-    state.thermalPower > 50
-      ? Math.max(
-          28,
-          Math.min(
-            84,
-            1 +
-              Math.min(1, state.thermalPower / 1700) * 69 -
-              steamDeficit * 0.72 +
-              steamSurplus * 0.22
+  // Coupled Steam Mass Balance in Drum Separators (70 BAR Nominal Equilibrium):
+  // - During a +MW Order: if steamDrawMWe > steamGenMWeEquivalent (cranking turbine valve without
+  //   first raising CONTROL ROD DRIVE and FEEDWATER VALVE / COOLING PUMPS), drumPressure drops
+  //   rapidly (-2.5 to -4.0 BAR/sec) below 45 BAR, starving the turbine!
+  // - During a -MW Order: if heatSteamMWe > steamDrawMWe (closing turbine valve without inserting
+  //   CONTROL ROD DRIVE and opening STEAM DUMP / VENT), drumPressure climbs rapidly (+2.5 to +3.5 BAR/sec)
+  //   past 78 BAR and coreTemp climbs until rods are inserted and steam is vented!
+  const offlinePumpPressurePenalty =
+    state.thermalPower > 500 ? Math.max(0, 4 - activePumps) * 4.2 : 0;
+
+  if (state.turbines[0].gridConnected && state.thermalPower > 40) {
+    const dumpMWe = (state.steamDumpValve ? 240 : 0) + (state.reliefValveOpen ? 380 : 0);
+    const deficitMWe = steamDrawMWe - steamGenMWeEquivalent;
+    const surplusHeatMWe = heatSteamMWe - steamDrawMWe - dumpMWe;
+
+    if (deficitMWe > 22) {
+      const dropRate = Math.min(4.0, 2.5 + ((deficitMWe - 22) / 100) * 1.5);
+      state.drumPressure -= dropRate * delta;
+      state.drumPressure = Math.max(24, state.drumPressure);
+    } else if (surplusHeatMWe > 22) {
+      const riseRate = Math.min(3.5, 2.5 + ((surplusHeatMWe - 22) / 100) * 1.2);
+      state.drumPressure += riseRate * delta;
+      state.coreTemp += Math.min(4.2, 1.8 + (surplusHeatMWe / 60) * 1.6) * delta;
+    } else {
+      const eqBar = 70.0 + offlinePumpPressurePenalty - deficitMWe * 0.08 + surplusHeatMWe * 0.08;
+      state.drumPressure += (eqBar - state.drumPressure) * 1.85 * delta;
+    }
+  } else {
+    const steamDeficit = Math.max(0, totalSteamConsumed - steamProduced);
+    const steamSurplus = Math.max(0, steamProduced - totalSteamConsumed);
+    const baseCorePressure =
+      state.thermalPower > 40
+        ? Math.min(70.0, 1 + Math.min(1, state.thermalPower / 1550) * 69.0)
+        : 1;
+    const targetDrumPressure =
+      state.thermalPower > 40
+        ? Math.max(
+            14,
+            Math.min(
+              108,
+              baseCorePressure -
+                Math.max(0, steamDeficit - 3) * 0.95 +
+                Math.max(0, steamSurplus - 10) * 0.62 +
+                offlinePumpPressurePenalty
+            )
           )
-        )
-      : 1;
-  state.drumPressure += (naturalEquilibriumPressure - state.drumPressure) * 0.65 * delta;
-  state.drumPressure += (steamProduced - totalSteamConsumed) * 0.08 * delta;
-  if (state.autoRodEnabled && !state.az5Active && state.drumPressure > 72 && steamSurplus < 15) {
-    state.drumPressure += (70 - state.drumPressure) * 1.4 * delta;
+        : 1;
+    state.drumPressure += (targetDrumPressure - state.drumPressure) * 1.85 * delta;
+  }
+
+  if (state.steamDumpValve) {
+    state.drumPressure -= 8.5 * delta;
   }
   state.drumPressure = Math.max(1, Math.min(120, state.drumPressure));
 
@@ -559,28 +640,37 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
     Math.max(0, state.drumPressure - 75) * 0.12;
 
   // ============================================================================
-  // 7. TURBINER (3000 RPM GOVERNOR / 50.0 HZ SYNKRONOSKOP [-180°..+180°] / 1000 MWe)
+  // 7. TURBINES: OVERSPEED VS. GRID DRAG (50.0 HZ EQUILIBRIUM ON UNIT C)
   // ============================================================================
+  const totalAllocatedMW = state.substations.reduce((s, x) => s + x.allocatedMW, 0);
+
   state.turbines.forEach((turb) => {
     if (turb.tripped) {
       turb.valve = 0;
       turb.gridConnected = false;
     }
 
-    const steamForce = turb.tripped ? 0 : turb.valve * (state.drumPressure / NOMINAL_PRESSURE_BAR);
+    // Available live steam pressure factor: drops sharply if drumPressure is starved (< 52 BAR)
+    const pressureFactor =
+      state.drumPressure >= 58
+        ? state.drumPressure / NOMINAL_PRESSURE_BAR
+        : state.drumPressure >= 42
+          ? 0.58 + ((state.drumPressure - 42) / 16) * (58 / NOMINAL_PRESSURE_BAR - 0.58)
+          : Math.max(0.18, (state.drumPressure - 10) / 32) * 0.58;
+    const steamForce = turb.tripped ? 0 : turb.valve * pressureFactor;
 
     if (!turb.gridConnected) {
-      if (!turb.tripped && turb.valve >= 0.15 && turb.valve <= 0.95 && state.drumPressure >= 30) {
-        turb.rpm += (3000 - turb.rpm) * 1.45 * delta;
+      if (!turb.tripped && turb.valve >= 0.15 && turb.valve <= 0.95 && state.drumPressure >= 32) {
+        turb.rpm += (3000 - turb.rpm) * 3.2 * delta;
         if (Math.abs(3000 - turb.rpm) < 12) {
           turb.rpm = 3000;
         }
-      } else if (!turb.tripped && turb.valve > 0.95 && state.drumPressure >= 30) {
-        const targetFreeRpm = 3220;
-        turb.rpm += (targetFreeRpm - turb.rpm) * 1.1 * delta;
+      } else if (!turb.tripped && turb.valve > 0.95 && state.drumPressure >= 32) {
+        const targetFreeRpm = 3240;
+        turb.rpm += (targetFreeRpm - turb.rpm) * 2.6 * delta;
       } else {
-        const targetLowRpm = steamForce * 16000;
-        turb.rpm += (targetLowRpm - turb.rpm) * 0.9 * delta;
+        const targetLowRpm = steamForce * 15000;
+        turb.rpm += (targetLowRpm - turb.rpm) * 2.4 * delta;
       }
 
       turb.rpm = Math.max(0, turb.rpm);
@@ -598,14 +688,62 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
         turb.tripped = true;
       }
     } else {
-      turb.rpm = 3000;
-      turb.freqHz = 50.0;
-      turb.syncPhase = 0;
+      // Coupled Mechanical Steam Power (2 turbines = 1000 MWe nominal at 100% valve & 70 BAR).
+      // Strictly capped by steamGenMWeEquivalent when drumPressure is starved (< 58 BAR) or steamDraw > steamGen,
+      // so the turbine CANNOT reach a higher MW target unless CONTROL ROD DRIVE and FEEDWATER VALVE are raised!
+      const rawTurbineSteamMW = Math.min(1150, steamForce * 1000);
+      const isSteamStarved =
+        state.drumPressure < 58 || steamDrawMWe > steamGenMWeEquivalent + 22;
+      const turbineSteamMW = isSteamStarved
+        ? Math.min(
+            rawTurbineSteamMW,
+            steamGenMWeEquivalent * Math.min(1, state.drumPressure / 58)
+          )
+        : rawTurbineSteamMW;
+      turb.electricalMW = Math.min(550, Math.round(turbineSteamMW * 0.5));
 
-      turb.electricalMW = Math.min(550, Math.round(steamForce * 500));
+      // Balance between Mechanical Steam Power (turbineSteamMW) and Electrical Grid Load (totalAllocatedMW):
+      // - Under-Powered (turbineSteamMW < totalAllocatedMW or starved drumPressure < 52 BAR):
+      //   Heavy magnetic grid drag pulls RPM < 2928 (< 48.8 Hz).
+      // - Over-Powered (turbineSteamMW > totalAllocatedMW, e.g., leaving valve high after shedding load):
+      //   Insufficient grid braking causes Overspeed (> 3060 RPM / > 51.0 Hz).
+      const effectiveGridLoadMW =
+        totalAllocatedMW === 0 && turb.valve <= 0.65
+          ? turbineSteamMW
+          : totalAllocatedMW;
+      const powerImbalanceMW = turbineSteamMW - effectiveGridLoadMW;
+      const starvationDragHz =
+        state.drumPressure < 52 ? ((52 - state.drumPressure) / 18) * 2.2 : 0;
 
-      if (steamForce < 0.03) {
+      // Tight deadband within ±15 MW keeps frequency locked cleanly at 50.0 Hz (3000 RPM)
+      const activeImbalanceMW =
+        Math.abs(powerImbalanceMW) <= 15
+          ? 0
+          : powerImbalanceMW - Math.sign(powerImbalanceMW) * 15;
+      const targetConnectedHz = Math.max(
+        45.5,
+        Math.min(53.8, 50.0 + (activeImbalanceMW / 115) * 1.15 - starvationDragHz)
+      );
+      const targetConnectedRpm = targetConnectedHz * 60;
+
+      turb.rpm += (targetConnectedRpm - turb.rpm) * Math.min(1, delta * 5.8);
+      if (Math.abs(3000 - turb.rpm) < 6 && activeImbalanceMW === 0 && starvationDragHz === 0) {
+        turb.rpm = 3000;
+      }
+      turb.freqHz = Number((turb.rpm / 60).toFixed(1));
+      turb.syncPhase = Math.max(
+        -45,
+        Math.min(45, ((turb.freqHz - 50.0) / 2.5) * 35)
+      );
+
+      if (steamForce < 0.03 || state.drumPressure < 16) {
         turb.gridConnected = false;
+        turb.electricalMW = 0;
+      } else if (turb.rpm > 3220) {
+        // Severe Turbine Overspeed (> 53.6 Hz) trips the breaker to protect blades!
+        turb.tripped = true;
+        turb.gridConnected = false;
+        turb.valve = 0;
         turb.electricalMW = 0;
       }
     }
@@ -616,14 +754,20 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   // ============================================================================
   // 8. OPPDATER STATUS OG KVOTER PÅ K.O.M.R.A.D.-84 SKJERMEN (KUN ELEKTRISK MWe)
   // ============================================================================
-  const totalAllocatedMW = state.substations.reduce((s, x) => s + x.allocatedMW, 0);
-  const hasEnoughPower = state.totalElectricalMW >= totalAllocatedMW - 15;
+  const activeGridHz = state.turbines[0]?.freqHz ?? 50.0;
+  const hzStableForGrid = !state.turbines[0]?.gridConnected || (activeGridHz >= 48.8 && activeGridHz <= 51.2);
+  const hasEnoughPower =
+    state.totalElectricalMW >= totalAllocatedMW - 20 && hzStableForGrid;
 
   state.substations.forEach((sub) => {
     const leverMatchesTarget = Math.abs(sub.allocatedMW - sub.targetMW) <= 15;
     const mwMet = hasEnoughPower && leverMatchesTarget;
 
-    if (!hasEnoughPower && sub.allocatedMW > 0) {
+    if (state.turbines[0]?.gridConnected && activeGridHz > 51.2 && sub.allocatedMW > 0) {
+      sub.statusText = `OVERSPEED (${activeGridHz.toFixed(1)}HZ)`;
+    } else if (state.turbines[0]?.gridConnected && activeGridHz < 48.8 && sub.allocatedMW > 0) {
+      sub.statusText = `DRAG LOW (${activeGridHz.toFixed(1)}HZ)`;
+    } else if (!hasEnoughPower && sub.allocatedMW > 0) {
       sub.statusText = `GEN LOW (${Math.round(state.totalElectricalMW)}/${totalAllocatedMW}MW)`;
     } else if (sub.id === 1) {
       sub.statusText = mwMet ? 'HEATING OK' : 'HEATING LOW';
@@ -780,9 +924,9 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       }
       return {
         phase: 'STEP_6_BASELINE_600MW',
-        header: '>> STEP 6/8 [UNIT C & A — 600 MWe]:',
+        header: '>> STEP 6/8 [UNIT C & A — 600 MWe / 50.0 HZ]:',
         body: 'ACTION: SCROLL "TURBINE STEAM VALVE" ON UNIT C UP TO 60% (600 MWe), THEN SCROLL ALL 6 SUBSTATION LEVERS ON UNIT A TO 100 MW EACH.',
-        hint: 'WHY: Cruising at 600 MWe (60% capacity) leaves 400 MWe of headroom when Moscow orders power surges!'
+        hint: 'WHY: Turbine Steam MW must match Sector MW Load to lock 50.0 Hz! Too much steam causes Overspeed (>51 Hz); too little steam causes Grid Drag (<49 Hz).'
       };
     }
 
@@ -816,12 +960,65 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       };
     }
 
-    case 'COMPLETED':
+    case 'COMPLETED': {
+      const totalTargetMW = state.substations.reduce((s, x) => s + x.targetMW, 0);
+      const totalAllocatedMW = state.substations.reduce((s, x) => s + x.allocatedMW, 0);
+      const unmetSub = state.substations.find((x) => Math.abs(x.allocatedMW - x.targetMW) >= 5);
+      const targetMWt = Math.round((totalTargetMW / 1000) * NOMINAL_THERMAL_MW);
+      const reqFeedwaterPct = Math.min(100, Math.round((totalTargetMW / 600) * 50));
+      const reqValvePct = Math.min(100, Math.round((totalTargetMW / 1000) * 100));
+      const curRodPct = Math.round(state.controlRods * 100);
+      const curFwPct = Math.round(state.feedwaterValve * 100);
+      const curValvePct = Math.round((state.turbines[0]?.valve ?? 0) * 100);
+      const curHz = (state.turbines[0]?.freqHz ?? 50.0).toFixed(1);
+
+      const isPlusOrder =
+        totalTargetMW > totalAllocatedMW + 5 ||
+        (unmetSub !== undefined && unmetSub.targetMW > unmetSub.allocatedMW) ||
+        state.thermalPower < targetMWt - 80 ||
+        state.drumPressure < 60;
+      const isMinusOrder =
+        totalTargetMW < totalAllocatedMW - 5 ||
+        (unmetSub !== undefined && unmetSub.targetMW < unmetSub.allocatedMW) ||
+        state.thermalPower > targetMWt + 100 ||
+        state.drumPressure > 75;
+
+      if (isPlusOrder) {
+        const s1Ok = state.thermalPower >= targetMWt - 85;
+        const s2Ok = state.feedwaterValve * 100 >= reqFeedwaterPct - 4 && state.drumPressure >= 62;
+        const s3Ok = !unmetSub && Math.abs(totalAllocatedMW - totalTargetMW) < 5;
+        const s4Ok =
+          Math.abs(curValvePct - reqValvePct) <= 4 &&
+          Math.abs((state.turbines[0]?.freqHz ?? 50) - 50) <= 0.4;
+        return {
+          phase: 'COMPLETED',
+          header: `>> ACTIVE +MW ORDER (${totalAllocatedMW} -> ${totalTargetMW} MW // ~${targetMWt} MWt):`,
+          body: `${s1Ok ? '[OK]' : '[1]'} [UNIT A-2] Withdraw CONTROL ROD DRIVE (${curRodPct}%) to reach ~${targetMWt} MWt | ${s2Ok ? '[OK]' : '[2]'} [UNIT B/A] Raise FEEDWATER VALVE (${curFwPct}% -> ${reqFeedwaterPct}%) & PUMPS A/B (~65-70 BAR)`,
+          hint: `${s3Ok ? '[OK]' : '[3]'} [UNIT A] Set ${unmetSub ? unmetSub.name : 'SECTOR'} MW LEVER to ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW | ${s4Ok ? '[OK]' : '[4]'} [UNIT C] Set TURBINE STEAM VALVE (${curValvePct}% -> ${reqValvePct}%) to lock 50.0 HZ (${curHz} HZ)`
+        };
+      }
+
+      if (isMinusOrder) {
+        const s1Ok = !unmetSub && Math.abs(totalAllocatedMW - totalTargetMW) < 5;
+        const s2Ok =
+          Math.abs(curValvePct - reqValvePct) <= 4 &&
+          Math.abs((state.turbines[0]?.freqHz ?? 50) - 50) <= 0.4;
+        const s3Ok = state.thermalPower <= targetMWt + 90 && state.drumPressure <= 75;
+        const s4Ok = state.drumPressure <= 74 && Math.abs(state.drumWaterLevel) <= 90;
+        return {
+          phase: 'COMPLETED',
+          header: `>> ACTIVE -MW ORDER (${totalAllocatedMW} -> ${totalTargetMW} MW // ~${targetMWt} MWt):`,
+          body: `${s1Ok ? '[OK]' : '[1]'} [UNIT A] Lower ${unmetSub ? unmetSub.name : 'SECTOR'} MW LEVER to ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW | ${s2Ok ? '[OK]' : '[2]'} [UNIT C] Lower TURBINE STEAM VALVE (${curValvePct}% -> ${reqValvePct}%) to keep 50.0 HZ`,
+          hint: `${s3Ok ? '[OK]' : '[3]'} [UNIT A-2] Insert CONTROL ROD DRIVE (${curRodPct}%) to ~${targetMWt} MWt (<75 BAR) | ${s4Ok ? '[OK]' : '[4]'} [UNIT B] Adjust FEEDWATER (${curFwPct}% -> ${reqFeedwaterPct}%) & STEAM DUMP if >75 BAR`
+        };
+      }
+
       return {
         phase: 'COMPLETED',
         header: '>> K.O.M.R.A.D.-84 // LIVE DISPATCH:',
-        body: 'MONITOR THE MATRIX PRINTER FOR MOSCOW DIRECTIVES, KEEP ALL 6 SUBSTATION QUOTAS GREEN, AND SUPPRESS ANY VOID OR XENON HAZARDS.',
-        hint: 'TIP: Hover & scroll your mouse wheel on any valve or lever (±5% or ±25 MW); hold [SHIFT+SCROLL] for ±1% fine tuning!'
+        body: '+MW ORDER: [1] Withdraw CONTROL ROD DRIVE (A-2) -> [2] Raise FEEDWATER VALVE (B) & PUMPS A/B (A) -> [3] Set SECTOR MW LEVER (A) -> [4] Adjust TURBINE STEAM VALVE (C) to 50.0 HZ.',
+        hint: '-MW ORDER: [1] Lower SECTOR MW LEVER (A) -> [2] Lower TURBINE STEAM VALVE (C) -> [3] Insert CONTROL ROD DRIVE (A-2) (<75 BAR) -> [4] Adjust FEEDWATER & STEAM DUMP (B).'
       };
+    }
   }
 }

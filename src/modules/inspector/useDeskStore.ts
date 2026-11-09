@@ -230,37 +230,37 @@ const SECTOR_ORDER_SPECS: Record<
 > = {
   pripyat: {
     bracketLabel: '1. PRIPYAT CITY',
-    ruTopic: 'ГОРОД ПРИПЯТЬ',
+    ruTopic: 'PRIPYAT CITY',
     candidateMWs: [150, 200, 50, 175, 125],
     forgedCandidateMWs: [225, 25, 250],
   },
   kolkhoz: {
     bracketLabel: '2. KOLKHOZ FARM',
-    ruTopic: 'СОВХОЗ «ЗАРЯ»',
+    ruTopic: 'KOLKHOZ ZARYA',
     candidateMWs: [150, 50, 175, 125, 200],
     forgedCandidateMWs: [225, 25, 250],
   },
   duga: {
     bracketLabel: '3. DUGA-1 RADAR',
-    ruTopic: 'РАДАР ДУГА-1',
+    ruTopic: 'DUGA-1 RADAR',
     candidateMWs: [175, 200, 50, 150, 225],
     forgedCandidateMWs: [250, 25, 225],
   },
   kgb: {
     bracketLabel: '4. KGB BUNKER 07',
-    ruTopic: 'БУНКЕР КГБ-07',
+    ruTopic: 'KGB BUNKER 07',
     candidateMWs: [150, 50, 175, 125, 200],
     forgedCandidateMWs: [225, 25, 250],
   },
   vodka: {
     bracketLabel: '5. VODKA PLANT',
-    ruTopic: 'КРАСНЫЙ ОКТЯБРЬ',
+    ruTopic: 'RED OCTOBER',
     candidateMWs: [175, 150, 200, 50, 125],
     forgedCandidateMWs: [250, 25, 225],
   },
   steel: {
     bracketLabel: '6. STEEL WORKS',
-    ruTopic: 'СТАЛЬЗАВОД №4',
+    ruTopic: 'STEEL WORKS #4',
     candidateMWs: [175, 50, 200, 150, 125],
     forgedCandidateMWs: [250, 25, 225],
   },
@@ -288,7 +288,7 @@ interface SingleTargetDirectiveBlueprint {
 const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   // 1. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 5. VODKA PLANT (SURGE TO 175 MW)
   {
-    titlePrefix: 'ДИРЕКТИВА 44-А',
+    titlePrefix: 'DIRECTIVE 44-A',
     targetSector: 'vodka',
     preferredMW: 175,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
@@ -307,7 +307,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 2. FORGERY (Page 1 Seal Micro-Print Defect): 6-point star + CCCP-LATIN micro-ring! -> Single Target: 3. DUGA-1 RADAR
   {
-    titlePrefix: 'ДИРЕКТИВА 44-Ж',
+    titlePrefix: 'DIRECTIVE 44-Z',
     targetSector: 'duga',
     preferredMW: 250,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
@@ -327,7 +327,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 3. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 3. DUGA-1 RADAR (SURGE TO 200 MW)
   {
-    titlePrefix: 'ДИРЕКТИВА 19-Б',
+    titlePrefix: 'DIRECTIVE 19-B',
     targetSector: 'duga',
     preferredMW: 200,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
@@ -346,7 +346,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 4. FORGERY (Page 2 Font Violation): Uses Forbidden Western Serif font -> Single Target: 1. PRIPYAT CITY
   {
-    titlePrefix: 'ДИРЕКТИВА 88-Ц',
+    titlePrefix: 'DIRECTIVE 88-C',
     targetSector: 'pripyat',
     preferredMW: 225,
     ministry: 'COUNCIL OF MINISTERS USSR',
@@ -365,7 +365,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 5. VALID: Council of Ministers + GOST_MONO + USSR_STATE_SEAL (NONE) + STATE_IVORY + PRAVDA_BLACK -> Single Target: 1. PRIPYAT CITY (SURGE TO 175 MW)
   {
-    titlePrefix: 'ДИРЕКТИВА 61-М',
+    titlePrefix: 'DIRECTIVE 61-M',
     targetSector: 'pripyat',
     preferredMW: 175,
     ministry: 'COUNCIL OF MINISTERS USSR',
@@ -384,7 +384,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 6. FORGERY (Page 3 Colour Violation): Council of Ministers using CIA Navy Blue Ink on Bleached Western White Paper -> Single Target: 6. STEEL WORKS
   {
-    titlePrefix: 'ДИРЕКТИВА 52-В',
+    titlePrefix: 'DIRECTIVE 52-V',
     targetSector: 'steel',
     preferredMW: 250,
     ministry: 'COUNCIL OF MINISTERS USSR',
@@ -404,7 +404,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 7. VALID: 5th Chief Directorate + GOST_MONO + KGB_SWORD_SHIELD (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 4. KGB BUNKER 07 (SURGE TO 150 MW)
   {
-    titlePrefix: 'ДИРЕКТИВА 71-К',
+    titlePrefix: 'DIRECTIVE 71-K',
     targetSector: 'kgb',
     preferredMW: 150,
     ministry: '5TH CHIEF DIRECTORATE',
@@ -423,7 +423,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 8. FORGERY (Page 1 Seal Micro-Defect + Page 3 Ink Mismatch): Broken atomic orbit & Imperial Purple ink -> Single Target: 5. VODKA PLANT
   {
-    titlePrefix: 'ДИРЕКТИВА 93-Ф',
+    titlePrefix: 'DIRECTIVE 93-F',
     targetSector: 'vodka',
     preferredMW: 225,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
@@ -443,7 +443,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 9. VALID: MinSredMash + GOST_MONO + MINSREDMASH_ATOM (NONE) + STATE_IVORY + SOVIET_CRIMSON -> Single Target: 2. KOLKHOZ FARM (LOAD SHEDDING TO 50 MW)
   {
-    titlePrefix: 'ДИРЕКТИВА 32-С',
+    titlePrefix: 'DIRECTIVE 32-S',
     targetSector: 'kolkhoz',
     preferredMW: 50,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
@@ -462,7 +462,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 10. FORGERY (Page 2 Unauthorized Ministry + Slanted Italic Font) -> Single Target: 2. KOLKHOZ FARM
   {
-    titlePrefix: 'ДИРЕКТИВА 64-Д',
+    titlePrefix: 'DIRECTIVE 64-D',
     targetSector: 'kolkhoz',
     preferredMW: 225,
     ministry: 'MINISTRY OF ATOMIC FREEDOM',
@@ -482,7 +482,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
   // 11. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 6. STEEL WORKS (SURGE TO 200 MW)
   {
-    titlePrefix: 'ДИРЕКТИВА 80-П',
+    titlePrefix: 'DIRECTIVE 80-P',
     targetSector: 'steel',
     preferredMW: 200,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
@@ -501,21 +501,45 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
   },
 ]
 
+/**
+ * Master toggle for KGB / CIA forged directives.
+ * Set to `false` to force 100% genuine Ministry power orders (`isForgery: false`)
+ * while testing and tuning the RBMK-1000 thermodynamic & grid control loop.
+ */
+export const ENABLE_FORGERIES = false
+
 let docSequence = 1
 
 function buildSingleTargetDeskDocument(
-  blueprint: SingleTargetDirectiveBlueprint,
+  rawBlueprint: SingleTargetDirectiveBlueprint,
   seqNum: number
 ): DeskDocument {
+  const blueprint: SingleTargetDirectiveBlueprint =
+    ENABLE_FORGERIES || !rawBlueprint.isForgery
+      ? rawBlueprint
+      : {
+          ...rawBlueprint,
+          ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
+          secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
+          fontType: 'GOST_MONO',
+          sealType: 'MINSREDMASH_ATOM',
+          sealMicroDefect: 'NONE',
+          paperColor: 'STATE_IVORY',
+          inkColor: 'SOVIET_CRIMSON',
+          isForgery: false,
+          forgeryReason: null,
+        }
+
   const currentTargets = useGameStore.getState().targetSectorMW
   const sector = blueprint.targetSector
   const spec = SECTOR_ORDER_SPECS[sector]
   const curMW = currentTargets[sector]
 
   // Pick a target MW (clean multiple of 25 MW between 25 and 250 MW) that differs from curMW
-  const candidates = blueprint.isForgery
-    ? spec.forgedCandidateMWs
-    : spec.candidateMWs
+  const candidates =
+    ENABLE_FORGERIES && blueprint.isForgery
+      ? spec.forgedCandidateMWs
+      : spec.candidateMWs
   let nextMW = blueprint.preferredMW
   if (nextMW === curMW || nextMW < 25 || nextMW > 250 || nextMW % 25 !== 0) {
     nextMW =
@@ -584,7 +608,7 @@ function buildTutorialDrillStep1Document(): DeskDocument {
   return {
     id: 'DRILL-00-1',
     status: 'printing',
-    title: 'DRILL ORDER 00-1 // КРАСНЫЙ ОКТЯБРЬ',
+    title: 'DRILL ORDER 00-1 // RED OCTOBER',
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-01-МСМ',
     dateString: '04.11.1984',
@@ -617,17 +641,23 @@ function buildTutorialDrillStep5Document(): DeskDocument {
   const currentTargets = useGameStore.getState().targetSectorMW
   const nextTargets: Record<SectorNodeId, number> = {
     ...currentTargets,
-    duga: 225,
+    duga: ENABLE_FORGERIES ? 225 : 175,
   }
-  const powerOrderText = 'SURGE [3. DUGA-1 RADAR] TO 225 MW (+125 MW)'
+  const powerOrderText = ENABLE_FORGERIES
+    ? 'SURGE [3. DUGA-1 RADAR] TO 225 MW (+125 MW)'
+    : 'SURGE [3. DUGA-1 RADAR] TO 175 MW (+75 MW)'
   return {
     id: 'DRILL-00-2',
     status: 'printing',
-    title: 'DRILL ORDER 00-2 // РАДАР ДУГА-1',
-    ministry: 'MINISTRY OF ENERGY AND ELECTRIFICATION',
+    title: 'DRILL ORDER 00-2 // DUGA-1 RADAR',
+    ministry: ENABLE_FORGERIES
+      ? 'MINISTRY OF ENERGY AND ELECTRIFICATION'
+      : 'MINISTRY OF MEDIUM MACHINE BUILDING',
     referenceCode: 'ГОСТ-84-09-МЭЭ',
     dateString: '04.11.1984',
-    content: 'DRILL 5: FAKE SEAL SHRED',
+    content: ENABLE_FORGERIES
+      ? 'DRILL 5: FAKE SEAL SHRED'
+      : 'DRILL 5: STAMP GREEN APPROVED',
     powerOrderText,
     powerTargets: {
       cityMW: nextTargets.pripyat + nextTargets.kolkhoz,
@@ -635,16 +665,19 @@ function buildTutorialDrillStep5Document(): DeskDocument {
       vodkaMW: nextTargets.vodka + nextTargets.steel,
       ...nextTargets,
     },
-    secretWatermark: 'LANGLEY-CIA • MKULTRA-84',
+    secretWatermark: ENABLE_FORGERIES
+      ? 'LANGLEY-CIA • MKULTRA-84'
+      : 'СССР • ГОССТАНДАРТ • 1984',
     signature: 'ГЕН. В. ФЕДОРЧУК',
     fontType: 'GOST_MONO',
-    sealType: 'USSR_STATE_SEAL',
-    sealMicroDefect: 'FOUR_POINT_STAR',
+    sealType: ENABLE_FORGERIES ? 'USSR_STATE_SEAL' : 'MINSREDMASH_ATOM',
+    sealMicroDefect: ENABLE_FORGERIES ? 'FOUR_POINT_STAR' : 'NONE',
     paperColor: 'STATE_IVORY',
-    inkColor: 'CIA_NAVY_BLUE',
-    isForgery: true,
-    forgeryReason:
-      '4-Point NATO Star in State Seal & Forbidden CIA Navy-Blue Ink',
+    inkColor: ENABLE_FORGERIES ? 'CIA_NAVY_BLUE' : 'SOVIET_CRIMSON',
+    isForgery: ENABLE_FORGERIES,
+    forgeryReason: ENABLE_FORGERIES
+      ? '4-Point NATO Star in State Seal & Forbidden CIA Navy-Blue Ink'
+      : null,
     x: PRINTER_SLOT_X_3D,
     z: PRINTER_SLIT_Z_3D - 0.08,
     isExpanded: false,
@@ -1085,7 +1118,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       return false
     }
 
-    if (useGameStore.getState().tutorialStep === 5) {
+    if (ENABLE_FORGERIES && useGameStore.getState().tutorialStep === 5) {
       set({
         lastVerdict: {
           docId: doc.id,

@@ -197,6 +197,9 @@ export interface GameState extends ReactorState {
   boronCooldown: number // 0 to 30s recharge for БОРНАЯ КИСЛОТА plunger
   az5Available: boolean
   az5Cooldown: number
+  gridTransientImpulse: number // Immediate Hz/RPM kick when moving Sector MW levers
+  steamTransientImpulse: number // Immediate BAR kick when moving Sector MW levers
+  voltageDipIntensity: number // 0.0 to 1.0 room voltage brownout intensity on heavy load changes
 
   // K.O.M.R.A.D.-84 Terminal & Cyber Defense (Komrad Kristianov's Domain)
   terminalLogs: string[]

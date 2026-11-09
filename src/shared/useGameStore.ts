@@ -124,8 +124,6 @@ function mapReactorToGameStateFields(
   }
   const pumpAActive = Boolean(r.mcpActive[0] || r.mcpActive[1])
   const pumpBActive = Boolean(r.mcpActive[2] || r.mcpActive[3])
-  const pumpAThrottle = (r.mcpActive[0] ? 50 : 0) + (r.mcpActive[1] ? 50 : 0)
-  const pumpBThrottle = (r.mcpActive[2] ? 50 : 0) + (r.mcpActive[3] ? 50 : 0)
   const waterLevelPct = Math.max(
     0,
     Math.min(100, ((r.drumWaterLevel + 400) / 800) * 100)
@@ -149,7 +147,6 @@ function mapReactorToGameStateFields(
     turbineRpm: Math.round(r.turbines[0].rpm),
     gridHz: Number(r.turbines[0].freqHz.toFixed(2)),
     pumpsActive: [pumpAActive, pumpBActive] as [boolean, boolean],
-    pumpThrottle: [pumpAThrottle, pumpBThrottle] as [number, number],
     nitrogenLoopValve: Number((r.feedwaterValve * 100).toFixed(1)),
     heliumPressure: Number(r.drumPressure.toFixed(1)),
     bubblerLevel: Number(waterLevelPct.toFixed(1)),
@@ -200,15 +197,22 @@ export function getContextualDiagnosticHint(
       case 'water':
         return '💧 DRUM WATER LEVEL: SCROLL FEEDWATER VALVE (ПЭН) ON UNIT B [KEY 3] TO KEEP LEVEL NEAR 0 MM (-100 TO +100 MM)!'
       case 'gas_oil':
-        return '⚠️ DRUM PRESSURE (>78 BAR): OPEN STEAM DUMP (БРУ-К) ON UNIT B [KEY 3] OR STEAM VENT ON UNIT C [KEY 5]!'
+        return '⚠️ THERMAL RECOIL (HIGH BAR): INSERT BORON RODS (UNIT A-2) & OPEN STEAM VENT (UNIT C) TO DUMP EXCESS STEAM!'
       case 'bearing':
         return state.voidFraction > 0.35
           ? `⚠️ STEAM VOIDS (${Math.round(state.voidFraction * 100)}%): SCROLL UP FEEDWATER (UNIT B), CLICK RED CORE TILES, OR PRESS [BORON INJECTION] ON UNIT A!`
           : `☢️ XENON POISONING (${Math.round(state.xenon)}%): SCROLL UP RODS (СУЗ) TO BURN XENON OR CLICK CYAN TILES ON 37-CORE MAP!`
       case 'grid':
-        return state.turbines[0]?.tripped
-          ? '🚨 TURBINE TRIPPED! FLIP [TRIP RESET] ON UNIT C [KEY 5], HOLD 3000 RPM (50.0 HZ) & SYNC AT 12 O’CLOCK!'
-          : '⚙️ TURBOGENERATOR SYNC: SCROLL TURBINE STEAM VALVE ON UNIT C [KEY 5] TO 3000 RPM (50.0 HZ) & CLOSE MAIN BREAKER AT 0°!'
+        if (state.turbines[0]?.tripped) {
+          return '🚨 TURBINE TRIPPED! FLIP [TRIP RESET] ON UNIT C [KEY 5], HOLD 3000 RPM (50.0 HZ) & SYNC AT 12 O’CLOCK!'
+        }
+        if (state.turbines[0]?.gridConnected && state.gridHz > 50.8) {
+          return '⚠️ TURBINE OVERSPEED (>50.8 HZ): TOO MUCH STEAM FOR CURRENT MW LOAD! LOWER 50HZ RHEOSTAT OR VENT STEAM (UNIT C)!'
+        }
+        if (state.turbines[0]?.gridConnected && state.gridHz < 49.0) {
+          return '⚠️ GRID DRAG (<49.0 HZ): UNDER-POWERED TURBINE! RAISE RODS (A-2), BOOST PUMPS (A/B) & OPEN TURBINE VALVE (C)!'
+        }
+        return '⚙️ TURBOGENERATOR SYNC: SCROLL TURBINE STEAM VALVE ON UNIT C [KEY 5] TO 3000 RPM (50.0 HZ) & CLOSE MAIN BREAKER AT 0°!'
       case 'order':
         return '📄 NEW DIRECTIVE IN PRINTER: PRESS [KEY 4] -> TEAR PAPER, INSPECT SEAL/FONT/COLOR, STAMP & DISPATCH (TUBE) OR SHRED!'
     }
@@ -221,13 +225,33 @@ export function getContextualDiagnosticHint(
   if (state.turbines[0]?.tripped) {
     return hintForAlarm('grid')
   }
+  const totalSectMW =
+    state.sectorMW.pripyat +
+    state.sectorMW.duga +
+    state.sectorMW.kolkhoz +
+    state.sectorMW.kgb +
+    state.sectorMW.vodka +
+    state.sectorMW.steel
+  if (
+    state.drumPressure < 36 &&
+    ((state.turbines[0]?.valve ?? 0) > 0.25 || totalSectMW > 200) &&
+    state.tutorialPhase === 'COMPLETED'
+  ) {
+    return '⚠️ STEAM STARVATION (<36 BAR): WITHDRAW BORON RODS (UNIT A-2) & BOOST COOLING PUMPS (UNIT A) TO PRODUCE MORE STEAM!'
+  }
+  if (
+    state.turbines[0]?.gridConnected &&
+    (state.gridHz > 50.8 || state.gridHz < 49.0)
+  ) {
+    return hintForAlarm('grid')
+  }
   if (state.voidFraction > 0.35 || state.xenon > 35) {
     return hintForAlarm('bearing')
   }
   if (state.coreTemp > 350) {
     return hintForAlarm('core')
   }
-  if (state.drumPressure > 78) {
+  if (state.drumPressure > 74) {
     return hintForAlarm('gas_oil')
   }
   if (Math.abs(state.drumWaterLevel) > 150) {
@@ -544,17 +568,28 @@ function syncWePadChatOnPhaseChange(
   return [...marked.slice(-30), nextMsg]
 }
 
+/**
+ * Master toggle for KGB / CIA forged directives.
+ * Set to `false` to force 100% genuine Ministry directives (`isCiaForgery: false`)
+ * while testing and tuning the RBMK-1000 thermodynamic & grid control loop.
+ */
+export const ENABLE_FORGERIES = false
+
 function createDirectiveInstance(forceForgery?: boolean): DirectiveDocument {
   directiveCounter += 1
+  const effectiveForceForgery = ENABLE_FORGERIES ? forceForgery : false
   const pool =
-    typeof forceForgery === 'boolean'
-      ? DIRECTIVE_BLUEPRINTS.filter((d) => d.isCiaForgery === forceForgery)
+    typeof effectiveForceForgery === 'boolean'
+      ? DIRECTIVE_BLUEPRINTS.filter((d) => d.isCiaForgery === effectiveForceForgery)
       : DIRECTIVE_BLUEPRINTS
   const template = pool[directiveCounter % pool.length]
   const offsetIndex = directiveCounter % 4
 
   return {
     ...template,
+    isCiaForgery: ENABLE_FORGERIES ? template.isCiaForgery : false,
+    flawReason: ENABLE_FORGERIES ? template.flawReason : undefined,
+    flawDescription: ENABLE_FORGERIES ? template.flawDescription : null,
     id: `DIR-84-${directiveCounter}`,
     deskX: 28 + offsetIndex * 18,
     deskY: 36 + offsetIndex * 14,
@@ -610,10 +645,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   vodkaDroughtTimer: 0,
   waterUsage: 0,
   redlineInstability: 0,
-  pumpAHeat: 0,
-  pumpBHeat: 0,
+  pumpThrottle: [75, 75],
+  pumpAHeat: 18,
+  pumpBHeat: 18,
   lubeOilPressure: 88,
-  oilCoolerValve: 45,
+  oilCoolerValve: 75,
   boronTankLevel: 100,
   boronReservePool: 300,
   boronPoisoningTimer: 0,
@@ -628,6 +664,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   boronCooldown: 0,
   az5Available: true,
   az5Cooldown: 0,
+  gridTransientImpulse: 0,
+  steamTransientImpulse: 0,
+  voltageDipIntensity: 0,
 
   terminalLogs: INITIAL_ENTRIES.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
   terminalEntries: INITIAL_ENTRIES,
@@ -885,8 +924,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         phase: 'playing',
         tutorialDrainSeconds: 0,
         redlineInstability: 0,
+        pumpThrottle: [75, 75] as [number, number],
+        pumpAHeat: 18,
+        pumpBHeat: 18,
+        oilCoolerValve: 75,
         treasonStrikes: 0,
         activeMandate: null,
+        gridTransientImpulse: 0,
+        steamTransientImpulse: 0,
+        voltageDipIntensity: 0,
         lastDecisionFeedback: msg,
         wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
@@ -928,9 +974,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       kgbLineActive: true,
       auxLoopBActive: false,
       vodkaDroughtTimer: 0,
+      pumpThrottle: [75, 75] as [number, number],
+      pumpAHeat: 18,
+      pumpBHeat: 18,
+      oilCoolerValve: 75,
       boronTankLevel: 100,
       boronReservePool: 300,
       boronPoisoningTimer: 0,
+      gridTransientImpulse: 0,
+      steamTransientImpulse: 0,
+      voltageDipIntensity: 0,
       tutorialDrainSeconds: 0,
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
@@ -970,10 +1023,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       selectedH2OSubstationId: 1,
       vodkaDroughtTimer: 0,
       redlineInstability: 0,
-      pumpAHeat: 0,
-      pumpBHeat: 0,
+      pumpThrottle: [75, 75] as [number, number],
+      pumpAHeat: 18,
+      pumpBHeat: 18,
       lubeOilPressure: 88,
-      oilCoolerValve: 45,
+      oilCoolerValve: 75,
       boronTankLevel: 100,
       boronReservePool: 300,
       boronPoisoningTimer: 0,
@@ -988,6 +1042,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       boronCooldown: 0,
       az5Available: true,
       az5Cooldown: 0,
+      gridTransientImpulse: 0,
+      steamTransientImpulse: 0,
+      voltageDipIntensity: 0,
       ciaIntrusionActive: false,
       ciaIntrusionProgress: 0,
       komradOverrideLocked: false,
@@ -1272,9 +1329,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (state.komradOverrideLocked) return state
       const subId = SECTOR_TO_SUB_ID[sector]
       const sub = findSubById(state.substations, subId)
+      const prevMW = Math.round(sub?.allocatedMW ?? 0)
       const maxMW = sub?.maxMW ?? 250
       const clamped = Math.max(0, Math.min(maxMW, Math.round(targetMW / 25) * 25))
-      if (clamped === Math.round(sub?.allocatedMW ?? 0)) return state
+      const deltaMW = clamped - prevMW
+      if (deltaMW === 0) return state
+
       const nextSubstations: SubstationQuota[] = state.substations.map((s) =>
         s.id === subId ? { ...s, allocatedMW: clamped } : { ...s }
       )
@@ -1282,6 +1342,85 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...extractReactorState(state),
         substations: nextSubstations,
       }
+
+      // Immediate Electromechanical Transient Shock across Generator, Steam Loop & Auxiliaries
+      let nextGridImpulse = state.gridTransientImpulse
+      let nextSteamImpulse = state.steamTransientImpulse
+      let nextVoltageDip = state.voltageDipIntensity
+      let nextLubeOil = state.lubeOilPressure
+      let nextPumpAHeat = state.pumpAHeat
+      let nextPumpBHeat = state.pumpBHeat
+
+      if (deltaMW > 0) {
+        // Pulling a Lever UP (ΔMW > 0 — Heavy Transformer Inrush):
+        // 1) Negative frequency/RPM kick (-0.06 * ΔMW Hz, -3.5 * ΔMW RPM)
+        // 2) Immediate steam pressure sag (-0.35 * ΔMW BAR as governor gulps live steam)
+        // 3) Room voltage brownout dip: min(1, ΔMW / 12)
+        // 4) Drop lubeOilPressure slightly, nudge bearingTemp, and ignite 1-2 fuel tiles if ΔMW >= 8
+        const hzKick = -0.06 * deltaMW
+        const rpmKick = -3.5 * deltaMW
+        const barSag = -0.35 * deltaMW
+        nextGridImpulse = Math.max(-2.6, Math.min(2.6, nextGridImpulse + hzKick))
+        nextSteamImpulse = Math.max(-18, Math.min(18, nextSteamImpulse + barSag))
+        nextVoltageDip = Math.max(nextVoltageDip, Math.min(1, deltaMW / 12))
+        nextLubeOil = Math.max(22, Number((state.lubeOilPressure - Math.min(9, deltaMW * 0.18)).toFixed(1)))
+        nextPumpAHeat = Math.min(100, Number((state.pumpAHeat + deltaMW * 0.14).toFixed(1)))
+        nextPumpBHeat = Math.min(100, Number((state.pumpBHeat + deltaMW * 0.14).toFixed(1)))
+
+        nextReactor.drumPressure = Math.max(12, nextReactor.drumPressure + barSag)
+        nextReactor.turbines = nextReactor.turbines.map((t) =>
+          t.gridConnected
+            ? {
+                ...t,
+                rpm: Math.max(2640, t.rpm + rpmKick),
+                freqHz: Number((Math.max(2640, t.rpm + rpmKick) / 60).toFixed(2)),
+              }
+            : { ...t }
+        ) as [typeof nextReactor.turbines[0], typeof nextReactor.turbines[1]]
+
+        if (deltaMW >= 8 && state.tutorialPhase === 'COMPLETED') {
+          const nextAnom = { ...(nextReactor.coreTileAnomalies ?? {}) }
+          const candidateTiles = [4, 8, 12, 16, 20, 22, 26, 30, 33]
+          const startIdx = (subId * 3 + Math.round(clamped / 25)) % candidateTiles.length
+          let added = 0
+          for (let i = 0; i < candidateTiles.length && added < (deltaMW >= 50 ? 2 : 1); i++) {
+            const tileId = candidateTiles[(startIdx + i) % candidateTiles.length]
+            if (!nextAnom[tileId]) {
+              nextAnom[tileId] = 'void'
+              added += 1
+            }
+          }
+          nextReactor.coreTileAnomalies = nextAnom
+          nextReactor.voidFraction = Math.min(1.0, nextReactor.voidFraction + 0.04 * added)
+        }
+      } else {
+        // Pulling a Lever DOWN (ΔMW < 0 — Load Rejection / Thermal Recoil Spike):
+        // 1) Positive overspeed & frequency spike (+0.07 * |ΔMW| Hz, +3.5 * |ΔMW| RPM)
+        // 2) Trapped live steam slams drumPressure upward (+0.45 * |ΔMW| BAR) & bubblerLevel by +3..6%
+        const absDelta = Math.abs(deltaMW)
+        const hzSpike = 0.07 * absDelta
+        const rpmSpike = 3.5 * absDelta
+        const barSpike = 0.45 * absDelta
+        nextGridImpulse = Math.max(-2.6, Math.min(2.6, nextGridImpulse + hzSpike))
+        nextSteamImpulse = Math.max(-18, Math.min(18, nextSteamImpulse + barSpike))
+        nextVoltageDip = Math.max(nextVoltageDip, Math.min(0.45, absDelta / 35))
+
+        nextReactor.drumPressure = Math.min(112, nextReactor.drumPressure + barSpike)
+        nextReactor.drumWaterLevel = Math.min(
+          380,
+          nextReactor.drumWaterLevel + Math.min(48, 1.2 * absDelta)
+        )
+        nextReactor.turbines = nextReactor.turbines.map((t) =>
+          t.gridConnected
+            ? {
+                ...t,
+                rpm: Math.min(3210, t.rpm + rpmSpike),
+                freqHz: Number((Math.min(3210, t.rpm + rpmSpike) / 60).toFixed(2)),
+              }
+            : { ...t }
+        ) as [typeof nextReactor.turbines[0], typeof nextReactor.turbines[1]]
+      }
+
       stepReactorSimulation(nextReactor, 0.001)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
@@ -1292,6 +1431,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       )
       return {
         ...mapped,
+        gridTransientImpulse: nextGridImpulse,
+        steamTransientImpulse: nextSteamImpulse,
+        voltageDipIntensity: nextVoltageDip,
+        lubeOilPressure: nextLubeOil,
+        pumpAHeat: nextPumpAHeat,
+        pumpBHeat: nextPumpBHeat,
         wePadChatLog: nextChatLog,
       }
     })
@@ -1312,6 +1457,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextMcp = [...state.mcpActive]
       nextMcp[idxA] = target
       nextMcp[idxB] = target
+      const nextThrottle: [number, number] = [
+        state.pumpThrottle[0],
+        state.pumpThrottle[1],
+      ]
+      nextThrottle[pumpIndex] = target ? Math.max(75, nextThrottle[pumpIndex]) : 0
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         mcpActive: nextMcp,
@@ -1325,6 +1475,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       )
       return {
         ...mapped,
+        pumpThrottle: nextThrottle,
         wePadChatLog: nextChatLog,
       }
     })
@@ -1342,8 +1493,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       const idxA = pumpIndex === 0 ? 0 : 2
       const idxB = pumpIndex === 0 ? 1 : 3
       const nextMcp = [...state.mcpActive]
-      nextMcp[idxA] = clamped >= 15
-      nextMcp[idxB] = clamped >= 55
+      // Only stop the loop's ГЦН pumps if the operator deliberately pulls the throttle lever down below 5%!
+      // Any throttle >= 5% keeps both circulation pumps in the loop engaged.
+      if (clamped < 5) {
+        nextMcp[idxA] = false
+        nextMcp[idxB] = false
+      } else {
+        nextMcp[idxA] = true
+        nextMcp[idxB] = true
+      }
+      const nextThrottle: [number, number] = [
+        state.pumpThrottle[0],
+        state.pumpThrottle[1],
+      ]
+      nextThrottle[pumpIndex] = clamped
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         mcpActive: nextMcp,
@@ -1357,13 +1520,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       )
       return {
         ...mapped,
+        pumpThrottle: nextThrottle,
         wePadChatLog: nextChatLog,
       }
     })
   },
 
   setOilCoolerValve: (valvePct: number) => {
-    get().setControlRodLevel(valvePct)
+    set((state) => {
+      const clamped = Math.max(0, Math.min(100, Number(valvePct.toFixed(1))))
+      if (Math.abs(clamped - state.oilCoolerValve) < 0.05) return state
+      return {
+        oilCoolerValve: clamped,
+      }
+    })
   },
 
   setControlRodLevel: (levelPct: number) => {
@@ -1373,7 +1543,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const delta = nextRods - state.controlRods
       if (Math.abs(delta) < 0.0005) return state
       const nextFeedwater =
-        nextRods >= 0.20 && state.feedwaterValve < 0.40
+        state.tutorialPhase !== 'COMPLETED' &&
+        nextRods >= 0.20 &&
+        state.feedwaterValve < 0.40
           ? 0.50
           : state.feedwaterValve
       const nextReactor: ReactorState = {
@@ -1631,6 +1803,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       let nextTargetDefense = state.targetDefenseMW
       let nextTargetVodka = state.targetVodkaMW
       let nextTutorialStep = state.tutorialStep
+      let nextAutoRodEnabled = state.autoRodEnabled
       let feedback = ''
       let logLevel: TerminalLogEntry['level'] = 'normal'
 
@@ -1695,6 +1868,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           0
         )
         const totalDeltaMW = newTotalMW - prevTotalMW
+        if (Math.abs(totalDeltaMW) >= 50) {
+          nextAutoRodEnabled = false
+        }
 
         const changeDescriptions = (
           changedSectors.length > 0 ? changedSectors : (['vodka'] as SectorNodeId[])
@@ -1707,9 +1883,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         const plantGuidance =
           totalDeltaMW >= 25
-            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): RAISE RODS (A-2), FEEDWATER (B) & TURBINE VALVE (C)!`
+            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): 1)[A-2] WITHDRAW RODS -> 2)[B/A] RAISE FEEDWATER & PUMPS -> 3)[A] SET MW LEVER -> 4)[C] TURBINE VALVE TO 50.0 HZ!`
             : totalDeltaMW <= -25
-              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): THROTTLE DOWN TURBINE (C) & RODS (A-2)!`
+              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): 1)[A] LOWER MW LEVER -> 2)[C] LOWER TURBINE VALVE -> 3)[A-2] INSERT RODS (<75 BAR) -> 4)[B] FEEDWATER & STEAM DUMP!`
               : `DIVERT POWER (${newTotalMW} MWe TOTAL): RE-BALANCE UNIT A LEVERS!`
 
         const routeReqText = `${changeDescriptions.join(' & ')} // ${plantGuidance}`
@@ -1761,6 +1937,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       return {
         substations: nextSubstations,
         tutorialStep: nextTutorialStep,
+        autoRodEnabled: nextAutoRodEnabled,
         coreTemp: nextTemp,
         pressureBar: nextPressure,
         redlineInstability: nextInstability,
@@ -1797,13 +1974,30 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (frameDt === 0) return
 
     thermoTickAccumSeconds += frameDt
-    if (thermoTickAccumSeconds < 0.075) return
+    if (thermoTickAccumSeconds < 0.033) return
     const dt = Math.min(0.25, thermoTickAccumSeconds)
     thermoTickAccumSeconds = 0
 
     if (state.phase === 'playing') {
       shiftElapsedSeconds += dt
     }
+
+    // Decay electromechanical transient impulses & room voltage brownout dip over 0.5-2.5s
+    const nextGridImpulse =
+      Math.abs(state.gridTransientImpulse) < 0.01
+        ? 0
+        : Number((state.gridTransientImpulse * Math.exp(-dt * 1.35)).toFixed(3))
+    const nextSteamImpulse =
+      Math.abs(state.steamTransientImpulse) < 0.02
+        ? 0
+        : Number((state.steamTransientImpulse * Math.exp(-dt * 1.25)).toFixed(3))
+    const nextVoltageDip =
+      state.voltageDipIntensity < 0.01
+        ? 0
+        : Number((state.voltageDipIntensity * Math.exp(-dt * 3.1)).toFixed(3))
+    const nextLubeOil = Number(
+      Math.min(88, state.lubeOilPressure + 4.5 * dt).toFixed(1)
+    )
 
     const baseReactor = extractReactorState(state)
     stepReactorSimulation(baseReactor, dt)
@@ -1833,6 +2027,69 @@ export const useGameStore = create<GameState>((set, get) => ({
     const nextBoronTankLevel = Number(
       Math.min(100, state.boronTankLevel + 2.0 * dt).toFixed(1)
     )
+
+    // Coupled Auxiliary Loops: Pump Bearing Cooling & Heat Equilibrium
+    // - Under nominal operation (BEARING COOLING valve >= 40%, normal throttle 50-85%, gridHz <= 50.8),
+    //   pump bearings naturally settle around a safe green 18-24 heat units (BEARING: 38°C-44°C).
+    // - Bearings only heat up into amber/red if the operator closes the BEARING COOLING valve (< 35%),
+    //   runs prolonged turbine overspeed (> 50.8 Hz), or overclocks pump throttle > 90% with low cooling.
+    const coolingValveRatio = state.oilCoolerValve / 100
+    const overspeedExtraHeat =
+      mapped.gridHz > 50.8 ? (mapped.gridHz - 50.8) * 28.0 : 0
+    const lowCoolingExtraHeat =
+      coolingValveRatio < 0.35 ? (0.35 - coolingValveRatio) * 95.0 : 0
+    const targetHeatA = Math.min(
+      98,
+      18 +
+        Math.max(0, state.pumpThrottle[0] - 80) * 0.45 +
+        lowCoolingExtraHeat +
+        overspeedExtraHeat
+    )
+    const targetHeatB = Math.min(
+      98,
+      18 +
+        Math.max(0, state.pumpThrottle[1] - 80) * 0.45 +
+        lowCoolingExtraHeat +
+        overspeedExtraHeat
+    )
+    const coolingRate = 0.85 + coolingValveRatio * 1.65
+    const nextPumpAHeat = Number(
+      Math.max(
+        18,
+        Math.min(
+          100,
+          state.pumpAHeat + (targetHeatA - state.pumpAHeat) * coolingRate * dt
+        )
+      ).toFixed(1)
+    )
+    const nextPumpBHeat = Number(
+      Math.max(
+        18,
+        Math.min(
+          100,
+          state.pumpBHeat + (targetHeatB - state.pumpBHeat) * coolingRate * dt
+        )
+      ).toFixed(1)
+    )
+    const targetGraphiteTemp = 25 + (baseReactor.thermalPower / 3200) * 420
+    const nextGraphiteTemp = Number(
+      (state.graphiteTemp + (targetGraphiteTemp - state.graphiteTemp) * 1.25 * dt).toFixed(1)
+    )
+    const isHzOutOfBounds =
+      Boolean(baseReactor.turbines[0]?.gridConnected) &&
+      (mapped.gridHz < 48.5 || mapped.gridHz > 51.5)
+    const nextHzOutOfBoundsSeconds = isHzOutOfBounds
+      ? state.hzOutOfBoundsSeconds + dt
+      : Math.max(0, state.hzOutOfBoundsSeconds - dt * 1.5)
+    if (nextHzOutOfBoundsSeconds > 14 && baseReactor.turbines[0]?.gridConnected) {
+      baseReactor.turbines[0].tripped = true
+      baseReactor.turbines[0].gridConnected = false
+      baseReactor.turbines[0].valve = 0
+      baseReactor.turbines[0].electricalMW = 0
+      baseReactor.turbines[1].gridConnected = false
+      baseReactor.turbines[1].electricalMW = 0
+      baseReactor.totalElectricalMW = 0
+    }
     const newLogs: TerminalLogEntry[] = []
     let nextFeedback = state.lastDecisionFeedback
     let nextChatLog = syncWePadChatOnPhaseChange(
@@ -2009,6 +2266,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({
         ...mapped,
         boronTankLevel: nextBoronTankLevel,
+        pumpAHeat: nextPumpAHeat,
+        pumpBHeat: nextPumpBHeat,
+        graphiteTemp: nextGraphiteTemp,
+        lubeOilPressure: nextLubeOil,
+        gridTransientImpulse: nextGridImpulse,
+        steamTransientImpulse: nextSteamImpulse,
+        voltageDipIntensity: nextVoltageDip,
+        hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         lastDecisionFeedback: nextFeedback,
         phase: nextPhase,
         wePadChatLog: nextChatLog,
@@ -2021,6 +2286,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({
         ...mapped,
         boronTankLevel: nextBoronTankLevel,
+        pumpAHeat: nextPumpAHeat,
+        pumpBHeat: nextPumpBHeat,
+        graphiteTemp: nextGraphiteTemp,
+        lubeOilPressure: nextLubeOil,
+        gridTransientImpulse: nextGridImpulse,
+        steamTransientImpulse: nextSteamImpulse,
+        voltageDipIntensity: nextVoltageDip,
+        hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         phase: nextPhase,
       })
     }

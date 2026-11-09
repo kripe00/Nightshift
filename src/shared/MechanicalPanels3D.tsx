@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
   playBoronHydraulicPumpStroke,
+  playContactorInrushClunk,
   playDetentClick,
   playKnifeSwitchSlam,
   playPneumaticWhoosh,
@@ -146,7 +147,7 @@ export function makePlaqueTex( // oxlint-disable-line react/only-export-componen
         cw / 2,
         Math.round(ch * 0.66),
         cw,
-        `900 ${Math.round(titleSize * 1.22)}px "Segoe UI Black", "Arial Black", "Impact", "Consolas", sans-serif`,
+        `900 ${Math.round(titleSize * 1.22)}px "Kremlin", "Segoe UI Black", "Arial Black", "Impact", "Consolas", sans-serif`,
         titleColor,
         "#000000",
         3.8,
@@ -159,7 +160,7 @@ export function makePlaqueTex( // oxlint-disable-line react/only-export-componen
         cw / 2,
         Math.round(ch * 0.44),
         cw,
-        `900 ${titleSize}px "Segoe UI Black", "Arial Black", "Impact", "Consolas", sans-serif`,
+        `900 ${titleSize}px "Kremlin", "Segoe UI Black", "Arial Black", "Impact", "Consolas", sans-serif`,
         titleColor,
         "#000000",
         3.6,
@@ -171,7 +172,7 @@ export function makePlaqueTex( // oxlint-disable-line react/only-export-componen
         cw / 2,
         Math.round(ch * 0.85),
         cw,
-        `900 ${subSize}px "Segoe UI Black", "Arial Black", "Consolas", sans-serif`,
+        `900 ${subSize}px "Kremlin", "Segoe UI Black", "Arial Black", "Consolas", sans-serif`,
         subColor,
         "#000000",
         3.2,
@@ -255,9 +256,11 @@ function startSmoothWheelSwivelDrag(
   minVal: number,
   maxVal: number,
   onChange: (nextVal: number) => void,
+  onActiveChange?: (isActive: boolean) => void,
 ): void {
   if (useCameraLookStore.getState().isFreeLookMode) return;
   e.stopPropagation();
+  onActiveChange?.(true);
 
   const r3fTarget = e.target as unknown as {
     setPointerCapture?: (id: number) => void;
@@ -335,6 +338,7 @@ function startSmoothWheelSwivelDrag(
   };
 
   const handleUp = () => {
+    onActiveChange?.(false);
     r3fTarget?.releasePointerCapture?.(e.pointerId);
     window.removeEventListener("pointermove", handleMove);
     window.removeEventListener("pointerup", handleUp);
@@ -425,6 +429,104 @@ export interface SovietModularSteelCabinet3DProps {
  * raised synoptic process flow lines (`мнемосхема`) — while keeping 100% of existing controls at
  * their exact local `(x, y, z)` coordinates!
  */
+function paintKsp4Chart(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  redTrace: number[],
+  blueTrace: number[],
+  titleText: string,
+): void {
+  // Cream-white chart paper roll (#f4f1e6)
+  ctx.fillStyle = "#f4f1e6";
+  ctx.fillRect(0, 0, w, h);
+  // Millimeter chart paper grid lines (pale cyan-green)
+  ctx.strokeStyle = "rgba(56, 136, 128, 0.28)";
+  ctx.lineWidth = 1;
+  for (let x = 16; x < w; x += 16) {
+    ctx.beginPath();
+    ctx.moveTo(x, 54);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+  for (let y = 56; y < h; y += 16) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+  // Left & right tractor sprocket holes on paper roll
+  ctx.fillStyle = "#262c2a";
+  for (let y = 64; y < h; y += 28) {
+    ctx.beginPath();
+    ctx.arc(8, y, 3, 0, Math.PI * 2);
+    ctx.arc(w - 8, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Top KSP-4 Scale Header Bar (#ece8d8)
+  ctx.fillStyle = "#ece8d8";
+  ctx.fillRect(0, 0, w, 54);
+  ctx.strokeStyle = "#1e2422";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, w - 4, 50);
+  ctx.fillStyle = "#181c1a";
+  ctx.font = '900 15px "Consolas", monospace';
+  ctx.textAlign = "center";
+  ctx.fillText(titleText, w / 2, 20);
+  ctx.fillStyle = "#c82218";
+  ctx.fillRect(20, 28, w - 40, 5);
+
+  const padX = 24;
+  const chartW = w - padX * 2;
+  const stepY = (h - 56) / Math.max(1, redTrace.length - 1);
+
+  // Red channel trace (newest at top y=56, scrolling downward)
+  ctx.strokeStyle = "#d81e18";
+  ctx.lineWidth = 3.2;
+  ctx.beginPath();
+  for (let i = 0; i < redTrace.length; i++) {
+    const px = padX + THREE.MathUtils.clamp(redTrace[i], 0.03, 0.97) * chartW;
+    const py = 56 + i * stepY;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // Blue channel trace
+  ctx.strokeStyle = "#245898";
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  for (let i = 0; i < blueTrace.length; i++) {
+    const px = padX + THREE.MathUtils.clamp(blueTrace[i], 0.03, 0.97) * chartW;
+    const py = 56 + i * stepY;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+
+  // Red pen carriage pointer at top of chart
+  const redHeadX =
+    padX + THREE.MathUtils.clamp(redTrace[0] ?? 0.5, 0.05, 0.95) * chartW;
+  ctx.fillStyle = "#d81e18";
+  ctx.beginPath();
+  ctx.moveTo(redHeadX, 54);
+  ctx.lineTo(redHeadX - 8, 38);
+  ctx.lineTo(redHeadX + 8, 38);
+  ctx.closePath();
+  ctx.fill();
+
+  // Blue pen carriage pointer at top of chart
+  const blueHeadX =
+    padX + THREE.MathUtils.clamp(blueTrace[0] ?? 0.4, 0.05, 0.95) * chartW;
+  ctx.fillStyle = "#245898";
+  ctx.beginPath();
+  ctx.moveTo(blueHeadX, 54);
+  ctx.lineTo(blueHeadX - 6, 41);
+  ctx.lineTo(blueHeadX + 6, 41);
+  ctx.closePath();
+  ctx.fill();
+}
+
 export const SovietModularSteelCabinet3D: React.FC<
   SovietModularSteelCabinet3DProps
 > = React.memo(
@@ -442,18 +544,40 @@ export const SovietModularSteelCabinet3D: React.FC<
     const ironTex = useMemo(() => getHammeredIronTextures(), []);
     const brassTex = useMemo(() => getBrushedBrassTextures(), []);
     const tabloMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
-    const lastTabloSigRef = useRef("");
+    const ksp4MatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+    const m381NeedleRefs = useRef<Array<THREE.Mesh | null>>([]);
+    const m381PosRefs = useRef<number[]>(Array(8).fill(0.5));
+    const m381VelRefs = useRef<number[]>(Array(8).fill(0));
+    const chartHistoryRef = useRef<{
+      red0: number[];
+      blue0: number[];
+      red1: number[];
+      blue1: number[];
+      lastSampleTime: number;
+    }>({
+      red0: Array(55).fill(0.5),
+      blue0: Array(55).fill(0.42),
+      red1: Array(55).fill(0.5),
+      blue1: Array(55).fill(0.5),
+      lastSampleTime: -1,
+    });
+
+    const ksp4ChartTextures = useMemo(() => {
+      const initRed = Array(55).fill(0.5);
+      const initBlue = Array(55).fill(0.42);
+      const tex0 = createCrispPanelTexture(256, 384, (ctx, w, h) => {
+        paintKsp4Chart(ctx, w, h, initRed, initBlue, "КСП-4 // ДАВЛ. И Т°С");
+      });
+      const tex1 = createCrispPanelTexture(256, 384, (ctx, w, h) => {
+        paintKsp4Chart(ctx, w, h, initRed, initRed, "КСП-4 // СЕТЬ 50ГЦ");
+      });
+      return [tex0, tex1] as const;
+    }, []);
 
     const tabloTextures = useMemo(() => {
-      return annunciatorLabels.map((lbl, idx) =>
+      return annunciatorLabels.map((lbl) =>
         createCrispPanelTexture(192, 64, (ctx, w, h) => {
-          const isWarn = idx === 1 || idx === 4;
-          const isCrit = idx === 2 || idx === 5;
-          ctx.fillStyle = isCrit
-            ? "#2a0908"
-            : isWarn
-              ? "#281b05"
-              : "#092414";
+          ctx.fillStyle = "#18221d";
           ctx.fillRect(0, 0, w, h);
 
           // Internal honeycomb diffuser grid
@@ -472,23 +596,18 @@ export const SovietModularSteelCabinet3D: React.FC<
             ctx.stroke();
           }
 
-          ctx.strokeStyle = "#18201e";
+          ctx.strokeStyle = "#111715";
           ctx.lineWidth = 5;
           ctx.strokeRect(2, 2, w - 4, h - 4);
 
-          const textCol = isCrit
-            ? "#ff5544"
-            : isWarn
-              ? "#ffcc33"
-              : "#44ff88";
           drawFittedPlaqueText(
             ctx,
             lbl,
             w / 2,
             41,
             w - 12,
-            '900 22px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
-            textCol,
+            '900 22px "Kremlin", "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
+            "#ffffff",
             "#000000",
             3.0,
             "1.5px",
@@ -500,47 +619,229 @@ export const SovietModularSteelCabinet3D: React.FC<
     useFrame(({ clock }) => {
       const s = useGameStore.getState();
       const t = clock.getElapsedTime();
-      const pulseBucket = Math.floor(t * 5);
-      const totalMW =
-        s.powerAllocation.cooling +
-        s.powerAllocation.defense +
-        s.powerAllocation.facility +
-        (s.ventilationActive ? 10 : 0);
-      const isCrit =
-        s.coreTemp >= 700 ||
-        s.isBlackout ||
-        totalMW > s.maxSafePower ||
-        s.ciaIntrusionActive;
-      const isWarn =
-        s.coreTemp >= 520 ||
-        s.heliumPressure > 65 ||
-        s.lubeOilPressure < 30 ||
-        Math.abs(s.gridHz - 50) > 0.8;
+      // 3.5 Hz fast urgent strobe for Critical, 1.5 Hz pulsing amber for Warning
+      const critFlash = Math.sin(t * Math.PI * 2 * 3.5) > 0;
+      const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
 
-      const sig = `${unitCode}|${s.isBlackout}|${isCrit}|${isWarn}|${pulseBucket % 2}`;
-      if (sig === lastTabloSigRef.current) return;
-      lastTabloSigRef.current = sig;
+      const getTileLevel = (idx: number): "normal" | "warn" | "critical" => {
+        const isOperating =
+          s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+        if (unitCode === "B") {
+          if (idx === 0) {
+            return (isOperating && s.pressureBar < 28) || s.pressureBar >= 78
+              ? "critical"
+              : (isOperating && s.pressureBar < 36) || s.pressureBar > 75
+                ? "warn"
+                : "normal";
+          }
+          if (idx === 1) {
+            return s.graphiteTemp > 620 || Math.abs(s.drumWaterLevel) > 250
+              ? "critical"
+              : s.graphiteTemp > 560 || Math.abs(s.drumWaterLevel) > 150
+                ? "warn"
+                : "normal";
+          }
+          if (idx === 2 || idx === 3) {
+            return s.bubblerLevel > 82
+              ? "critical"
+              : s.bubblerLevel > 72
+                ? "warn"
+                : "normal";
+          }
+          return isOperating &&
+            (s.sealToggles.some((on) => !on) || s.mcpActive.some((on) => !on))
+            ? "warn"
+            : "normal";
+        }
+
+        if (unitCode === "A2") {
+          const bearingTemp = 20 + Math.max(s.pumpAHeat, s.pumpBHeat);
+          const hotspotCount = Object.keys(s.channelHotspots).length;
+          const oilLow =
+            s.lubeOilPressure < 45 ||
+            (s.oilCoolerValve < 35 && bearingTemp > 60);
+          if (idx === 0 || idx === 1) {
+            return bearingTemp > 82 || s.thermalPower > 3600
+              ? "critical"
+              : bearingTemp > 70 || s.thermalPower > 3300
+                ? "warn"
+                : "normal";
+          }
+          if (idx === 2 || idx === 3) {
+            return hotspotCount >= 2 || s.voidFraction > 0.55
+              ? "critical"
+              : hotspotCount > 0 || oilLow || s.voidFraction > 0.3 || s.xenon > 45
+                ? "warn"
+                : "normal";
+          }
+          return s.boronTankLevel < 20 ||
+            (isOperating && s.pressureBar < 28) ||
+            s.pressureBar >= 78
+            ? "critical"
+            : s.boronTankLevel < 35 ||
+                (isOperating && s.pressureBar < 36) ||
+                s.pressureBar > 75
+              ? "warn"
+              : "normal";
+        }
+
+        if (unitCode === "A") {
+          const hasUnmetQuota = (Object.keys(s.sectorMW) as SectorNodeId[]).some(
+            (k) => s.sectorMW[k] !== s.targetSectorMW[k],
+          );
+          if (idx === 0 || idx === 1) {
+            return s.coreTemp > 580
+              ? "critical"
+              : s.coreTemp > 520
+                ? "warn"
+                : "normal";
+          }
+          if (idx === 2 || idx === 3) {
+            return (isOperating && s.pressureBar < 28) || s.pressureBar >= 78
+              ? "critical"
+              : (isOperating && s.pressureBar < 36) || s.pressureBar > 75
+                ? "warn"
+                : "normal";
+          }
+          return s.radiationLevel > 5 || s.roomRadiation > 5
+            ? "critical"
+            : s.radiationLevel > 1.5 || s.roomRadiation > 1.5 || hasUnmetQuota
+              ? "warn"
+              : "normal";
+        }
+
+        // unitCode === "C"
+        const rpm = s.turbines[0]?.rpm ?? 0;
+        const gridConnected = s.turbines[0]?.gridConnected ?? false;
+        const tripped = s.turbines[0]?.tripped ?? false;
+        const totalTargetMW = Object.values(s.targetSectorMW).reduce(
+          (a, b) => a + b,
+          0,
+        );
+        const steamMismatch =
+          Math.abs(s.totalElectricalMW - totalTargetMW) > 25;
+        if (idx === 0 || idx === 1) {
+          return rpm < 2850 || rpm > 3150
+            ? "critical"
+            : rpm < 2950 || rpm > 3050
+              ? "warn"
+              : "normal";
+        }
+        if (idx === 2 || idx === 3) {
+          return s.gridHz < 49.0 || s.gridHz > 51.0
+            ? "critical"
+            : s.gridHz < 49.4 || s.gridHz > 50.6
+              ? "warn"
+              : "normal";
+        }
+        return s.isBlackout || !gridConnected || tripped
+          ? "critical"
+          : steamMismatch
+            ? "warn"
+            : "normal";
+      };
 
       for (let i = 0; i < 6; i++) {
         const mat = tabloMatRefs.current[i];
         if (!mat) continue;
-        if (s.isBlackout) {
+        if (s.isBlackout && !(unitCode === "C" && (i === 4 || i === 5))) {
+          mat.color.set("#141a17");
+          mat.emissive.set("#141a17");
           mat.emissiveIntensity = 0.04;
           continue;
         }
-        const isCritCell = i === 2 || i === 5;
-        const isWarnCell = i === 1 || i === 4;
-        if (isCritCell) {
-          mat.emissiveIntensity = isCrit
-            ? pulseBucket % 2 === 0
-              ? 1.45
-              : 0.35
-            : 0.22;
-        } else if (isWarnCell) {
-          mat.emissiveIntensity = isWarn || isCrit ? 1.15 : 0.32;
+        const lvl = getTileLevel(i);
+        if (lvl === "critical") {
+          mat.color.set(critFlash ? "#ff2a2a" : "#3a0a0a");
+          mat.emissive.set("#ff2a2a");
+          mat.emissiveIntensity = critFlash ? 2.25 : 0.25;
+        } else if (lvl === "warn") {
+          mat.color.set("#ffaa00");
+          mat.emissive.set("#ffb000");
+          mat.emissiveIntensity = 0.55 + warnPulse * 1.45;
         } else {
-          mat.emissiveIntensity = 0.85;
+          mat.color.set("#1d7a3e");
+          mat.emissive.set("#28ff66");
+          mat.emissiveIntensity = 0.55;
         }
+      }
+
+      // Live scrolling KSP-4 Paper Strip-Chart Recorder traces (~8 Hz update)
+      const ch = chartHistoryRef.current;
+      if (t - ch.lastSampleTime >= 0.12) {
+        ch.lastSampleTime = t;
+        const r0 = THREE.MathUtils.clamp(s.pressureBar / 80, 0.04, 0.96);
+        const b0 = THREE.MathUtils.clamp((s.coreTemp - 200) / 700, 0.04, 0.96);
+        const r1 = THREE.MathUtils.clamp((s.gridHz - 47.5) / 5.0, 0.04, 0.96);
+        const b1 = THREE.MathUtils.clamp(s.totalElectricalMW / 900, 0.04, 0.96);
+
+        ch.red0.unshift(r0);
+        if (ch.red0.length > 55) ch.red0.pop();
+        ch.blue0.unshift(b0);
+        if (ch.blue0.length > 55) ch.blue0.pop();
+        ch.red1.unshift(r1);
+        if (ch.red1.length > 55) ch.red1.pop();
+        ch.blue1.unshift(b1);
+        if (ch.blue1.length > 55) ch.blue1.pop();
+
+        for (let rIdx = 0; rIdx < 2; rIdx++) {
+          const mat = ksp4MatRefs.current[rIdx];
+          const tex = mat?.map as THREE.CanvasTexture | undefined;
+          if (!tex) continue;
+          const canvas = tex.image as HTMLCanvasElement;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            paintKsp4Chart(
+              ctx,
+              canvas.width,
+              canvas.height,
+              rIdx === 0 ? ch.red0 : ch.red1,
+              rIdx === 0 ? ch.blue0 : ch.blue1,
+              rIdx === 0 ? "КСП-4 // ДАВЛ. И Т°С" : "КСП-4 // СЕТЬ 50ГЦ",
+            );
+            tex.needsUpdate = true;
+          }
+        }
+      }
+
+      // Spring-damper inertia + high-frequency mechanical vibration on the 8 M381 horizontal strip meters
+      const dt = 0.016;
+      const transientSeverity = Math.max(
+        Math.abs(s.gridTransientImpulse) * 1.4,
+        Math.abs(s.steamTransientImpulse) / 10,
+        Math.abs(s.gridHz - 50) * 1.1,
+      );
+      const targets = [
+        THREE.MathUtils.clamp(s.pressureBar / 80, 0.05, 0.95),
+        THREE.MathUtils.clamp((s.coreTemp - 200) / 700, 0.05, 0.95),
+        THREE.MathUtils.clamp(s.coolantFlow / 110, 0.05, 0.95),
+        THREE.MathUtils.clamp((s.gridHz - 47.5) / 5.0, 0.05, 0.95),
+        THREE.MathUtils.clamp(s.totalElectricalMW / 900, 0.05, 0.95),
+        THREE.MathUtils.clamp((s.graphiteTemp - 250) / 500, 0.05, 0.95),
+        THREE.MathUtils.clamp(s.heliumPressure / 100, 0.05, 0.95),
+        THREE.MathUtils.clamp(s.bubblerLevel / 100, 0.05, 0.95),
+      ];
+      const maxSpanX = (width > 1.8 ? 0.22 : 0.165) - 0.032;
+      for (let m = 0; m < 8; m++) {
+        const needle = m381NeedleRefs.current[m];
+        if (!needle) continue;
+        const tgt = s.isBlackout ? 0.04 : targets[m];
+        const cur = m381PosRefs.current[m];
+        let vel = m381VelRefs.current[m];
+        const accel = (tgt - cur) * 175.0 - vel * 12.5;
+        vel += accel * dt;
+        const nextPos = THREE.MathUtils.clamp(cur + vel * dt, 0.03, 0.97);
+        m381PosRefs.current[m] = nextPos;
+        m381VelRefs.current[m] = vel;
+
+        const isOutNominal = nextPos > 0.72 || nextPos < 0.2 || transientSeverity > 0.12;
+        const vib = isOutNominal
+          ? (Math.sin(t * 138.0 + m * 1.9) * 0.65 +
+              Math.cos(t * 176.0 + m * 2.7) * 0.35) *
+            0.014 *
+            Math.max(0.35, Math.min(1.5, transientSeverity))
+          : 0;
+        needle.position.x = (nextPos - 0.5 + vib) * maxSpanX;
       }
     });
 
@@ -611,89 +912,6 @@ export const SovietModularSteelCabinet3D: React.FC<
           ctx.fillText("0", 22, 53);
           ctx.fillText("50", w / 2, 53);
           ctx.fillText("100", w - 26, 53);
-          // Red vertical pointer needle
-          ctx.fillStyle = "#d82218";
-          ctx.fillRect(w * 0.62 - 3, 8, 6, h - 16);
-        }),
-      [],
-    );
-
-    const ksp4ChartTex = useMemo(
-      () =>
-        createCrispPanelTexture(256, 384, (ctx, w, h) => {
-          // Cream-white chart paper roll (#f4f1e6)
-          ctx.fillStyle = "#f4f1e6";
-          ctx.fillRect(0, 0, w, h);
-          // Millimeter chart paper grid lines (pale cyan-green & orange-red)
-          ctx.strokeStyle = "rgba(56, 136, 128, 0.28)";
-          ctx.lineWidth = 1;
-          for (let x = 16; x < w; x += 16) {
-            ctx.beginPath();
-            ctx.moveTo(x, 54);
-            ctx.lineTo(x, h);
-            ctx.stroke();
-          }
-          for (let y = 56; y < h; y += 16) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(w, y);
-            ctx.stroke();
-          }
-          // Left & right tractor sprocket holes on paper roll
-          ctx.fillStyle = "#262c2a";
-          for (let y = 64; y < h; y += 28) {
-            ctx.beginPath();
-            ctx.arc(8, y, 3, 0, Math.PI * 2);
-            ctx.arc(w - 8, y, 3, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          // Top KSP-4 Scale Header Bar (#ece8d8)
-          ctx.fillStyle = "#ece8d8";
-          ctx.fillRect(0, 0, w, 54);
-          ctx.strokeStyle = "#1e2422";
-          ctx.lineWidth = 3;
-          ctx.strokeRect(2, 2, w - 4, 50);
-          ctx.fillStyle = "#181c1a";
-          ctx.font = '900 16px "Consolas", monospace';
-          ctx.textAlign = "center";
-          ctx.fillText("САМОПИСЕЦ КСП-4", w / 2, 20);
-          ctx.fillStyle = "#c82218";
-          ctx.fillRect(20, 28, w - 40, 5);
-          // Dual ink trace curves (Red channel + Blue channel)
-          ctx.strokeStyle = "#d81e18";
-          ctx.lineWidth = 3.5;
-          ctx.beginPath();
-          for (let y = 56; y <= h; y += 6) {
-            const px =
-              w * 0.54 +
-              Math.sin(y * 0.045) * 34 +
-              Math.cos(y * 0.11) * 14;
-            if (y === 56) ctx.moveTo(px, y);
-            else ctx.lineTo(px, y);
-          }
-          ctx.stroke();
-
-          ctx.strokeStyle = "#245898";
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          for (let y = 56; y <= h; y += 6) {
-            const px =
-              w * 0.38 +
-              Math.cos(y * 0.038) * 26 +
-              Math.sin(y * 0.09) * 10;
-            if (y === 56) ctx.moveTo(px, y);
-            else ctx.lineTo(px, y);
-          }
-          ctx.stroke();
-
-          // Red pen carriage pointer at top of chart
-          ctx.fillStyle = "#d81e18";
-          ctx.beginPath();
-          ctx.moveTo(w * 0.58, 54);
-          ctx.lineTo(w * 0.58 - 8, 38);
-          ctx.lineTo(w * 0.58 + 8, 38);
-          ctx.closePath();
-          ctx.fill();
         }),
       [],
     );
@@ -794,9 +1012,12 @@ export const SovietModularSteelCabinet3D: React.FC<
             <mesh position={[0, -0.004, 0.012]}>
               <planeGeometry args={[recorderW - 0.018, 0.198]} />
               <meshStandardMaterial
-                map={ksp4ChartTex}
+                ref={(el) => {
+                  ksp4MatRefs.current[rIdx] = el;
+                }}
+                map={ksp4ChartTextures[rIdx]}
                 emissive="#ffffff"
-                emissiveMap={ksp4ChartTex}
+                emissiveMap={ksp4ChartTextures[rIdx]}
                 emissiveIntensity={0.22}
                 roughness={0.55}
               />
@@ -945,6 +1166,21 @@ export const SovietModularSteelCabinet3D: React.FC<
                       emissiveMap={m381ScaleTex}
                       emissiveIntensity={0.25}
                       roughness={0.4}
+                    />
+                  </mesh>
+                  {/* Physical 3D Red Pointer Needle with Spring-Damper Overshoot & Micro-Jitter */}
+                  <mesh
+                    ref={(el) => {
+                      m381NeedleRefs.current[sideIdx * 4 + mIdx] = el;
+                    }}
+                    position={[0, 0.002, 0.0076]}
+                  >
+                    <boxGeometry args={[0.0042, 0.031, 0.0018]} />
+                    <meshStandardMaterial
+                      color="#e82418"
+                      emissive="#ff2a1a"
+                      emissiveIntensity={0.55}
+                      roughness={0.25}
                     />
                   </mesh>
                 </group>
@@ -1752,6 +1988,175 @@ export const CagedSovietJewelLamp3D: React.FC<CagedJewelLamp3DProps> = ({
   );
 };
 
+export interface SovietBacklitIndicatorBlock3DProps {
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: number;
+  label: string;
+  getAlertState: (state: ReturnType<typeof useGameStore.getState>) => {
+    level: "normal" | "warn" | "critical";
+    acknowledged?: boolean;
+  };
+}
+
+/**
+ * Physical Backlit Soviet Control Indicator Block (`Кнопка-Табло`, 0.09m × 0.036m × 0.015m)
+ * Mounted beside sloped-desk controls:
+ * - Glows dim sage/white (`#d8e6de`) normally.
+ * - Pulses amber (1.5 Hz) on `warn` or strobes bright red (3.5 Hz) on `critical`.
+ * - Turns steady bright amber (`#ffb000`) while the operator is actively dragging/adjusting that control (`Квитирование`).
+ */
+export const SovietBacklitIndicatorBlock3D: React.FC<
+  SovietBacklitIndicatorBlock3DProps
+> = ({ position, rotation, scale = 1, label, getAlertState }) => {
+  const capMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+  const brassTex = useMemo(() => getBrushedBrassTextures(), []);
+
+  const capTexture = useMemo(
+    () =>
+      createCrispPanelTexture(192, 72, (ctx, w, h) => {
+        ctx.fillStyle = "#1c2621";
+        ctx.fillRect(0, 0, w, h);
+
+        // Subtle translucent honeycomb diffuser pattern
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.28)";
+        ctx.lineWidth = 1;
+        for (let gx = 8; gx < w; gx += 8) {
+          ctx.beginPath();
+          ctx.moveTo(gx, 0);
+          ctx.lineTo(gx, h);
+          ctx.stroke();
+        }
+        for (let gy = 8; gy < h; gy += 8) {
+          ctx.beginPath();
+          ctx.moveTo(0, gy);
+          ctx.lineTo(w, gy);
+          ctx.stroke();
+        }
+
+        ctx.strokeStyle = "#2b3630";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+
+        drawFittedPlaqueText(
+          ctx,
+          label,
+          w / 2,
+          46,
+          w - 10,
+          '900 24px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
+          "#ffffff",
+          "#000000",
+          2.8,
+          "1.5px",
+        );
+      }),
+    [label],
+  );
+
+  useFrame(({ clock }) => {
+    const mat = capMatRef.current;
+    if (!mat) return;
+    const state = useGameStore.getState();
+    const t = clock.getElapsedTime();
+    const { level, acknowledged } = getAlertState(state);
+
+    if (acknowledged) {
+      // Steady bright amber while dragging/adjusting (`Квитирование` acknowledgment)
+      mat.color.set("#ffbb22");
+      mat.emissive.set("#ffb000");
+      mat.emissiveIntensity = 1.75;
+      return;
+    }
+
+    if (level === "critical") {
+      // 3.5 Hz urgent red strobe
+      const critFlash = Math.sin(t * Math.PI * 2 * 3.5) > 0;
+      mat.color.set(critFlash ? "#ff332a" : "#441010");
+      mat.emissive.set("#ff2a2a");
+      mat.emissiveIntensity = critFlash ? 2.25 : 0.25;
+      return;
+    }
+
+    if (level === "warn") {
+      // 1.5 Hz pulsing amber
+      const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
+      mat.color.set("#ffaa00");
+      mat.emissive.set("#ffb000");
+      mat.emissiveIntensity = 0.6 + warnPulse * 1.4;
+      return;
+    }
+
+    if (state.isBlackout) {
+      mat.color.set("#18201c");
+      mat.emissive.set("#18201c");
+      mat.emissiveIntensity = 0.04;
+      return;
+    }
+
+    // Normal dim sage/white glow
+    mat.color.set("#d8e6de");
+    mat.emissive.set("#b8d8c4");
+    mat.emissiveIntensity = 0.28;
+  });
+
+  return (
+    <group position={position} rotation={rotation} scale={scale}>
+      {/* Recessed Warm Cast-Iron & Brushed-Brass Mounting Bezel (`0.098m × 0.042m × 0.01m`) */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.098, 0.042, 0.01]} />
+        <meshStandardMaterial
+          color="#2b3036"
+          metalness={0.78}
+          roughness={0.36}
+          bumpMap={ironTex.bumpMap}
+          bumpScale={0.005}
+        />
+      </mesh>
+      <mesh position={[0, 0, 0.004]} castShadow>
+        <boxGeometry args={[0.093, 0.038, 0.006]} />
+        <meshStandardMaterial
+          color="#b8a46b"
+          metalness={0.86}
+          roughness={0.28}
+          bumpMap={brassTex.bumpMap}
+          bumpScale={0.004}
+        />
+      </mesh>
+      {/* 2 Side Brass Retention Hex Screws */}
+      {[-0.045, 0.045].map((sx, sIdx) => (
+        <mesh
+          key={sIdx}
+          position={[sx, 0, 0.006]}
+          rotation={[Math.PI / 2, 0, 0]}
+        >
+          <cylinderGeometry args={[0.0028, 0.0028, 0.004, 6]} />
+          <meshStandardMaterial
+            color="#8a929a"
+            metalness={0.88}
+            roughness={0.28}
+          />
+        </mesh>
+      ))}
+      {/* Translucent Backlit Plastic Indicator Cap (`0.09m × 0.036m × 0.015m`) */}
+      <mesh position={[0, 0, 0.008]} castShadow>
+        <boxGeometry args={[0.09, 0.036, 0.015]} />
+        <meshStandardMaterial
+          ref={capMatRef}
+          map={capTexture}
+          emissiveMap={capTexture}
+          color="#d8e6de"
+          emissive="#b8d8c4"
+          emissiveIntensity={0.28}
+          roughness={0.24}
+          metalness={0.12}
+        />
+      </mesh>
+    </group>
+  );
+};
+
 interface HighDetailManometer3DProps {
   position: [number, number, number];
   title: string;
@@ -1767,6 +2172,9 @@ interface HighDetailManometer3DProps {
   synchroscopeMode?: boolean;
   getValue: () => number;
   secondaryGetValue?: () => number;
+  getAlertLevel?: (
+    state: ReturnType<typeof useGameStore.getState>,
+  ) => "normal" | "warn" | "critical";
 }
 
 export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
@@ -1781,10 +2189,13 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
   synchroscopeMode = false,
   getValue,
   secondaryGetValue,
+  getAlertLevel,
 }) => {
   const needleGroupRef = useRef<THREE.Group>(null);
   const secondaryNeedleRef = useRef<THREE.Group>(null);
   const warningLampRef = useRef<THREE.MeshStandardMaterial>(null);
+  const needleVelRef = useRef(0);
+  const secNeedleVelRef = useRef(0);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
@@ -1981,31 +2392,42 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
     title,
   ]);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const rawVal = getValue();
     const state = useGameStore.getState();
     const t = clock.getElapsedTime();
+    const dt = Math.min(0.05, Math.max(0.004, delta));
 
     if (synchroscopeMode) {
       if (needleGroupRef.current) {
         needleGroupRef.current.rotation.z = -(rawVal * Math.PI) / 180;
       }
       if (warningLampRef.current) {
-        const inSync =
-          Math.abs(rawVal) <= 25 &&
-          Math.abs((state.turbines[0]?.rpm ?? 0) - 3000) <= 60;
-        if (state.turbines[0]?.tripped) {
+        const customLvl = getAlertLevel ? getAlertLevel(state) : null;
+        if (customLvl === "critical" || state.turbines[0]?.tripped) {
+          const critFlash = Math.sin(t * Math.PI * 2 * 3.5) > 0;
           warningLampRef.current.color.set("#ff2a2a");
           warningLampRef.current.emissive.set("#ff2a2a");
-          warningLampRef.current.emissiveIntensity = 2.0;
-        } else if (inSync || state.turbines[0]?.gridConnected) {
-          warningLampRef.current.color.set("#33ff66");
-          warningLampRef.current.emissive.set("#33ff66");
-          warningLampRef.current.emissiveIntensity = 1.4;
-        } else {
+          warningLampRef.current.emissiveIntensity = critFlash ? 2.35 : 0.28;
+        } else if (customLvl === "warn") {
+          const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
           warningLampRef.current.color.set("#ffb000");
           warningLampRef.current.emissive.set("#ffb000");
-          warningLampRef.current.emissiveIntensity = 1.1;
+          warningLampRef.current.emissiveIntensity = 0.65 + warnPulse * 1.45;
+        } else {
+          const inSync =
+            Math.abs(rawVal) <= 25 &&
+            Math.abs((state.turbines[0]?.rpm ?? 0) - 3000) <= 60;
+          if (inSync || state.turbines[0]?.gridConnected) {
+            warningLampRef.current.color.set("#33ff66");
+            warningLampRef.current.emissive.set("#33ff66");
+            warningLampRef.current.emissiveIntensity = 1.1;
+          } else {
+            const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
+            warningLampRef.current.color.set("#ffb000");
+            warningLampRef.current.emissive.set("#ffb000");
+            warningLampRef.current.emissiveIntensity = 0.65 + warnPulse * 1.35;
+          }
         }
       }
       return;
@@ -2017,51 +2439,93 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
       !centerNominal &&
       typeof lowDangerThreshold === "number" &&
       ratio <= 0.15;
+    const customLevel = getAlertLevel ? getAlertLevel(state) : null;
     const isDanger =
-      rawVal >= dangerThreshold ||
-      (typeof lowDangerThreshold === "number" &&
-        rawVal <= lowDangerThreshold) ||
-      isOver80Pct ||
-      isLow20Pct;
+      customLevel === "critical" ||
+      (!customLevel &&
+        (rawVal >= dangerThreshold ||
+          (typeof lowDangerThreshold === "number" &&
+            rawVal <= lowDangerThreshold) ||
+          isOver80Pct ||
+          isLow20Pct));
     const isWarn =
-      !isDanger &&
-      !centerNominal &&
-      (ratio >= 0.72 ||
-        (typeof lowDangerThreshold === "number" && ratio <= 0.25));
+      customLevel === "warn" ||
+      (!customLevel &&
+        !isDanger &&
+        !centerNominal &&
+        (ratio >= 0.72 ||
+          (typeof lowDangerThreshold === "number" && ratio <= 0.25)));
 
+    // High-frequency mechanical needle vibration (±1.5°–3.0° = ±0.026..0.052 rad at 18–25 Hz)
+    // whenever the parameter is under transient stress or outside its green zone!
+    const isTransientStressed =
+      isDanger ||
+      isWarn ||
+      state.voltageDipIntensity > 0.08 ||
+      Math.abs(state.gridTransientImpulse) > 0.15 ||
+      Math.abs(state.steamTransientImpulse) > 1.2 ||
+      Math.abs(state.gridHz - 50.0) > 0.35 ||
+      state.pressureBar < 38 ||
+      state.pressureBar > 60 ||
+      state.coreTemp > 500;
+    const vibAmp = isDanger
+      ? 0.048
+      : isWarn || state.voltageDipIntensity > 0.15
+        ? 0.032
+        : isTransientStressed
+          ? 0.022
+          : 0.003;
     const jitter =
-      Math.sin(t * 18 + position[0] * 5) * (isDanger ? 0.025 : 0.004);
+      (Math.sin(t * 21.5 * Math.PI * 2 + position[0] * 7.3) * 0.65 +
+        Math.cos(t * 18.2 * Math.PI * 2 + position[1] * 11.1) * 0.35) *
+      vibAmp;
 
-    const targetRotZ = 2.35 - ratio * 4.7 + jitter;
+    // Spring-damper inertia (slight overshoot + damped oscillation) when values jump
+    const baseTargetRotZ = 2.35 - ratio * 4.7;
     if (needleGroupRef.current) {
-      needleGroupRef.current.rotation.z = THREE.MathUtils.lerp(
-        needleGroupRef.current.rotation.z,
-        targetRotZ,
-        0.18,
+      const curZ = needleGroupRef.current.rotation.z;
+      const stiffness = 195;
+      const damping = 11.5;
+      const accel =
+        (baseTargetRotZ - curZ) * stiffness - needleVelRef.current * damping;
+      needleVelRef.current = THREE.MathUtils.clamp(
+        needleVelRef.current + accel * dt,
+        -18,
+        18,
       );
+      needleGroupRef.current.rotation.z =
+        curZ + needleVelRef.current * dt + jitter;
     }
 
     if (secondaryNeedleRef.current && secondaryGetValue) {
       const secVal = secondaryGetValue();
       const secRatio = THREE.MathUtils.clamp((secVal - min) / (max - min), 0, 1);
       const secRotZ = 2.35 - secRatio * 4.7;
-      secondaryNeedleRef.current.rotation.z = THREE.MathUtils.lerp(
-        secondaryNeedleRef.current.rotation.z,
-        secRotZ,
-        0.18,
+      const curSecZ = secondaryNeedleRef.current.rotation.z;
+      const secAccel =
+        (secRotZ - curSecZ) * 180 - secNeedleVelRef.current * 12.0;
+      secNeedleVelRef.current = THREE.MathUtils.clamp(
+        secNeedleVelRef.current + secAccel * dt,
+        -16,
+        16,
       );
+      secondaryNeedleRef.current.rotation.z =
+        curSecZ + secNeedleVelRef.current * dt + jitter * 0.6;
     }
 
     if (warningLampRef.current) {
       if (isDanger) {
-        const flash = Math.sin(t * 16 + position[0] * 3) > -0.15;
+        // 3.5 Hz fast urgent strobe for Critical
+        const critFlash = Math.sin(t * Math.PI * 2 * 3.5) > 0;
         warningLampRef.current.color.set("#ff2a2a");
         warningLampRef.current.emissive.set("#ff2a2a");
-        warningLampRef.current.emissiveIntensity = flash ? 2.2 : 0.45;
+        warningLampRef.current.emissiveIntensity = critFlash ? 2.35 : 0.28;
       } else if (isWarn) {
+        // 1.5 Hz pulsing amber for Warning
+        const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
         warningLampRef.current.color.set("#ffb000");
         warningLampRef.current.emissive.set("#ffb000");
-        warningLampRef.current.emissiveIntensity = 1.35;
+        warningLampRef.current.emissiveIntensity = 0.65 + warnPulse * 1.45;
       } else {
         warningLampRef.current.color.set("#33ff66");
         warningLampRef.current.emissive.set("#33ff66");
@@ -2242,6 +2706,7 @@ const SculptedPumpValveAssembly3D: React.FC<
   const heatBarMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const heatBarMeshRef = useRef<THREE.Mesh>(null);
   const lastPumpOnRef = useRef<boolean | null>(null);
+  const pumpDraggingRef = useRef(false);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
@@ -2254,6 +2719,28 @@ const SculptedPumpValveAssembly3D: React.FC<
         subSize: 36,
       }),
     [label, subLabel],
+  );
+
+  const wheelSubLabelTex = useMemo(
+    () =>
+      makePlaqueTex("BEARING COOL", "WHEEL: COOL %", {
+        width: 240,
+        height: 76,
+        titleSize: 28,
+        subSize: 21,
+      }),
+    [],
+  );
+
+  const leverSubLabelTex = useMemo(
+    () =>
+      makePlaqueTex("PUMP THROTTLE", "LEVER: FLOW %", {
+        width: 240,
+        height: 76,
+        titleSize: 27,
+        subSize: 21,
+      }),
+    [],
   );
 
   const lastBearingDegRef = useRef<number>(-1);
@@ -2321,12 +2808,13 @@ const SculptedPumpValveAssembly3D: React.FC<
       }
     }
 
-    // Continuous smooth rotational angle on the 6-spoke cast-iron valve wheel
+    // Continuous smooth rotational angle on the 6-spoke cast-iron BEARING COOLING valve wheel
     if (wheelRef.current) {
-      const targetWheelRot = -(throttle / 100) * Math.PI * 1.8;
+      const coolingPct = state.isBlackout ? 0 : state.oilCoolerValve;
+      const targetWheelRot = -(coolingPct / 100) * Math.PI * 1.8;
       const cavitationJitter =
         state.pumpThrottle[0] > 50 && state.pumpThrottle[1] > 50 && !state.isBlackout
-          ? Math.sin(clock.getElapsedTime() * 44 + pumpIndex * 2) * 0.045
+          ? Math.sin(clock.getElapsedTime() * 44 + pumpIndex * 2) * 0.035
           : 0;
       wheelRef.current.rotation.z = THREE.MathUtils.lerp(
         wheelRef.current.rotation.z,
@@ -2383,7 +2871,24 @@ const SculptedPumpValveAssembly3D: React.FC<
     }
   });
 
-  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+  const handleWheelPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    const curCooling = useGameStore.getState().oilCoolerValve;
+    startSmoothWheelSwivelDrag(
+      e,
+      wheelRef.current,
+      curCooling,
+      0,
+      100,
+      (nextVal) => {
+        useGameStore.getState().setOilCoolerValve(nextVal);
+      },
+      (active) => {
+        pumpDraggingRef.current = active;
+      },
+    );
+  };
+
+  const handleLeverPointerDown = (e: ThreeEvent<PointerEvent>) => {
     const curThrottle = useGameStore.getState().pumpThrottle[pumpIndex];
     startSmoothWheelSwivelDrag(
       e,
@@ -2393,6 +2898,9 @@ const SculptedPumpValveAssembly3D: React.FC<
       100,
       (nextVal) => {
         useGameStore.getState().setPumpThrottle(pumpIndex, nextVal);
+      },
+      (active) => {
+        pumpDraggingRef.current = active;
       },
     );
   };
@@ -2437,12 +2945,68 @@ const SculptedPumpValveAssembly3D: React.FC<
         />
       </mesh>
 
-      {/* Caged Soviet Jewel Lamp & Horizontal Bearing Heat Bar Below Wheel (+35% wider & taller: `BEARING: XX°C`) */}
+      {/* Caged Soviet Jewel Lamp, Backlit Кнопка-Табло & Horizontal Bearing Heat Bar Below Wheel (+35% wider & taller: `BEARING: XX°C`) */}
       <CagedSovietJewelLamp3D
         position={[-0.125, 0.096, 0.038]}
         lampMatRef={lampMatRef}
         scale={0.84}
       />
+      <SovietBacklitIndicatorBlock3D
+        position={[0.048, 0.096, 0.038]}
+        label={pumpIndex === 0 ? "ТАБЛО ГЦН-А" : "ТАБЛО ГЦН-Б"}
+        getAlertState={(s) => {
+          const bHeat = pumpIndex === 0 ? s.pumpAHeat : s.pumpBHeat;
+          const isOperating =
+            s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+          return {
+            level:
+              s.coreTemp > 580 ||
+              (isOperating && !s.pumpsActive[pumpIndex]) ||
+              bHeat >= 80
+                ? "critical"
+                : s.coreTemp > 520 ||
+                    (isOperating && s.pressureBar < 36) ||
+                    bHeat >= 55
+                  ? "warn"
+                  : "normal",
+            acknowledged: pumpDraggingRef.current,
+          };
+        }}
+      />
+
+      {/* Dedicated Sub-Label Plaques for Left Rotary Wheel (BEARING COOL) & Right Knife Lever (PUMP THROTTLE) */}
+      <group position={[-0.082, -0.112, 0.042]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.168, 0.044, 0.008]} />
+          <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
+        </mesh>
+        <mesh position={[0, 0, 0.005]}>
+          <planeGeometry args={[0.160, 0.038]} />
+          <meshStandardMaterial
+            map={wheelSubLabelTex}
+            emissive="#ffffff"
+            emissiveMap={wheelSubLabelTex}
+            emissiveIntensity={0.38}
+            roughness={0.55}
+          />
+        </mesh>
+      </group>
+      <group position={[0.088, -0.112, 0.042]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.168, 0.044, 0.008]} />
+          <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
+        </mesh>
+        <mesh position={[0, 0, 0.005]}>
+          <planeGeometry args={[0.160, 0.038]} />
+          <meshStandardMaterial
+            map={leverSubLabelTex}
+            emissive="#ffffff"
+            emissiveMap={leverSubLabelTex}
+            emissiveIntensity={0.38}
+            roughness={0.55}
+          />
+        </mesh>
+      </group>
       <group position={[0.005, -0.176, 0.038]}>
         <mesh castShadow receiveShadow>
           <boxGeometry args={[0.362, 0.07, 0.016]} />
@@ -2476,10 +3040,39 @@ const SculptedPumpValveAssembly3D: React.FC<
         </mesh>
       </group>
 
-      {/* Heavy Bolted Cast-Iron Valve Manifold & 6-Spoke Handwheel */}
+      {/* Heavy Bolted Cast-Iron Valve Manifold & 6-Spoke Handwheel (BEARING COOLING VALVE) */}
       <group
         position={[-0.072, -0.012, 0.038]}
-        onPointerDown={handlePointerDown}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          useGameStore
+            .getState()
+            .setHoveredControlHint(
+              "BEARING COOLING WHEEL: Scroll/Drag to open bearing cooling water flow (keep >=50% to keep bearings ~38°C)!",
+            );
+        }}
+        onPointerOut={(e) => {
+          e.stopPropagation();
+          useGameStore.getState().setHoveredControlHint(null);
+        }}
+        onWheel={(e) => {
+          if (useCameraLookStore.getState().isFreeLookMode) return;
+          e.stopPropagation();
+          e.nativeEvent?.stopImmediatePropagation?.();
+          const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
+          const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 2 : 8);
+          const s = useGameStore.getState();
+          const nextCooling = THREE.MathUtils.clamp(
+            Math.round(s.oilCoolerValve + step),
+            0,
+            100,
+          );
+          if (nextCooling !== Math.round(s.oilCoolerValve)) {
+            playDetentClick((Math.abs(nextCooling) % 5) + 1);
+            s.setOilCoolerValve(nextCooling);
+          }
+        }}
+        onPointerDown={handleWheelPointerDown}
       >
         {/* Pipe Manifold Flange & Brushed-Brass Degree Scale Plate */}
         <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
@@ -2518,7 +3111,7 @@ const SculptedPumpValveAssembly3D: React.FC<
         <group
           ref={wheelRef}
           position={[0, 0, 0.068]}
-          onPointerDown={handlePointerDown}
+          onPointerDown={handleWheelPointerDown}
         >
           <mesh rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.135, 0.135, 0.11, 16]} />
@@ -2579,10 +3172,40 @@ const SculptedPumpValveAssembly3D: React.FC<
         </group>
       </group>
 
-      {/* Dual-Blade Copper Knife-Switch Throw Lever with Dark Phenolic Bakelite Crossbar & Steel Ferrules */}
+      {/* Dual-Blade Copper Knife-Switch Throw Lever with Dark Phenolic Bakelite Crossbar & Steel Ferrules (PUMP THROTTLE LEVER) */}
       <group
         position={[0.088, -0.012, 0.036]}
-        onPointerDown={handlePointerDown}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          useGameStore
+            .getState()
+            .setHoveredControlHint(
+              `PUMP THROTTLE LEVER (${pumpIndex === 0 ? "ГЦН 1-2" : "ГЦН 3-4"}): Drag/Scroll to adjust pump flow % (50-85% = Nominal, 0% = Stop)!`,
+            );
+        }}
+        onPointerOut={(e) => {
+          e.stopPropagation();
+          useGameStore.getState().setHoveredControlHint(null);
+        }}
+        onWheel={(e) => {
+          if (useCameraLookStore.getState().isFreeLookMode) return;
+          e.stopPropagation();
+          e.nativeEvent?.stopImmediatePropagation?.();
+          const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
+          const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 2 : 8);
+          const s = useGameStore.getState();
+          const curThrottle = s.pumpThrottle[pumpIndex] ?? 75;
+          const nextThrottle = THREE.MathUtils.clamp(
+            Math.round(curThrottle + step),
+            0,
+            100,
+          );
+          if (nextThrottle !== Math.round(curThrottle)) {
+            playDetentClick((Math.abs(nextThrottle) % 5) + 1);
+            s.setPumpThrottle(pumpIndex, nextThrottle);
+          }
+        }}
+        onPointerDown={handleLeverPointerDown}
       >
         <mesh castShadow receiveShadow>
           <boxGeometry args={[0.088, 0.22, 0.038]} />
@@ -2810,7 +3433,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           }
         });
       }),
-    [maxSectorMW],
+    [],
   );
 
   useFrame(({ clock }) => {
@@ -2961,7 +3584,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         maxSectorMW,
       );
       if (snappedMW !== s.sectorMW[sector]) {
+        const deltaMW = snappedMW - s.sectorMW[sector];
         playDetentClick(Math.round(snappedMW / 25));
+        playContactorInrushClunk(deltaMW);
         s.setSectorPower(sector, snappedMW);
       }
     };
@@ -2977,6 +3602,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         const cur = s.sectorMW[sector];
         const nextMW = cur >= maxSectorMW ? 0 : cur + 25;
         playDetentClick(Math.round(nextMW / 25));
+        playContactorInrushClunk(nextMW - cur);
         s.setSectorPower(sector, nextMW);
       }
       playSwitchClank(false);
@@ -2995,7 +3621,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
     const stepMW = e.deltaY < 0 ? 25 : -25;
     const nextMW = Math.max(0, Math.min(250, s.sectorMW[sector] + stepMW));
     if (nextMW !== s.sectorMW[sector]) {
+      const deltaMW = nextMW - s.sectorMW[sector];
       playDetentClick(Math.round(nextMW / 25));
+      playContactorInrushClunk(deltaMW);
       s.setSectorPower(sector, nextMW);
     }
   };
@@ -3067,6 +3695,20 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           />
         </mesh>
       </group>
+
+      {/* Backlit Soviet Control Indicator Block (`Кнопка-Табло`) Above Sector MW Lever */}
+      <SovietBacklitIndicatorBlock3D
+        position={[0.068, 0.148, 0.036]}
+        scale={0.92}
+        label="КВОТА МВт"
+        getAlertState={(s) => {
+          const diff = Math.abs(s.sectorMW[sector] - s.targetSectorMW[sector]);
+          return {
+            level: diff >= 75 ? "critical" : diff > 0 ? "warn" : "normal",
+            acknowledged: dragRef.current.active,
+          };
+        }}
+      />
 
       {/* Projected 3D Cast-Iron Bezel Housing (depth: 0.025m) with 4 Corner Hex Bolts & 10 Ribbed Phosphor Glass Cells */}
       <group position={[-0.068, -0.014, 0.032]} scale={[1, 0.9, 1]}>
@@ -3377,6 +4019,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             return;
           }
           playLeverRatchet(0.85);
+          playContactorInrushClunk(-50);
           s.shiftSectorPower(sector, -50);
         }}
       >
@@ -3404,6 +4047,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             return;
           }
           playDetentClick(Math.max(0, Math.round((s.sectorMW[sector] - 25) / 25)));
+          playContactorInrushClunk(-25);
           s.shiftSectorPower(sector, -25);
         }}
       >
@@ -3431,6 +4075,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             return;
           }
           playDetentClick(Math.min(10, Math.round((s.sectorMW[sector] + 25) / 25)));
+          playContactorInrushClunk(25);
           s.shiftSectorPower(sector, 25);
         }}
       >
@@ -3458,6 +4103,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             return;
           }
           playLeverRatchet(1.1);
+          playContactorInrushClunk(50);
           s.shiftSectorPower(sector, 50);
         }}
       >
@@ -3766,14 +4412,24 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       state.targetSectorMW.vodka +
       state.targetSectorMW.steel;
     const hasGenDeficit = totalSuppliedMW > state.totalElectricalMW + 15;
+    const isSteamStarved =
+      state.drumPressure < 36 &&
+      totalSuppliedMW > 200 &&
+      state.tutorialPhase === "COMPLETED";
+    const isThermalRecoil =
+      state.drumPressure > 74 && state.tutorialPhase === "COMPLETED";
 
     const mandateText = state.az5Active
       ? `● AZ-5 SCRAM ACTIVE (TIMER: ${state.az5Timer.toFixed(1)}S)`
-      : hasGenDeficit
-        ? `⚠️ GENERATION DEFICIT: RAISE RODS (A-2) + TURBINE VALVE (C) TO GENERATE ${totalSuppliedMW} MWe!`
-        : all6Matched
-          ? `● ALL 6 SECTORS BALANCED AT ${totalSuppliedMW} / ${Math.round(state.totalElectricalMW)} MWe`
-          : `● ALLOCATED: ${totalSuppliedMW} / ${totalTargetMW} MWe (GEN: ${Math.round(state.totalElectricalMW)} MWe)`;
+      : isSteamStarved
+        ? `⚠️ STEAM STARVATION (<36 BAR): RAISE RODS (A-2) & COOLING PUMPS!`
+        : isThermalRecoil
+          ? `⚠️ THERMAL RECOIL (>74 BAR): INSERT RODS (A-2) & VENT STEAM (C)!`
+          : hasGenDeficit
+            ? `⚠️ GENERATION DEFICIT: RAISE RODS (A-2) + TURBINE VALVE (C) TO GENERATE ${totalSuppliedMW} MWe!`
+            : all6Matched
+              ? `● ALL 6 SECTORS BALANCED AT ${totalSuppliedMW} / ${Math.round(state.totalElectricalMW)} MWe`
+              : `● ALLOCATED: ${totalSuppliedMW} / ${totalTargetMW} MWe (GEN: ${Math.round(state.totalElectricalMW)} MWe)`;
     const sig = `${Math.round(state.coreTemp)}|${Math.round(state.drumPressure)}|${state.roomRadiation.toFixed(1)}|${Math.round(state.totalElectricalMW)}|${Math.round(state.voidFraction * 100)}|${totalSuppliedMW}|${all6Matched}|${state.az5Active}|${mandateText}`;
     const tex = statusMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (tex && tex.userData.lastSig !== sig) {
@@ -3883,12 +4539,12 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         width={1.98}
         unitCode="A"
         annunciatorLabels={[
-          "КОНТУР А",
-          "НАСОСЫ ГЦН",
-          "Т° ЯДРА >350",
-          "БАРАБАН >80",
-          "СЕТЬ 1000 МВТ",
-          "АЗ-5 ГОТОВ",
+          "LOOP A",
+          "PUMP A/B",
+          "CORE TEMP",
+          "DRUM BAR",
+          "RADIATION",
+          "AZ-5 SCRAM",
         ]}
         mimicSegments={unitAMimicSegments}
         mimicNodes={unitAMimicNodes}
@@ -3999,6 +4655,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           nominalMark={284}
           dangerThreshold={420}
           getValue={() => useGameStore.getState().coreTemp}
+          getAlertLevel={(s) =>
+            s.coreTemp > 580 ? "critical" : s.coreTemp > 520 ? "warn" : "normal"
+          }
         />
         <HighDetailManometer3D
           position={[0, 0, 0]}
@@ -4011,6 +4670,14 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           nominalMark={70}
           dangerThreshold={80}
           getValue={() => useGameStore.getState().drumPressure}
+          getAlertLevel={(s) => {
+            const isOp = s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+            return (isOp && s.pressureBar < 28) || s.pressureBar >= 78
+              ? "critical"
+              : (isOp && s.pressureBar < 36) || s.pressureBar > 75
+                ? "warn"
+                : "normal";
+          }}
         />
         <HighDetailManometer3D
           position={[0.60, 0, 0]}
@@ -4022,6 +4689,16 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           max={15}
           dangerThreshold={7.5}
           getValue={() => useGameStore.getState().roomRadiation}
+          getAlertLevel={(s) => {
+            const hasUnmetQuota = (
+              Object.keys(s.sectorMW) as SectorNodeId[]
+            ).some((k) => s.sectorMW[k] !== s.targetSectorMW[k]);
+            return s.radiationLevel > 5 || s.roomRadiation > 5
+              ? "critical"
+              : s.radiationLevel > 1.5 || s.roomRadiation > 1.5 || hasUnmetQuota
+                ? "warn"
+                : "normal";
+          }}
         />
       </group>
 
@@ -4798,6 +5475,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
     progress: 0,
     lastHissTime: 0,
   });
+  const oilWheelDraggingRef = useRef(false);
+  const coreRodDraggingRef = useRef(false);
+  const gasWheelDraggingRef = useRef(false);
 
   useEffect(() => {
     applySovietPBRToHierarchy(groupRef.current);
@@ -5458,20 +6138,20 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         annunciatorLabels={
           variant === "rear"
             ? [
-                "ГЕЛИЙ-N2",
-                "ГЕРМОШЛЮЗ",
-                "ДАВЛ. >68",
-                "ГРАФИТ Т°",
-                "БАРБОТЕР",
-                "СБРОС H2O",
+                "SEPARATOR",
+                "DRUM LEVEL",
+                "FEEDWATER",
+                "MCP PUMPS",
+                "STEAM DUMP",
+                "CONDENSER",
               ]
             : [
-                "МАСЛОБЛОК",
-                "ПОДШИПНИК",
-                "КАНАЛЫ ТК",
-                "БИОЗАЩИТА",
-                "СУЗ СТЕРЖНИ",
-                "БОРНЫЙ БАК",
+                "THERMAL MW",
+                "XENON VOID",
+                "CORE MAP",
+                "ROD DRIVE",
+                "AUTO RODS",
+                "REACTIVITY",
               ]
         }
         mimicSegments={wrapMimicSegments}
@@ -5553,6 +6233,15 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               nominalMark={70}
               dangerThreshold={80}
               getValue={() => useGameStore.getState().drumPressure}
+              getAlertLevel={(s) => {
+                const isOp =
+                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+                return (isOp && s.pressureBar < 28) || s.pressureBar >= 78
+                  ? "critical"
+                  : (isOp && s.pressureBar < 36) || s.pressureBar > 75
+                    ? "warn"
+                    : "normal";
+              }}
             />
             <HighDetailManometer3D
               position={[0, 0, 0]}
@@ -5566,6 +6255,13 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               lowDangerThreshold={-250}
               dangerThreshold={250}
               getValue={() => useGameStore.getState().drumWaterLevel}
+              getAlertLevel={(s) =>
+                s.graphiteTemp > 620 || Math.abs(s.drumWaterLevel) > 250
+                  ? "critical"
+                  : s.graphiteTemp > 560 || Math.abs(s.drumWaterLevel) > 150
+                    ? "warn"
+                    : "normal"
+              }
             />
             <HighDetailManometer3D
               position={[0.51, 0, 0]}
@@ -5577,6 +6273,16 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               max={100}
               dangerThreshold={95}
               getValue={() => useGameStore.getState().feedwaterValve * 100}
+              getAlertLevel={(s) => {
+                const isOp =
+                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+                return s.bubblerLevel > 82
+                  ? "critical"
+                  : s.bubblerLevel > 72 ||
+                      (isOp && s.sealToggles.some((on) => !on))
+                    ? "warn"
+                    : "normal";
+              }}
             />
           </>
         ) : (
@@ -5592,6 +6298,14 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               nominalMark={3200}
               dangerThreshold={3600}
               getValue={() => useGameStore.getState().thermalPower}
+              getAlertLevel={(s) => {
+                const bearingTemp = 20 + Math.max(s.pumpAHeat, s.pumpBHeat);
+                return bearingTemp > 82 || s.thermalPower > 3600
+                  ? "critical"
+                  : bearingTemp > 70 || s.thermalPower > 3300
+                    ? "warn"
+                    : "normal";
+              }}
             />
             <HighDetailManometer3D
               position={[0, 0, 0]}
@@ -5606,6 +6320,18 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               secondaryGetValue={() =>
                 useGameStore.getState().voidFraction * 100
               }
+              getAlertLevel={(s) => {
+                const hotspotCount = Object.keys(s.channelHotspots).length;
+                const oilLow = s.lubeOilPressure < 45;
+                return hotspotCount >= 2 || s.voidFraction > 0.55
+                  ? "critical"
+                  : hotspotCount > 0 ||
+                      oilLow ||
+                      s.voidFraction > 0.3 ||
+                      s.xenon > 45
+                    ? "warn"
+                    : "normal";
+              }}
             />
             <HighDetailManometer3D
               position={[0.51, 0, 0]}
@@ -5617,6 +6343,19 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               max={100}
               dangerThreshold={90}
               getValue={() => useGameStore.getState().controlRods * 100}
+              getAlertLevel={(s) => {
+                const isOp =
+                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+                return s.boronTankLevel < 20 ||
+                  (isOp && s.pressureBar < 28) ||
+                  s.pressureBar >= 78
+                  ? "critical"
+                  : s.boronTankLevel < 35 ||
+                      (isOp && s.pressureBar < 36) ||
+                      s.pressureBar > 75
+                    ? "warn"
+                    : "normal";
+              }}
             />
           </>
         )}
@@ -5683,6 +6422,18 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               lampMatRef={oilLampMatRef}
               scale={0.82}
             />
+            <SovietBacklitIndicatorBlock3D
+              position={[0.04, 0.115, 0.024]}
+              scale={0.88}
+              label="ТАБЛО МАСЛО"
+              getAlertState={(s) => {
+                const bt = 20 + Math.max(s.pumpAHeat, s.pumpBHeat);
+                return {
+                  level: bt > 82 ? "critical" : bt > 70 ? "warn" : "normal",
+                  acknowledged: oilWheelDraggingRef.current,
+                };
+              }}
+            />
             {/* Semicircular Brushed-Brass 0-100% Scale Arc */}
             <mesh position={[-0.035, -0.02, 0.022]}>
               <torusGeometry args={[0.092, 0.0065, 8, 22, Math.PI]} />
@@ -5725,7 +6476,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   useGameStore.getState().controlRods * 100,
                   0,
                   100,
-                  (v) => useGameStore.getState().setOilCoolerValve(v),
+                  (v) => useGameStore.getState().setControlRodLevel(v),
+                  (act) => {
+                    oilWheelDraggingRef.current = act;
+                  },
                 )
               }
             >
@@ -5889,6 +6643,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             onPointerDown={(e) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
+              coreRodDraggingRef.current = true;
               const s = useGameStore.getState();
               const activeKeys = Object.keys(s.channelHotspots).map(Number);
               const startY = e.nativeEvent.clientY;
@@ -5915,6 +6670,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               };
 
               const handleUp = () => {
+                coreRodDraggingRef.current = false;
                 window.removeEventListener("pointermove", handleMove);
                 window.removeEventListener("pointerup", handleUp);
                 window.removeEventListener("pointercancel", handleUp);
@@ -5944,6 +6700,29 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 roughness={0.55}
               />
             </mesh>
+            <SovietBacklitIndicatorBlock3D
+              position={[0, 0.205, 0.032]}
+              scale={0.88}
+              label="ТАБЛО СУЗ/ЯДРО"
+              getAlertState={(s) => {
+                const hc = Object.keys(s.channelHotspots).length;
+                const isOp =
+                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+                return {
+                  level:
+                    hc >= 2 ||
+                    (isOp && s.pressureBar < 28) ||
+                    s.pressureBar >= 78
+                      ? "critical"
+                      : hc > 0 ||
+                          (isOp && s.pressureBar < 36) ||
+                          s.pressureBar > 75
+                        ? "warn"
+                        : "normal",
+                  acknowledged: coreRodDraggingRef.current,
+                };
+              }}
+            />
 
             {/* Heavy Recessed Octagonal Cast-Iron Reactor Pit Flange (dark gunmetal #222629) */}
             <mesh
@@ -6172,6 +6951,20 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 roughness={0.65}
               />
             </mesh>
+            <SovietBacklitIndicatorBlock3D
+              position={[0, 0.145, 0.024]}
+              scale={0.88}
+              label="ТАБЛО БОР"
+              getAlertState={(s) => ({
+                level:
+                  s.boronTankLevel < 20
+                    ? "critical"
+                    : s.boronTankLevel < 35
+                      ? "warn"
+                      : "normal",
+                acknowledged: pistonDragRef.current.active,
+              })}
+            />
 
             {/* Weathered Steel-Framed Cast-Iron Pump Backplate */}
             <mesh position={[0, -0.02, 0.005]} castShadow receiveShadow>
@@ -6569,6 +7362,28 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               lampMatRef={gasLampMatRef}
               scale={0.8}
             />
+            <SovietBacklitIndicatorBlock3D
+              position={[0.04, 0.115, 0.026]}
+              scale={0.88}
+              label="ТАБЛО ГАЗ/ПЭН"
+              getAlertState={(s) => {
+                const isOp =
+                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+                return {
+                  level:
+                    s.graphiteTemp > 620 ||
+                    (isOp && s.pressureBar < 28) ||
+                    Math.abs(s.drumWaterLevel) > 250
+                      ? "critical"
+                      : s.graphiteTemp > 560 ||
+                          (isOp && s.pressureBar < 36) ||
+                          Math.abs(s.drumWaterLevel) > 150
+                        ? "warn"
+                        : "normal",
+                  acknowledged: gasWheelDraggingRef.current,
+                };
+              }}
+            />
 
             {/* Central Cast-Iron Regulator Body & Semicircular Brass BAR Scale */}
             <group
@@ -6607,6 +7422,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   0,
                   100,
                   (v) => useGameStore.getState().setNitrogenLoopValve(v),
+                  (act) => {
+                    gasWheelDraggingRef.current = act;
+                  },
                 )
               }
             >
@@ -6754,6 +7572,27 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 roughness={0.55}
               />
             </mesh>
+            <SovietBacklitIndicatorBlock3D
+              position={[0, 0.185, 0.026]}
+              scale={0.88}
+              label="ТАБЛО ГЕРМО"
+              getAlertState={(s) => {
+                const isOp =
+                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+                const offCount = isOp
+                  ? s.sealToggles.filter((on) => !on).length
+                  : 0;
+                return {
+                  level:
+                    offCount >= 2
+                      ? "critical"
+                      : offCount > 0 || (isOp && s.mcpActive.some((on) => !on))
+                        ? "warn"
+                        : "normal",
+                  acknowledged: emergSealDepressRef.current > 0.1,
+                };
+              }}
+            />
 
             {/* Square Bolted Steel Containment Housing */}
             <mesh position={[0, -0.02, 0.005]} castShadow receiveShadow>
@@ -6988,6 +7827,20 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 roughness={0.65}
               />
             </mesh>
+            <SovietBacklitIndicatorBlock3D
+              position={[0, 0.145, 0.024]}
+              scale={0.88}
+              label="ТАБЛО СБРОС"
+              getAlertState={(s) => ({
+                level:
+                  s.bubblerLevel > 78 || s.pressureBar > 68
+                    ? "critical"
+                    : s.bubblerLevel > 68 || s.pressureBar > 62
+                      ? "warn"
+                      : "normal",
+                acknowledged: drainDragRef.current.active,
+              })}
+            />
 
             {/* Weathered Steel-Framed Cast-Iron Assembly Backplate */}
             <mesh position={[0, -0.02, 0.005]} castShadow receiveShadow>
