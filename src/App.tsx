@@ -1,5 +1,6 @@
 import { Canvas } from '@react-three/fiber'
 import { useEffect } from 'react'
+import { playKnifeSwitchSlam } from './modules/inspector/audio'
 import { playSwitchClank } from './modules/reactor/audioSynth'
 import {
   startSoundtrack,
@@ -14,10 +15,8 @@ export function App() {
   const phase = useGameStore((s) => s.phase)
   const tick = useGameStore((s) => s.tick)
   const isMusicMuted = useGameStore((s) => s.isMusicMuted)
-  const coreTemp = useGameStore((s) => s.coreTemp)
-  const redlineInstability = useGameStore((s) => s.redlineInstability)
-  const maxSafePower = useGameStore((s) => s.maxSafePower)
-  const powerAllocation = useGameStore((s) => s.powerAllocation)
+  const wePadHeld = useGameStore((s) => s.wePadHeld)
+  const wePadInspecting = useGameStore((s) => s.wePadInspecting)
 
   useEffect(() => {
     if (phase !== 'playing') return
@@ -52,29 +51,33 @@ export function App() {
     }
   }, [])
 
-  // Immediately update soundtrack mute & redline crossfade whenever state changes (e.g. pressing [M])
+  // Immediately update soundtrack mute & redline crossfade whenever mute or phase changes
+  // (HighDetailReactorPanel3D also updates redline soundtrack state imperatively inside useFrame)
   useEffect(() => {
+    const s = useGameStore.getState()
     const totalMW =
-      powerAllocation.cooling +
-      powerAllocation.defense +
-      powerAllocation.facility
+      s.powerAllocation.cooling +
+      s.powerAllocation.defense +
+      s.powerAllocation.facility
     const isRedline =
-      totalMW > maxSafePower || coreTemp >= 760 || redlineInstability >= 50
+      totalMW > s.maxSafePower || s.coreTemp >= 760 || s.redlineInstability >= 50
     updateSoundtrackState(isRedline, isMusicMuted)
-  }, [
-    isMusicMuted,
-    coreTemp,
-    redlineInstability,
-    maxSafePower,
-    powerAllocation.cooling,
-    powerAllocation.defense,
-    powerAllocation.facility,
-  ])
+  }, [isMusicMuted, phase])
 
-  // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase.
+  // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase,
+  // or to re-close the Main Breaker during an active shift if it tripped open (isBlackout === true).
   // Holding Shift + Space starts (or switches into) Endless Sandbox / No-Fail Test Mode (isGodMode = true).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Backspace') {
+        const s = useGameStore.getState()
+        if (s.phase === 'playing' && s.tutorialStep !== 'DONE') {
+          e.preventDefault()
+          playSwitchClank(true)
+          s.skipTutorial()
+          return
+        }
+      }
       if (e.code === 'Space' || e.code === 'Enter') {
         const s = useGameStore.getState()
         const wantSandbox = e.shiftKey && e.code === 'Space'
@@ -100,6 +103,10 @@ export function App() {
           e.preventDefault()
           playSwitchClank(true)
           s.setGodMode(!s.isGodMode)
+        } else if (s.isBlackout) {
+          e.preventDefault()
+          playKnifeSwitchSlam(true)
+          s.recloseMainBreaker()
         }
       }
     }
@@ -111,6 +118,17 @@ export function App() {
     <div className="relative h-screen w-screen overflow-hidden bg-[#080b09] select-none">
       <MainMenuOverlay />
       <DebugMenu />
+
+      {/* Discreet WE-PAD 84 Control Hint Bar at Bottom of Screen */}
+      {phase === 'playing' && (
+        <div className="pointer-events-none fixed bottom-2.5 left-1/2 z-20 -translate-x-1/2 rounded border border-[#28b862]/70 bg-[#051209]/90 px-4 py-1 font-mono text-xs font-bold tracking-wider text-[#39ff14] shadow-lg">
+          {wePadHeld
+            ? wePadInspecting
+              ? '[TAB]: KOMPAKT SIDE-VISNING  |  [E]: LEGG NED WE-PAD  |  [1–6]: BYTT FANE'
+              : '[TAB]: SE NÆRMERE PÅ WE-PAD  |  [E]: LEGG NED WE-PAD  |  [1–6]: BYTT FANE'
+            : '[E]: PLUKK OPP WE-PAD 84'}
+        </div>
+      )}
 
       {/* 100% True 3D First-Person Soviet Control Room Canvas (Locked dpr=1 + PCFSoftShadowMap for chiaroscuro 60 FPS micro-pixel aesthetic) */}
       <Canvas

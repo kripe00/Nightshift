@@ -28,14 +28,14 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     fov: 56,
   },
   reactor: {
-    position: [0.22, 1.32, 2.35],
-    target: [-1.96, 1.24, 2.48],
+    position: [-0.05, 1.24, 2.58],
+    target: [-2.02, 1.15, 3.16],
     fov: 58,
   },
   power: {
-    position: [-0.08, 0.86, 2.35],
-    target: [-1.96, 0.64, 2.35],
-    fov: 54,
+    position: [0.0, 1.24, 2.68],
+    target: [-0.42, 1.15, 4.98],
+    fov: 58,
   },
   terminal: {
     position: [0, 1.48, 1.92],
@@ -48,8 +48,8 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     fov: 56,
   },
   aux: {
-    position: [-0.22, 1.32, 2.35],
-    target: [1.96, 1.24, 2.35],
+    position: [-0.12, 1.24, 2.02],
+    target: [1.76, 1.16, 2.02],
     fov: 58,
   },
 };
@@ -105,8 +105,14 @@ export const CameraController: React.FC = () => {
     },
   });
 
+  const skipNextPoseSyncRef = useRef<boolean>(false);
+
   // Sync base yaw & pitch whenever activeStation changes via [0]-[5] or 3D station buttons
   useEffect(() => {
+    if (skipNextPoseSyncRef.current) {
+      skipNextPoseSyncRef.current = false;
+      return;
+    }
     const pose = STATION_CAMERA_POSES[activeStation];
     const { yaw, pitch } = computePoseYawPitch(pose);
     lookStateRef.current.targetYaw = setShortestTargetYaw(
@@ -179,6 +185,19 @@ export const CameraController: React.FC = () => {
         return;
       }
 
+      // When inspecting WE-PAD 84 up close ([TAB]), keys [1-6] switch WE-PAD tabs instead of jumping camera stations
+      if (
+        useGameStore.getState().wePadInspecting &&
+        (e.key === "1" ||
+          e.key === "2" ||
+          e.key === "3" ||
+          e.key === "4" ||
+          e.key === "5" ||
+          e.key === "6")
+      ) {
+        return;
+      }
+
       if (e.key === "1") {
         e.preventDefault();
         syncStationPose("reactor");
@@ -196,18 +215,22 @@ export const CameraController: React.FC = () => {
         syncStationPose("aux");
       } else if (e.key === "6") {
         e.preventDefault();
-        setActiveStation("reactor");
+        skipNextPoseSyncRef.current =
+          useGameStore.getState().activeStation !== "power";
+        setActiveStation("power");
         lookStateRef.current.targetYaw = setShortestTargetYaw(
           lookStateRef.current.currentYaw,
-          (3 * Math.PI) / 4,
+          Math.PI / 2 - 0.42,
         );
         lookStateRef.current.targetPitch = -0.02;
       } else if (e.key === "7") {
         e.preventDefault();
-        setActiveStation("reactor");
+        skipNextPoseSyncRef.current =
+          useGameStore.getState().activeStation !== "power";
+        setActiveStation("power");
         lookStateRef.current.targetYaw = setShortestTargetYaw(
           lookStateRef.current.currentYaw,
-          Math.PI,
+          Math.PI / 2 + 0.42,
         );
         lookStateRef.current.targetPitch = -0.02;
       } else if (e.key === "0" || e.key === "Escape") {

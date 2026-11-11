@@ -4,10 +4,12 @@ import { useGameStore } from './useGameStore'
 export const DebugMenu: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
 
-  const isGodMode = useGameStore((s) => s.isGodMode)
-  const coreTemp = useGameStore((s) => s.coreTemp)
-  const isBlackout = useGameStore((s) => s.isBlackout)
-  const activeDirectives = useGameStore((s) => s.activeDirectives)
+  const isGodMode = useGameStore((s) => (isOpen ? s.isGodMode : false))
+  const coreTemp = useGameStore((s) => (isOpen ? Math.round(s.coreTemp) : 330))
+  const isBlackout = useGameStore((s) => (isOpen ? s.isBlackout : false))
+  const activeDirectivesCount = useGameStore((s) =>
+    isOpen ? s.activeDirectives.length : 0
+  )
   const setGodMode = useGameStore((s) => s.setGodMode)
   const spawnDirective = useGameStore((s) => s.spawnDirective)
   const debugSetTemp = useGameStore((s) => s.debugSetTemp)
@@ -124,7 +126,7 @@ export const DebugMenu: React.FC = () => {
         </button>
 
         <div className="border-t border-[#313d2f] pt-1 text-sm text-[#9ca396]">
-          Pravda Queue: {activeDirectives.length} | Core Enthusiasm: {Math.round(coreTemp)}°C (Nominal)
+          Pravda Queue: {activeDirectivesCount} | Core Enthusiasm: {coreTemp}°C (Nominal)
         </div>
       </div>
     </div>

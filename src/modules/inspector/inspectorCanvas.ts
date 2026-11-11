@@ -3,6 +3,7 @@
 // Full Expanded Directives with Relative Ink Stamps, 3-Page Scrollable KGB Security Manual,
 // and True 2x Straight Optical Magnifying Glass Zoom (Zero UV).
 
+import type { WePadChatMessage, WePadTabId } from '../../shared/types'
 import {
   INK_COLOR_HEX,
   PAPER_COLOR_HEX,
@@ -17,6 +18,31 @@ import {
   type SealEmblemType,
   type SealMicroDefect,
 } from './useDeskStore'
+
+export interface WePadTelemetryPayload {
+  activeTab: WePadTabId
+  wePadHeld: boolean
+  wePadInspecting: boolean
+  tutorialPhase: string
+  tutorialHeader: string
+  tutorialBody: string
+  tutorialHint: string
+  chatLog: WePadChatMessage[]
+  thermalPower: number
+  drumPressure: number
+  drumWaterLevel: number
+  coreTemp: number
+  controlRods: number
+  xenonPoisoning: number
+  voidFraction: number
+  rpm: number
+  syncPhase: number
+  gridConnected: boolean
+  turbineValve?: number
+  totalElectricalMW: number
+  plantWaterDrainPct: number
+  mcpActiveCount: number
+}
 
 // 16-Color Soviet Bunker Palette from Master Prompt STEP 1
 export const SOVIET_16_PALETTE_HEX = [
@@ -121,26 +147,123 @@ function wrapCanvasText(
   return lines
 }
 
+const DIRECTIVE_HIGH_CONTRAST_INK_HEX: Record<
+  DeskDocument['inkColor'],
+  string
+> = {
+  SOVIET_CRIMSON: '#8a0f0a',
+  BUNKER_OLIVE: '#143b16',
+  PRAVDA_BLACK: '#0a0a0a',
+  IMPERIAL_PURPLE: '#4e106e',
+  CIA_NAVY_BLUE: '#0b2968',
+}
+
 function getFontDeclaration(fontType: DocumentFontType, sizePx: number): string {
   switch (fontType) {
     case 'WESTERN_SERIF':
-      return `bold ${sizePx}px Georgia, "Times New Roman", Times, serif`
+      return `900 ${sizePx}px Georgia, "Times New Roman", Times, serif`
     case 'SLANTED_ITALIC':
-      return `italic bold ${sizePx}px "Courier Prime", monospace`
+      return `italic 900 ${sizePx}px "Courier Prime", "Consolas", monospace`
     case 'BOURGEOIS_SANS':
-      return `bold ${sizePx}px Arial, Helvetica, sans-serif`
+      return `900 ${sizePx}px "Arial Black", Arial, Helvetica, sans-serif`
     case 'PRAVDA_BLOCK':
-      return `900 ${sizePx}px "Courier Prime", monospace`
+      return `900 ${sizePx}px "Courier Prime", "Consolas", monospace`
     case 'GOST_MONO':
     default:
-      return `bold ${sizePx}px "Courier Prime", monospace`
+      return `900 ${sizePx}px "Courier Prime", "Consolas", monospace`
   }
 }
 
 /**
+ * 1. Helper Function for Ultra-Thick Text (`drawHeavyText`)
+ * Sets `ctx.lineJoin = 'round'`, `ctx.miterLimit = 2`, and `ctx.lineWidth = Math.max(2.2, fontSize * 0.08)`
+ * in the exact same color as `ctx.fillStyle` (or an optional dark outline), then calls BOTH
+ * `ctx.strokeText(text, x, y)` AND `ctx.fillText(text, x, y)` so every character stroke is 2-3x thicker!
+ */
+export function drawHeavyText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  fillColor: string,
+  options?: {
+    maxWidth?: number
+    outlineColor?: string
+    outlineWidth?: number
+    strokeColor?: string
+    strokeWidth?: number
+  }
+): void {
+  ctx.save()
+  ctx.lineJoin = 'round'
+  ctx.miterLimit = 2
+  const maxWidth = options?.maxWidth
+
+  // Optional outer contrast outline pass (e.g. black outline behind white Ministry banner text)
+  if (options?.outlineColor) {
+    ctx.strokeStyle = options.outlineColor
+    ctx.lineWidth = options.outlineWidth ?? Math.max(4.5, fontSize * 0.16)
+    if (maxWidth !== undefined) {
+      ctx.strokeText(text, x, y, maxWidth)
+    } else {
+      ctx.strokeText(text, x, y)
+    }
+  }
+
+  // Primary self-colored thickening stroke pass + solid fill pass
+  ctx.fillStyle = fillColor
+  ctx.strokeStyle = options?.strokeColor ?? fillColor
+  ctx.lineWidth = options?.strokeWidth ?? Math.max(2.2, fontSize * 0.08)
+
+  if (maxWidth !== undefined) {
+    ctx.strokeText(text, x, y, maxWidth)
+    ctx.fillText(text, x, y, maxWidth)
+  } else {
+    ctx.strokeText(text, x, y)
+    ctx.fillText(text, x, y)
+  }
+  ctx.restore()
+}
+
+function parseDirectiveOrderDisplay(doc: DeskDocument): {
+  sectorLine: string
+  targetLoadLine: string
+  shortNote: string
+} {
+  let sectorLine = '[5] VODKA PLANT'
+  let targetLoadLine = 'TARGET: 25 MW (+10 MW)'
+
+  const bracketMatch = doc.powerOrderText.match(/\[(\d+)\.?\s*([^\]]+)\]/)
+  if (bracketMatch) {
+    sectorLine = `[${bracketMatch[1]}] ${bracketMatch[2].trim()}`
+  }
+
+  const mwMatch = doc.powerOrderText.match(/TO\s+(\d+)\s*MW/i)
+  const deltaMatch = doc.powerOrderText.match(/\(\s*([+-]?\d+\s*MW)\s*\)/i)
+  if (mwMatch) {
+    const deltaPart = deltaMatch ? ` (${deltaMatch[1].replace(/\s+/g, ' ')})` : ''
+    targetLoadLine = `TARGET: ${mwMatch[1]} MW${deltaPart}`
+  }
+
+  const rawWords = doc.content
+    .replace(/^.*?\(\s*[+-]?\d+\s*MW\s*\)\.?\s*/i, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  const shortNote = (
+    rawWords.length > 0
+      ? rawWords.slice(0, 5).join(' ')
+      : 'STAMP GREEN APPROVED'
+  ).toUpperCase()
+
+  return { sectorLine, targetLoadLine, shortNote }
+}
+
+/**
  * Renders the 3 Official Soviet Seals (USSR State Seal, MinSredMash Atom, KGB Sword & Shield).
- * At 1x (`isMagnified = false`), micro-print is tiny and barely a texture line;
- * at 2x (`isMagnified = true` inside the optical lens), the micro-ring text, star points, and orbits are razor-sharp.
+ * Giant, thick-lined (`4px–6px` lineWidth) with 2.5x larger bold ring text (`★ СССР ★ 1984 ★` vs `★ CCCP-LATIN ★`)
+ * so every seal detail is crystal clear at a glance on a MacBook screen.
  */
 export function drawOfficialSeal(
   ctx: CanvasRenderingContext2D,
@@ -150,11 +273,11 @@ export function drawOfficialSeal(
   sealType: SealEmblemType,
   microDefect: SealMicroDefect,
   inkHex: string,
-  isMagnified: boolean
+  _isMagnified: boolean
 ): void {
   ctx.save()
   ctx.translate(cx, cy)
-  const scale = radius / 50
+  const scale = radius / 100
   ctx.scale(scale, scale)
 
   const hasLatinRing =
@@ -162,63 +285,73 @@ export function drawOfficialSeal(
     microDefect === 'SIX_POINT_STAR' ||
     microDefect === 'BROKEN_ORBIT'
 
-  const topRingText = hasLatinRing
-    ? '★ CCCP-LATIN • SERIES-6 ★'
-    : '★ СССР • ГОССТАНДАРТ 84 ★'
+  const topRingText = hasLatinRing ? '★ CCCP-LATIN ★' : '★ СССР ★ 1984 ★'
 
   const bottomRingText =
     sealType === 'USSR_STATE_SEAL'
       ? hasLatinRing
-        ? 'SOVMIN • WESTERN PRESS'
-        : 'СОВЕТ МИНИСТРОВ СССР'
+        ? 'SOVMIN-WEST'
+        : 'СОВМИН СССР'
       : sealType === 'MINSREDMASH_ATOM'
         ? hasLatinRing
-          ? 'MINSREDMASH • ORBIT-1'
-          : 'МИНСРЕДМАШ • ОБЪЕКТ №4'
+          ? 'ORBIT-FAKE'
+          : 'МИНСРЕДМАШ'
         : hasLatinRing
-          ? '5-UPR • LANGLEY COPY'
-          : '5-Е УПРАВЛЕНИЕ КГБ СССР'
+          ? 'LANGLEY-5'
+          : 'КГБ СССР №4'
 
   ctx.strokeStyle = inkHex
   ctx.fillStyle = inkHex
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
 
-  // Outer Double Stamp Ring
-  ctx.lineWidth = 2.5
+  // Outer & Inner Stamp Rings (Doubled 4px-6px heavy lineWidth)
+  ctx.lineWidth = 6.0
   ctx.beginPath()
-  ctx.arc(0, 0, 47, 0, Math.PI * 2)
+  ctx.arc(0, 0, 95, 0, Math.PI * 2)
   ctx.stroke()
 
-  ctx.lineWidth = 1.1
-  ctx.setLineDash([2.2, 1.6])
+  ctx.lineWidth = 3.8
+  ctx.setLineDash([5.5, 3.8])
   ctx.beginPath()
-  ctx.arc(0, 0, 43, 0, Math.PI * 2)
+  ctx.arc(0, 0, 86, 0, Math.PI * 2)
   ctx.stroke()
   ctx.setLineDash([])
 
-  ctx.lineWidth = 1.6
+  ctx.lineWidth = 5.0
   ctx.beginPath()
-  ctx.arc(0, 0, 31, 0, Math.PI * 2)
+  ctx.arc(0, 0, 56, 0, Math.PI * 2)
   ctx.stroke()
 
-  // Micro-print top & bottom ring labels (crisp, un-dithered high-contrast strokes)
+  // 2.5x Larger Bold Ring Text (`★ СССР ★ 1984 ★` vs `★ CCCP-LATIN ★`) with `drawHeavyText`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = isMagnified
-    ? 'bold 6.2px "Courier Prime", monospace'
-    : 'bold 4.2px "Courier Prime", monospace'
-  ctx.fillText(topRingText, 0, -36.5)
-  ctx.fillText(bottomRingText, 0, 38)
+  ctx.font = '900 18.5px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, topRingText, 0, -71, 18.5, inkHex, {
+    maxWidth: 146,
+    strokeWidth: 2.0,
+  })
+  drawHeavyText(ctx, bottomRingText, 0, 72, 18.5, inkHex, {
+    maxWidth: 144,
+    strokeWidth: 2.0,
+  })
 
-  // Left & Right micro serial codes
-  ctx.font = isMagnified
-    ? 'bold 6.0px "Courier Prime", monospace'
-    : 'bold 4.0px "Courier Prime", monospace'
-  ctx.fillText(microDefect === 'NONE' ? '№84' : 'ERR', -37, 2)
-  ctx.fillText(microDefect === 'NONE' ? '5★' : '6★', 37, 2)
+  // Left & Right Bold Rim Codes
+  ctx.font = '900 17px "Courier Prime", "Consolas", monospace'
+  const leftCode = microDefect === 'NONE' ? '№84' : 'ERR'
+  const rightCode =
+    microDefect === 'NONE'
+      ? '5★'
+      : microDefect === 'FOUR_POINT_STAR'
+        ? '4★'
+        : '6★'
+  drawHeavyText(ctx, leftCode, -72, 2, 17, inkHex, { strokeWidth: 1.8 })
+  drawHeavyText(ctx, rightCode, 72, 2, 17, inkHex, { strokeWidth: 1.8 })
 
-  // Top Crown Star at (0, -24)
-  const starY = -24
-  const rOuter = 6.5
+  // Top Crown Star at (0, -39) — giant & thick-lined (`5-pt` vs `4-pt` / `6-pt` fake)
+  const starY = -39
+  const rOuter = 16.5
+  ctx.lineWidth = 3.2
   if (microDefect === 'SIX_POINT_STAR') {
     ctx.beginPath()
     ctx.moveTo(0, starY - rOuter)
@@ -226,6 +359,7 @@ export function drawOfficialSeal(
     ctx.lineTo(-rOuter * 0.86, starY + rOuter * 0.5)
     ctx.closePath()
     ctx.fill()
+    ctx.stroke()
 
     ctx.beginPath()
     ctx.moveTo(0, starY + rOuter)
@@ -233,8 +367,9 @@ export function drawOfficialSeal(
     ctx.lineTo(-rOuter * 0.86, starY - rOuter * 0.5)
     ctx.closePath()
     ctx.fill()
+    ctx.stroke()
   } else if (microDefect === 'FOUR_POINT_STAR') {
-    const rIn = rOuter * 0.35
+    const rIn = rOuter * 0.36
     ctx.beginPath()
     ctx.moveTo(0, starY - rOuter)
     ctx.lineTo(rIn, starY - rIn)
@@ -246,8 +381,9 @@ export function drawOfficialSeal(
     ctx.lineTo(-rIn, starY - rIn)
     ctx.closePath()
     ctx.fill()
+    ctx.stroke()
   } else {
-    const rInner = rOuter * 0.42
+    const rInner = rOuter * 0.44
     ctx.beginPath()
     for (let i = 0; i < 10; i++) {
       const r = i % 2 === 0 ? rOuter : rInner
@@ -259,106 +395,107 @@ export function drawOfficialSeal(
     }
     ctx.closePath()
     ctx.fill()
+    ctx.stroke()
   }
 
-  // Center Emblem by Seal Type
+  // Center Emblem by Seal Type (Doubled 4px–6px lineWidth)
   if (sealType === 'USSR_STATE_SEAL') {
-    ctx.lineWidth = 1.5
+    ctx.lineWidth = 5.4
     ctx.beginPath()
-    ctx.arc(0, 4, 14, 0, Math.PI * 2)
+    ctx.arc(0, 11, 27, 0, Math.PI * 2)
     ctx.stroke()
 
-    ctx.lineWidth = 1.0
+    ctx.lineWidth = 4.2
     ctx.beginPath()
-    ctx.ellipse(0, 4, 7, 14, 0, 0, Math.PI * 2)
+    ctx.ellipse(0, 11, 13.5, 27, 0, 0, Math.PI * 2)
     ctx.stroke()
 
     ctx.beginPath()
-    ctx.moveTo(-14, 4)
-    ctx.lineTo(14, 4)
-    ctx.moveTo(-12, -3)
-    ctx.lineTo(12, -3)
-    ctx.moveTo(-12, 11)
-    ctx.lineTo(12, 11)
+    ctx.moveTo(-27, 11)
+    ctx.lineTo(27, 11)
+    ctx.moveTo(-23, -3)
+    ctx.lineTo(23, -3)
+    ctx.moveTo(-23, 25)
+    ctx.lineTo(23, 25)
     ctx.stroke()
 
-    ctx.lineWidth = 2.8
-    ctx.setLineDash([3, 1.5])
+    ctx.lineWidth = 6.2
+    ctx.setLineDash([6.5, 3.5])
     ctx.beginPath()
-    ctx.arc(0, 4, 21, Math.PI * 0.68, Math.PI * 1.32)
+    ctx.arc(0, 11, 39, Math.PI * 0.68, Math.PI * 1.32)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(0, 4, 21, -Math.PI * 0.32, Math.PI * 0.32)
+    ctx.arc(0, 11, 39, -Math.PI * 0.32, Math.PI * 0.32)
     ctx.stroke()
     ctx.setLineDash([])
 
-    ctx.lineWidth = 2.2
+    ctx.lineWidth = 5.8
     ctx.beginPath()
-    ctx.moveTo(-7, 11)
-    ctx.lineTo(7, -5)
+    ctx.moveTo(-14, 24)
+    ctx.lineTo(14, -6)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(1, 3, 8, -Math.PI * 0.65, Math.PI * 0.55)
+    ctx.arc(2, 9, 16, -Math.PI * 0.65, Math.PI * 0.55)
     ctx.stroke()
   } else if (sealType === 'MINSREDMASH_ATOM') {
-    ctx.lineWidth = 1.7
+    ctx.lineWidth = 5.8
     ctx.beginPath()
-    ctx.ellipse(0, 4, 19, 7.5, (-32 * Math.PI) / 180, 0, Math.PI * 2)
+    ctx.ellipse(0, 11, 37, 16, (-32 * Math.PI) / 180, 0, Math.PI * 2)
     ctx.stroke()
 
     if (microDefect === 'BROKEN_ORBIT') {
-      ctx.setLineDash([2.5, 2.5])
+      ctx.setLineDash([7.0, 6.5])
       ctx.beginPath()
-      ctx.ellipse(0, 4, 19, 7.5, (32 * Math.PI) / 180, 0, Math.PI * 1.15)
+      ctx.ellipse(0, 11, 37, 16, (32 * Math.PI) / 180, 0, Math.PI * 1.12)
       ctx.stroke()
       ctx.setLineDash([])
     } else {
       ctx.beginPath()
-      ctx.ellipse(0, 4, 19, 7.5, (32 * Math.PI) / 180, 0, Math.PI * 2)
+      ctx.ellipse(0, 11, 37, 16, (32 * Math.PI) / 180, 0, Math.PI * 2)
       ctx.stroke()
     }
 
     ctx.beginPath()
-    ctx.arc(0, 4, 2.8, 0, Math.PI * 2)
+    ctx.arc(0, 11, 8.8, 0, Math.PI * 2)
     ctx.fill()
 
-    ctx.lineWidth = 2.0
+    ctx.lineWidth = 5.6
     ctx.beginPath()
-    ctx.moveTo(-8, 12)
-    ctx.lineTo(8, -5)
+    ctx.moveTo(-15, 26)
+    ctx.lineTo(15, -6)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(1, 4, 8.5, -Math.PI * 0.6, Math.PI * 0.55)
+    ctx.arc(2, 11, 17, -Math.PI * 0.6, Math.PI * 0.55)
     ctx.stroke()
   } else if (sealType === 'KGB_SWORD_SHIELD') {
-    ctx.lineWidth = 2.4
+    ctx.lineWidth = 6.2
     ctx.beginPath()
-    ctx.moveTo(0, -18)
-    ctx.lineTo(0, 25)
-    ctx.moveTo(-8, -13)
-    ctx.lineTo(8, -13)
+    ctx.moveTo(0, -28)
+    ctx.lineTo(0, 48)
+    ctx.moveTo(-18, -19)
+    ctx.lineTo(18, -19)
     ctx.stroke()
 
-    ctx.fillStyle = '#d8d2c0'
-    ctx.lineWidth = 2.0
+    ctx.fillStyle = '#e8dec3'
+    ctx.lineWidth = 5.6
     ctx.beginPath()
-    ctx.moveTo(-12, -10)
-    ctx.lineTo(12, -10)
-    ctx.lineTo(10, 8)
-    ctx.lineTo(0, 20)
-    ctx.lineTo(-10, 8)
+    ctx.moveTo(-24, -13)
+    ctx.lineTo(24, -13)
+    ctx.lineTo(20, 19)
+    ctx.lineTo(0, 41)
+    ctx.lineTo(-20, 19)
     ctx.closePath()
     ctx.fill()
     ctx.stroke()
 
     ctx.fillStyle = inkHex
-    ctx.lineWidth = 1.9
+    ctx.lineWidth = 5.6
     ctx.beginPath()
-    ctx.moveTo(-6, 10)
-    ctx.lineTo(6, -4)
+    ctx.moveTo(-12, 23)
+    ctx.lineTo(12, -4)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(0, 3, 6.5, -Math.PI * 0.6, Math.PI * 0.55)
+    ctx.arc(0, 9, 13.5, -Math.PI * 0.6, Math.PI * 0.55)
     ctx.stroke()
   }
 
@@ -376,83 +513,123 @@ export function drawCompactTeletypeSlipCanvas(
   doc: DeskDocument
 ): void {
   ctx.save()
-  ctx.imageSmoothingEnabled = false
+  ctx.imageSmoothingEnabled = true
+  const LW = 256
+  const LH = 320
+  ctx.scale(w / LW, h / LH)
+
   const paperHex = PAPER_COLOR_HEX[doc.paperColor]
-  const inkHex = INK_COLOR_HEX[doc.inkColor]
+  const inkHex = DIRECTIVE_HIGH_CONTRAST_INK_HEX[doc.inkColor]
+  const { sectorLine, targetLoadLine } = parseDirectiveOrderDisplay(doc)
 
   ctx.fillStyle = paperHex
-  ctx.fillRect(0, 0, w, h)
+  ctx.fillRect(0, 0, LW, LH)
 
   // Left & Right Tractor Sprocket Holes
-  ctx.fillStyle = '#0d110f'
-  for (let y = 14; y < h - 18; y += 26) {
-    ctx.fillRect(8, y, 8, 8)
-    ctx.fillRect(w - 16, y, 8, 8)
+  ctx.fillStyle = '#0a0a0a'
+  for (let y = 14; y < LH - 18; y += 26) {
+    ctx.fillRect(7, y, 8, 8)
+    ctx.fillRect(LW - 15, y, 8, 8)
   }
 
   // Serrated bottom tear edge shadow
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
-  ctx.fillRect(0, h - 10, w, 10)
-  ctx.fillStyle = '#0d110f'
-  for (let x = 0; x < w; x += 12) {
+  ctx.fillRect(0, LH - 10, LW, 10)
+  ctx.fillStyle = '#0a0a0a'
+  for (let x = 0; x < LW; x += 12) {
     ctx.beginPath()
-    ctx.moveTo(x, h)
-    ctx.lineTo(x + 6, h - 7)
-    ctx.lineTo(x + 12, h)
+    ctx.moveTo(x, LH)
+    ctx.lineTo(x + 6, LH - 7)
+    ctx.lineTo(x + 12, LH)
     ctx.closePath()
     ctx.fill()
   }
 
   // Inner Slip Frame
-  ctx.strokeStyle = '#18211b'
-  ctx.lineWidth = 2
-  ctx.strokeRect(24, 12, w - 48, h - 28)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 3.5
+  ctx.strokeRect(20, 10, LW - 40, LH - 24)
 
-  // Header Badge: ПРАВДА-84 // ТЕЛЕТАЙП
+  // 1. Bold Ministry Header Banner
   ctx.fillStyle = inkHex
-  ctx.fillRect(30, 20, w - 60, 28)
-  ctx.fillStyle = paperHex
-  ctx.font = 'bold 14px "Courier Prime", monospace'
+  ctx.fillRect(24, 15, LW - 48, 52)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('ПРАВДА-84 // ТЕЛЕТАЙП', w / 2, 34)
-
-  // Title & Reference Code
-  ctx.fillStyle = '#0d110f'
-  ctx.textAlign = 'left'
-  ctx.font = getFontDeclaration(doc.fontType, 14)
-  const lines = wrapCanvasText(ctx, doc.title, w - 68)
-  let y = 72
-  for (const line of lines.slice(0, 3)) {
-    ctx.fillText(line, 34, y)
-    y += 20
+  ctx.font = getFontDeclaration(doc.fontType, 18)
+  const minLines = wrapCanvasText(ctx, doc.ministry, LW - 56)
+  if (minLines.length === 1) {
+    drawHeavyText(ctx, minLines[0], LW / 2, 41, 18, '#ffffff', {
+      maxWidth: LW - 54,
+      outlineColor: '#0a0a0a',
+      outlineWidth: 3.5,
+    })
+  } else {
+    ctx.font = getFontDeclaration(doc.fontType, 16)
+    drawHeavyText(ctx, minLines[0], LW / 2, 30, 16, '#ffffff', {
+      maxWidth: LW - 54,
+      outlineColor: '#0a0a0a',
+      outlineWidth: 3.2,
+    })
+    drawHeavyText(ctx, minLines.slice(1).join(' '), LW / 2, 52, 16, '#ffffff', {
+      maxWidth: LW - 54,
+      outlineColor: '#0a0a0a',
+      outlineWidth: 3.2,
+    })
   }
 
-  ctx.font = 'bold 13px "Courier Prime", monospace'
-  ctx.fillStyle = '#2a362b'
-  ctx.fillText(`КОД: ${doc.referenceCode}`, 34, y + 12)
-  ctx.fillText(`ДАТА: ${doc.dateString}`, 34, y + 32)
+  // 2. Massive Dark 2-Line Center Target Box
+  ctx.fillStyle = '#101814'
+  ctx.fillRect(24, 74, LW - 48, 108)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 3.5
+  ctx.strokeRect(24, 74, LW - 48, 108)
 
-  // Ministry Stamp Box
-  ctx.strokeStyle = inkHex
+  ctx.font = '900 22px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, sectorLine, LW / 2, 104, 22, '#33ff66', {
+    maxWidth: LW - 58,
+    outlineColor: '#050807',
+    outlineWidth: 3.5,
+  })
+
+  ctx.strokeStyle = '#28b862'
   ctx.lineWidth = 2
-  ctx.strokeRect(34, h - 82, w - 68, 38)
-  ctx.fillStyle = inkHex
-  ctx.textAlign = 'center'
-  ctx.font = 'bold 12px "Courier Prime", monospace'
-  ctx.fillText(doc.ministry.slice(0, 24), w / 2, h - 63)
+  ctx.beginPath()
+  ctx.moveTo(32, 126)
+  ctx.lineTo(LW - 32, 126)
+  ctx.stroke()
 
-  ctx.fillStyle = '#8b1e1e'
-  ctx.font = 'bold 12px "VT323", monospace'
-  ctx.fillText('► DRAG ONTO MAT TO UNFOLD ►', w / 2, h - 26)
+  ctx.font = '900 22px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, targetLoadLine, LW / 2, 156, 22, '#ffe066', {
+    maxWidth: LW - 58,
+    outlineColor: '#050807',
+    outlineWidth: 3.5,
+  })
+
+  // 3. Bottom Unfold Callout & Giant Seal Preview
+  drawOfficialSeal(
+    ctx,
+    LW / 2,
+    234,
+    44,
+    doc.sealType,
+    doc.sealMicroDefect,
+    inkHex,
+    false
+  )
+
+  ctx.font = '900 17px "VT323", monospace'
+  drawHeavyText(ctx, '► TEAR TO DESK ►', LW / 2, LH - 24, 17, '#8a0f0a', {
+    maxWidth: LW - 56,
+  })
 
   ctx.restore()
 }
 
 /**
  * Draws the Full Expanded Directive Document (768x1024 crisp high-DPI canvas, normalized to 560x740 logical grid).
- * Increases base typography size by 35% (Ministry header 24px-28px, Ref/Date/Title 20px-22px, Body 18px-20px in #141413 ink)
- * while keeping micro-print seal rings, star points, and orbits fine enough that the 2x Magnifying Glass remains essential.
+ * Restructured from top to bottom with ZERO empty middle gap, ultra-thick `drawHeavyText` strokes,
+ * a 200px tall center dark command box, +55% larger metadata & signature, +35% larger thick-lined seal,
+ * and a clean unclipped bottom instruction bar.
  */
 export function drawFullDirectiveSheetCanvas(
   ctx: CanvasRenderingContext2D,
@@ -468,7 +645,9 @@ export function drawFullDirectiveSheetCanvas(
   ctx.scale(w / LW, h / LH)
 
   const paperHex = PAPER_COLOR_HEX[doc.paperColor]
-  const inkHex = INK_COLOR_HEX[doc.inkColor]
+  const inkHex = DIRECTIVE_HIGH_CONTRAST_INK_HEX[doc.inkColor]
+  const { sectorLine, targetLoadLine, shortNote } =
+    parseDirectiveOrderDisplay(doc)
 
   // 1. Paper Stock Tint Background
   ctx.fillStyle = paperHex
@@ -477,190 +656,332 @@ export function drawFullDirectiveSheetCanvas(
   // Folded top-right dog-ear corner
   ctx.fillStyle = '#8f8772'
   ctx.beginPath()
-  ctx.moveTo(LW - 42, 0)
-  ctx.lineTo(LW, 42)
-  ctx.lineTo(LW - 42, 42)
+  ctx.moveTo(LW - 36, 0)
+  ctx.lineTo(LW, 36)
+  ctx.lineTo(LW - 36, 36)
   ctx.closePath()
   ctx.fill()
 
   // 2. Tractor-Feed Sprocket Holes Left & Right
-  ctx.fillStyle = '#0d110f'
+  ctx.fillStyle = '#0a0a0a'
   for (let y = 18; y < LH - 18; y += 34) {
-    ctx.fillRect(10, y, 10, 10)
-    ctx.fillRect(LW - 20, y, 10, 10)
+    ctx.fillRect(8, y, 10, 10)
+    ctx.fillRect(LW - 18, y, 10, 10)
   }
 
-  // 3. Official Double Border Frame
-  ctx.strokeStyle = '#18211b'
-  ctx.lineWidth = 3
-  ctx.strokeRect(30, 16, LW - 60, LH - 32)
-  ctx.lineWidth = 1.2
-  ctx.strokeRect(35, 21, LW - 70, LH - 42)
+  // 3. Heavy Official Double Border Frame
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 4.5
+  ctx.strokeRect(26, 14, LW - 52, LH - 28)
+  ctx.lineWidth = 2.2
+  ctx.strokeRect(32, 20, LW - 64, LH - 40)
 
-  // Micro-print security border line along top edge (subtle at 1x, crisp under 2x Magnifying Glass)
+  // ============================================================================
+  // SECTION 1: TOP MINISTRY BANNER (Taller & Bolder, y: 26..136) + GOST & DATE ROW (y: 140..176)
+  // - Removed tiny unreadable micro-line above the red banner.
+  // - 40% taller coloured Ministry banner with +45% larger white + black-outlined strokes.
+  // - Single big, bold row for GOST code & Date (`ГОСТ-84-01  |  04.11.1984`) at +50% larger font size.
+  // ============================================================================
+  const bannerX = 38
+  const bannerY = 26
+  const bannerW = LW - 76
+  const bannerH = 108
   ctx.fillStyle = inkHex
-  ctx.font = isMagnified
-    ? 'bold 12px "Courier Prime", monospace'
-    : 'bold 8.5px "Courier Prime", monospace'
-  ctx.textAlign = 'center'
-  ctx.fillText(
-    `${doc.secretWatermark} • ФОРМА №4 • ${doc.paperColor} • ${doc.inkColor}`,
-    LW / 2,
-    34
-  )
+  ctx.fillRect(bannerX, bannerY, bannerW, bannerH)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 4.0
+  ctx.strokeRect(bannerX, bannerY, bannerW, bannerH)
 
-  // 4. Issuing Ministry Header Banner (Bold 24px–26px, wrapped cleanly if 2 lines)
-  ctx.fillStyle = inkHex
-  ctx.fillRect(42, 42, LW - 84, 58)
-  ctx.fillStyle = paperHex
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = getFontDeclaration(doc.fontType, 24)
-  const ministryLines = wrapCanvasText(ctx, doc.ministry, LW - 100)
+  ctx.font = getFontDeclaration(doc.fontType, 38)
+  const ministryLines = wrapCanvasText(ctx, doc.ministry, bannerW - 24)
   if (ministryLines.length === 1) {
-    ctx.font = getFontDeclaration(doc.fontType, 25)
-    ctx.fillText(ministryLines[0], LW / 2, 71)
+    ctx.font = getFontDeclaration(doc.fontType, 42)
+    drawHeavyText(
+      ctx,
+      ministryLines[0],
+      LW / 2,
+      bannerY + bannerH / 2,
+      42,
+      '#ffffff',
+      {
+        maxWidth: bannerW - 20,
+        outlineColor: '#0a0a0a',
+        outlineWidth: 6.5,
+      }
+    )
   } else {
-    ctx.font = getFontDeclaration(doc.fontType, 22)
-    ctx.fillText(ministryLines[0], LW / 2, 58)
-    ctx.fillText(ministryLines.slice(1).join(' '), LW / 2, 83)
+    ctx.font = getFontDeclaration(doc.fontType, 38)
+    drawHeavyText(
+      ctx,
+      ministryLines[0],
+      LW / 2,
+      bannerY + 32,
+      38,
+      '#ffffff',
+      {
+        maxWidth: bannerW - 20,
+        outlineColor: '#0a0a0a',
+        outlineWidth: 6.0,
+      }
+    )
+    drawHeavyText(
+      ctx,
+      ministryLines.slice(1).join(' '),
+      LW / 2,
+      bannerY + 76,
+      38,
+      '#ffffff',
+      {
+        maxWidth: bannerW - 20,
+        outlineColor: '#0a0a0a',
+        outlineWidth: 6.0,
+      }
+    )
   }
 
-  // 5. Reference Code (`ИСХ. №`) & Date (`ДАТА`) Row (Bold 20px)
-  ctx.fillStyle = '#141413'
-  ctx.textAlign = 'left'
-  ctx.font = getFontDeclaration(doc.fontType, 20)
-  ctx.fillText(`ИСХ. № ${doc.referenceCode}`, 44, 122)
-  ctx.textAlign = 'right'
-  ctx.fillText(`ДАТА: ${doc.dateString}`, LW - 44, 122)
+  // Single Big, Bold Row for GOST Code & Date (`ГОСТ-84-01  |  04.11.1984`) at +50% larger font size
+  const gostRowY = 140
+  const gostRowH = 38
+  ctx.fillStyle = 'rgba(10, 10, 10, 0.08)'
+  ctx.fillRect(bannerX, gostRowY, bannerW, gostRowH)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 3.0
+  ctx.strokeRect(bannerX, gostRowY, bannerW, gostRowH)
 
-  ctx.strokeStyle = inkHex
-  ctx.lineWidth = 2.5
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = getFontDeclaration(doc.fontType, 27)
+  drawHeavyText(
+    ctx,
+    `${doc.referenceCode}   |   ${doc.dateString}`,
+    LW / 2,
+    gostRowY + gostRowH / 2 + 1,
+    27,
+    '#0a0a0a',
+    { maxWidth: bannerW - 20 }
+  )
+
+  // ============================================================================
+  // SECTION 2: MASSIVE 2-LINE CENTER TARGET BOX (Fills Upper-Middle of Page, y: 184..382, height = 198px!)
+  //   - Line 1 (Huge Bold Emerald/Yellow): `[5] VODKA PLANT` (Font size 2x larger!)
+  //   - Line 2 (Giant Poster-Sized Readout): `TARGET: 25 MW (+10 MW)` (Font size 2.2x larger, ultra-thick stroke!)
+  // ============================================================================
+  const boxX = 38
+  const boxY = 184
+  const boxW = LW - 76
+  const boxH = 198
+  ctx.fillStyle = '#0f1713'
+  ctx.fillRect(boxX, boxY, boxW, boxH)
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 5.0
+  ctx.strokeRect(boxX, boxY, boxW, boxH)
+  ctx.strokeStyle = '#28b862'
+  ctx.lineWidth = 3.0
+  ctx.strokeRect(boxX + 6, boxY + 6, boxW - 12, boxH - 12)
+
+  // Line 1: Huge Bold Emerald `[5] VODKA PLANT`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = '900 50px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, sectorLine, LW / 2, boxY + 54, 50, '#3dff78', {
+    maxWidth: boxW - 28,
+    outlineColor: '#040806',
+    outlineWidth: 7.0,
+    strokeWidth: 4.2,
+  })
+
+  // Heavy Emerald Center Divider Bar inside Dark Command Box
+  ctx.strokeStyle = '#28b862'
+  ctx.lineWidth = 3.5
   ctx.beginPath()
-  ctx.moveTo(42, 138)
-  ctx.lineTo(LW - 42, 138)
+  ctx.moveTo(boxX + 18, boxY + 100)
+  ctx.lineTo(boxX + boxW - 18, boxY + 100)
   ctx.stroke()
 
-  // 6. Directive Title (Bold 22px), Power Routing Order Box & Body Paragraphs
+  // Line 2: Giant Poster-Sized Readout `TARGET: 25 MW (+10 MW)`
+  ctx.font = '900 52px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, targetLoadLine, LW / 2, boxY + 150, 52, '#ffe066', {
+    maxWidth: boxW - 28,
+    outlineColor: '#040806',
+    outlineWidth: 7.5,
+    strokeWidth: 4.5,
+  })
+
+  // ============================================================================
+  // SECTION 3: 1-LINE CIPHER / FONT INSPECTION BANNER (y: 388..444, +60% larger font size!)
+  // Rendered in `doc.fontType` so `GOST_MONO` vs fake font is huge and effortless to inspect!
+  // ============================================================================
+  const noteY = 388
+  const noteH = 56
+  ctx.fillStyle = 'rgba(10, 10, 10, 0.08)'
+  ctx.fillRect(bannerX, noteY, bannerW, noteH)
+  ctx.strokeStyle = inkHex
+  ctx.lineWidth = 3.5
+  ctx.strokeRect(bannerX, noteY, bannerW, noteH)
+
   ctx.save()
+  ctx.beginPath()
+  ctx.rect(bannerX + 4, noteY + 2, bannerW - 8, noteH - 4)
+  ctx.clip()
   if (doc.fontType === 'SLANTED_ITALIC') {
-    ctx.transform(1, 0, -0.18, 1, 46, 0)
+    ctx.translate(LW / 2, noteY + noteH / 2)
+    ctx.transform(1, 0, -0.24, 1, 0, 0)
+    ctx.translate(-LW / 2, -(noteY + noteH / 2))
   }
-  ctx.fillStyle = inkHex
-  ctx.textAlign = 'left'
-  ctx.font = getFontDeclaration(doc.fontType, 22)
-  const titleLines = wrapCanvasText(ctx, doc.title, LW - 92)
-  let y = 164
-  for (const line of titleLines) {
-    ctx.fillText(line, 44, y)
-    y += 26
-  }
-
-  // Prominent Framed Regional Power Routing Order Banner
-  if (doc.powerOrderText) {
-    const boxY = y - 6
-    ctx.fillStyle = '#18241d'
-    ctx.fillRect(42, boxY, LW - 84, 38)
-    ctx.strokeStyle = inkHex
-    ctx.lineWidth = 2
-    ctx.strokeRect(42, boxY, LW - 84, 38)
-    ctx.fillStyle = '#33ff66'
-    ctx.font = 'bold 15px "Courier Prime", monospace'
-    ctx.textAlign = 'center'
-    ctx.fillText(doc.powerOrderText, LW / 2, boxY + 24)
-    ctx.textAlign = 'left'
-    y = boxY + 58
-  } else {
-    y += 10
-  }
-
-  ctx.fillStyle = '#141413'
-  ctx.font = getFontDeclaration(doc.fontType, 18)
-  const bodyLines = wrapCanvasText(ctx, doc.content, LW - 92)
-  for (const line of bodyLines) {
-    ctx.fillText(line, 44, y)
-    y += 25
-  }
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = getFontDeclaration(doc.fontType, 34)
+  drawHeavyText(
+    ctx,
+    shortNote,
+    LW / 2,
+    noteY + noteH / 2 + 1,
+    34,
+    '#0a0a0a',
+    { maxWidth: bannerW - 20 }
+  )
   ctx.restore()
 
-  // 7. Bottom Footer Row: Signature & Clearance Block (Left) + Official Soviet Seal Emblem (Right)
-  const footerTop = 426
-  const footerH = 228
+  // ============================================================================
+  // SECTION 4: EXPANDED BOTTOM METADATA, SIGNATURE & GIANT OFFICIAL SEAL (`ПЕЧАТЬ`) (y: 450..674)
+  // - Left Column (`ПОДПИСЬ`, `PAPER`, `INK`, `FONT`): +55% larger font with `drawHeavyText`, removed tiny micro-code.
+  // - Right Column: Giant, thick-lined Official Seal (`radius = 104`, fills right half of lower box).
+  // ============================================================================
+  const footerTop = 450
+  const footerH = 224
   ctx.strokeStyle = inkHex
-  ctx.lineWidth = 2.2
-  ctx.strokeRect(42, footerTop, LW - 84, footerH)
+  ctx.lineWidth = 4.0
+  ctx.strokeRect(bannerX, footerTop, bannerW, footerH)
 
-  // Official Soviet Seal at (cx=426, cy=footerTop + 114, r=78)
+  // Left Column (x: 48..296)
+  const leftX = 48
+  const leftMaxW = 246
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+
+  ctx.font = '900 22px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, 'ПОДПИСЬ:', leftX, footerTop + 26, 22, '#0a0a0a', {
+    maxWidth: leftMaxW,
+  })
+
+  ctx.font = getFontDeclaration(doc.fontType, 32)
+  drawHeavyText(ctx, doc.signature, leftX, footerTop + 62, 32, inkHex, {
+    maxWidth: leftMaxW,
+  })
+
+  ctx.strokeStyle = '#0a0a0a'
+  ctx.lineWidth = 3.0
+  ctx.beginPath()
+  ctx.moveTo(leftX, footerTop + 86)
+  ctx.lineTo(leftX + leftMaxW, footerTop + 86)
+  ctx.stroke()
+
+  // 3 Huge, Crystal-Clear Inspection Lines (`PAPER`, `INK`, `FONT`) at +55% larger font size
+  ctx.font = '900 25px "Courier Prime", "Consolas", monospace'
+  drawHeavyText(
+    ctx,
+    `PAPER: ${doc.paperColor}`,
+    leftX,
+    footerTop + 114,
+    25,
+    '#0a0a0a',
+    { maxWidth: leftMaxW }
+  )
+  drawHeavyText(
+    ctx,
+    `INK:   ${doc.inkColor}`,
+    leftX,
+    footerTop + 154,
+    25,
+    inkHex,
+    { maxWidth: leftMaxW }
+  )
+  drawHeavyText(
+    ctx,
+    `FONT:  ${doc.fontType}`,
+    leftX,
+    footerTop + 194,
+    25,
+    '#0a0a0a',
+    { maxWidth: leftMaxW }
+  )
+
+  // Right Column — Giant, Thick-Lined Official Seal (`ПЕЧАТЬ`) filling the entire right half of the lower box
   drawOfficialSeal(
     ctx,
-    426,
-    footerTop + 114,
-    78,
+    410,
+    footerTop + 112,
+    104,
     doc.sealType,
     doc.sealMicroDefect,
     inkHex,
     isMagnified
   )
 
-  ctx.fillStyle = '#141413'
-  ctx.textAlign = 'left'
-  ctx.font = 'bold 18px "Courier Prime", monospace'
-  ctx.fillText('ПОДПИСЬ:', 54, footerTop + 30)
-  ctx.fillStyle = inkHex
-  ctx.font = getFontDeclaration(doc.fontType, 21)
-  ctx.fillText(doc.signature, 54, footerTop + 60)
+  // ============================================================================
+  // SECTION 5: UNCLIPPED BOTTOM BLACK INSTRUCTION BAR (y: 680..720)
+  // Shortened to `[ОДОБРЕНО] -> LEFT TUBE  |  [УНИЧТОЖЕНО] -> RIGHT SHREDDER`
+  // centered cleanly inside the black bar with zero left/right clipping!
+  // ============================================================================
+  const bottomBarY = 680
+  const bottomBarH = 40
+  ctx.fillStyle = '#0a0d0b'
+  ctx.fillRect(bannerX, bottomBarY, bannerW, bottomBarH)
+  ctx.strokeStyle = '#b8a46b'
+  ctx.lineWidth = 2.8
+  ctx.strokeRect(bannerX, bottomBarY, bannerW, bottomBarH)
 
-  ctx.fillStyle = '#141413'
-  ctx.font = 'bold 18px "Courier Prime", monospace'
-  ctx.fillText(`PAPER: ${doc.paperColor}`, 54, footerTop + 104)
-  ctx.fillText(`INK:   ${doc.inkColor}`, 54, footerTop + 132)
-  ctx.fillText(`FONT:  ${doc.fontType}`, 54, footerTop + 160)
-  ctx.fillStyle = inkHex
-  ctx.font = isMagnified
-    ? 'bold 13px "Courier Prime", monospace'
-    : 'bold 10px "Courier Prime", monospace'
-  ctx.fillText(`МИКРО-КОД: ${doc.secretWatermark}`, 54, footerTop + 198)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = '900 22px "VT323", "Courier Prime", monospace'
+  drawHeavyText(
+    ctx,
+    '[ОДОБРЕНО] -> LEFT TUBE  |  [УНИЧТОЖЕНО] -> RIGHT SHREDDER',
+    LW / 2,
+    bottomBarY + bottomBarH / 2 + 1,
+    22,
+    '#ffe066',
+    {
+      maxWidth: bannerW - 18,
+      outlineColor: '#000000',
+      outlineWidth: 3.5,
+      strokeWidth: 1.8,
+    }
+  )
 
-  // 8. Permanently Attached Relative Ink Stamps (`doc.stamps`)
+  // 6. Permanently Attached Relative Ink Stamps (`doc.stamps`)
   for (const stamp of doc.stamps) {
     ctx.save()
     const sx = Math.max(115, Math.min(LW - 115, stamp.u * LW))
     const sy = Math.max(66, Math.min(LH - 66, stamp.v * LH))
     ctx.translate(sx, sy)
     ctx.rotate(-0.08)
-    const stampColor = stamp.type === 'APPROVED' ? '#1b6e32' : '#8b1e1e'
-    ctx.fillStyle = 'rgba(230, 222, 195, 0.85)'
-    ctx.fillRect(-104, -35, 208, 70)
+    const stampColor = stamp.type === 'APPROVED' ? '#0f5c25' : '#8a0f0a'
+    ctx.fillStyle = 'rgba(235, 228, 205, 0.94)'
+    ctx.fillRect(-118, -42, 236, 84)
     ctx.strokeStyle = stampColor
     ctx.fillStyle = stampColor
-    ctx.lineWidth = 5
-    ctx.strokeRect(-104, -35, 208, 70)
-    ctx.lineWidth = 2
-    ctx.strokeRect(-96, -27, 192, 54)
-    ctx.font = 'bold 24px "Courier Prime", monospace'
+    ctx.lineWidth = 6.5
+    ctx.strokeRect(-118, -42, 236, 84)
+    ctx.lineWidth = 3.0
+    ctx.strokeRect(-108, -32, 216, 64)
+    ctx.font = '900 32px "Courier Prime", "Consolas", monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(
+    drawHeavyText(
+      ctx,
       stamp.type === 'APPROVED' ? 'ОДОБРЕНО' : 'УНИЧТОЖЕНО',
       0,
-      -7
+      -8,
+      32,
+      stampColor
     )
-    ctx.font = 'bold 15px "Courier Prime", monospace'
-    ctx.fillText(`${stamp.type} // №4`, 0, 16)
+    ctx.font = '900 20px "Courier Prime", "Consolas", monospace'
+    drawHeavyText(ctx, `${stamp.type} // №4`, 0, 20, 20, stampColor)
     ctx.restore()
   }
-
-  // 9. Bottom Instruction Strip
-  ctx.fillStyle = '#0d110f'
-  ctx.fillRect(42, LH - 66, LW - 84, 36)
-  ctx.fillStyle = '#b8a46b'
-  ctx.font = 'bold 17px "VT323", monospace'
-  ctx.textAlign = 'center'
-  ctx.fillText(
-    'STAMP [ОДОБРЕНО] -> DROP IN LEFT [ПНЕВМОПОЧТА TUBE] OR SHRED [RIGHT]',
-    LW / 2,
-    LH - 44
-  )
 
   ctx.restore()
 }
@@ -668,6 +989,10 @@ export function drawFullDirectiveSheetCanvas(
 export const drawDirectiveCanvas = drawFullDirectiveSheetCanvas
 
 type ManualIconKind =
+  | 'shift_goal_crt'
+  | 'tear_inspect'
+  | 'stamp_tube_shred'
+  | 'route_mw_water'
   | 'levers'
   | 'wheel'
   | 'az5'
@@ -675,10 +1000,47 @@ type ManualIconKind =
   | 'gas'
   | 'rheostat'
   | 'breaker'
-  | 'printer'
-  | 'stamp'
   | 'piston'
   | 'vent'
+  | 'ventilation_toggle'
+
+function drawFivePointStar(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rOuter: number,
+  rInner: number
+): void {
+  ctx.beginPath()
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? rOuter : rInner
+    const a = -Math.PI / 2 + (i * Math.PI) / 5
+    const px = cx + Math.cos(a) * r
+    const py = cy + Math.sin(a) * r
+    if (i === 0) ctx.moveTo(px, py)
+    else ctx.lineTo(px, py)
+  }
+  ctx.closePath()
+}
+
+function drawFourPointFakeStar(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rOuter: number,
+  rInner: number
+): void {
+  ctx.beginPath()
+  for (let i = 0; i < 8; i++) {
+    const r = i % 2 === 0 ? rOuter : rInner
+    const a = -Math.PI / 2 + (i * Math.PI) / 4
+    const px = cx + Math.cos(a) * r
+    const py = cy + Math.sin(a) * r
+    if (i === 0) ctx.moveTo(px, py)
+    else ctx.lineTo(px, py)
+  }
+  ctx.closePath()
+}
 
 function drawManualSchematicIcon(
   ctx: CanvasRenderingContext2D,
@@ -688,204 +1050,953 @@ function drawManualSchematicIcon(
 ): void {
   ctx.save()
   ctx.translate(cx, cy)
+  ctx.scale(0.84, 0.88)
 
-  if (kind === 'levers') {
-    // 3 MW Slotted Levers Icon
-    ctx.fillStyle = '#18211b'
-    ctx.fillRect(-34, -34, 68, 68)
-    ctx.strokeStyle = '#b8a46b'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(-34, -34, 68, 68)
-    const leverHeights = [-14, 4, -8]
-    const cols = ['#33ff66', '#ffb000', '#33ff66']
-    ;[-18, 0, 18].forEach((lx, i) => {
-      ctx.fillStyle = '#0d110f'
-      ctx.fillRect(lx - 3, -24, 6, 48)
-      const hy = leverHeights[i] ?? 0
-      ctx.fillStyle = cols[i] ?? '#33ff66'
-      ctx.fillRect(lx - 7, hy - 6, 14, 12)
-      ctx.strokeStyle = '#111111'
-      ctx.lineWidth = 1.5
-      ctx.strokeRect(lx - 7, hy - 6, 14, 12)
-    })
-  } else if (kind === 'wheel') {
-    // 6-Spoke Valve Handwheel Icon
-    ctx.strokeStyle = '#6e1a14'
-    ctx.lineWidth = 7
+  const INK_BLACK = '#111111'
+  const INK_GREEN = '#094a20'
+  const INK_RED = '#7a110a'
+  const INK_NAVY = '#0c2854'
+  const PAPER_BG = '#e8dec3'
+
+  // Subtle blueprint cross-hatch grid inside icon frame
+  ctx.strokeStyle = 'rgba(20, 18, 16, 0.14)'
+  ctx.lineWidth = 1
+  for (let gx = -46; gx <= 46; gx += 12) {
     ctx.beginPath()
-    ctx.arc(0, 0, 26, 0, Math.PI * 2)
+    ctx.moveTo(gx, -68)
+    ctx.lineTo(gx, 68)
     ctx.stroke()
+  }
+  for (let gy = -64; gy <= 64; gy += 12) {
+    ctx.beginPath()
+    ctx.moveTo(-48, gy)
+    ctx.lineTo(48, gy)
+    ctx.stroke()
+  }
+
+  if (kind === 'shift_goal_crt') {
+    // Card 1 (SHIFT GOAL & GRID MAP): K.O.M.R.A.D.-84 CRT monitor + central Nuclear Plant icon,
+    // radiating power lines (MW), thermometer gauge (<1000°C), and shift clock (00:00 -> 06:00).
+    ctx.fillStyle = '#18241d'
+    ctx.fillRect(-44, -64, 88, 70)
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.8
+    ctx.strokeRect(-44, -64, 88, 70)
     ctx.strokeStyle = '#b8a46b'
-    ctx.lineWidth = 3
+    ctx.lineWidth = 1.8
+    ctx.strokeRect(-40, -60, 80, 62)
+
+    // Radiating grid transmission lines from central plant to regional nodes
+    ctx.strokeStyle = '#33ff66'
+    ctx.lineWidth = 2.2
+    const nodes: Array<[number, number]> = [
+      [-30, -48],
+      [28, -48],
+      [-32, -16],
+      [30, -16],
+    ]
+    nodes.forEach(([nx, ny]) => {
+      ctx.beginPath()
+      ctx.moveTo(0, -32)
+      ctx.lineTo(nx, ny)
+      ctx.stroke()
+      ctx.fillStyle = '#33ff66'
+      ctx.fillRect(nx - 3.5, ny - 3.5, 7, 7)
+    })
+
+    // Central Nuclear Plant Cooling Tower & Reactor Dome
+    ctx.fillStyle = '#ffb000'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.0
+    ctx.beginPath()
+    ctx.moveTo(-9, -20)
+    ctx.lineTo(-6, -42)
+    ctx.lineTo(6, -42)
+    ctx.lineTo(9, -20)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#ff2a2a'
+    drawFivePointStar(ctx, 0, -31, 5.5, 2.3)
+    ctx.fill()
+
+    // MW Callout Tag inside CRT
+    ctx.fillStyle = '#33ff66'
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('100 MW GRID', 0, -6)
+
+    // Bottom Left: Thermometer Gauge (<1000°C)
+    ctx.fillStyle = PAPER_BG
+    ctx.fillRect(-44, 12, 42, 52)
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.2
+    ctx.strokeRect(-44, 12, 42, 52)
+    ctx.strokeStyle = INK_RED
+    ctx.lineWidth = 2.5
+    ctx.beginPath()
+    ctx.moveTo(-32, 20)
+    ctx.lineTo(-32, 48)
+    ctx.stroke()
+    ctx.fillStyle = INK_RED
+    ctx.beginPath()
+    ctx.arc(-32, 51, 5.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = INK_RED
+    ctx.font = '800 9.5px "Courier Prime", monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText('<1000°', -23, 33)
+    ctx.fillStyle = INK_BLACK
+    ctx.fillText('MAX °C', -23, 49)
+
+    // Bottom Right: Shift Clock (00:00 -> 06:00)
+    ctx.fillStyle = PAPER_BG
+    ctx.fillRect(2, 12, 42, 52)
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.2
+    ctx.strokeRect(2, 12, 42, 52)
+    ctx.beginPath()
+    ctx.arc(23, 30, 11, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = INK_GREEN
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.moveTo(23, 30)
+    ctx.lineTo(23, 21)
+    ctx.moveTo(23, 30)
+    ctx.lineTo(30, 30)
+    ctx.stroke()
+    ctx.fillStyle = INK_NAVY
+    ctx.font = '800 9.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('00->06h', 23, 55)
+  } else if (kind === 'tear_inspect') {
+    // Card 2 (STEP 1: TEAR & INSPECT): ПРАВДА-84 teleprinter with perforated directive sheet
+    // being ripped sideways (--> arrow) and inspected under a Magnifying Glass lens over a 5-point Soviet star seal.
+    ctx.fillStyle = '#364940'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.5
+    ctx.fillRect(-44, 14, 88, 38)
+    ctx.strokeRect(-44, 14, 88, 38)
+
+    // Roller platen slot
+    ctx.fillStyle = INK_BLACK
+    ctx.fillRect(-36, 10, 72, 7)
+
+    // Printer nameplate
+    ctx.fillStyle = '#e8dec3'
+    ctx.font = '800 10px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('ПРАВДА-84', 0, 38)
+
+    // Perforated Directive Sheet emerging and ripping sideways
+    ctx.fillStyle = '#f2ead4'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.4
+    ctx.beginPath()
+    ctx.moveTo(-32, 12)
+    ctx.lineTo(-32, -56)
+    ctx.lineTo(22, -56)
+    ctx.lineTo(28, 12)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    // Tractor pin holes along left edge
+    ctx.fillStyle = INK_BLACK
+    for (let py = -48; py <= 2; py += 12) {
+      ctx.fillRect(-29, py, 3.5, 3.5)
+    }
+
+    // Text lines on directive
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.0
+    ctx.beginPath()
+    ctx.moveTo(-20, -44)
+    ctx.lineTo(14, -44)
+    ctx.moveTo(-20, -34)
+    ctx.lineTo(8, -34)
+    ctx.moveTo(-20, -24)
+    ctx.lineTo(4, -24)
+    ctx.stroke()
+
+    // Sideways Tear-Off Arrow (-->)
+    ctx.strokeStyle = INK_RED
+    ctx.fillStyle = INK_RED
+    ctx.lineWidth = 2.8
+    ctx.beginPath()
+    ctx.moveTo(-26, -6)
+    ctx.lineTo(36, -6)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(42, -6)
+    ctx.lineTo(31, -12)
+    ctx.lineTo(31, 0)
+    ctx.closePath()
+    ctx.fill()
+
+    // Magnifying Glass Lens over a 5-point Soviet Star Seal
+    ctx.fillStyle = '#d9f2e6'
+    ctx.strokeStyle = '#8c6d1f'
+    ctx.lineWidth = 3.2
+    ctx.beginPath()
+    ctx.arc(14, -32, 18, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    // 5-Point Star Seal inside Magnifier Lens
+    ctx.fillStyle = INK_RED
+    drawFivePointStar(ctx, 14, -32, 11, 4.5)
+    ctx.fill()
+
+    // Magnifier Handle
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 5.0
+    ctx.beginPath()
+    ctx.moveTo(27, -19)
+    ctx.lineTo(43, -3)
+    ctx.stroke()
+
+    ctx.fillStyle = INK_NAVY
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('TEAR -> 2x LENS', 0, 65)
+  } else if (kind === 'stamp_tube_shred') {
+    // Card 3 (STEP 2: STAMP & PNEUMATIC TUBE vs SHREDDER):
+    // Left: Wooden Rubber Stamp (ОДОБРЕНО) + vertical Pneumatic Outbox Tube (ИСХОДЯЩИЕ) with upward arrow (^).
+    // Right: Mechanical Shredder (УНИЧТОЖИТЕЛЬ) with gears and downward pull-handle (v x5).
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 1.8
+    ctx.setLineDash([4, 3])
+    ctx.beginPath()
+    ctx.moveTo(0, -64)
+    ctx.lineTo(0, 52)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    // LEFT HALF: Pneumatic Outbox Tube + Upward Arrow + Green Stamp
+    ctx.fillStyle = '#c2e8d8'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.4
+    ctx.fillRect(-38, -58, 22, 72)
+    ctx.strokeRect(-38, -58, 22, 72)
+
+    // Brass collar rings on tube
+    ctx.fillStyle = '#b8a46b'
+    ctx.fillRect(-40, -46, 26, 6)
+    ctx.fillRect(-40, -14, 26, 6)
+    ctx.strokeRect(-40, -46, 26, 6)
+    ctx.strokeRect(-40, -14, 26, 6)
+
+    // Upward Dispatch Arrow (^) inside tube
+    ctx.strokeStyle = INK_GREEN
+    ctx.fillStyle = INK_GREEN
+    ctx.lineWidth = 2.8
+    ctx.beginPath()
+    ctx.moveTo(-27, 4)
+    ctx.lineTo(-27, -34)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-27, -42)
+    ctx.lineTo(-34, -30)
+    ctx.lineTo(-20, -30)
+    ctx.closePath()
+    ctx.fill()
+
+    // Wooden Rubber Stamp (ОДОБРЕНО) at bottom-left
+    ctx.fillStyle = INK_GREEN
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.arc(-25, 23, 7, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillRect(-29, 30, 8, 8)
+    ctx.fillRect(-39, 38, 28, 9)
+    ctx.strokeRect(-39, 38, 28, 9)
+
+    // RIGHT HALF: Shredder Box with Gears + Downward Pull-Handle (v x5)
+    ctx.fillStyle = '#3a4a3f'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.4
+    ctx.fillRect(6, -30, 32, 54)
+    ctx.strokeRect(6, -30, 32, 54)
+
+    // Meshing Gear Wheels inside Shredder
+    ctx.strokeStyle = '#e8dec3'
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.arc(16, -6, 6.5, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(28, -6, 6.5, 0, Math.PI * 2)
+    ctx.stroke()
+
+    // Red Shredder Pull-Handle & Downward Arrow (v x5)
+    ctx.strokeStyle = INK_RED
+    ctx.fillStyle = INK_RED
+    ctx.lineWidth = 3.0
+    ctx.beginPath()
+    ctx.moveTo(41, -46)
+    ctx.lineTo(41, 14)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(41, -48, 5.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(41, 22)
+    ctx.lineTo(35, 11)
+    ctx.lineTo(47, 11)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.fillStyle = INK_GREEN
+    ctx.font = '800 9.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('^TUBE', -25, 62)
+    ctx.fillStyle = INK_RED
+    ctx.fillText('vSHREDx5', 24, 62)
+  } else if (kind === 'route_mw_water') {
+    // Card 4 (STEP 3: ROUTE MW & BALANCE WATER):
+    // T-Handle MW Lever pushed up (+MW), linked by an arrow to a 6-Spoke Cooling Wheel
+    // and a Vodka Distillery Bottle/Tower + Water Droplet (H2O %).
+    // 1. Left: T-Handle MW Lever (+MW)
+    ctx.fillStyle = '#23312b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.4
+    ctx.fillRect(-44, -56, 24, 66)
+    ctx.strokeRect(-44, -56, 24, 66)
+    ctx.fillStyle = INK_BLACK
+    ctx.fillRect(-35, -48, 6, 50)
+    // T-Handle pushed UP
+    ctx.fillStyle = INK_GREEN
+    ctx.fillRect(-46, -44, 28, 11)
+    ctx.strokeRect(-46, -44, 28, 11)
+
+    // Arrow from Lever to Wheel/Water
+    ctx.strokeStyle = INK_NAVY
+    ctx.fillStyle = INK_NAVY
+    ctx.lineWidth = 2.5
+    ctx.beginPath()
+    ctx.moveTo(-16, -24)
+    ctx.lineTo(0, -24)
+    ctx.stroke()
+
+    // 2. Top-Right: 6-Spoke Cooling Wheel
+    const wx = 20
+    const wy = -34
+    ctx.strokeStyle = INK_RED
+    ctx.lineWidth = 4.5
+    ctx.beginPath()
+    ctx.arc(wx, wy, 17, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.2
     for (let i = 0; i < 3; i++) {
       const a = (i * Math.PI) / 3
       ctx.beginPath()
-      ctx.moveTo(Math.cos(a) * -23, Math.sin(a) * -23)
-      ctx.lineTo(Math.cos(a) * 23, Math.sin(a) * 23)
+      ctx.moveTo(wx + Math.cos(a) * -15, wy + Math.sin(a) * -15)
+      ctx.lineTo(wx + Math.cos(a) * 15, wy + Math.sin(a) * 15)
       ctx.stroke()
     }
+
+    // 3. Bottom-Right: Vodka Bottle/Tower + Water Droplet (H2O %)
+    ctx.fillStyle = '#2b4c3f'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.moveTo(6, 46)
+    ctx.lineTo(6, 16)
+    ctx.lineTo(11, 8)
+    ctx.lineTo(11, -2)
+    ctx.lineTo(19, -2)
+    ctx.lineTo(19, 8)
+    ctx.lineTo(24, 16)
+    ctx.lineTo(24, 46)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    // Red star label on bottle
+    ctx.fillStyle = '#ff2a2a'
+    drawFivePointStar(ctx, 15, 28, 5, 2)
+    ctx.fill()
+
+    // Water Droplet (H2O)
+    ctx.fillStyle = '#1c6ea4'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.0
+    ctx.beginPath()
+    ctx.moveTo(37, 6)
+    ctx.quadraticCurveTo(46, 22, 43, 32)
+    ctx.arc(37, 32, 7, 0, Math.PI)
+    ctx.quadraticCurveTo(28, 22, 37, 6)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = INK_BLACK
+    ctx.font = '800 10px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('+MW -> H2O%', 0, 64)
+  } else if (kind === 'levers') {
+    // MW Substation Levers: Notched ratchet track, twin chrome arms, Bakelite T-handle, and digital MW readout box (40/40 MW)
+    // Digital Nixie Readout Window at Top
+    ctx.fillStyle = INK_BLACK
+    ctx.strokeStyle = '#8c6d1f'
+    ctx.lineWidth = 2.4
+    ctx.fillRect(-44, -64, 88, 24)
+    ctx.strokeRect(-44, -64, 88, 24)
+    ctx.fillStyle = '#33ff66'
+    ctx.font = '800 13.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('40/40 MW', 0, -47)
+
+    // Slotted Steel Substation Bay & Notched Ratchet Track
+    ctx.fillStyle = '#2a3830'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.5
+    ctx.fillRect(-38, -35, 76, 82)
+    ctx.strokeRect(-38, -35, 76, 82)
+
+    // Left & Right Engraved Scale Ticks (50..0 MW)
+    ctx.strokeStyle = '#e8dec3'
+    ctx.lineWidth = 2.0
+    for (let ty = -27; ty <= 39; ty += 11) {
+      ctx.beginPath()
+      ctx.moveTo(-34, ty)
+      ctx.lineTo(-22, ty)
+      ctx.moveTo(22, ty)
+      ctx.lineTo(34, ty)
+      ctx.stroke()
+    }
+
+    // Center Ratchet Slot & Twin Chrome Lever Arms
+    ctx.fillStyle = INK_BLACK
+    ctx.fillRect(-10, -29, 20, 70)
+    ctx.strokeStyle = '#d8dee2'
+    ctx.lineWidth = 3.5
+    ctx.beginPath()
+    ctx.moveTo(-6, 36)
+    ctx.lineTo(-6, -12)
+    ctx.moveTo(6, 36)
+    ctx.lineTo(6, -12)
+    ctx.stroke()
+
+    // Heavy Bakelite T-Handle Crossbar
+    ctx.fillStyle = INK_RED
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.6
+    ctx.fillRect(-32, -20, 64, 16)
+    ctx.strokeRect(-32, -20, 64, 16)
+    ctx.fillStyle = '#e8dec3'
+    ctx.fillRect(-20, -14, 40, 4)
+
+    ctx.fillStyle = INK_NAVY
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('6x MW LEVERS', 0, 63)
+  } else if (kind === 'wheel') {
+    // Cooling Pump / Oil / Helium Handwheels: 6-spoke cast-iron valve wheel with circular rotation arrows (↻) and pressure pipe
+    // Horizontal flanged pressure pipe behind wheel
+    ctx.fillStyle = '#576657'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.5
+    ctx.fillRect(-46, -10, 92, 20)
+    ctx.strokeRect(-46, -10, 92, 20)
+    // Pipe flanges
+    ctx.fillRect(-42, -16, 8, 32)
+    ctx.strokeRect(-42, -16, 8, 32)
+    ctx.fillRect(34, -16, 8, 32)
+    ctx.strokeRect(34, -16, 8, 32)
+
+    // 6-Spoke Cast-Iron Valve Wheel
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 9.0
+    ctx.beginPath()
+    ctx.arc(0, -6, 31, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.strokeStyle = INK_RED
+    ctx.lineWidth = 5.5
+    ctx.beginPath()
+    ctx.arc(0, -6, 31, 0, Math.PI * 2)
+    ctx.stroke()
+
+    // 6 Cast-Iron Spokes
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 3.2
+    for (let i = 0; i < 3; i++) {
+      const a = (i * Math.PI) / 3
+      ctx.beginPath()
+      ctx.moveTo(Math.cos(a) * -28, -6 + Math.sin(a) * -28)
+      ctx.lineTo(Math.cos(a) * 28, -6 + Math.sin(a) * 28)
+      ctx.stroke()
+    }
+
+    // Center Brass Hub
     ctx.fillStyle = '#b8a46b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.5
     ctx.beginPath()
-    ctx.arc(0, 0, 7, 0, Math.PI * 2)
+    ctx.arc(0, -6, 9, 0, Math.PI * 2)
     ctx.fill()
+    ctx.stroke()
+
+    // Circular Rotation Arrow above wheel
+    ctx.strokeStyle = INK_NAVY
+    ctx.fillStyle = INK_NAVY
+    ctx.lineWidth = 2.6
+    ctx.beginPath()
+    ctx.arc(0, -6, 40, -Math.PI * 0.78, -Math.PI * 0.22)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(31, -31)
+    ctx.lineTo(22, -37)
+    ctx.lineTo(25, -26)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.fillStyle = INK_BLACK
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('CRANK WHEEL', 0, 62)
   } else if (kind === 'az5') {
-    // Hinged Hazard Cover & Red AZ-5 Button + Green Boron Plunger
-    ctx.fillStyle = '#d49b27'
-    ctx.fillRect(-32, -32, 64, 20)
-    ctx.strokeStyle = '#111111'
-    ctx.lineWidth = 2
-    ctx.strokeRect(-32, -32, 64, 20)
-    ctx.fillStyle = '#8b1e1e'
+    // AZ-5 & Boron Injection: Striped flip-up safety cover over the square AZ-5 button alongside the circular BORON plunger
+    // Hinged Yellow/Black Hazard Cover flipped UP
+    ctx.fillStyle = '#e09f1f'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.5
+    ctx.fillRect(-42, -62, 46, 26)
+    ctx.strokeRect(-42, -62, 46, 26)
+    // Diagonal hazard stripes on cover
     ctx.beginPath()
-    ctx.arc(-13, 12, 14, 0, Math.PI * 2)
+    ctx.moveTo(-34, -62)
+    ctx.lineTo(-42, -46)
+    ctx.moveTo(-18, -62)
+    ctx.lineTo(-30, -36)
+    ctx.moveTo(-2, -62)
+    ctx.lineTo(-14, -36)
+    ctx.stroke()
+
+    // Square Red AZ-5 Button Housing below flipped cover
+    ctx.fillStyle = '#23312b'
+    ctx.fillRect(-42, -30, 46, 46)
+    ctx.strokeRect(-42, -30, 46, 46)
+    ctx.fillStyle = INK_RED
+    ctx.fillRect(-34, -22, 30, 30)
+    ctx.strokeRect(-34, -22, 30, 30)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = '800 11px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('AZ-5', -19, -3)
+
+    // Right: Circular Green BORON Plunger
+    ctx.fillStyle = '#23312b'
+    ctx.fillRect(8, -30, 36, 46)
+    ctx.strokeRect(8, -30, 36, 46)
+    ctx.fillStyle = INK_GREEN
+    ctx.beginPath()
+    ctx.arc(26, -7, 13, 0, Math.PI * 2)
     ctx.fill()
     ctx.stroke()
-    ctx.fillStyle = '#145c26'
-    ctx.beginPath()
-    ctx.arc(16, 12, 13, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.stroke()
+    ctx.fillStyle = '#ffffff'
+    ctx.font = '800 9.5px "Courier Prime", monospace'
+    ctx.fillText('B-10', 26, -4)
+
+    ctx.fillStyle = INK_BLACK
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.fillText('AZ-5 & BORON', 0, 62)
   } else if (kind === 'octagon') {
-    // Octagonal RBMK 37-Channel Bio-Shield Matrix Icon
-    ctx.fillStyle = '#18211b'
+    // RBMK Octagonal Bio-Shield: Octagon frame with grid of square channel caps and cursor arrow clicking a flashing hotspot tile
+    ctx.fillStyle = '#23312b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 3.0
     ctx.beginPath()
     for (let i = 0; i < 8; i++) {
       const a = (i * Math.PI) / 4 + Math.PI / 8
-      const px = Math.cos(a) * 32
-      const py = Math.sin(a) * 32
+      const px = Math.cos(a) * 42
+      const py = -8 + Math.sin(a) * 42
       if (i === 0) ctx.moveTo(px, py)
       else ctx.lineTo(px, py)
     }
     ctx.closePath()
     ctx.fill()
-    ctx.strokeStyle = '#b8a46b'
-    ctx.lineWidth = 2.5
     ctx.stroke()
-    for (let gx = -15; gx <= 15; gx += 15) {
-      for (let gy = -15; gy <= 15; gy += 15) {
-        const isHot = (gx === 0 && gy === 0) || (gx === 15 && gy === -15)
+
+    // 5x5 Channel Cap Grid inside Octagon
+    for (let gx = -2; gx <= 2; gx++) {
+      for (let gy = -2; gy <= 2; gy++) {
+        if (Math.abs(gx) === 2 && Math.abs(gy) === 2) continue
+        const tx = gx * 11
+        const ty = -8 + gy * 11
+        const isHot = (gx === 0 && gy === 0) || (gx === 1 && gy === -1)
         ctx.fillStyle = isHot ? '#ff2a2a' : '#33ff66'
-        ctx.fillRect(gx - 5, gy - 5, 10, 10)
+        ctx.fillRect(tx - 4.5, ty - 4.5, 9, 9)
+        ctx.strokeStyle = INK_BLACK
+        ctx.lineWidth = 1.4
+        ctx.strokeRect(tx - 4.5, ty - 4.5, 9, 9)
       }
     }
-  } else if (kind === 'gas') {
-    // Containment Toggles & Bubbler Sight-Glass Column Icon
-    ctx.fillStyle = '#18211b'
-    ctx.fillRect(-34, -30, 40, 60)
-    ctx.strokeStyle = '#b8a46b'
-    ctx.lineWidth = 2
-    ctx.strokeRect(-34, -30, 40, 60)
-    ;[-21, -7].forEach((tx) => {
-      ctx.fillStyle = '#33ff66'
-      ctx.beginPath()
-      ctx.arc(tx, -12, 4.5, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#cfc6b0'
-      ctx.fillRect(tx - 2.5, 2, 5, 18)
-    })
-    ctx.fillStyle = '#0d110f'
-    ctx.fillRect(14, -30, 18, 60)
-    ctx.fillStyle = '#28d8ff'
-    ctx.fillRect(17, -6, 12, 33)
-    ctx.strokeStyle = '#b8a46b'
-    ctx.strokeRect(14, -30, 18, 60)
-  } else if (kind === 'rheostat') {
-    // 50Hz Rotary Rheostat Dial with Pointer Bar
-    ctx.fillStyle = '#18211b'
+
+    // Cursor Arrow clicking center flashing hotspot tile
+    ctx.fillStyle = '#ffffff'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.2
     ctx.beginPath()
-    ctx.arc(0, 0, 30, 0, Math.PI * 2)
+    ctx.moveTo(4, -4)
+    ctx.lineTo(28, 12)
+    ctx.lineTo(18, 14)
+    ctx.lineTo(23, 26)
+    ctx.lineTo(16, 29)
+    ctx.lineTo(11, 17)
+    ctx.lineTo(4, 23)
+    ctx.closePath()
     ctx.fill()
-    ctx.strokeStyle = '#b8a46b'
-    ctx.lineWidth = 3
     ctx.stroke()
-    ctx.strokeStyle = '#33ff66'
-    ctx.lineWidth = 3
+
+    ctx.fillStyle = INK_RED
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('CLICK HOT TILE', 0, 62)
+  } else if (kind === 'gas') {
+    // Bubbler Drain & Sight-Glass: Vertical glass water column with graduation ticks next to downward pull-handle recycling water (-> H2O)
+    // Left: Vertical Sight-Glass Water Column with Graduation Ticks
+    ctx.fillStyle = '#18241d'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.5
+    ctx.fillRect(-40, -58, 30, 96)
+    ctx.strokeRect(-40, -58, 30, 96)
+
+    // Cyan/Blue Water Level inside Sight Glass
+    ctx.fillStyle = '#1f7ab8'
+    ctx.fillRect(-36, -12, 22, 46)
+
+    // Graduation ticks on Sight-Glass
+    ctx.strokeStyle = '#e8dec3'
+    ctx.lineWidth = 2.0
+    for (let gy = -46; gy <= 26; gy += 12) {
+      ctx.beginPath()
+      ctx.moveTo(-40, gy)
+      ctx.lineTo(-28, gy)
+      ctx.stroke()
+    }
+
+    // Right: 3 Seal Toggles at top + Downward Pull-Handle at bottom
+    ;[-2, 14, 30].forEach((tx) => {
+      ctx.fillStyle = INK_GREEN
+      ctx.strokeStyle = INK_BLACK
+      ctx.lineWidth = 1.8
+      ctx.fillRect(tx - 4, -56, 8, 16)
+      ctx.strokeRect(tx - 4, -56, 8, 16)
+    })
+
+    // Spring-Loaded Drain Pull-Handle
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 3.2
     ctx.beginPath()
-    ctx.arc(0, 0, 22, -Math.PI * 0.8, -Math.PI * 0.2)
+    ctx.moveTo(16, -28)
+    ctx.lineTo(16, 16)
     ctx.stroke()
-    ctx.strokeStyle = '#ffb000'
+    ctx.fillStyle = INK_RED
+    ctx.fillRect(2, 10, 28, 12)
+    ctx.strokeRect(2, 10, 28, 12)
+
+    // Downward Arrow + -> H2O
+    ctx.strokeStyle = INK_NAVY
+    ctx.fillStyle = INK_NAVY
+    ctx.lineWidth = 2.5
+    ctx.beginPath()
+    ctx.moveTo(38, -22)
+    ctx.lineTo(38, 18)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(38, 26)
+    ctx.lineTo(32, 15)
+    ctx.lineTo(44, 15)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.fillStyle = INK_GREEN
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('DRAIN -> H2O', 0, 62)
+  } else if (kind === 'rheostat') {
+    // 50Hz Rheostat: Circular 50.0 Hz dial with scale ticks, center needle, and rotary grip bar
+    ctx.fillStyle = '#18241d'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 3.0
+    ctx.beginPath()
+    ctx.arc(0, -10, 38, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    // Green safe arc around 12 o'clock (50.0 Hz)
+    ctx.strokeStyle = '#33ff66'
     ctx.lineWidth = 4.5
     ctx.beginPath()
-    ctx.moveTo(0, 4)
-    ctx.lineTo(0, -20)
+    ctx.arc(0, -10, 29, -Math.PI * 0.75, -Math.PI * 0.25)
     ctx.stroke()
+
+    // Scale ticks around perimeter
+    ctx.strokeStyle = '#e8dec3'
+    ctx.lineWidth = 2.0
+    for (let i = -4; i <= 4; i++) {
+      const a = -Math.PI / 2 + i * 0.28
+      ctx.beginPath()
+      ctx.moveTo(Math.cos(a) * 26, -10 + Math.sin(a) * 26)
+      ctx.lineTo(Math.cos(a) * 34, -10 + Math.sin(a) * 34)
+      ctx.stroke()
+    }
+
+    // Center needle pointing to 12 o'clock (50.0 Hz)
+    ctx.strokeStyle = '#ffb000'
+    ctx.lineWidth = 3.5
+    ctx.beginPath()
+    ctx.moveTo(0, 6)
+    ctx.lineTo(0, -34)
+    ctx.stroke()
+
+    // Center Bakelite Knob
+    ctx.fillStyle = '#b8a46b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.2
+    ctx.beginPath()
+    ctx.arc(0, -10, 9, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = INK_BLACK
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('50.0 Hz DIAL', 0, 48)
+    ctx.fillStyle = INK_NAVY
+    ctx.fillText('< DRAG L/R >', 0, 63)
   } else if (kind === 'breaker') {
-    // Copper Knife-Switch MAIN BREAKER Icon
-    ctx.fillStyle = '#18211b'
-    ctx.fillRect(-32, -32, 64, 64)
-    ctx.strokeStyle = '#ff2a2a'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(-32, -32, 64, 64)
-    ctx.strokeStyle = '#d4874b'
-    ctx.lineWidth = 5
-    ctx.beginPath()
-    ctx.moveTo(-11, 18)
-    ctx.lineTo(-11, -16)
-    ctx.moveTo(11, 18)
-    ctx.lineTo(11, -16)
-    ctx.stroke()
-    ctx.fillStyle = '#6e1a14'
-    ctx.fillRect(-20, -22, 40, 11)
-  } else if (kind === 'printer') {
-    // Pravda Printer & Magnifying Lens Icon
-    ctx.fillStyle = '#2b302c'
-    ctx.fillRect(-32, -8, 64, 36)
-    ctx.strokeStyle = '#111111'
-    ctx.lineWidth = 2
-    ctx.strokeRect(-32, -8, 64, 36)
-    ctx.fillStyle = '#e6dec3'
-    ctx.fillRect(-22, -32, 44, 32)
-    ctx.strokeRect(-22, -32, 44, 32)
-    ctx.strokeStyle = '#b8a46b'
-    ctx.lineWidth = 3
-    ctx.beginPath()
-    ctx.arc(10, -14, 12, 0, Math.PI * 2)
-    ctx.stroke()
-  } else if (kind === 'stamp') {
-    // Stamp & Shredder Icon
-    ctx.fillStyle = '#145c26'
-    ctx.fillRect(-30, -24, 36, 18)
-    ctx.strokeStyle = '#111111'
-    ctx.lineWidth = 2
-    ctx.strokeRect(-30, -24, 36, 18)
-    ctx.fillStyle = '#6e1a14'
-    ctx.fillRect(6, -28, 24, 56)
-    ctx.strokeRect(6, -28, 24, 56)
-    ctx.fillStyle = '#e6dec3'
-    ctx.fillRect(-28, 2, 28, 24)
+    // Knife-Switch Breaker: Dual-blade copper knife switch ([SPACE]) with top contact jaws and insulated crossbar handle
+    ctx.fillStyle = '#23312b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.6
+    ctx.fillRect(-38, -60, 76, 98)
+    ctx.strokeRect(-38, -60, 76, 98)
+
+    // Top Copper Contact Jaws
+    ctx.fillStyle = '#c87636'
+    ctx.fillRect(-26, -52, 14, 16)
+    ctx.strokeRect(-26, -52, 14, 16)
+    ctx.fillRect(12, -52, 14, 16)
+    ctx.strokeRect(12, -52, 14, 16)
+
+    // Bottom Pivot Blocks
+    ctx.fillRect(-26, 14, 14, 14)
+    ctx.strokeRect(-26, 14, 14, 14)
+    ctx.fillRect(12, 14, 14, 14)
+    ctx.strokeRect(12, 14, 14, 14)
+
+    // Dual Copper Blades engaged UP
+    ctx.fillStyle = '#e08b46'
+    ctx.fillRect(-23, -44, 8, 62)
+    ctx.strokeRect(-23, -44, 8, 62)
+    ctx.fillRect(15, -44, 8, 62)
+    ctx.strokeRect(15, -44, 8, 62)
+
+    // Red Insulated Crossbar Handle at top
+    ctx.fillStyle = INK_RED
+    ctx.fillRect(-32, -34, 64, 14)
+    ctx.strokeRect(-32, -34, 64, 14)
+
+    ctx.fillStyle = INK_BLACK
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('BREAKER [SPC]', 0, 62)
   } else if (kind === 'piston') {
-    // Boron T-Handle Piston Pump Icon
-    ctx.fillStyle = '#18211b'
-    ctx.fillRect(-30, -32, 60, 64)
-    ctx.strokeStyle = '#b8a46b'
-    ctx.lineWidth = 2
-    ctx.strokeRect(-30, -32, 60, 64)
-    ctx.fillStyle = '#8a929a'
-    ctx.fillRect(-4, -18, 8, 42)
-    ctx.fillStyle = '#4a1210'
-    ctx.fillRect(-22, -24, 44, 12)
-    ctx.strokeStyle = '#111111'
-    ctx.strokeRect(-22, -24, 44, 12)
-  } else if (kind === 'vent') {
-    // Steam Vent Lever & Guarded Toggle Icon
-    ctx.fillStyle = '#18211b'
-    ctx.fillRect(-32, -32, 64, 64)
-    ctx.strokeStyle = '#b8a46b'
-    ctx.lineWidth = 2
-    ctx.strokeRect(-32, -32, 64, 64)
-    ctx.strokeStyle = '#8a929a'
-    ctx.lineWidth = 5
+    // Boron T-Handle Piston Pump: Vertical graduated cylinder with chrome plunger rod and Bakelite T-handle
+    ctx.fillStyle = '#23312b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.6
+    ctx.fillRect(-28, -14, 56, 56)
+    ctx.strokeRect(-28, -14, 56, 56)
+
+    // Green Boron Tank Level Window
+    ctx.fillStyle = INK_GREEN
+    ctx.fillRect(-16, -4, 32, 36)
+    ctx.strokeRect(-16, -4, 32, 36)
+
+    // Chrome Plunger Shaft
+    ctx.fillStyle = '#d8dee2'
+    ctx.fillRect(-6, -46, 12, 34)
+    ctx.strokeRect(-6, -46, 12, 34)
+
+    // Horizontal Bakelite T-Handle at top
+    ctx.fillStyle = INK_RED
+    ctx.fillRect(-34, -58, 68, 14)
+    ctx.strokeRect(-34, -58, 68, 14)
+
+    // Up/Down Pump Arrows
+    ctx.strokeStyle = INK_NAVY
+    ctx.lineWidth = 2.6
     ctx.beginPath()
-    ctx.moveTo(-12, -20)
-    ctx.lineTo(-12, 18)
+    ctx.moveTo(38, -44)
+    ctx.lineTo(38, 18)
     ctx.stroke()
-    ctx.fillStyle = '#6e1a14'
-    ctx.fillRect(-22, 10, 20, 12)
-    ctx.fillStyle = '#d49b27'
-    ctx.fillRect(8, -18, 16, 36)
+
+    ctx.fillStyle = INK_BLACK
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('PUMP T-HANDLE', 0, 62)
+  } else if (kind === 'vent') {
+    // Steam Vent (Spring Pull-Lever): Vertical slot with heavy red handle pulled DOWN + steam cloud puffs
+    ctx.fillStyle = '#23312b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.6
+    ctx.fillRect(-36, -58, 44, 96)
+    ctx.strokeRect(-36, -58, 44, 96)
+
+    // Vertical Lever Slot
+    ctx.fillStyle = INK_BLACK
+    ctx.fillRect(-19, -48, 10, 76)
+
+    // Lever Arm & Red Handle pulled DOWN
+    ctx.fillStyle = INK_RED
+    ctx.fillRect(-32, 4, 36, 16)
+    ctx.strokeRect(-32, 4, 36, 16)
+
+    // Downward Pull Arrow
+    ctx.strokeStyle = INK_RED
+    ctx.fillStyle = INK_RED
+    ctx.lineWidth = 3.0
+    ctx.beginPath()
+    ctx.moveTo(26, -44)
+    ctx.lineTo(26, 16)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(26, 26)
+    ctx.lineTo(18, 12)
+    ctx.lineTo(34, 12)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.fillStyle = INK_BLACK
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('PULL DOWN', 0, 62)
+  } else if (kind === 'ventilation_toggle') {
+    // Ventilation (Guarded Metal Toggle): Flip-up hazard guard + heavy chrome toggle bat switch + fan icon
+    ctx.fillStyle = '#23312b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.6
+    ctx.fillRect(-38, -56, 76, 94)
+    ctx.strokeRect(-38, -56, 76, 94)
+
+    // Yellow Guard U-Bracket
+    ctx.strokeStyle = '#d49b27'
+    ctx.lineWidth = 4.0
+    ctx.beginPath()
+    ctx.moveTo(-22, 24)
+    ctx.lineTo(-22, -42)
+    ctx.lineTo(22, -42)
+    ctx.lineTo(22, 24)
+    ctx.stroke()
+
+    // Center Toggle Bat Switch flipped UP (ON)
+    ctx.fillStyle = '#b8a46b'
+    ctx.strokeStyle = INK_BLACK
+    ctx.lineWidth = 2.4
+    ctx.beginPath()
+    ctx.arc(0, 6, 11, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = '#d8dee2'
+    ctx.beginPath()
+    ctx.moveTo(-5, 6)
+    ctx.lineTo(-9, -30)
+    ctx.lineTo(9, -30)
+    ctx.lineTo(5, 6)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = INK_GREEN
+    ctx.font = '800 10.5px "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText('FLIP UP [ON]', 0, 62)
   }
 
   ctx.restore()
+}
+
+const MANUAL_BODY_FONT_STACK =
+  '"Consolas", "Lucida Console", "Segoe UI", Arial, sans-serif'
+
+function drawFittedCardLine(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  baseSize = 21
+): void {
+  let size = baseSize
+  ctx.font = `bold ${size}px ${MANUAL_BODY_FONT_STACK}`
+  while (size > 14 && ctx.measureText(text).width > maxWidth) {
+    size -= 0.5
+    ctx.font = `bold ${size}px ${MANUAL_BODY_FONT_STACK}`
+  }
+  ctx.fillText(text, x, y, maxWidth)
+}
+
+function drawWrappedManualSection(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  bodyLines: readonly string[],
+  x: number,
+  topY: number,
+  cardRightX: number,
+  color: string
+): void {
+  const maxWidth = cardRightX - x - 18
+  const fullText = bodyLines.map((s) => s.trim()).join(' ')
+  ctx.fillStyle = color
+  ctx.textAlign = 'left'
+
+  for (const fontSize of [21, 20.5, 20, 19.5, 19, 18.5, 18, 17.5]) {
+    ctx.font = `bold ${fontSize}px ${MANUAL_BODY_FONT_STACK}`
+    const labelW = ctx.measureText(label).width
+    const firstLineMaxW = maxWidth - labelW - 6
+
+    const words = fullText.split(/\s+/).filter(Boolean)
+    let line1 = ''
+    let idx = 0
+    while (idx < words.length) {
+      const candidate = line1 ? `${line1} ${words[idx]}` : words[idx]
+      if (ctx.measureText(candidate).width <= firstLineMaxW || !line1) {
+        line1 = candidate
+        idx++
+      } else {
+        break
+      }
+    }
+    const line2 = words.slice(idx).join(' ')
+    if (
+      ctx.measureText(line1).width <= firstLineMaxW &&
+      (!line2 || ctx.measureText(line2).width <= maxWidth)
+    ) {
+      ctx.fillText(label, x, topY)
+      ctx.fillText(line1, x + labelW + 6, topY)
+      if (line2) {
+        ctx.fillText(line2, x, topY + 22)
+      }
+      return
+    }
+  }
+
+  // Fallback with guaranteed maxWidth clamping so zero characters ever touch the right border
+  ctx.font = `bold 17.5px ${MANUAL_BODY_FONT_STACK}`
+  const labelW = ctx.measureText(label).width
+  const firstLineMaxW = Math.max(80, maxWidth - labelW - 6)
+  ctx.fillText(label, x, topY)
+  drawFittedCardLine(ctx, bodyLines[0] ?? '', x + labelW + 6, topY, firstLineMaxW, 17.5)
+  if (bodyLines[1]) {
+    drawFittedCardLine(ctx, bodyLines[1], x, topY + 22, maxWidth, 17.5)
+  }
 }
 
 interface FieldGuideCardSpec {
@@ -902,74 +2013,95 @@ function drawFieldGuideCard(
   ry: number,
   card: FieldGuideCardSpec
 ): void {
-  const cardX = 42
-  const cardW = LW - 72
-  const cardH = 196
+  const cardX = 38
+  const cardW = LW - 64
+  const cardH = 204
+  const cardRightX = cardX + cardW
 
-  // Cream technical card body
-  ctx.fillStyle = '#e6dfd0'
+  // Warm Vintage Card Body (#e8dec3) with heavy dark charcoal-black border (#111111)
+  ctx.fillStyle = '#e8dec3'
   ctx.fillRect(cardX, ry, cardW, cardH)
+  ctx.strokeStyle = '#111111'
+  ctx.lineWidth = 3.0
+  ctx.strokeRect(cardX, ry, cardW, cardH)
+
+  // Top Header Badge Bar (Deep Forest Stamp Green #094a20)
+  ctx.fillStyle = '#094a20'
+  ctx.fillRect(cardX, ry, cardW, 33)
   ctx.strokeStyle = '#111111'
   ctx.lineWidth = 2.5
   ctx.strokeRect(cardX, ry, cardW, cardH)
-
-  // Top Header Badge Bar
-  ctx.fillStyle = '#144722'
-  ctx.fillRect(cardX, ry, cardW, 30)
-  ctx.strokeStyle = '#111111'
-  ctx.lineWidth = 2
-  ctx.strokeRect(cardX, ry, cardW, 30)
+  ctx.strokeRect(cardX, ry, cardW, 33)
 
   ctx.fillStyle = '#ffffff'
   ctx.textAlign = 'left'
-  ctx.font = 'bold 17px "Courier Prime", monospace'
-  ctx.fillText(card.badge, cardX + 10, ry + 21)
+  drawFittedCardLine(ctx, card.badge, cardX + 10, ry + 23, cardW - 20, 19.5)
 
-  // Left Schematic Mini-Diagram Box
-  ctx.fillStyle = '#d6cdb8'
-  ctx.fillRect(cardX + 2, ry + 31, 88, cardH - 33)
+  // Narrowed Left Technical Schematic Box (82px wide, ~21% narrower so text gets +38px horizontal room!)
+  const diagW = 82
+  ctx.fillStyle = '#ded2b4'
+  ctx.fillRect(cardX + 2, ry + 34, diagW - 2, cardH - 36)
   ctx.strokeStyle = '#111111'
-  ctx.lineWidth = 1.5
+  ctx.lineWidth = 2.4
   ctx.beginPath()
-  ctx.moveTo(cardX + 90, ry + 30)
-  ctx.lineTo(cardX + 90, ry + cardH)
+  ctx.moveTo(cardX + diagW, ry + 33)
+  ctx.lineTo(cardX + diagW, ry + cardH)
   ctx.stroke()
 
-  drawManualSchematicIcon(ctx, cardX + 46, ry + 113, card.icon)
+  drawManualSchematicIcon(ctx, cardX + diagW / 2, ry + 116, card.icon)
 
-  // Right Column Structured Breakdown: USE (Blue-Black), EFFECT (Green), REACTION (Crimson)
-  const tx = cardX + 98
-  ctx.textAlign = 'left'
-  ctx.font = 'bold 15px "Courier Prime", monospace'
+  // Right Column Structured Breakdown (Clean Left Alignment & Word-Wrap Helper):
+  // USE: Deep Navy Blueprint Ink (#0c2854)
+  // EFFECT: Deep Forest Stamp Green (#094a20)
+  // RISK: Deep Crimson Ink (#7a110a)
+  const tx = cardX + diagW + 10
 
   // 1. HOW TO OPERATE (USE:)
-  ctx.fillStyle = '#14264c'
-  ctx.fillText(`USE: ${card.useLines[0]}`, tx, ry + 52)
-  ctx.fillText(`     ${card.useLines[1]}`, tx, ry + 72)
+  drawWrappedManualSection(
+    ctx,
+    'USE:',
+    card.useLines,
+    tx,
+    ry + 56,
+    cardRightX,
+    '#0c2854'
+  )
 
-  // Horizontal separator rule
-  ctx.strokeStyle = '#b8ae96'
-  ctx.lineWidth = 1
+  // Crisp Dark Divider Rule
+  ctx.strokeStyle = '#8c7f65'
+  ctx.lineWidth = 1.6
   ctx.beginPath()
-  ctx.moveTo(tx, ry + 81)
-  ctx.lineTo(cardX + cardW - 8, ry + 81)
+  ctx.moveTo(tx, ry + 87)
+  ctx.lineTo(cardRightX - 10, ry + 87)
   ctx.stroke()
 
   // 2. DIRECT ACTION / EFFECT (EFFECT:)
-  ctx.fillStyle = '#13522d'
-  ctx.fillText(`EFFECT: ${card.effectLines[0]}`, tx, ry + 101)
-  ctx.fillText(`        ${card.effectLines[1]}`, tx, ry + 121)
+  drawWrappedManualSection(
+    ctx,
+    'EFFECT:',
+    card.effectLines,
+    tx,
+    ry + 109,
+    cardRightX,
+    '#094a20'
+  )
 
-  // Horizontal separator rule
+  // Crisp Dark Divider Rule
   ctx.beginPath()
-  ctx.moveTo(tx, ry + 130)
-  ctx.lineTo(cardX + cardW - 8, ry + 130)
+  ctx.moveTo(tx, ry + 140)
+  ctx.lineTo(cardRightX - 10, ry + 140)
   ctx.stroke()
 
-  // 3. COUNTER-REACTION / SIDE EFFECT (REACTION:)
-  ctx.fillStyle = '#8a1c14'
-  ctx.fillText(`REACTION: ${card.reactionLines[0]}`, tx, ry + 151)
-  ctx.fillText(`          ${card.reactionLines[1]}`, tx, ry + 172)
+  // 3. COUNTER-REACTION / SIDE EFFECT (RISK:)
+  drawWrappedManualSection(
+    ctx,
+    'RISK:',
+    card.reactionLines,
+    tx,
+    ry + 162,
+    cardRightX,
+    '#7a110a'
+  )
 }
 
 /**
@@ -998,22 +2130,22 @@ export function drawSecurityManualCanvas(
   ctx.fillStyle = isRbmkSection ? '#1f362a' : '#6b1d18'
   ctx.fillRect(0, 0, LW, LH)
 
-  // Clean High-Contrast Manual Page Cardstock (#dfd8c5) shifted slightly right to clear the 3-ring binder holes
-  ctx.fillStyle = '#dfd8c5'
+  // Warm Vintage Manual Page Cardstock (#e8dec3) shifted slightly right to clear the 3-ring binder holes
+  ctx.fillStyle = '#e8dec3'
   ctx.fillRect(14, 14, LW - 28, LH - 28)
-  ctx.strokeStyle = '#111111'
-  ctx.lineWidth = 3
+  ctx.strokeStyle = '#141210'
+  ctx.lineWidth = 3.2
   ctx.strokeRect(20, 20, LW - 40, LH - 40)
 
   // Left-Edge Punched 3-Ring Binder Holes & Brass Reinforcements on Page
   ;[195, 388, 580].forEach((hy) => {
     ctx.fillStyle = '#b8a46b'
     ctx.beginPath()
-    ctx.arc(32, hy, 9, 0, Math.PI * 2)
+    ctx.arc(31, hy, 9, 0, Math.PI * 2)
     ctx.fill()
     ctx.fillStyle = '#2b1a12'
     ctx.beginPath()
-    ctx.arc(32, hy, 5, 0, Math.PI * 2)
+    ctx.arc(31, hy, 5, 0, Math.PI * 2)
     ctx.fill()
   })
 
@@ -1025,10 +2157,10 @@ export function drawSecurityManualCanvas(
   ctx.translate(0, -scrollY * 1.55)
 
   if (page === 1) {
-    ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 22px "Courier Prime", monospace'
+    ctx.fillStyle = '#7a110a'
+    ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('1. OFFICIAL SOVIET SEALS & SPECIMENS:', 44, 158)
+    ctx.fillText('1. OFFICIAL SOVIET SEALS & SPECIMENS:', 38, 156)
 
     const sealRows: Array<{
       type: SealEmblemType
@@ -1038,80 +2170,214 @@ export function drawSecurityManualCanvas(
       rule1: string
       rule2: string
       rule3: string
+      genuineLabel: string
+      fakeLabel: string
+      defectKind: 'STAR' | 'ORBIT' | 'SWORD'
     }> = [
       {
         type: 'USSR_STATE_SEAL',
         ink: '#111111',
         title: '1. STATE SEAL (ГЕРБ СССР)',
         ministry: 'Issuer: COUNCIL OF MINISTERS',
-        rule1: '✓ 5-PT STAR on crest (6/4-pt = Fake)',
+        rule1: '✓ 5-PT STAR crest (4/6-pt = Fake)',
         rule2: '✓ СССР • ГОССТАНДАРТ 84 ring',
-        rule3: '✗ Shred any CCCP-LATIN ring text!',
+        rule3: '✗ Shred CCCP-LATIN ring text!',
+        genuineLabel: '✓ GENUINE (5★)',
+        fakeLabel: '✗ FAKE (4/6★)',
+        defectKind: 'STAR',
       },
       {
         type: 'MINSREDMASH_ATOM',
-        ink: '#8b1e1e',
+        ink: '#7a110a',
         title: '2. ATOM SEAL (АТОМНЫЙ ЩИТ)',
-        ministry: 'Issuer: MINSREDMASH & ATOMIC EN.',
-        rule1: '✓ 2 SOLID ORBITS (Broken = Sabotage)',
+        ministry: 'Issuer: MINSREDMASH & ATOM EN.',
+        rule1: '✓ 2 SOLID ORBITS (Gap = Fake)',
         rule2: '✓ 5-PT STAR & СССР micro-ring',
-        rule3: '✓ Rim code №84 / 5★ under 2x lens',
+        rule3: '✓ Rim code №84 / 5★ under lens',
+        genuineLabel: '✓ SOLID ORBITS',
+        fakeLabel: '✗ BROKEN ORBIT',
+        defectKind: 'ORBIT',
       },
       {
         type: 'KGB_SWORD_SHIELD',
-        ink: '#8b1e1e',
+        ink: '#7a110a',
         title: '3. KGB SHIELD (ЩИТ И МЕЧ)',
         ministry: 'Issuer: 5TH CHIEF DIRECTORATE',
         rule1: '✓ VERTICAL SWORD on shield axis',
         rule2: '✓ 5-Е УПРАВЛЕНИЕ КГБ СССР ring',
         rule3: '✗ Shred any LANGLEY COPY ring!',
+        genuineLabel: '✓ STRAIGHT AXIS',
+        fakeLabel: '✗ CROOKED / 4★',
+        defectKind: 'SWORD',
       },
     ]
 
     sealRows.forEach((row, idx) => {
-      const ry = 170 + idx * 212
-      ctx.fillStyle = '#dfd8c5'
-      ctx.fillRect(42, ry, LW - 72, 198)
+      const ry = 166 + idx * 222
+      const cardX = 38
+      const cardW = LW - 64
+      const cardH = 212
+      const cardRightX = cardX + cardW
+
+      ctx.fillStyle = '#e8dec3'
+      ctx.fillRect(cardX, ry, cardW, cardH)
+      ctx.strokeStyle = '#111111'
+      ctx.lineWidth = 3.0
+      ctx.strokeRect(cardX, ry, cardW, cardH)
+
+      // Top Header Strip for Seal Specimen
+      ctx.fillStyle = '#7a110a'
+      ctx.fillRect(cardX, ry, cardW, 32)
       ctx.strokeStyle = '#111111'
       ctx.lineWidth = 2.5
-      ctx.strokeRect(42, ry, LW - 72, 198)
+      ctx.strokeRect(cardX, ry, cardW, 32)
+      ctx.fillStyle = '#ffffff'
+      ctx.textAlign = 'left'
+      drawFittedCardLine(ctx, row.title, cardX + 12, ry + 23, cardW - 24, 20.5)
+
+      // Narrowed Left Seal Column (124px wide -> +30px more horizontal width for right text column!)
+      const sealColW = 124
+      ctx.fillStyle = '#ded2b4'
+      ctx.fillRect(cardX + 2, ry + 33, sealColW - 2, cardH - 35)
+      ctx.strokeStyle = '#111111'
+      ctx.lineWidth = 2.2
+      ctx.beginPath()
+      ctx.moveTo(cardX + sealColW, ry + 32)
+      ctx.lineTo(cardX + sealColW, ry + cardH)
+      ctx.stroke()
 
       drawOfficialSeal(
         ctx,
-        102,
-        ry + 99,
-        52,
+        cardX + sealColW / 2,
+        ry + 121,
+        56,
         row.type,
         'NONE',
         row.ink,
         isMagnified || true
       )
 
-      ctx.fillStyle = '#111111'
+      // Right Column Rules + Side-by-Side [✓ GENUINE] vs [✗ FAKE] Visual Callout Boxes
+      const tx = cardX + sealColW + 10
+      const rightMaxW = cardRightX - tx - 18
       ctx.textAlign = 'left'
-      ctx.font = 'bold 21px "Courier Prime", monospace'
-      ctx.fillText(row.title, 164, ry + 34)
-      ctx.fillStyle = '#1e2b22'
-      ctx.font = 'bold 19px "Courier Prime", monospace'
-      ctx.fillText(row.ministry, 164, ry + 66)
-      ctx.fillStyle = '#145c26'
-      ctx.font = 'bold 19px "Courier Prime", monospace'
-      ctx.fillText(row.rule1, 164, ry + 104)
-      ctx.fillText(row.rule2, 164, ry + 138)
-      ctx.fillStyle = '#8b1e1e'
-      ctx.fillText(row.rule3, 164, ry + 172)
+      ctx.fillStyle = '#0c2854'
+      drawFittedCardLine(ctx, row.ministry, tx, ry + 55, rightMaxW, 20)
+
+      ctx.fillStyle = '#094a20'
+      drawFittedCardLine(ctx, row.rule1, tx, ry + 81, rightMaxW, 19.5)
+      drawFittedCardLine(ctx, row.rule2, tx, ry + 104, rightMaxW, 19.5)
+      ctx.fillStyle = '#7a110a'
+      drawFittedCardLine(ctx, row.rule3, tx, ry + 127, rightMaxW, 19.5)
+
+      // Side-by-Side Visual Callout Comparison Boxes (y: ry + 136..204)
+      const boxY = ry + 136
+      const boxW = 194
+      const boxH = 68
+
+      // Left Box: ✓ GENUINE Specimen Callout
+      ctx.fillStyle = '#d9eadc'
+      ctx.fillRect(tx, boxY, boxW, boxH)
+      ctx.strokeStyle = '#094a20'
+      ctx.lineWidth = 2.5
+      ctx.strokeRect(tx, boxY, boxW, boxH)
+      ctx.fillStyle = '#094a20'
+      drawFittedCardLine(ctx, row.genuineLabel, tx + 8, boxY + 19, boxW - 14, 16)
+
+      // Right Box: ✗ FAKE Defect Callout
+      const fakeX = tx + boxW + 10
+      ctx.fillStyle = '#f2d8d5'
+      ctx.fillRect(fakeX, boxY, boxW, boxH)
+      ctx.strokeStyle = '#7a110a'
+      ctx.lineWidth = 2.5
+      ctx.strokeRect(fakeX, boxY, boxW, boxH)
+      ctx.fillStyle = '#7a110a'
+      drawFittedCardLine(ctx, row.fakeLabel, fakeX + 8, boxY + 19, boxW - 14, 16)
+
+      // Draw enlarged visual icons inside the GENUINE vs FAKE comparison boxes
+      const iconY = boxY + 45
+      if (row.defectKind === 'STAR') {
+        // Genuine 5-Point Star vs Fake 4-Point & 6-Point Stars
+        ctx.fillStyle = '#094a20'
+        drawFivePointStar(ctx, tx + 32, iconY, 16, 6.8)
+        ctx.fill()
+        drawFittedCardLine(ctx, '5 POINTS', tx + 56, iconY + 5, boxW - 64, 16)
+
+        ctx.fillStyle = '#7a110a'
+        drawFourPointFakeStar(ctx, fakeX + 30, iconY, 16, 5.5)
+        ctx.fill()
+        drawFittedCardLine(ctx, '4/6 PT = CIA', fakeX + 54, iconY + 5, boxW - 62, 16)
+      } else if (row.defectKind === 'ORBIT') {
+        // Genuine Solid Dual Orbits vs Fake Broken Dashed Orbit
+        ctx.strokeStyle = '#094a20'
+        ctx.lineWidth = 2.6
+        ctx.beginPath()
+        ctx.ellipse(tx + 36, iconY, 21, 9, -0.45, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.ellipse(tx + 36, iconY, 21, 9, 0.45, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.fillStyle = '#094a20'
+        drawFittedCardLine(ctx, '2 CLOSED', tx + 64, iconY + 5, boxW - 72, 16)
+
+        ctx.strokeStyle = '#7a110a'
+        ctx.lineWidth = 2.6
+        ctx.beginPath()
+        ctx.ellipse(fakeX + 36, iconY, 21, 9, -0.45, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.ellipse(fakeX + 36, iconY, 21, 9, 0.45, 0, Math.PI * 1.1)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.fillStyle = '#7a110a'
+        drawFittedCardLine(ctx, 'GAP / DASH', fakeX + 64, iconY + 5, boxW - 72, 16)
+      } else {
+        // Genuine Vertical Sword & Shield vs Fake Crooked Sword / Latin Ring
+        ctx.strokeStyle = '#094a20'
+        ctx.lineWidth = 3.0
+        ctx.beginPath()
+        ctx.moveTo(tx + 32, iconY - 17)
+        ctx.lineTo(tx + 32, iconY + 17)
+        ctx.moveTo(tx + 22, iconY - 10)
+        ctx.lineTo(tx + 42, iconY - 10)
+        ctx.stroke()
+        ctx.fillStyle = '#094a20'
+        drawFittedCardLine(ctx, '90° + СССР', tx + 54, iconY + 5, boxW - 62, 16)
+
+        ctx.strokeStyle = '#7a110a'
+        ctx.lineWidth = 3.0
+        ctx.beginPath()
+        ctx.moveTo(fakeX + 24, iconY - 16)
+        ctx.lineTo(fakeX + 40, iconY + 16)
+        ctx.moveTo(fakeX + 18, iconY - 8)
+        ctx.lineTo(fakeX + 38, iconY - 12)
+        ctx.stroke()
+        ctx.fillStyle = '#7a110a'
+        drawFittedCardLine(ctx, 'LATIN/TILT', fakeX + 52, iconY + 5, boxW - 60, 16)
+      }
     })
   } else if (page === 2) {
-    ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 22px "Courier Prime", monospace'
+    const cardX = 38
+    const cardW = LW - 64
+    const maxW = cardW - 28
+    ctx.fillStyle = '#7a110a'
+    ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('2. AUTHORIZED MINISTRIES & FONTS:', 44, 158)
+    ctx.fillText('2. AUTHORIZED MINISTRIES & FONTS:', cardX, 158)
 
-    ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(42, 170, LW - 72, 214)
+    // Authorized Ministries Box
+    ctx.fillStyle = '#e8dec3'
+    ctx.fillRect(cardX, 170, cardW, 224)
     ctx.strokeStyle = '#111111'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(42, 170, LW - 72, 214)
+    ctx.lineWidth = 3.0
+    ctx.strokeRect(cardX, 170, cardW, 224)
+
+    ctx.fillStyle = '#0c2854'
+    ctx.fillRect(cardX, 170, cardW, 32)
+    ctx.strokeRect(cardX, 170, cardW, 32)
+    ctx.fillStyle = '#ffffff'
+    drawFittedCardLine(ctx, 'AUTHORIZED SOVIET ISSUING MINISTRIES:', 50, 192, maxW, 20)
 
     const validMinistries = [
       '1. MINISTRY OF MEDIUM MACHINE BLDG',
@@ -1119,185 +2385,192 @@ export function drawSecurityManualCanvas(
       '3. COUNCIL OF MINISTERS USSR',
       '4. 5TH CHIEF DIRECTORATE',
     ]
-    ctx.fillStyle = '#145c26'
-    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.fillStyle = '#094a20'
     validMinistries.forEach((m, i) => {
-      ctx.fillText(`✓ ${m}`, 52, 202 + i * 34)
+      drawFittedCardLine(ctx, `✓ ${m}`, 50, 230 + i * 33, maxW, 21)
     })
-    ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 19px "Courier Prime", monospace'
-    ctx.fillText('✗ SHRED ANY OTHER MINISTRY HEADER!', 52, 362)
+    ctx.fillStyle = '#7a110a'
+    drawFittedCardLine(ctx, '✗ SHRED ANY OTHER MINISTRY HEADER!', 50, 376, maxW, 21)
 
     // Approved Fonts Box
-    ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(42, 398, LW - 72, 194)
-    ctx.strokeStyle = '#145c26'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(42, 398, LW - 72, 194)
-    ctx.fillStyle = '#145c26'
-    ctx.font = 'bold 21px "Courier Prime", monospace'
-    ctx.fillText('✓ APPROVED SOVIET FONTS (ГОСТ 84):', 52, 430)
+    ctx.fillStyle = '#e8dec3'
+    ctx.fillRect(cardX, 408, cardW, 200)
+    ctx.strokeStyle = '#094a20'
+    ctx.lineWidth = 3.0
+    ctx.strokeRect(cardX, 408, cardW, 200)
+    ctx.fillStyle = '#094a20'
+    ctx.fillRect(cardX, 408, cardW, 32)
+    ctx.strokeStyle = '#111111'
+    ctx.strokeRect(cardX, 408, cardW, 32)
+    ctx.fillStyle = '#ffffff'
+    drawFittedCardLine(ctx, '✓ APPROVED SOVIET FONTS (ГОСТ 84):', 50, 430, maxW, 20)
+
     ctx.fillStyle = '#111111'
-    ctx.font = getFontDeclaration('GOST_MONO', 21)
-    ctx.fillText('• GOST MONO: ДИРЕКТИВА №44', 52, 468)
-    ctx.font = 'bold 19px "Courier Prime", monospace'
-    ctx.fillStyle = '#1e2b22'
-    ctx.fillText('  Monospaced slab; flat terminals.', 52, 498)
+    ctx.font = getFontDeclaration('GOST_MONO', 22)
+    ctx.fillText('• GOST MONO: ДИРЕКТИВА №44', 50, 472, maxW)
+    ctx.fillStyle = '#094a20'
+    drawFittedCardLine(ctx, '  Monospaced slab; flat terminals.', 50, 502, maxW, 21)
+
     ctx.fillStyle = '#111111'
-    ctx.font = getFontDeclaration('PRAVDA_BLOCK', 21)
-    ctx.fillText('• PRAVDA BLOCK: ПРОТОКОЛ ГКАЭ', 52, 538)
-    ctx.font = 'bold 19px "Courier Prime", monospace'
-    ctx.fillStyle = '#1e2b22'
-    ctx.fillText('  Heavy block strokes; zero slant.', 52, 570)
+    ctx.font = getFontDeclaration('PRAVDA_BLOCK', 22)
+    ctx.fillText('• PRAVDA BLOCK: ПРОТОКОЛ ГКАЭ', 50, 546, maxW)
+    ctx.fillStyle = '#094a20'
+    drawFittedCardLine(ctx, '  Heavy block strokes; zero slant.', 50, 578, maxW, 21)
 
     // Forbidden Western Fonts Box
-    ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(42, 606, LW - 72, 202)
-    ctx.strokeStyle = '#8b1e1e'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(42, 606, LW - 72, 202)
-    ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 21px "Courier Prime", monospace'
-    ctx.fillText('✗ FORBIDDEN WESTERN FONTS (SHRED!):', 52, 638)
+    ctx.fillStyle = '#e8dec3'
+    ctx.fillRect(cardX, 622, cardW, 204)
+    ctx.strokeStyle = '#7a110a'
+    ctx.lineWidth = 3.0
+    ctx.strokeRect(cardX, 622, cardW, 204)
+    ctx.fillStyle = '#7a110a'
+    ctx.fillRect(cardX, 622, cardW, 32)
+    ctx.strokeStyle = '#111111'
+    ctx.strokeRect(cardX, 622, cardW, 32)
+    ctx.fillStyle = '#ffffff'
+    drawFittedCardLine(ctx, '✗ FORBIDDEN WESTERN FONTS (SHRED!):', 50, 644, maxW, 20)
+
     ctx.fillStyle = '#111111'
-    ctx.font = getFontDeclaration('WESTERN_SERIF', 21)
-    ctx.fillText('• WESTERN SERIF: Roman Serif 88', 52, 676)
-    ctx.font = 'bold 19px "Courier Prime", monospace'
-    ctx.fillStyle = '#8b1e1e'
-    ctx.fillText('  Triangular serifs & thin strokes!', 52, 708)
+    ctx.font = getFontDeclaration('WESTERN_SERIF', 22)
+    ctx.fillText('• WESTERN SERIF: Roman Serif 88', 50, 686, maxW)
+    ctx.fillStyle = '#7a110a'
+    drawFittedCardLine(ctx, '  Triangular serifs & thin strokes!', 50, 718, maxW, 21)
+
     ctx.fillStyle = '#111111'
-    ctx.font = getFontDeclaration('SLANTED_ITALIC', 21)
-    ctx.fillText('• SLANTED / SANS: 12° Italic', 52, 748)
-    ctx.font = 'bold 19px "Courier Prime", monospace'
-    ctx.fillStyle = '#8b1e1e'
-    ctx.fillText('  12° cursive slant or sans curves!', 52, 780)
+    ctx.font = getFontDeclaration('SLANTED_ITALIC', 22)
+    ctx.fillText('• SLANTED / SANS: 12° Italic', 50, 762, maxW)
+    ctx.fillStyle = '#7a110a'
+    drawFittedCardLine(ctx, '  12° cursive slant or sans curves!', 50, 794, maxW, 21)
   } else if (page === 3) {
-    ctx.fillStyle = '#8b1e1e'
-    ctx.font = 'bold 22px "Courier Prime", monospace'
+    const cardX = 38
+    const cardW = LW - 64
+    const maxW = cardX + cardW - 104 - 18
+    ctx.fillStyle = '#7a110a'
+    ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('3. PAPER STOCK & MINISTRY INKS:', 44, 158)
+    ctx.fillText('3. PAPER STOCK & MINISTRY INKS:', cardX, 158)
 
     // Paper Stock Swatches
-    ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(42, 170, LW - 72, 292)
+    ctx.fillStyle = '#e8dec3'
+    ctx.fillRect(cardX, 170, cardW, 304)
     ctx.strokeStyle = '#111111'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(42, 170, LW - 72, 292)
-    ctx.fillStyle = '#111111'
-    ctx.font = 'bold 21px "Courier Prime", monospace'
-    ctx.fillText('1. PAPER STOCK TINT SWATCHES:', 52, 202)
+    ctx.lineWidth = 3.0
+    ctx.strokeRect(cardX, 170, cardW, 304)
+    ctx.fillStyle = '#0c2854'
+    ctx.fillRect(cardX, 170, cardW, 32)
+    ctx.strokeRect(cardX, 170, cardW, 32)
+    ctx.fillStyle = '#ffffff'
+    drawFittedCardLine(ctx, '1. PAPER STOCK TINT SWATCHES:', 50, 192, cardW - 28, 20)
 
     const papers: Array<{ hex: string; label: string; desc: string; ok: boolean }> = [
       {
         hex: PAPER_COLOR_HEX.STATE_IVORY,
-        label: 'VALID: State Ivory (#d8d2c0)',
+        label: '✓ VALID: State Ivory (#d8d2c0)',
         desc: 'Unbleached Factory No. 4 stock.',
         ok: true,
       },
       {
         hex: PAPER_COLOR_HEX.BUNKER_GREY,
-        label: 'VALID: Bunker Grey (#bfc4be)',
+        label: '✓ VALID: Bunker Grey (#bfc4be)',
         desc: 'Recycled security archive card.',
         ok: true,
       },
       {
         hex: PAPER_COLOR_HEX.BLEACHED_WHITE,
-        label: 'SHRED: Bleached White (#f4f4f6)',
+        label: '✗ SHRED: Bleached White (#f4f4f6)',
         desc: 'Western optical-brightened bond!',
         ok: false,
       },
       {
         hex: PAPER_COLOR_HEX.YELLOW_PARCHMENT,
-        label: 'SHRED: Yellow Parchment (#e6d8ad)',
+        label: '✗ SHRED: Yellow Stock (#e6d8ad)',
         desc: 'Counterfeit chemically aged stock!',
         ok: false,
       },
     ]
     papers.forEach((p, idx) => {
-      const py = 218 + idx * 58
+      const py = 214 + idx * 62
       ctx.fillStyle = p.hex
-      ctx.fillRect(54, py, 36, 38)
+      ctx.fillRect(50, py, 42, 44)
       ctx.strokeStyle = '#111111'
-      ctx.lineWidth = 2
-      ctx.strokeRect(54, py, 36, 38)
-      ctx.fillStyle = p.ok ? '#145c26' : '#8b1e1e'
-      ctx.font = 'bold 20px "Courier Prime", monospace'
-      ctx.fillText(p.label, 100, py + 16)
+      ctx.lineWidth = 2.6
+      ctx.strokeRect(50, py, 42, 44)
+      ctx.fillStyle = p.ok ? '#094a20' : '#7a110a'
+      drawFittedCardLine(ctx, p.label, 104, py + 18, maxW, 21)
       ctx.fillStyle = '#111111'
-      ctx.font = 'bold 18px "Courier Prime", monospace'
-      ctx.fillText(p.desc, 100, py + 40)
+      drawFittedCardLine(ctx, p.desc, 104, py + 42, maxW, 20)
     })
 
     // Ministry Ink Swatches
-    ctx.fillStyle = '#dfd8c5'
-    ctx.fillRect(42, 476, LW - 72, 316)
+    ctx.fillStyle = '#e8dec3'
+    ctx.fillRect(cardX, 488, cardW, 320)
     ctx.strokeStyle = '#111111'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(42, 476, LW - 72, 316)
-    ctx.fillStyle = '#111111'
-    ctx.font = 'bold 21px "Courier Prime", monospace'
-    ctx.fillText('2. MANDATORY MINISTRY INKS:', 52, 508)
+    ctx.lineWidth = 3.0
+    ctx.strokeRect(cardX, 488, cardW, 320)
+    ctx.fillStyle = '#7a110a'
+    ctx.fillRect(cardX, 488, cardW, 32)
+    ctx.strokeRect(cardX, 488, cardW, 32)
+    ctx.fillStyle = '#ffffff'
+    drawFittedCardLine(ctx, '2. MANDATORY MINISTRY INKS:', 50, 510, cardW - 28, 20)
 
     const inks: Array<{ hex: string; title: string; rule: string; ok: boolean }> = [
       {
         hex: INK_COLOR_HEX.SOVIET_CRIMSON,
-        title: 'Soviet Crimson (#8b1e1e)',
+        title: '✓ Soviet Crimson (#8b1e1e)',
         rule: 'ONLY: MinSredMash & 5th Dir.',
         ok: true,
       },
       {
         hex: INK_COLOR_HEX.BUNKER_OLIVE,
-        title: 'Bunker Olive (#2d4c2b)',
+        title: '✓ Bunker Olive (#2d4c2b)',
         rule: 'ONLY: Atomic Energy Committee',
         ok: true,
       },
       {
         hex: INK_COLOR_HEX.PRAVDA_BLACK,
-        title: 'Pravda Black (#1a1a1a)',
+        title: '✓ Pravda Black (#1a1a1a)',
         rule: 'ONLY: Council of Min. & 5th Dir.',
         ok: true,
       },
       {
         hex: INK_COLOR_HEX.CIA_NAVY_BLUE,
-        title: 'SHRED: Navy Blue / Purple Ink',
+        title: '✗ SHRED: Navy Blue / Purple Ink',
         rule: 'Forbidden Western ink = SHRED!',
         ok: false,
       },
     ]
     inks.forEach((ink, idx) => {
-      const iy = 526 + idx * 62
+      const iy = 532 + idx * 65
       ctx.fillStyle = ink.hex
-      ctx.fillRect(54, iy, 36, 38)
+      ctx.fillRect(50, iy, 42, 44)
       ctx.strokeStyle = '#111111'
-      ctx.lineWidth = 2
-      ctx.strokeRect(54, iy, 36, 38)
-      ctx.fillStyle = ink.ok ? '#111111' : '#8b1e1e'
-      ctx.font = 'bold 20px "Courier Prime", monospace'
-      ctx.fillText(ink.title, 100, iy + 16)
-      ctx.fillStyle = ink.ok ? '#145c26' : '#8b1e1e'
-      ctx.font = 'bold 19px "Courier Prime", monospace'
-      ctx.fillText(ink.rule, 100, iy + 42)
+      ctx.lineWidth = 2.6
+      ctx.strokeRect(50, iy, 42, 44)
+      ctx.fillStyle = ink.ok ? '#111111' : '#7a110a'
+      drawFittedCardLine(ctx, ink.title, 104, iy + 18, maxW, 21)
+      ctx.fillStyle = ink.ok ? '#094a20' : '#7a110a'
+      drawFittedCardLine(ctx, ink.rule, 104, iy + 43, maxW, 20)
     })
   } else if (page === 4) {
     // =========================================================================
     // SECTION II — TAB 4 (`4. HOW TO PLAY (SHIFT LOOP)`)
     // =========================================================================
-    ctx.fillStyle = '#144722'
-    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.fillStyle = '#094a20'
+    ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('4. HOW TO PLAY: 00:00-06:00 SHIFT LOOP', 44, 156)
+    ctx.fillText('4. HOW TO PLAY: 00:00-06:00 SHIFT LOOP', 38, 156)
 
     const loopCards: FieldGuideCardSpec[] = [
       {
-        icon: 'az5',
-        badge: '1. THE GOAL (SURVIVE 00:00 TO 06:00 SHIFT)',
+        icon: 'shift_goal_crt',
+        badge: '1. SHIFT GOAL & GRID MAP (00:00 -> 06:00)',
         useLines: [
-          'Press Keys [1]-[5] to move between panels',
-          'or press [B] to hold this Manual in hand.',
+          'Press Keys [1]-[5] to move between panels;',
+          'press [B] to hold this Manual in hand.',
         ],
         effectLines: [
-          'Survive from 00:00 to 06:00 AM to complete',
-          'your night shift at RBMK Sector 84.',
+          'Survive 00:00 to 06:00 AM while keeping',
+          'all 6 Regional Map nodes balanced (MW).',
         ],
         reactionLines: [
           'Core Temp >1000°C triggers RBMK Meltdown!',
@@ -1305,10 +2578,10 @@ export function drawSecurityManualCanvas(
         ],
       },
       {
-        icon: 'printer',
+        icon: 'tear_inspect',
         badge: '2. STEP 1 — TEAR & INSPECT ([KEY 4] DESK)',
         useLines: [
-          'When ПРАВДА-84 prints a directive, grab &',
+          'When ПРАВДА-84 prints an order, grab and',
           'drag paper sideways across the tear-bar.',
         ],
         effectLines: [
@@ -1321,62 +2594,62 @@ export function drawSecurityManualCanvas(
         ],
       },
       {
-        icon: 'stamp',
-        badge: '3. STEP 2 — STAMP [ОДОБРЕНО] & PNEUMATIC TUBE',
+        icon: 'stamp_tube_shred',
+        badge: '3. STEP 2 — STAMP & TUBE vs SHREDDER',
         useLines: [
-          'GENUINE: Stamp ОДОБРЕНО, then drag onto or',
-          'click the left ПНЕВМОПОЧТА Outbox Tube!',
+          'GENUINE: Stamp ОДОБРЕНО, load КАПСУЛА,',
+          'insert in ПНЕВМОПОЧТА & pull ПУСК lever!',
         ],
         effectLines: [
-          'Dispatches capsule & updates Regional Map',
-          'MW targets (CITY / DEFENSE / VODKA).',
+          'Launches capsule & updates the target MW',
+          'demand on the K.O.M.R.A.D.-84 Map.',
         ],
         reactionLines: [
-          'FORGED: Drag into right Shredder & pull handle',
-          '5x! Dispatching a forgery triggers sabotage!',
+          'FORGED: Drag into right Shredder & pull',
+          'handle 5x (v)! Dispatching fake = Sabotage!',
         ],
       },
       {
-        icon: 'levers',
-        badge: '4. STEP 3 — ROUTE MW & PROTECT VODKA WATER!',
+        icon: 'route_mw_water',
+        badge: '4. HOW TO INCREASE vs DECREASE MW (+/- ORDERS)',
         useLines: [
-          'Drag 1.CITY, 2.DEFENSE, 3.VODKA levers on',
-          'UNIT A [Key 1] to match Regional Map MW.',
+          '+MW ORDER: 1. Withdraw Boron Rods (A-2) -> 2. Boost',
+          'Cooling Pumps (A/B) & pull MW Lever -> 3. Turn 50Hz',
         ],
         effectLines: [
-          'Balance Cooling Pumps, Helium-N2 Gas Loop',
-          '(UNIT B) & Bubbler Water Recycle (+12%/s).',
+          'Rheostat / Steam Valve (UNIT C) up to lock 50.0 Hz!',
+          '-MW ORDER: 1. Lower MW Lever (A) -> 2. Lower 50Hz',
         ],
         reactionLines: [
-          'Over-pumping river water (<40% Reservoir)',
-          'causes a Vodka Distillery Water Drought!',
+          'Rheostat (C) & open Steam Vent if BAR spikes ->',
+          '3. Insert Boron Rods (A-2) to cool the core!',
         ],
       },
     ]
 
     loopCards.forEach((c, idx) => {
-      drawFieldGuideCard(ctx, LW, 168 + idx * 208, c)
+      drawFieldGuideCard(ctx, LW, 168 + idx * 214, c)
     })
   } else if (page === 5) {
     // =========================================================================
     // SECTION II — TAB 5 (`5. UNIT A (MAIN REACTOR [KEY 1])`)
     // =========================================================================
-    ctx.fillStyle = '#144722'
-    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.fillStyle = '#094a20'
+    ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('5. UNIT A: MAIN REACTOR PANEL [KEY 1]', 44, 156)
+    ctx.fillText('5. UNIT A: MAIN REACTOR PANEL [KEY 1]', 38, 156)
 
     const unitACards: FieldGuideCardSpec[] = [
       {
         icon: 'levers',
-        badge: '[KEY 1] REGIONAL MW LEVERS (1.CITY / 2.DEF / 3.VODKA)',
+        badge: '[KEY 1] 6 REGIONAL MW SUBSTATION LEVERS',
         useLines: [
-          'Drag 1.CITY & AGRI, 2.DEFENSE GRID, and',
-          '3.VODKA & STEEL levers directly (0-80 MW).',
+          'Drag any of the 6 sector levers (0-50 MW)',
+          'or click -10 / -5 / +5 / +10 MW buttons.',
         ],
         effectLines: [
-          'Routes Megawatts to the 3 regional sectors',
-          'on the K.O.M.R.A.D.-84 Map (+/-5 MW).',
+          'Matches CURRENT / TARGET MW in each Nixie',
+          'window (1.PRIPYAT .. 6.STEEL WORKS).',
         ],
         reactionLines: [
           'Higher MW heats CORE TEMP & PRESSURE and',
@@ -1385,18 +2658,18 @@ export function drawSecurityManualCanvas(
       },
       {
         icon: 'wheel',
-        badge: '[KEY 1] COOLING PUMPS A & B (RIVER WATER)',
+        badge: '[KEY 1] PUMPS A & B (ZONE H2O SIPHON)',
         useLines: [
-          'Grab 6-spoke wheel with mouse and crank in',
-          'a circle (or up/down) through 6 steps.',
+          'PUMP A siphons [1] PRIPYAT & [2] KOLKHOZ;',
+          'PUMP B siphons [5] VODKA (>40% throttle).',
         ],
         effectLines: [
-          'Pumps cold Pripyat river water through the',
-          'core to lower CORE TEMP (°C).',
+          'Boils zone H2O into BUBBLER MAX (UNIT B)',
+          'to rapidly lower CORE TEMP (°C).',
         ],
         reactionLines: [
-          'Both pumps >110% drains WATER RESERVOIR',
-          '(<40% = Vodka Drought! <10% = Pump Dry)!',
+          'Dry Pripyat (<30%)=Cavitation! Dry Kolkhoz',
+          '(<35%)=Hz Drag! Dry Vodka (<40%)=Citation!',
         ],
       },
       {
@@ -1407,192 +2680,192 @@ export function drawSecurityManualCanvas(
           '(>850°C). BORON: Press green plunger in.',
         ],
         effectLines: [
-          'BORON drops CORE TEMP -85°C & -10 BAR.',
-          'AZ-5 executes emergency full-core scram.',
+          'BORON drops CORE -140°C, GRAPHITE -90°C',
+          '& quenches all hotspots (needs >=40% B).',
         ],
         reactionLines: [
-          'Consumes 35% of BORON TANK on UNIT A-2',
-          '(must be hand-pumped back!) + 30s cooldown.',
+          'Uses 45% BORON (finite 3.0 Tanks!) & causes',
+          'a 15s -20% MW sag across all 6 levers!',
         ],
       },
     ]
 
     unitACards.forEach((c, idx) => {
-      drawFieldGuideCard(ctx, LW, 168 + idx * 208, c)
+      drawFieldGuideCard(ctx, LW, 168 + idx * 214, c)
     })
   } else if (page === 6) {
     // =========================================================================
     // SECTION II — TAB 6 (`6. UNIT A-2 & B (AUX SYSTEMS [KEY 3])`)
     // =========================================================================
-    ctx.fillStyle = '#144722'
-    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.fillStyle = '#094a20'
+    ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('6. UNIT A-2 & B: AUX SYSTEMS [KEY 3]', 44, 156)
+    ctx.fillText('6. UNIT A-2 & B: AUX SYSTEMS [KEY 3]', 38, 156)
 
     const auxCards: FieldGuideCardSpec[] = [
       {
         icon: 'octagon',
         badge: '[UNIT A-2] RBMK 37-TILE CORE BIO-SHIELD',
         useLines: [
-          'Watch the 37 steel channel caps. When a',
+          'Watch the 37 steel channel caps; when a',
           'tile flashes AMBER/RED, click it directly.',
         ],
         effectLines: [
-          'Slams a local control rod into the channel',
-          'to quench local fuel channel overheating.',
+          'Quenches single channel hotspot (-20°C)',
+          'and consumes 6% from BORON TANK.',
         ],
         reactionLines: [
-          'Every unquenched RED tile adds +5°C/s to',
-          'CORE TEMP and +1.2 BAR/s to STEAM PRESSURE!',
+          'Each unquenched RED tile adds +5°C/s to',
+          'CORE TEMP and +1.2 BAR/s to STEAM BAR!',
         ],
       },
       {
         icon: 'wheel',
-        badge: '[UNIT A-2] OIL COOLER VALVE (LEFT WHEEL)',
+        badge: '[UNIT A-2] OIL COOLER VALVE (DRY COOLING)',
         useLines: [
-          'Grab and crank the cast-iron handwheel',
-          'on the lower-left of UNIT A-2 (0-100%).',
+          'Crank the left handwheel on UNIT A-2;',
+          'dial <30% when LUBE OIL drops to recover!',
         ],
         effectLines: [
-          'Cools down PUMP A/B BEARING HEAT (%) and',
-          'restores LUBE OIL PRESSURE.',
+          'Cools MAX BEARING (-3.5°C/s) and adds dry',
+          'core cooling without using zone H2O.',
         ],
         reactionLines: [
-          'Diverts 15% of water pressure away from',
-          'main reactor core cooling on UNIT A!',
+          'Running >50% thins LUBE OIL (-1.5%/s);',
+          'below 25% oil breaks down & stops cooling!',
         ],
       },
       {
         icon: 'piston',
-        badge: '[UNIT A-2] BORON PISTON PUMP (T-HANDLE)',
+        badge: '[UNIT A-2] BORON PISTON PUMP (3.0 TANKS)',
         useLines: [
           'Grab the horizontal Bakelite T-handle on',
-          'UNIT A-2 and pump it up & down repeatedly.',
+          'UNIT A-2 and pump full strokes up & down.',
         ],
         effectLines: [
-          'Refills BORON RESERVE TANK back to 100%',
-          'so BORON INJECTION and AZ-5 can function.',
+          'Restores +3.5% BORON TANK per full stroke',
+          '(zero auto-recharge; manual pump only).',
         ],
         reactionLines: [
-          'Requires physical pumping strokes after',
-          'every BORON injection or AZ-5 scram!',
+          'Draws from finite shift supply of 3.0',
+          'Boron Carboys (300% total concentrate)!',
         ],
       },
       {
         icon: 'wheel',
-        badge: '[UNIT B] HELIUM-N2 LOOP (DRY GAS COOLING)',
+        badge: '[UNIT B] HELIUM-N2 LOOP (0-80 BAR GAS)',
         useLines: [
-          'Crank the left regulator handwheel on',
-          'UNIT B to hold gas pressure at 40-55 BAR.',
+          'Crank left wheel on UNIT B; dial <35% &',
+          'flip Scrubbers ON to vent BAR (-2.5/s)!',
         ],
         effectLines: [
-          'Cools GRAPHITE (°C) & takes 35% heat load',
-          'off water pumps WITHOUT using river water!',
+          'Absorbs 40% of core & graphite heat load',
+          'without siphoning any zone water!',
         ],
         reactionLines: [
-          'If GRAPHITE TEMP exceeds 650°C, positive',
-          'void reactivity makes CORE TEMP skyrocket!',
+          'Running >45% builds pressure; >68 BAR',
+          'saturates (loses 75% cooling + leaks R/H)!',
         ],
       },
       {
         icon: 'gas',
-        badge: '[UNIT B] BUBBLER DRAIN (WATER RECYCLING)',
+        badge: '[UNIT B] BUBBLER DRAIN (RETURN ZONE H2O)',
         useLines: [
-          'Flip 3 metal toggles UP to lock seals; hold',
-          'down spring-loaded BUBBLER DRAIN lever.',
+          'Flip 3 Seal Scrubbers UP to lock seals;',
+          'pull & hold spring BUBBLER DRAIN lever.',
         ],
         effectLines: [
-          'Condenses steam from CONDENSER % and',
-          'recycles +12% water/s to WATER RESERVOIR!',
+          'Pumps condensed steam from BUBBLER MAX',
+          'back to PRIPYAT, KOLKHOZ & VODKA (+10%/s)!',
         ],
         reactionLines: [
-          'Prevents Vodka Distillery Water Droughts!',
-          'Pool >=90% blocks cooling & spikes BAR!',
+          'Cures zone water droughts & reverses map',
+          'pipes! Bubbler >=90% blocks steam vent!',
         ],
       },
     ]
 
     auxCards.forEach((c, idx) => {
-      drawFieldGuideCard(ctx, LW, 168 + idx * 208, c)
+      drawFieldGuideCard(ctx, LW, 168 + idx * 214, c)
     })
   } else {
     // =========================================================================
-    // SECTION II — TAB 7 (`7. TURBINE & GRID (RIGHT PANEL [KEY 5])`)
+    // SECTION II — TAB 7 (`7. UNIT C: TURBINE & 50HZ GRID [KEY 5]`)
     // =========================================================================
-    ctx.fillStyle = '#144722'
-    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.fillStyle = '#094a20'
+    ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('7. TURBINE & GRID (RIGHT PANEL [KEY 5])', 44, 156)
+    ctx.fillText('7. UNIT C: TURBINE & 50HZ GRID [KEY 5]', 38, 156)
 
     const gridCards: FieldGuideCardSpec[] = [
       {
         icon: 'breaker',
         badge: '[KEY 5] MAIN BREAKER (COPPER KNIFE-SWITCH)',
         useLines: [
-          'Grab the big red handle and drag it all the',
-          'way UP into the copper jaws (or [SPACE]).',
+          'If tripped OPEN, trim 50HZ RHEOSTAT to 49–51 HZ,',
+          'then drag MAIN BREAKER UP (or [SPACE]) to re-close.',
         ],
         effectLines: [
-          'Energizes the bunker and connects the',
-          'turbine generator to the Soviet 50Hz grid.',
+          'Trips OPEN if GRID HZ leaves 47.8–52.2 HZ (or >3450',
+          'RPM) for >10s, causing 0 MW regional blackout!',
         ],
         reactionLines: [
-          'Trips OPEN automatically into blackout if',
-          'GRID HZ stays in the red zone for >8s!',
+          'While OPEN, turbine stops converting reactor heat',
+          'into MW — CORE TEMP & PRESSURE climb 1.8x faster!',
         ],
       },
       {
         icon: 'rheostat',
-        badge: '[KEY 5] 50HZ RHEOSTAT (CENTER ROTARY DIAL)',
+        badge: '[KEY 5] 50HZ RHEOSTAT (+MW vs -MW CHECKLIST)',
         useLines: [
-          'Grab and drag left/right with mouse to',
-          'rotate the ceramic dial through its clicks.',
+          'HOW TO INCREASE MW (+MW ORDER): 1. Withdraw Boron',
+          'Rods (A-2) -> 2. Boost Pumps & MW Lever (A) -> 3. Turn',
         ],
         effectLines: [
-          'Trims GRID FREQUENCY back to 50.0 Hz',
-          '(12 o-clock) after changing MW on UNIT A.',
+          '50Hz Rheostat / Steam Valve (C) UP to hold 50.0 Hz!',
+          'HOW TO DECREASE MW (-MW ORDER): 1. Lower MW Lever (A)',
         ],
         reactionLines: [
-          'Neglecting 50.0 Hz trips the MAIN BREAKER',
-          'and plunges the control room into blackout!',
+          '-> 2. Lower 50Hz Rheostat (C) so RPM <3060 (<51 Hz) &',
+          'Vent Steam -> 3. Insert Boron Rods (A-2) & Dump Steam!',
         ],
       },
       {
         icon: 'vent',
-        badge: '[KEY 5] STEAM VENT (SPRING PULL-LEVER)',
+        badge: '[KEY 5] STEAM VENT vs AUX LOOP B (BYPASS)',
         useLines: [
-          'Grab and hold the right lever DOWN with',
-          'your mouse (snaps back up on release).',
+          'Pull & hold STEAM VENT (left lever) for relief,',
+          'OR flip Switch 4: AUX LOOP B (TURBINE BYPASS).',
         ],
         effectLines: [
-          'Rapidly dumps excess STEAM PRESSURE',
-          '(-18 BAR/s) to prevent pipe rupture (>95).',
+          'STEAM VENT drops -5.5 BAR/s & -10°C/s fast, but',
+          'wastes -2.5%/s H2O into sky (+0.12 R/H/s rads)!',
         ],
         reactionLines: [
-          'Releases radioactive steam, spiking room',
-          'DOSIMETER (R/H) & filling UNIT B bubbler!',
+          'AUX LOOP B diverts steam into UNIT B BUBBLER (+3.5%/s',
+          'H2O, -15% RPM) to pump water back to Vodka & City!',
         ],
       },
       {
-        icon: 'gas',
-        badge: '[KEY 5] VENTILATION (GUARDED METAL TOGGLE)',
+        icon: 'ventilation_toggle',
+        badge: '[KEY 5] VENTILATION & KGB LINE TOGGLES',
         useLines: [
-          'Flip the bottom-left guarded metal toggle',
-          'switch UP (ON) on the Right Panel.',
+          'Flip Switch 1 (VENTILATION), Switch 2 (AUDIO [M]),',
+          'or Switch 3 (KGB LINE) along the bottom of UNIT C.',
         ],
         effectLines: [
-          'Scrubs radioactive contamination out of',
-          'the control room (-1.2 R/H per second).',
+          'VENTILATION scrubs room radiation (-1.2 R/H/s) for',
+          '+10 MW internal load (-0.4 Hz shift on GEN. LOAD).',
         ],
         reactionLines: [
-          'Draws +10 MW parasitic electrical load,',
-          'pulling GRID HZ down & heating the core!',
+          'KGB LINE (-0.35 Hz drag) decodes live Ministry &',
+          'forgery intel on the K.O.M.R.A.D.-84 Comms screen!',
         ],
       },
     ]
 
     gridCards.forEach((c, idx) => {
-      drawFieldGuideCard(ctx, LW, 168 + idx * 208, c)
+      drawFieldGuideCard(ctx, LW, 168 + idx * 214, c)
     })
   }
 
@@ -1706,10 +2979,525 @@ export function drawSecurityManualCanvas(
 }
 
 /**
- * Renders the True 2x Straight Optical Magnifying Glass Lens (384x384).
- * Zero UV — computes the exact intersection with the topmost overlapping 3D Directive
- * (or the KGB Security Manual) and draws a genuine 2x optically magnified crop!
+ * Draws the engraved Soviet "Bitten Beetroot with Hammer & Sickle" ("Надкусанная Свёкла с Серпом и Молотом")
+ * emblem for ЭЛЕКТРОНИКА «МЫ-ПАД 84» (WE-PAD 84).
  */
+export function drawBittenBeetrootHammerSickleLogo(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  scale = 1.0,
+  strokeCol = '#39ff14',
+  fillCol = '#7a1628'
+): void {
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.scale(scale, scale)
+
+  // Beetroot leafy sprouts at top
+  ctx.strokeStyle = strokeCol
+  ctx.lineWidth = 2.4
+  ctx.beginPath()
+  ctx.moveTo(0, -14)
+  ctx.quadraticCurveTo(-9, -24, -14, -22)
+  ctx.moveTo(0, -14)
+  ctx.lineTo(0, -25)
+  ctx.moveTo(0, -14)
+  ctx.quadraticCurveTo(9, -24, 14, -22)
+  ctx.stroke()
+
+  // Beetroot body with a prominent Apple-style bite on the right side + root tail at bottom
+  ctx.fillStyle = fillCol
+  ctx.strokeStyle = strokeCol
+  ctx.lineWidth = 2.6
+  ctx.beginPath()
+  ctx.moveTo(0, -14)
+  ctx.bezierCurveTo(-16, -14, -19, 2, -10, 13)
+  ctx.lineTo(0, 24) // Root taproot tip
+  ctx.lineTo(9, 13)
+  // Bite indentation on right flank
+  ctx.arc(15, 0, 7.5, Math.PI * 0.68, -Math.PI * 0.68, true)
+  ctx.quadraticCurveTo(10, -14, 0, -14)
+  ctx.closePath()
+  ctx.fill()
+  ctx.stroke()
+
+  // Hammer & Sickle inside the beetroot
+  ctx.strokeStyle = '#ffd000'
+  ctx.lineWidth = 2.4
+  // Hammer handle & head
+  ctx.beginPath()
+  ctx.moveTo(-6, 9)
+  ctx.lineTo(5, -5)
+  ctx.moveTo(1, -7)
+  ctx.lineTo(8, -2)
+  ctx.stroke()
+  // Sickle arc
+  ctx.beginPath()
+  ctx.arc(-1, 1, 7.5, -Math.PI * 0.65, Math.PI * 0.55)
+  ctx.stroke()
+
+  ctx.restore()
+}
+
+/**
+ * Draws the glowing phosphor-vector screen of ЭЛЕКТРОНИКА «МЫ-ПАД 84» (WE-PAD 84):
+ * - Slogan: "IN SOVIET UNION, THERE IS NO i-PAD, ONLY WE-PAD!"
+ * - Bitten Beetroot with Hammer & Sickle logo
+ * - 6 Interactive Tabs (`[1. ЧАТ / DRILL]`, `[2. UNIT B]`, `[3. UNIT A-2]`, `[4. UNIT A]`, `[5. UNIT C]`, `[6. ФИЗИКА]`)
+ * - Live scrolling Volkov Telegraph Chat Log + Step 0–7 checklist & RBMK-1000 schematics
+ */
+export function drawWePad84ScreenCanvas(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  payload: WePadTelemetryPayload,
+  scrollY = 0
+): void {
+  ctx.save()
+  ctx.imageSmoothingEnabled = true
+  const LW = 1024
+  const LH = 1280
+  ctx.scale(w / LW, h / LH)
+
+  const activeTab = payload.activeTab
+
+  // Deep Phosphor-Black CRT Screen Background & Crisp Outer Frame
+  ctx.fillStyle = '#041109'
+  ctx.fillRect(0, 0, LW, LH)
+  ctx.strokeStyle = '#39ff14'
+  ctx.lineWidth = 4
+  ctx.strokeRect(10, 10, LW - 20, LH - 20)
+
+  // =========================================================================
+  // ZONE 1 (TOP): COMPACT TELEMETRY LINE (30px) + 6 TAB BUTTONS (26px)
+  // =========================================================================
+  ctx.fillStyle = '#082112'
+  ctx.fillRect(20, 20, LW - 40, 56)
+  ctx.strokeStyle = '#28b862'
+  ctx.lineWidth = 2.5
+  ctx.strokeRect(20, 20, LW - 40, 56)
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#00f0ff'
+  ctx.font = 'bold 28px "Consolas", "Courier Prime", monospace'
+  const teleLine = `MWt:${Math.round(payload.thermalPower)} | BAR:${payload.drumPressure.toFixed(0)} | LVL:${Math.round(payload.drumWaterLevel)}mm | VLV:${Math.round((payload.turbineValve ?? 0) * 100)}% | RPM:${Math.round(payload.rpm)} | MWe:${Math.round(payload.totalElectricalMW)}`
+  ctx.fillText(teleLine, LW / 2, 58, LW - 56)
+
+  // 6 Chapter Tab Buttons (`[1] DRILL` .. `[6] HAZARDS`, 2 rows x 3 columns, y = 88..216)
+  const tabSpecs: Array<{ id: WePadTabId; label: string }> = [
+    { id: 1, label: '[1] DRILL' },
+    { id: 2, label: '[2] UNIT B' },
+    { id: 3, label: '[3] UNIT A-2' },
+    { id: 4, label: '[4] UNIT A' },
+    { id: 5, label: '[5] UNIT C' },
+    { id: 6, label: '[6] HAZARDS' },
+  ]
+  const colW = Math.floor((LW - 52) / 3)
+  tabSpecs.forEach((tab, idx) => {
+    const col = idx % 3
+    const row = Math.floor(idx / 3)
+    const tx = 20 + col * (colW + 6)
+    const ty = 88 + row * 64
+    const isSel = activeTab === tab.id
+    ctx.fillStyle = isSel ? '#196b30' : '#091d11'
+    ctx.fillRect(tx, ty, colW, 56)
+    ctx.strokeStyle = isSel ? '#ffd000' : '#28b862'
+    ctx.lineWidth = isSel ? 3.5 : 2
+    ctx.strokeRect(tx, ty, colW, 56)
+    ctx.fillStyle = isSel ? '#ffffff' : '#88e8a0'
+    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+    ctx.textAlign = 'center'
+    ctx.fillText(tab.label, tx + colW / 2, ty + 37, colW - 14)
+  })
+
+  // =========================================================================
+  // ZONE 2 (MIDDLE — 80% OF SCREEN): spacious, big-font active content
+  // =========================================================================
+  const vpX = 20
+  const vpY = 232
+  const vpW = LW - 40
+  const vpH = 956
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(vpX, vpY, vpW, vpH)
+  ctx.clip()
+
+  if (activeTab === 1) {
+    // -----------------------------------------------------------------------
+    // TAB 1: ACTIVE ORDER BOX (`ACTION:` + `WHY:` or `>> K.O.M.R.A.D.-84 // LIVE DISPATCH`) +
+    //        1–2 PREVIOUSLY COMPLETED STEPS / MESSAGES (`26px`) BELOW
+    // -----------------------------------------------------------------------
+    const isCompletedShift = payload.tutorialPhase === 'COMPLETED'
+    const latestLiveMsg =
+      isCompletedShift && payload.chatLog.length > 0
+        ? payload.chatLog[payload.chatLog.length - 1]
+        : null
+
+    const objY = vpY + 8
+    const objH = 385
+    ctx.fillStyle = '#1f1904'
+    ctx.fillRect(vpX + 4, objY, vpW - 8, objH)
+    ctx.strokeStyle = '#ffd000'
+    ctx.lineWidth = 4
+    ctx.strokeRect(vpX + 4, objY, vpW - 8, objH)
+
+    const isActiveMultiPanelOrder =
+      isCompletedShift && payload.tutorialHeader.startsWith('>> ACTIVE')
+    ctx.textAlign = 'left'
+    ctx.fillStyle = '#39ff14'
+    ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
+    const topBoxHeader =
+      isCompletedShift && !isActiveMultiPanelOrder
+        ? '>> K.O.M.R.A.D.-84 // LIVE DISPATCH'
+        : payload.tutorialHeader
+    ctx.fillText(topBoxHeader, vpX + 24, objY + 46, vpW - 48)
+
+    ctx.fillStyle = '#ffe600'
+    ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
+    const rawActiveText =
+      isCompletedShift && !isActiveMultiPanelOrder && latestLiveMsg
+        ? `[${latestLiveMsg.timestamp}] ${latestLiveMsg.sender}: ${latestLiveMsg.text}`
+        : payload.tutorialBody
+    const cleanBody = rawActiveText.replace(/^"|"$/g, '')
+    const bodyLines = wrapCanvasText(ctx, cleanBody, vpW - 48)
+    bodyLines.slice(0, 3).forEach((ln, i) => {
+      ctx.fillText(ln, vpX + 24, objY + 96 + i * 38, vpW - 48)
+    })
+
+    // Divider between ACTION and WHY / LIVE ADVISORY
+    const whyDivY = objY + 216
+    ctx.strokeStyle = '#00f0ff'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(vpX + 20, whyDivY)
+    ctx.lineTo(vpX + vpW - 20, whyDivY)
+    ctx.stroke()
+
+    ctx.fillStyle = '#00f0ff'
+    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+    const cleanHint = payload.tutorialHint.replace(/^"|"$/g, '')
+    const hintLines = wrapCanvasText(ctx, cleanHint, vpW - 48)
+    hintLines.slice(0, 4).forEach((ln, i) => {
+      ctx.fillText(ln, vpX + 24, whyDivY + 34 + i * 33, vpW - 48)
+    })
+
+    // Filter previously completed Volkov steps or earlier live dispatches (never repeat the active top message!)
+    const completedMsgs = isCompletedShift
+      ? payload.chatLog.slice(0, Math.max(0, payload.chatLog.length - 1))
+      : payload.chatLog.filter(
+          (m) =>
+            m.completed &&
+            m.sender !== 'SYSTEM' &&
+            m.phase !== payload.tutorialPhase
+        )
+
+    const histHeaderY = objY + objH + 38
+    ctx.fillStyle = '#58b870'
+    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText(
+      isCompletedShift
+        ? 'PREVIOUS DISPATCHES & VOLKOV LOG (SCROLL):'
+        : 'COMPLETED ORDERS (HISTORY):',
+      vpX + 8,
+      histHeaderY
+    )
+
+    if (completedMsgs.length === 0) {
+      ctx.fillStyle = '#3d7a4e'
+      ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+      ctx.fillText(
+        '• No completed steps yet — execute the active order above.',
+        vpX + 12,
+        histHeaderY + 52,
+        vpW - 24
+      )
+    } else {
+      // Show at most 2 completed steps at a time (scrollY steps through older completed orders)
+      const scrollSteps = Math.max(0, Math.floor(scrollY / 40))
+      const endIdx = Math.max(
+        1,
+        completedMsgs.length - scrollSteps
+      )
+      const startIdx = Math.max(0, endIdx - 2)
+      const visibleCompleted = completedMsgs.slice(startIdx, endIdx).reverse()
+
+      let cardY = histHeaderY + 20
+      visibleCompleted.forEach((msg) => {
+        ctx.font = 'bold 25px "Consolas", "Courier Prime", monospace'
+        const lines = wrapCanvasText(ctx, msg.text, vpW - 56).slice(0, 3)
+        const cardH = 58 + lines.length * 34 + 16
+
+        ctx.fillStyle = 'rgba(10, 38, 18, 0.85)'
+        ctx.fillRect(vpX + 4, cardY, vpW - 8, cardH)
+        ctx.strokeStyle = '#248f43'
+        ctx.lineWidth = 2.5
+        ctx.strokeRect(vpX + 4, cardY, vpW - 8, cardH)
+
+        ctx.textAlign = 'left'
+        ctx.fillStyle = '#39ff14'
+        ctx.font = 'bold 25px "Consolas", "Courier Prime", monospace'
+        ctx.fillText(
+          `[${msg.timestamp}] ${msg.sender}`,
+          vpX + 22,
+          cardY + 38
+        )
+
+        ctx.textAlign = 'right'
+        ctx.fillStyle = '#39ff14'
+        ctx.fillText(
+          msg.sender === 'K.O.M.R.A.D.-84' ? 'LOGGED ✓' : 'COMPLETED ✓',
+          vpX + vpW - 22,
+          cardY + 38
+        )
+
+        ctx.textAlign = 'left'
+        ctx.fillStyle = '#8ce8a4'
+        lines.forEach((ln, lIdx) => {
+          ctx.fillText(ln, vpX + 22, cardY + 78 + lIdx * 34, vpW - 44)
+        })
+
+        cardY += cardH + 18
+      })
+    }
+  } else {
+    // -----------------------------------------------------------------------
+    // TABS 2–6: LARGE VECTOR SCHEMATIC (`lineWidth: 4`, `26px` labels) +
+    //           MAX 4 SHORT BULLET POINTS (`bold 28px monospace`)
+    // -----------------------------------------------------------------------
+    const schemY = vpY + 8
+    const schemH = 270
+    ctx.fillStyle = '#05160b'
+    ctx.fillRect(vpX + 4, schemY, vpW - 8, schemH)
+    ctx.strokeStyle = '#00f0ff'
+    ctx.lineWidth = 4
+    ctx.strokeRect(vpX + 4, schemY, vpW - 8, schemH)
+
+    const drawBullets = (
+      title: string,
+      bullets: [string, string, string, string],
+      accent = '#39ff14'
+    ) => {
+      const boxY = schemY + schemH + 24
+      const boxH = vpH - schemH - 40
+      ctx.fillStyle = '#071a0e'
+      ctx.fillRect(vpX + 4, boxY, vpW - 8, boxH)
+      ctx.strokeStyle = accent
+      ctx.lineWidth = 3.5
+      ctx.strokeRect(vpX + 4, boxY, vpW - 8, boxH)
+
+      ctx.fillStyle = accent
+      ctx.fillRect(vpX + 4, boxY, vpW - 8, 58)
+      ctx.fillStyle = '#031006'
+      ctx.textAlign = 'left'
+      ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
+      ctx.fillText(title, vpX + 22, boxY + 40, vpW - 44)
+
+      let curBY = boxY + 108
+      bullets.forEach((bText, bIdx) => {
+        ctx.font = 'bold 28px "Consolas", "Courier Prime", monospace'
+        ctx.fillStyle = bIdx % 2 === 0 ? '#ffffff' : '#ffe600'
+        const wrapped = wrapCanvasText(ctx, bText, vpW - 52).slice(0, 2)
+        wrapped.forEach((ln, lIdx) => {
+          ctx.fillText(ln, vpX + 24, curBY + lIdx * 38, vpW - 48)
+        })
+        curBY += wrapped.length * 38 + 34
+      })
+    }
+
+    if (activeTab === 2) {
+      // UNIT B Schematic: Drum Separator + 4 MCP Pumps
+      ctx.strokeStyle = '#00f0ff'
+      ctx.lineWidth = 4
+      ctx.strokeRect(vpX + 44, schemY + 38, 320, 110)
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.28)'
+      ctx.fillRect(vpX + 48, schemY + 94, 312, 50)
+      ctx.fillStyle = '#00f0ff'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('DRUM: 70 BAR / 0 MM', vpX + 204, schemY + 78)
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText('FEEDWATER: 50–85%', vpX + 204, schemY + 195)
+
+      for (let i = 0; i < 4; i++) {
+        const px = vpX + 455 + i * 130
+        ctx.strokeStyle = '#39ff14'
+        ctx.lineWidth = 4
+        ctx.beginPath()
+        ctx.arc(px, schemY + 98, 42, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.fillStyle = '#39ff14'
+        ctx.fillText(`ГЦН-${i + 1}`, px, schemY + 185)
+      }
+
+      drawBullets('UNIT B // DRUM & COOLANT LOOP (БЩУ-Т)', [
+        '• PUMPS (ГЦН 1–4): Turn ON all 4 Main Pumps first — prevents steam voids in the core!',
+        '• FEEDWATER (ПЭН): 50% at 600 MWe (85% at 1000 MWe) replaces boiled steam so Drum stays ~0 MM.',
+        '• DRUM PRESSURE: Nominal 70 BAR (Redzone >80 BAR). Use STEAM DUMP (БРУ-К) if >85 BAR.',
+        '• POWER SURGE RULE: More MWt boils water faster — raise Feedwater when raising Rods!',
+      ])
+    } else if (activeTab === 3) {
+      // UNIT A-2 Schematic: 37-Rod Core + Reactivity
+      ctx.strokeStyle = '#39ff14'
+      ctx.lineWidth = 4
+      ctx.beginPath()
+      ctx.arc(vpX + 160, schemY + 135, 86, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.fillStyle = '#39ff14'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('37-ROD CORE', vpX + 160, schemY + 142)
+
+      ctx.textAlign = 'left'
+      ctx.fillStyle = '#00f0ff'
+      ctx.fillText(
+        `ROD POSITION: ${Math.round(payload.controlRods * 100)}%`,
+        vpX + 310,
+        schemY + 86
+      )
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText(
+        `XENON-135: ${payload.xenonPoisoning.toFixed(1)}%`,
+        vpX + 310,
+        schemY + 146
+      )
+      ctx.fillStyle = '#ff5555'
+      ctx.fillText(
+        `POSITIVE VOID: +${payload.voidFraction.toFixed(1)}%`,
+        vpX + 310,
+        schemY + 206
+      )
+
+      drawBullets('UNIT A-2 // CORE & REACTIVITY (СИУР)', [
+        '• ROD POSITION (0–100%): 55% = 1920 MWt (600 MWe baseline); 90% = 3200 MWt (1000 MWe surge).',
+        '• AUTO REGULATOR (АР): Micro-trims ±40 MWt (±1.5% rods) ONLY — saturates & trips OFF on >=50 MWe orders!',
+        '• WHY RAISE RODS: Opening Turbine Valve without raising Control Rods & Feedwater starves Drum BAR (<45 BAR).',
+        '• XENON & VOID: Click glowing cyan/red tiles on the 37-ROD CORE MAP or use Boron / Feedwater.',
+      ])
+    } else if (activeTab === 4) {
+      // UNIT A Schematic: AZ-5 Warning + 6 Substation Sliders
+      ctx.strokeStyle = '#ff2a2a'
+      ctx.lineWidth = 4
+      ctx.strokeRect(vpX + 36, schemY + 36, 430, 195)
+      ctx.fillStyle = '#ff2a2a'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('⚠️ AZ-5 GRAPHITE TIP FLAW', vpX + 251, schemY + 105)
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText('+0.035 REACTIVITY (FIRST 3.5s)', vpX + 251, schemY + 165)
+
+      ctx.fillStyle = '#39ff14'
+      ctx.fillText('6 LEVERS: 0–250 MW EACH', vpX + 725, schemY + 138)
+
+      drawBullets(
+        'UNIT A // AZ-5 & 6 SUBSTATION LEVERS (0–250 MW)',
+        [
+          '• +MW ORDER: 1.[A-2] Withdraw Control Rods -> 2.[B/A] Raise Feedwater & Pumps A/B -> 3.[A] Set Sector MW Lever -> 4.[C] Match Turbine Steam Valve (50.0 Hz)!',
+          '• -MW ORDER: 1.[A] Lower Sector MW Lever -> 2.[C] Lower Turbine Steam Valve -> 3.[A-2] Insert Control Rods (<75 BAR) -> 4.[B] Adjust Feedwater & Steam Dump!',
+          '• STEAM STARVATION (<45 BAR): Pulling MW Lever & Valve without raising Rods & Feedwater drops Drum Level <-80mm!',
+          '• AZ-5 DEFECT: Graphite rod tips cause a 3.5s power spike if Void > 20%!',
+        ],
+        '#ff2a2a'
+      )
+    } else if (activeTab === 5) {
+      // UNIT C Schematic: Synchroscope 12 o'clock + 3000 RPM Governor
+      ctx.strokeStyle = '#39ff14'
+      ctx.lineWidth = 4
+      ctx.beginPath()
+      ctx.arc(vpX + 155, schemY + 135, 86, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.strokeStyle = '#ffd000'
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.moveTo(vpX + 155, schemY + 135)
+      ctx.lineTo(vpX + 155, schemY + 56)
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.fillStyle = '#39ff14'
+      ctx.fillText("12 O'CLOCK = 0° SYNC ZONE", vpX + 290, schemY + 86)
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText('1. 20% VALVE -> 3000 RPM GOVERNOR', vpX + 290, schemY + 146)
+      ctx.fillStyle = '#00f0ff'
+      ctx.fillText('2. LOCK 50.0 HZ EQUILIBRIUM (+/- MW)', vpX + 290, schemY + 206)
+
+      drawBullets('UNIT C // TURBINE & 50.0 HZ EQUILIBRIUM (БЩУ-Э)', [
+        '• 3000 RPM GOVERNOR: Set STEAM VALVE to 20%, then click MAIN BREAKER [SPACE] at 12 o\'clock!',
+        '• +MW ORDER: 1. Withdraw Rods (A-2) -> 2. Boost Pumps & MW Lever (A) -> 3. Turn 50Hz Rheostat / Valve UP (C) so Grid Drag doesn\'t pull Hz <49.0!',
+        '• -MW ORDER: 1. Lower MW Lever (A) -> 2. Lower 50Hz Rheostat / Valve (C) so Turbine doesn\'t Overspeed (>51.0 Hz) & Vent Steam -> 3. Insert Rods (A-2)!',
+        '• BREAKER TRIP: Staying outside 48.5–51.5 Hz for >14s or >3220 RPM trips the Main Breaker!',
+      ])
+    } else {
+      // TAB 6: HAZARDS — POSITIVE VOID & XENON-135 COUNTERMEASURES
+      ctx.strokeStyle = '#ff2a2a'
+      ctx.lineWidth = 4
+      ctx.beginPath()
+      ctx.moveTo(vpX + 44, schemY + 215)
+      ctx.quadraticCurveTo(vpX + 260, schemY + 200, vpX + 440, schemY + 55)
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = 'bold 26px "Consolas", monospace'
+      ctx.fillStyle = '#ff2a2a'
+      ctx.fillText(
+        `VOID (${payload.voidFraction.toFixed(0)}%): RED TILES / FEEDWATER / BORON`,
+        vpX + 52,
+        schemY + 92
+      )
+      ctx.fillStyle = '#00f0ff'
+      ctx.fillText(
+        `XENON (${payload.xenonPoisoning.toFixed(0)}%): CYAN TILES / RAISE RODS >=75%`,
+        vpX + 52,
+        schemY + 155
+      )
+      ctx.fillStyle = '#ffd000'
+      ctx.fillText(
+        'RODS (MWt) -> DRUM BAR -> TURBINE (MWe) -> 6 LEVERS',
+        vpX + 52,
+        schemY + 215
+      )
+
+      drawBullets(
+        'POSITIV VOID & XENON-135 COUNTERMEASURES',
+        [
+          '• STOP HIGH VOID (%): Raise FEEDWATER (UNIT B) to 75%+, click RED core tiles (A-2), or press [BORON INJECTION] on UNIT A (-35% Void)!',
+          '• BURN XENON-135 (%): Raise RODS (СУЗ on A-2) to 75–90% (>1800 MWt) or click CYAN core tiles (-12% Xenon each)!',
+          '• PREVENT XENON PIT: During low-MW orders, keep Rods at ~60% and open STEAM DUMP (БРУ-К) so Xenon keeps burning!',
+          '• MOUSE WHEEL TIP: Scroll wheel on ANY handwheel or lever for fast 5% / 25 MW steps (hold SHIFT for 1% fine trim)!',
+        ],
+        '#00f0ff'
+      )
+    }
+  }
+
+  ctx.restore() // end Zone 2 clip
+
+  // =========================================================================
+  // ZONE 3 (BOTTOM): 1 CLEAN STATUS LINE WITHOUT HEAVY BOX FRAMES
+  // =========================================================================
+  ctx.strokeStyle = '#28b862'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(24, 1202)
+  ctx.lineTo(LW - 24, 1202)
+  ctx.stroke()
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#ffd000'
+  ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+  ctx.fillText(
+    '[1–6]: BYTT FANE   |   [TAB]: ZOOM   |   [E]: LEGG PÅ PULT',
+    LW / 2,
+    1244,
+    LW - 40
+  )
+
+  ctx.restore()
+}
+
 export function drawTrue2xOpticalLensCanvas(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -1823,23 +3611,36 @@ export function drawDeskHeaderTickerCanvas(
   citations: number,
   lastVerdict: InspectionVerdict | null,
   isMuted = false,
-  isFreeLookMode = false
+  isFreeLookMode = false,
+  tutorialPrompt: string | null = null,
+  diagnosticHint: string | null = null
 ): void {
   ctx.save()
   ctx.imageSmoothingEnabled = false
 
+  const activeBannerPrompt = diagnosticHint ?? tutorialPrompt
+  const isDrillMode = Boolean(tutorialPrompt && !diagnosticHint)
+
   ctx.fillStyle = '#09120e'
   ctx.fillRect(0, 0, w, h)
-  ctx.strokeStyle = '#b8a46b'
+  ctx.strokeStyle = activeBannerPrompt ? '#ffb000' : '#b8a46b'
   ctx.lineWidth = 4
   ctx.strokeRect(4, 4, w - 8, h - 8)
 
-  // Left Title in Phosphor Green / Brass
-  ctx.fillStyle = '#33ff66'
-  ctx.font = 'bold 18px "Courier Prime", monospace'
+  // Left Title in Phosphor Green / Brass (or Training Drill / Diagnostic Badge)
+  ctx.fillStyle = activeBannerPrompt ? '#ffb000' : '#33ff66'
+  ctx.font = 'bold 17px "Courier Prime", monospace'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillText('ПУНКТ №4 // DESK', 16, 28)
+  ctx.fillText(
+    isDrillMode
+      ? 'УЧЕБНАЯ ТРЕВОГА'
+      : diagnosticHint
+        ? 'ТАБЛО ТРЕВОГИ'
+        : 'ПУНКТ №4 // DESK',
+    16,
+    28
+  )
 
   // Diegetic Camera Mode Pill ([L-CTRL] РЕЖИМ: КУРСОР / ОБЗОР)
   ctx.fillStyle = isFreeLookMode ? '#3b280b' : '#112e22'
@@ -1851,9 +3652,11 @@ export function drawDeskHeaderTickerCanvas(
   ctx.font = 'bold 14px "Courier Prime", monospace'
   ctx.textAlign = 'center'
   ctx.fillText(
-    isFreeLookMode
-      ? '[L-CTRL] РЕЖИМ: ОБЗОР (FREE-LOOK)'
-      : '[L-CTRL] РЕЖИМ: КУРСОР (CURSOR)',
+    isDrillMode
+      ? '[BACKSPACE] SKIP TRAINING DRILL'
+      : isFreeLookMode
+        ? '[L-CTRL] РЕЖИМ: ОБЗОР (FREE-LOOK)'
+        : '[L-CTRL] РЕЖИМ: КУРСОР (CURSOR)',
     382,
     28
   )
@@ -1886,34 +3689,46 @@ export function drawDeskHeaderTickerCanvas(
   ctx.fillStyle = '#ff5555'
   ctx.fillText(`CITATIONS: ${citations}`, w - 103, 28)
 
-  // Bottom Verdict Ticker Row
-  const tickerBg = !lastVerdict
-    ? '#0d1a14'
-    : lastVerdict.pending
-      ? '#2b220d'
-      : lastVerdict.correct
-        ? '#0f2e19'
-        : '#3b0f0f'
+  // Bottom Verdict / Training Drill / Contextual Diagnostic Hint Ticker Row
+  const tickerBg = activeBannerPrompt
+    ? '#2b1e08'
+    : !lastVerdict
+      ? '#0d1a14'
+      : lastVerdict.pending
+        ? '#2b220d'
+        : lastVerdict.correct
+          ? '#0f2e19'
+          : '#3b0f0f'
   ctx.fillStyle = tickerBg
   ctx.fillRect(14, 50, w - 28, 36)
-  const tickerColor = !lastVerdict
-    ? '#33ff66'
-    : lastVerdict.pending
-      ? '#ffb000'
-      : lastVerdict.correct
-        ? '#33ff66'
-        : '#ff2a2a'
-  ctx.strokeStyle = tickerColor
+  const tickerColor = activeBannerPrompt
+    ? '#ffdd55'
+    : !lastVerdict
+      ? '#33ff66'
+      : lastVerdict.pending
+        ? '#ffb000'
+        : lastVerdict.correct
+          ? '#33ff66'
+          : '#ff2a2a'
+  ctx.strokeStyle = activeBannerPrompt ? '#ffb000' : tickerColor
   ctx.lineWidth = 2
   ctx.strokeRect(14, 50, w - 28, 36)
 
   ctx.fillStyle = tickerColor
-  ctx.font = 'bold 16px "Courier Prime", monospace'
   ctx.textAlign = 'center'
-  const text = lastVerdict
-    ? `${lastVerdict.docId} [${lastVerdict.decision}]: ${lastVerdict.reason}`
-    : 'INSPECT SEALS (2x ZOOM), FONTS/MINISTRIES & COLOURS IN KGB MANUAL BEFORE DISPATCHING'
-  ctx.fillText(text.slice(0, 88), w / 2, 69)
+  const text = activeBannerPrompt
+    ? activeBannerPrompt
+    : lastVerdict
+      ? `${lastVerdict.docId} [${lastVerdict.decision}]: ${lastVerdict.reason}`
+      : 'INSPECT SEALS (2x ZOOM), FONTS/MINISTRIES & COLOURS IN KGB MANUAL BEFORE DISPATCHING'
+
+  let fontPx = activeBannerPrompt ? 14 : 16
+  ctx.font = `bold ${fontPx}px "Courier Prime", monospace`
+  while (ctx.measureText(text).width > w - 44 && fontPx > 11) {
+    fontPx -= 0.5
+    ctx.font = `bold ${fontPx}px "Courier Prime", monospace`
+  }
+  ctx.fillText(text, w / 2, 69)
 
   ctx.restore()
 }

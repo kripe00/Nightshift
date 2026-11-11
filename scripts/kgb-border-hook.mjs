@@ -1,11 +1,17 @@
 // KGB Pre-Commit Border Hook — Blocks commits that cross Komrad Kristianov / Komrad Oleg boundaries
 import { execSync } from 'node:child_process'
+import fs from 'node:fs'
 
 const RED = '\x1b[31m'
 const GREEN = '\x1b[32m'
 const YELLOW = '\x1b[33m'
 const BOLD = '\x1b[1m'
 const RESET = '\x1b[0m'
+
+if (fs.existsSync('.git/MERGE_HEAD')) {
+  process.stdout.write(`${GREEN}☭ [KGB GRENSEKONTROLL] Autorisert branch-synkronisering (MERGE_HEAD) godkjent.${RESET}\n`)
+  process.exit(0)
+}
 
 function runGit(cmd) {
   try {

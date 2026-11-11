@@ -1,7 +1,51 @@
 // Shared Contract: Cross-module TypeScript types and interfaces
+import type {
+  ReactorState,
+  SubstationQuota,
+  TurbineState,
+  TutorialPhase,
+  TutorialPrompt,
+} from '../simulation/rbmkPhysics'
+
+export type {
+  ReactorState,
+  SubstationQuota,
+  TurbineState,
+  TutorialPhase,
+  TutorialPrompt,
+}
 
 export type SystemType = 'cooling' | 'defense' | 'facility'
+export type SectorNodeId =
+  | 'pripyat'
+  | 'kolkhoz'
+  | 'duga'
+  | 'kgb'
+  | 'vodka'
+  | 'steel'
 export type DirectiveDecision = 'APPROVED' | 'SHREDDED'
+
+export type WePadTabId = 1 | 2 | 3 | 4 | 5 | 6
+
+export interface WePadChatMessage {
+  id: string
+  timestamp: string
+  sender: 'COMRADE VOLKOV' | 'K.O.M.R.A.D.-84' | 'SYSTEM' | 'PRAVDA-84'
+  text: string
+  hint?: string
+  phase?: TutorialPhase
+  completed?: boolean
+  level?: 'normal' | 'warn' | 'danger'
+}
+
+export type TutorialStep = 1 | 2 | 3 | 4 | 5 | 'DONE'
+export type DiagnosticAlarmId =
+  | 'core'
+  | 'water'
+  | 'gas_oil'
+  | 'bearing'
+  | 'grid'
+  | 'order'
 export type GamePhase = 'boot' | 'playing' | 'victory' | 'meltdown' | 'gulag'
 export type CameraStation =
   | 'overview'
@@ -74,7 +118,7 @@ export interface TerminalLogEntry {
   level: 'normal' | 'warn' | 'danger'
 }
 
-export type HotspotSeverity = 'amber' | 'red'
+export type HotspotSeverity = 'amber' | 'red' | 'cyan'
 
 export interface OperationalMandate {
   id: string
@@ -84,7 +128,7 @@ export interface OperationalMandate {
   fulfilled: boolean
 }
 
-export interface GameState {
+export interface GameState extends ReactorState {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
   activeStation: CameraStation
@@ -96,6 +140,13 @@ export interface GameState {
   treasonStrikes: number // 0 to 3 (3 = Gulag Game Over)
   lastDecisionFeedback: string | null
   activeMandate: OperationalMandate | null
+  tutorialPhase: TutorialPhase
+  tutorialPrompt: TutorialPrompt
+
+  // WE-PAD 84 & H2O Controls
+  wePadActiveTab: WePadTabId
+  wePadChatLog: WePadChatMessage[]
+  selectedH2OSubstationId: 1 | 3 | 5
 
   // Reactor & Power Matrix (UNIT A, UNIT A-2, UNIT B & Right Turbine Panel)
   coreTemp: number // 300°C nominal -> 1000°C meltdown
@@ -103,11 +154,17 @@ export interface GameState {
   radiationLevel: number // 0.1 to 15.0 R/h
   maxSafePower: number // 100 MW (up to 180 MW in Redline)
   powerAllocation: Record<SystemType, number>
-  targetCityMW: number // Regional Map Sector 1 target MW (1. CITY & AGRI)
-  targetDefenseMW: number // Regional Map Sector 2 target MW (2. DEFENSE GRID)
-  targetVodkaMW: number // Regional Map Sector 3 target MW (3. VODKA & STEEL)
-  waterReservoir: number // 0 to 100% Pripyat local water reservoir level
-  waterUsage: number // L/s river water drawn by cooling pumps
+  sectorMW: Record<SectorNodeId, number> // 6 Individual Regional Substation Levers
+  targetSectorMW: Record<SectorNodeId, number> // 6 Individual Regional Map Target MW values
+  targetCityMW: number // Regional Map Sector 1+2 combined target MW
+  targetDefenseMW: number // Regional Map Sector 3+4 combined target MW
+  targetVodkaMW: number // Regional Map Sector 5+6 combined target MW
+  waterReservoir: number // 0 to 100% average local water reservoir level
+  pripyatWater: number // [1] PRIPYAT CITY H2O % (0..100%, target 85%)
+  kolkhozWater: number // [3] KOLKHOZ FARM H2O % (0..100%, target 85%)
+  vodkaWater: number // [5] VODKA PLANT H2O % (0..100%, target 85%)
+  vodkaDroughtTimer: number
+  waterUsage: number // Plant water drain %
   redlineInstability: number // 0 to 100% (100% triggers Blackout)
   isBlackout: boolean
   pumpsActive: [boolean, boolean] // Pump A & Pump B
@@ -116,7 +173,11 @@ export interface GameState {
   pumpBHeat: number // 0 to 100% bearing heat & cavitation
   lubeOilPressure: number // 0 to 100% bearing lube pressure (UNIT A-2)
   oilCoolerValve: number // 0 to 100% oil cooler handwheel opening (UNIT A-2)
+  controlRodLevel: number // 0% = fully inserted/poisoned, 100% = fully withdrawn/extracted (UNIT A-2)
   boronTankLevel: number // 0 to 100% boron reserve tank level (UNIT A-2)
+  boronReservePool: number // 0 to 300% finite Boron Concentrate Carboy pool (3.0 TANKS)
+  boronPoisoningTimer: number // 0 to 15s Boron Reactivity Damping (-20% MW output sag)
+  isInspectingDesk: boolean // True when holding Magnifying Glass or reading Desk Manual (30% thermal damping)
   channelHotspots: Record<number, HotspotSeverity> // 0..36 RBMK core channel hotspots (UNIT A-2)
   graphiteTemp: number // 280°C to 850°C moderator temperature (UNIT B)
   nitrogenLoopValve: number // 0 to 100% Helium-N2 gas regulator wheel (UNIT B)
@@ -129,12 +190,16 @@ export interface GameState {
   turbineRpm: number // 0 to 3600 RPM
   gridHz: number // 45.0 to 55.0 Hz (Target 50.0 Hz)
   excitationTrim: number // -5.0 to +5.0 Hz rotary rheostat offset
-  hzOutOfBoundsSeconds: number // > 8s outside [46.5, 53.5] trips Main Breaker
+  hzOutOfBoundsSeconds: number // > 10s outside [47.8, 52.2] or > 3450 RPM trips Main Breaker
   ventilationActive: boolean // ВЕНТИЛЯЦИЯ guarded toggle (-1.2 R/h/s, +10 MW load)
   kgbLineActive: boolean // СВЯЗЬ КГБ guarded toggle
+  auxLoopBActive: boolean // AUX LOOP B (Turbine Bypass -> UNIT B Bubbler Condenser)
   boronCooldown: number // 0 to 30s recharge for БОРНАЯ КИСЛОТА plunger
   az5Available: boolean
   az5Cooldown: number
+  gridTransientImpulse: number // Immediate Hz/RPM kick when moving Sector MW levers
+  steamTransientImpulse: number // Immediate BAR kick when moving Sector MW levers
+  voltageDipIntensity: number // 0.0 to 1.0 room voltage brownout intensity on heavy load changes
 
   // K.O.M.R.A.D.-84 Terminal & Cyber Defense (Komrad Kristianov's Domain)
   terminalLogs: string[]
@@ -146,17 +211,58 @@ export interface GameState {
   // Inspector Desk & Directives (Komrad Oleg's Domain)
   activeDirectives: DirectiveDocument[]
   printerProgress: number // 0 to 100% until next directive spawns
+  tutorialStep: TutorialStep
+  tutorialDrainSeconds: number
+  shiftRunId: number
+  hoveredDiagnosticId: DiagnosticAlarmId | null
+  hoveredControlHint: string | null
 
   // Shared Actions
   setActiveStation: (station: CameraStation) => void
   startShift: () => void
   resetShift: () => void
+  skipTutorial: () => void
+  setTutorialStep: (step: TutorialStep) => void
+  setHoveredDiagnosticId: (id: DiagnosticAlarmId | null) => void
+  setHoveredControlHint: (hint: string | null) => void
+  notifyPrinterDirectiveSpawned: (
+    docTitle: string,
+    isForgery: boolean,
+    powerTargets?: {
+      pripyat?: number
+      kolkhoz?: number
+      duga?: number
+      kgb?: number
+      vodka?: number
+      steel?: number
+    }
+  ) => void
+  toggleWePadHeld: (forceHeld?: boolean) => void
+  toggleWePadInspecting: (forceInspecting?: boolean) => void
+  setWePadActiveTab: (tab: WePadTabId) => void
+  setSubstationH2O: (substationId: 1 | 3 | 5, pct: number) => void
+  adjustSubstationH2O: (substationId: 1 | 3 | 5, deltaPct: number) => void
+  cycleSelectedH2OSubstation: () => void
+  recloseMainBreaker: () => void
+  pullMainBreaker: () => void
+  resetTurbineTrip: () => void
+  setFeedwaterValve: (valveRatioOrPct: number) => void
+  toggleMcpPump: (pumpIdx: 0 | 1 | 2 | 3, active?: boolean) => void
+  setSteamDumpValve: (open: boolean) => void
+  toggleSteamDumpValve: () => void
+  setRodTargetRate: (rate: -1 | 0 | 1) => void
+  setAutoRodEnabled: (enabled?: boolean) => void
+  setTurbineSteamValve: (valveRatioOrPct: number) => void
   setShiftKeyHeld: (held: boolean) => void
   shiftPower: (system: SystemType, deltaMW: number) => void
   setSubsystemPower: (system: SystemType, targetMW: number) => void
+  setSectorPower: (sector: SectorNodeId, targetMW: number) => void
+  shiftSectorPower: (sector: SectorNodeId, deltaMW: number) => void
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => void
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => void
   setOilCoolerValve: (valvePct: number) => void
+  setControlRodLevel: (levelPct: number) => void
+  adjustControlRodLevel: (deltaPct: number) => void
   pumpBoronTank: (amountPct?: number) => void
   quenchChannelHotspot: (channelIndex: number) => void
   setNitrogenLoopValve: (valvePct: number) => void
@@ -167,6 +273,8 @@ export interface GameState {
   adjustExcitationTrim: (deltaHz: number) => void
   toggleVentilation: (active?: boolean) => void
   toggleKgbLine: (active?: boolean) => void
+  toggleAuxLoopB: (active?: boolean) => void
+  setInspectingDesk: (inspecting: boolean) => void
   injectBoronAcid: () => void
   executeDeskDirectiveEffect: (
     docTitle: string,
@@ -177,6 +285,12 @@ export interface GameState {
       cityMW?: number
       defenseMW?: number
       vodkaMW?: number
+      pripyat?: number
+      kolkhoz?: number
+      duga?: number
+      kgb?: number
+      vodka?: number
+      steel?: number
     }
   ) => void
   tickThermodynamics: (dtSeconds: number) => void

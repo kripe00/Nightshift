@@ -502,59 +502,173 @@ export function playShredFinalClunk(): void {
 }
 
 /**
- * Pneumatic tube whoosh + vacuum thunk when dispatching an approved directive.
+ * Crisp paper-scroll roll + machined brass capsule end-cap snap when packing a stamped directive into КАПСУЛА.
  */
-export function playPneumaticDispatchSound(): void {
+export function playCapsulePackSound(): void {
   const audio = getAudioContext()
   if (!audio) return
   const now = audio.currentTime
-  const dur = 0.58
 
-  // 1. Brass receiver flap slam + capsule latch clank
+  // 1. Tight paper scroll roll rustle
+  playPaperRustle(true)
+
+  // 2. Machined brass capsule cap snap + spring latch click
+  const snapT = now + 0.085
+  const ring = audio.createOscillator()
+  const rg = audio.createGain()
+  ring.type = 'triangle'
+  ring.frequency.setValueAtTime(1420, snapT)
+  ring.frequency.exponentialRampToValueAtTime(480, snapT + 0.055)
+  rg.gain.setValueAtTime(0.24, snapT)
+  rg.gain.exponentialRampToValueAtTime(0.001, snapT + 0.06)
+  ring.connect(rg).connect(audio.destination)
+  ring.start(snapT)
+  ring.stop(snapT + 0.065)
+
+  const thud = audio.createOscillator()
+  const tg = audio.createGain()
+  thud.type = 'sine'
+  thud.frequency.setValueAtTime(240, snapT + 0.01)
+  thud.frequency.exponentialRampToValueAtTime(75, snapT + 0.06)
+  tg.gain.setValueAtTime(0.26, snapT + 0.01)
+  tg.gain.exponentialRampToValueAtTime(0.001, snapT + 0.065)
+  thud.connect(tg).connect(audio.destination)
+  thud.start(snapT + 0.01)
+  thud.stop(snapT + 0.07)
+}
+
+/**
+ * Heavy curved brass/glass breech door hinge clank + pneumatic rubber gasket seal hiss when opening/closing ЛЮК КАМЕРЫ.
+ */
+export function playBreechHatchLatchSound(opening: boolean): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  // 1. Metallic cam-latch throw clank
   const clank = audio.createOscillator()
   const cg = audio.createGain()
-  clank.type = 'triangle'
-  clank.frequency.setValueAtTime(520, now)
-  clank.frequency.exponentialRampToValueAtTime(115, now + 0.065)
-  cg.gain.setValueAtTime(0.28, now)
+  clank.type = 'square'
+  clank.frequency.setValueAtTime(opening ? 380 : 540, now)
+  clank.frequency.exponentialRampToValueAtTime(opening ? 760 : 140, now + 0.065)
+  cg.gain.setValueAtTime(0.22, now)
   cg.gain.exponentialRampToValueAtTime(0.001, now + 0.07)
   clank.connect(cg).connect(audio.destination)
   clank.start(now)
   clank.stop(now + 0.075)
 
-  // 2. Pneumatic vacuum rush shooting UP the vertical glass tube
-  const size = Math.floor(audio.sampleRate * dur)
+  // 2. Heavy brass door seat thud
+  const thud = audio.createOscillator()
+  const tg = audio.createGain()
+  thud.type = 'triangle'
+  thud.frequency.setValueAtTime(opening ? 140 : 195, now + 0.035)
+  thud.frequency.exponentialRampToValueAtTime(48, now + 0.12)
+  tg.gain.setValueAtTime(0.32, now + 0.035)
+  tg.gain.exponentialRampToValueAtTime(0.001, now + 0.125)
+  thud.connect(tg).connect(audio.destination)
+  thud.start(now + 0.035)
+  thud.stop(now + 0.13)
+
+  // 3. Pneumatic vacuum gasket compression hiss when sealing shut (or pressure release puff when opening)
+  const hissDur = opening ? 0.09 : 0.18
+  const size = Math.floor(audio.sampleRate * hissDur)
   const buf = audio.createBuffer(1, size, audio.sampleRate)
   const d = buf.getChannelData(0)
   for (let i = 0; i < size; i++) {
-    d[i] = Math.random() * 2 - 1
+    const env = Math.sin((i / size) * Math.PI)
+    d[i] = (Math.random() * 2 - 1) * env
   }
   const noise = audio.createBufferSource()
   noise.buffer = buf
   const bp = audio.createBiquadFilter()
   bp.type = 'bandpass'
-  bp.frequency.setValueAtTime(380, now + 0.04)
-  bp.frequency.exponentialRampToValueAtTime(3600, now + dur)
-  bp.Q.setValueAtTime(1.3, now)
+  bp.frequency.setValueAtTime(opening ? 1900 : 2800, now + 0.04)
+  bp.Q.setValueAtTime(2.4, now + 0.04)
   const ng = audio.createGain()
-  ng.gain.setValueAtTime(0.0001, now + 0.04)
-  ng.gain.linearRampToValueAtTime(0.34, now + 0.14)
-  ng.gain.exponentialRampToValueAtTime(0.001, now + dur)
+  ng.gain.setValueAtTime(opening ? 0.14 : 0.24, now + 0.04)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + 0.04 + hissDur)
   noise.connect(bp).connect(ng).connect(audio.destination)
   noise.start(now + 0.04)
+}
 
-  // 3. Ceiling vacuum manifold arrival thud + pneumatic check-valve hiss
+/**
+ * Hollow brass cylinder slide + spring-detent catch when loading КАПСУЛА into the open pneumatic breech chamber.
+ */
+export function playCapsuleChamberLoadSound(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  const slide = audio.createOscillator()
+  const sg = audio.createGain()
+  slide.type = 'triangle'
+  slide.frequency.setValueAtTime(280, now)
+  slide.frequency.linearRampToValueAtTime(420, now + 0.07)
+  sg.gain.setValueAtTime(0.22, now)
+  sg.gain.exponentialRampToValueAtTime(0.001, now + 0.08)
+  slide.connect(sg).connect(audio.destination)
+  slide.start(now)
+  slide.stop(now + 0.085)
+
+  playDetentClick(2)
+}
+
+/**
+ * Heavy vacuum valve clank + powerful pneumatic suction roar along the overhead ceiling pipeline + arrival thud behind K.O.M.R.A.D.-84.
+ */
+export function playPneumaticDispatchSound(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+  const dur = 0.86
+
+  // 1. Heavy cast-iron vacuum valve throw clank
+  const clank = audio.createOscillator()
+  const cg = audio.createGain()
+  clank.type = 'triangle'
+  clank.frequency.setValueAtTime(520, now)
+  clank.frequency.exponentialRampToValueAtTime(98, now + 0.085)
+  cg.gain.setValueAtTime(0.36, now)
+  cg.gain.exponentialRampToValueAtTime(0.001, now + 0.09)
+  clank.connect(cg).connect(audio.destination)
+  clank.start(now)
+  clank.stop(now + 0.095)
+
+  // 2. Powerful pneumatic suction roar shooting UP the riser, around the 90° brass elbow, and across the ceiling pipe
+  const size = Math.floor(audio.sampleRate * dur)
+  const buf = audio.createBuffer(1, size, audio.sampleRate)
+  const d = buf.getChannelData(0)
+  for (let i = 0; i < size; i++) {
+    const env = Math.sin((i / size) * Math.PI)
+    d[i] = (Math.random() * 2 - 1) * env
+  }
+  const noise = audio.createBufferSource()
+  noise.buffer = buf
+  const bp = audio.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(320, now + 0.03)
+  bp.frequency.exponentialRampToValueAtTime(3400, now + dur * 0.55)
+  bp.frequency.exponentialRampToValueAtTime(950, now + dur)
+  bp.Q.setValueAtTime(1.35, now)
+  const ng = audio.createGain()
+  ng.gain.setValueAtTime(0.0001, now + 0.03)
+  ng.gain.linearRampToValueAtTime(0.38, now + 0.16)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + dur)
+  noise.connect(bp).connect(ng).connect(audio.destination)
+  noise.start(now + 0.03)
+
+  // 3. K.O.M.R.A.D.-84 rear receiver manifold arrival thud + pneumatic check-valve bell chime
   const thunk = audio.createOscillator()
   const tg = audio.createGain()
   thunk.type = 'sine'
-  thunk.frequency.setValueAtTime(135, now + dur - 0.11)
-  thunk.frequency.exponentialRampToValueAtTime(42, now + dur + 0.06)
-  tg.gain.setValueAtTime(0.0001, now + dur - 0.11)
-  tg.gain.linearRampToValueAtTime(0.42, now + dur - 0.09)
-  tg.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.07)
+  thunk.frequency.setValueAtTime(148, now + dur - 0.12)
+  thunk.frequency.exponentialRampToValueAtTime(38, now + dur + 0.07)
+  tg.gain.setValueAtTime(0.0001, now + dur - 0.12)
+  tg.gain.linearRampToValueAtTime(0.46, now + dur - 0.09)
+  tg.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.08)
   thunk.connect(tg).connect(audio.destination)
-  thunk.start(now + dur - 0.11)
-  thunk.stop(now + dur + 0.08)
+  thunk.start(now + dur - 0.12)
+  thunk.stop(now + dur + 0.09)
 }
 
 export function playPneumaticWhoosh(): void {
@@ -1346,6 +1460,296 @@ export function playCheckpointIntercomSquawk(): void {
   noise.connect(nFilter).connect(ng).connect(audio.destination)
   noise.start(now)
 }
+
+/**
+ * Distinct two-tone Soviet brass bell chime (`ЗВОНОК ПРЕДУПРЕЖДЕНИЯ`)
+ * Triggered the moment a Desk Annunciator threshold first crosses into Amber Warning.
+ */
+export function playAmberWarningChime(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  const notes = [880, 659.25] // High A5 -> E5 resonant brass bell pair
+  notes.forEach((freq, idx) => {
+    const t0 = now + idx * 0.19
+    const bell = audio.createOscillator()
+    const overtone = audio.createOscillator()
+    const gain = audio.createGain()
+    const otGain = audio.createGain()
+
+    bell.type = 'triangle'
+    bell.frequency.setValueAtTime(freq, t0)
+    overtone.type = 'sine'
+    overtone.frequency.setValueAtTime(freq * 2.41, t0)
+
+    gain.gain.setValueAtTime(0.22, t0)
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.48)
+    otGain.gain.setValueAtTime(0.085, t0)
+    otGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.22)
+
+    bell.connect(gain).connect(audio.destination)
+    overtone.connect(otGain).connect(audio.destination)
+
+    bell.start(t0)
+    overtone.start(t0)
+    bell.stop(t0 + 0.5)
+    overtone.stop(t0 + 0.24)
+  })
+}
+
+/**
+ * Slow, rhythmic low-frequency Soviet bunker klaxon pulse (`СИРЕНА АВАРИИ`)
+ * Triggered when any Desk Annunciator tile enters Critical Red (with 6-second cooldown).
+ */
+export function playCriticalRedKlaxonPulse(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  const horn = audio.createOscillator()
+  const sub = audio.createOscillator()
+  const filter = audio.createBiquadFilter()
+  const gain = audio.createGain()
+
+  horn.type = 'sawtooth'
+  horn.frequency.setValueAtTime(145, now)
+  horn.frequency.linearRampToValueAtTime(215, now + 0.32)
+  horn.frequency.linearRampToValueAtTime(132, now + 0.72)
+
+  sub.type = 'square'
+  sub.frequency.setValueAtTime(72.5, now)
+  sub.frequency.linearRampToValueAtTime(107.5, now + 0.32)
+  sub.frequency.linearRampToValueAtTime(66, now + 0.72)
+
+  filter.type = 'lowpass'
+  filter.frequency.setValueAtTime(640, now)
+  filter.Q.setValueAtTime(3.5, now)
+
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.linearRampToValueAtTime(0.24, now + 0.08)
+  gain.gain.setValueAtTime(0.22, now + 0.45)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.76)
+
+  horn.connect(filter)
+  sub.connect(filter)
+  filter.connect(gain).connect(audio.destination)
+
+  horn.start(now)
+  sub.start(now)
+  horn.stop(now + 0.78)
+  sub.stop(now + 0.78)
+}
+
+/**
+ * Heavy hydraulic resistance chug & check-valve clank for manual Boron Piston hand-pumping (`НАСОС БОРА`)
+ */
+export function playBoronHydraulicPumpStroke(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+
+  // 1. Deep hydraulic cylinder compression thud
+  const cyl = audio.createOscillator()
+  const cylGain = audio.createGain()
+  cyl.type = 'sine'
+  cyl.frequency.setValueAtTime(118, now)
+  cyl.frequency.exponentialRampToValueAtTime(38, now + 0.22)
+  cylGain.gain.setValueAtTime(0.32, now)
+  cylGain.gain.exponentialRampToValueAtTime(0.001, now + 0.24)
+  cyl.connect(cylGain).connect(audio.destination)
+  cyl.start(now)
+  cyl.stop(now + 0.25)
+
+  // 2. Viscous liquid squeeze hiss through check-valve
+  const dur = 0.18
+  const bufSize = Math.floor(audio.sampleRate * dur)
+  const buf = audio.createBuffer(1, bufSize, audio.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.sin((i / bufSize) * Math.PI)
+  }
+  const src = audio.createBufferSource()
+  src.buffer = buf
+  const bp = audio.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(720, now)
+  bp.Q.setValueAtTime(2.6, now)
+  const ng = audio.createGain()
+  ng.gain.setValueAtTime(0.18, now)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + dur)
+  src.connect(bp).connect(ng).connect(audio.destination)
+  src.start(now)
+}
+
+/**
+ * Heavy metallic high-voltage contactor CLUNK-THUD + 50Hz/100Hz magnetic transformer hum swell
+ * Triggered when throwing or scrolling a Sector MW Lever on UNIT A (`|ΔMW| >= 5 MW`).
+ */
+export function playContactorInrushClunk(deltaMW: number): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
+  const absDelta = Math.abs(deltaMW)
+  if (absDelta < 5) return
+  const intensity = Math.min(1.0, Math.max(0.35, absDelta / 50))
+  const isInrush = deltaMW > 0
+
+  // 1. Sub-bass cabinet contactor thump
+  const thud = audio.createOscillator()
+  const thudGain = audio.createGain()
+  thud.type = 'sine'
+  thud.frequency.setValueAtTime(isInrush ? 115 : 145, now)
+  thud.frequency.exponentialRampToValueAtTime(isInrush ? 26 : 36, now + 0.14)
+  thudGain.gain.setValueAtTime(0.42 * intensity, now)
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16)
+  thud.connect(thudGain).connect(audio.destination)
+  thud.start(now)
+  thud.stop(now + 0.17)
+
+  // 2. Bandpass-filtered copper contact jaw slam + arc snap
+  const snapDur = 0.055
+  const bufSize = Math.floor(audio.sampleRate * snapDur)
+  const buf = audio.createBuffer(1, bufSize, audio.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.28))
+  }
+  const noise = audio.createBufferSource()
+  noise.buffer = buf
+  const bp = audio.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.setValueAtTime(isInrush ? 1180 : 1680, now)
+  bp.Q.setValueAtTime(3.2, now)
+  const ng = audio.createGain()
+  ng.gain.setValueAtTime(0.34 * intensity, now)
+  ng.gain.exponentialRampToValueAtTime(0.001, now + snapDur)
+  noise.connect(bp).connect(ng).connect(audio.destination)
+  noise.start(now)
+
+  // 3. 50Hz / 100Hz magnetic transformer hum swell (groans down on +MW inrush, whines up on -MW load rejection)
+  const humDur = 0.38
+  const hum50 = audio.createOscillator()
+  const hum100 = audio.createOscillator()
+  const lp = audio.createBiquadFilter()
+  const humGain = audio.createGain()
+
+  hum50.type = 'sawtooth'
+  hum100.type = 'triangle'
+  const fStart = isInrush ? 51.0 : 49.5
+  const fEnd = isInrush ? 46.5 : 54.0
+  hum50.frequency.setValueAtTime(fStart, now + 0.02)
+  hum50.frequency.linearRampToValueAtTime(fEnd, now + 0.18)
+  hum50.frequency.linearRampToValueAtTime(50.0, now + humDur)
+
+  hum100.frequency.setValueAtTime(fStart * 2, now + 0.02)
+  hum100.frequency.linearRampToValueAtTime(fEnd * 2, now + 0.18)
+  hum100.frequency.linearRampToValueAtTime(100.0, now + humDur)
+
+  lp.type = 'lowpass'
+  lp.frequency.setValueAtTime(isInrush ? 240 : 320, now)
+  lp.Q.setValueAtTime(2.8, now)
+
+  humGain.gain.setValueAtTime(0.001, now)
+  humGain.gain.linearRampToValueAtTime(0.16 * intensity, now + 0.05)
+  humGain.gain.exponentialRampToValueAtTime(0.001, now + humDur)
+
+  hum50.connect(lp)
+  hum100.connect(lp)
+  lp.connect(humGain).connect(audio.destination)
+
+  hum50.start(now)
+  hum100.start(now)
+  hum50.stop(now + humDur + 0.02)
+  hum100.stop(now + humDur + 0.02)
+}
+
+interface TurbineHumController {
+  osc50: OscillatorNode
+  osc100: OscillatorNode
+  filter: BiquadFilterNode
+  gain: GainNode
+  lastUpdateSec: number
+}
+
+let turbineHumCtrl: TurbineHumController | null = null
+
+/**
+ * Continuous background turbogenerator harmonic hum tied directly to `turbineRpm / 3000`.
+ * Lets the operator hear the 1000 MWe turbine groan lower in pitch under heavy MW drag
+ * or whine higher in pitch during load-rejection overspeed.
+ */
+export function updateTurbinePitchHum(
+  rpm: number,
+  totalAllocatedMW: number,
+  voltageDipIntensity: number,
+  isBlackout: boolean
+): void {
+  if (typeof window === 'undefined') return
+  const state = useGameStore.getState()
+  if (state.isMusicMuted || isBlackout || rpm < 250 || state.phase !== 'playing') {
+    if (turbineHumCtrl && ctx) {
+      turbineHumCtrl.gain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.08)
+    }
+    return
+  }
+
+  // Only start or update if AudioContext has already been unlocked by user interaction
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+
+  if (!turbineHumCtrl) {
+    const osc50 = ctx.createOscillator()
+    const osc100 = ctx.createOscillator()
+    const filter = ctx.createBiquadFilter()
+    const gain = ctx.createGain()
+
+    osc50.type = 'sawtooth'
+    osc100.type = 'triangle'
+    osc50.frequency.setValueAtTime(50, now)
+    osc100.frequency.setValueAtTime(100, now)
+
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(165, now)
+    filter.Q.setValueAtTime(2.2, now)
+
+    gain.gain.setValueAtTime(0.0001, now)
+
+    osc50.connect(filter)
+    osc100.connect(filter)
+    filter.connect(gain).connect(ctx.destination)
+
+    osc50.start(now)
+    osc100.start(now)
+
+    turbineHumCtrl = {
+      osc50,
+      osc100,
+      filter,
+      gain,
+      lastUpdateSec: now,
+    }
+  }
+
+  if (now - turbineHumCtrl.lastUpdateSec < 0.04) return
+  turbineHumCtrl.lastUpdateSec = now
+
+  const pitchRatio = Math.max(0.25, Math.min(1.35, rpm / 3000))
+  const fBase = 50.0 * pitchRatio
+  const loadFactor = Math.min(1.0, totalAllocatedMW / 1000)
+  const targetGain = Math.min(
+    0.048,
+    0.012 + loadFactor * 0.018 + voltageDipIntensity * 0.022
+  )
+  const targetCutoff = 135 + pitchRatio * 55 + voltageDipIntensity * 95
+
+  turbineHumCtrl.osc50.frequency.setTargetAtTime(fBase, now, 0.05)
+  turbineHumCtrl.osc100.frequency.setTargetAtTime(fBase * 2, now, 0.05)
+  turbineHumCtrl.filter.frequency.setTargetAtTime(targetCutoff, now, 0.06)
+  turbineHumCtrl.gain.gain.setTargetAtTime(targetGain, now, 0.06)
+}
+
+
 
 
 
