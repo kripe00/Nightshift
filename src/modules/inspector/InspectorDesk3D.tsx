@@ -119,7 +119,7 @@ function createCrispDocumentCanvasTexture(
   const tex = new THREE.CanvasTexture(canvas)
   tex.magFilter = THREE.LinearFilter
   tex.minFilter = THREE.LinearFilter
-  tex.anisotropy = 16
+  tex.anisotropy = 8
   tex.generateMipmaps = false
   tex.colorSpace = THREE.SRGBColorSpace
   tex.needsUpdate = true
@@ -157,7 +157,7 @@ const MANUAL_BASE_W = 0.38
 const MANUAL_BASE_H = 0.45
 const MANUAL_SCALE = 1.48
 const MANUAL_HELD_SCALE = 0.315
-const MANUAL_INSPECT_SCALE = 0.56
+const MANUAL_INSPECT_SCALE = 0.58
 const _manualDeskQuat = new THREE.Quaternion()
 const _manualHeldLocalQuat = new THREE.Quaternion().setFromEuler(
   new THREE.Euler(Math.PI / 2 - 0.12, 0.16, -0.02, 'YXZ')
@@ -1922,30 +1922,44 @@ export function InspectorDesk3D() {
   const lensTex = useMemo(() => createCrispDocumentCanvasTexture(512, 512), [])
   const shredPlateTex = useMemo(() => createNearestCanvasTexture(256, 96), [])
 
-  const buildWePadPayload = (gs = useGameStore.getState()): WePadTelemetryPayload => ({
-    activeTab: gs.wePadActiveTab,
-    wePadHeld: gs.wePadHeld,
-    wePadInspecting: gs.wePadInspecting,
-    tutorialPhase: gs.tutorialPhase,
-    tutorialHeader: gs.tutorialPrompt.header,
-    tutorialBody: gs.tutorialPrompt.body,
-    tutorialHint: gs.tutorialPrompt.hint,
-    chatLog: gs.wePadChatLog,
-    thermalPower: gs.thermalPower,
-    drumPressure: gs.drumPressure,
-    drumWaterLevel: gs.drumWaterLevel,
-    coreTemp: gs.coreTemp,
-    controlRods: gs.controlRods,
-    xenonPoisoning: gs.xenon,
-    voidFraction: gs.voidFraction * 100,
-    rpm: gs.turbines[0].rpm,
-    syncPhase: gs.turbines[0].syncPhase,
-    gridConnected: gs.turbines[0].gridConnected,
-    turbineValve: gs.turbines[0].valve,
-    totalElectricalMW: gs.totalElectricalMW,
-    plantWaterDrainPct: gs.plantWaterDrainPct,
-    mcpActiveCount: gs.mcpActive.filter(Boolean).length,
-  })
+  const buildWePadPayload = (gs = useGameStore.getState()): WePadTelemetryPayload => {
+    const gridConn = Boolean(gs.turbines[0]?.gridConnected)
+    const totQuota = Object.values(gs.targetSectorMW).reduce((a, b) => a + b, 0)
+    const houseMW = Math.round(gs.houseLoadMW)
+    return {
+      activeTab: gs.wePadActiveTab,
+      wePadHeld: gs.wePadHeld,
+      wePadInspecting: gs.wePadInspecting,
+      tutorialPhase: gs.tutorialPhase,
+      tutorialHeader: gs.tutorialPrompt.header,
+      tutorialBody: gs.tutorialPrompt.body,
+      tutorialHint: gs.tutorialPrompt.hint,
+      tutorialPanelKey: gs.tutorialPrompt.panelKey,
+      tutorialActionLine: gs.tutorialPrompt.actionLine,
+      tutorialWhyLines: gs.tutorialPrompt.whyLines,
+      tutorialVolkovQuote: gs.tutorialPrompt.volkovQuote,
+      chatLog: gs.wePadChatLog,
+      thermalPower: gs.thermalPower,
+      drumPressure: gs.drumPressure,
+      drumWaterLevel: gs.drumWaterLevel,
+      coreTemp: gs.coreTemp,
+      controlRods: gs.controlRods,
+      reactivity: gs.reactivity,
+      xenonPoisoning: gs.xenon,
+      voidFraction: gs.voidFraction * 100,
+      rpm: gs.turbines[0].rpm,
+      gridHz: gs.turbines[0].freqHz,
+      syncPhase: gs.turbines[0].syncPhase,
+      gridConnected: gridConn,
+      turbineValve: gs.turbines[0].valve,
+      totalElectricalMW: gs.totalElectricalMW,
+      neededMWe: totQuota + houseMW,
+      generatedMWe: gridConn ? gs.totalElectricalMW + houseMW : 0,
+      houseLoadMW: houseMW,
+      plantWaterDrainPct: gs.plantWaterDrainPct,
+      mcpActiveCount: gs.mcpActive.filter(Boolean).length,
+    }
+  }
 
   // Guardrail 4: Immediate WE-PAD 84 Texture & Lens Refresh when tab, scroll, chat or handheld state changes
   const lastWePadSigRef = useRef<string>('')
@@ -2908,25 +2922,40 @@ export function InspectorDesk3D() {
     const maxBearingC = 20 + Math.max(gameState.pumpAHeat, gameState.pumpBHeat)
     const hzDrift = Math.abs(gameState.gridHz - 50.0)
     const waterInDrought =
-      gameState.pripyatWater < 30 ||
-      gameState.kolkhozWater < 35 ||
-      gameState.vodkaWater < 40
+      gameState.waterReservoir < 22 ||
+      Math.abs(gameState.drumWaterLevel) > 180 ||
+      gameState.pripyatWater < 26 ||
+      gameState.kolkhozWater < 30 ||
+      gameState.vodkaWater < 34
     const waterLow =
-      gameState.pripyatWater < 45 ||
-      gameState.kolkhozWater < 45 ||
-      gameState.vodkaWater < 45
+      gameState.waterReservoir < 34 ||
+      Math.abs(gameState.drumWaterLevel) > 135 ||
+      gameState.pripyatWater < 38 ||
+      gameState.kolkhozWater < 40 ||
+      gameState.vodkaWater < 42
 
     // Severity levels: 0 = Dim Normal, 1 = Amber Early Warning, 2 = Critical Red (or 3 = Incoming Order Emerald/Amber Flash)
     const nextLevels = [
-      gameState.coreTemp > 680 ? 2 : gameState.coreTemp > 520 ? 1 : 0,
+      gameState.coreTemp > 680 ? 2 : gameState.coreTemp > 560 ? 1 : 0,
       waterInDrought ? 2 : waterLow ? 1 : 0,
-      gameState.heliumPressure > 68 || gameState.lubeOilPressure < 25
+      gameState.heliumPressure > 72 ||
+      gameState.lubeOilPressure < 24 ||
+      gameState.bubblerLevel >= 92
         ? 2
-        : gameState.heliumPressure > 58 || gameState.lubeOilPressure < 40
+        : gameState.heliumPressure > 62 ||
+            gameState.lubeOilPressure < 36 ||
+            gameState.bubblerLevel >= 82
           ? 1
           : 0,
-      maxBearingC > 90 ? 2 : maxBearingC > 75 ? 1 : 0,
-      hzDrift > 1.5 ? 2 : hzDrift > 0.8 ? 1 : 0,
+      maxBearingC > 90 ? 2 : maxBearingC > 80 ? 1 : 0,
+      (Boolean(gameState.turbines[0]?.gridConnected) && hzDrift > 1.2) ||
+      !gameState.avrActive ||
+      !gameState.auxLoopBActive
+        ? 2
+        : (Boolean(gameState.turbines[0]?.gridConnected) && hzDrift > 0.65) ||
+            gameState.wetSteamPenalty > 0.12
+          ? 1
+          : 0,
       printingDoc !== null ? 3 : 0,
     ]
 
@@ -3280,7 +3309,7 @@ export function InspectorDesk3D() {
 
     // 3B. Refresh WE-PAD 84 Live Screen CanvasTexture when telemetry or chat updates
     const gsNow = useGameStore.getState()
-    const wePadSig = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${gsNow.tutorialPhase}|${gsNow.wePadChatLog.length}|${manualScrollY}|${Math.round(gsNow.thermalPower / 10)}|${Math.round(gsNow.drumPressure)}|${Math.round(gsNow.drumWaterLevel / 5)}|${Math.round(gsNow.turbines[0].valve * 100)}|${Math.round(gsNow.turbines[0].rpm / 20)}|${Math.round(gsNow.totalElectricalMW / 5)}|${gsNow.plantWaterDrainPct}`
+    const wePadSig = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${gsNow.tutorialPhase}|${gsNow.tutorialPrompt.actionLine}|${gsNow.wePadChatLog.length}|${manualScrollY}|${Math.round(gsNow.thermalPower / 10)}|${Math.round(gsNow.drumPressure)}|${Math.round(gsNow.drumWaterLevel / 5)}|${Math.round(gsNow.turbines[0].valve * 100)}|${Math.round(gsNow.turbines[0].rpm / 20)}|${gsNow.turbines[0].freqHz.toFixed(1)}|${Math.round(gsNow.totalElectricalMW / 5)}|${Math.round(gsNow.xenon)}|${Math.round(gsNow.voidFraction * 100)}|${gsNow.plantWaterDrainPct}`
     const mTex = manualMatRef.current?.map as THREE.CanvasTexture | undefined
     if (mTex && lastWePadSigRef.current !== wePadSig) {
       lastWePadSigRef.current = wePadSig
@@ -3339,7 +3368,7 @@ export function InspectorDesk3D() {
         const perspCam = camera as THREE.PerspectiveCamera
         const fovRad = THREE.MathUtils.degToRad(perspCam.fov || 56)
         const aspect = perspCam.aspect || 1.77
-        const holdDist = THREE.MathUtils.lerp(0.28, 0.25, smoothInspect)
+        const holdDist = THREE.MathUtils.lerp(0.28, 0.21, smoothInspect)
         const halfFrustumH = Math.tan(fovRad * 0.5) * holdDist
         const halfFrustumW = halfFrustumH * aspect
         const swayX = Math.cos(t * 1.35) * 0.0006 * (1 - smoothInspect * 0.7)
