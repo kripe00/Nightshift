@@ -122,10 +122,19 @@ export type HotspotSeverity = 'amber' | 'red' | 'cyan'
 
 export interface OperationalMandate {
   id: string
-  code: 'COOLING_OIL' | 'DEFENSE_HZ' | 'PUMP_B_SEAL' | 'FACILITY_BUBBLER'
+  code:
+    | 'COOLING_OIL'
+    | 'DEFENSE_HZ'
+    | 'PUMP_B_SEAL'
+    | 'FACILITY_BUBBLER'
+    | 'SECTOR_QUOTA'
   title: string
   requirementText: string
   fulfilled: boolean
+  complianceRemainingSec?: number
+  complianceTotalSec?: number
+  targetSubstationId?: number
+  targetMW?: number
 }
 
 export interface GameState extends ReactorState {
@@ -191,9 +200,12 @@ export interface GameState extends ReactorState {
   gridHz: number // 45.0 to 55.0 Hz (Target 50.0 Hz)
   excitationTrim: number // -5.0 to +5.0 Hz rotary rheostat offset
   hzOutOfBoundsSeconds: number // > 10s outside [47.8, 52.2] or > 3450 RPM trips Main Breaker
-  ventilationActive: boolean // ВЕНТИЛЯЦИЯ guarded toggle (-1.2 R/h/s, +10 MW load)
-  kgbLineActive: boolean // СВЯЗЬ КГБ guarded toggle
-  auxLoopBActive: boolean // AUX LOOP B (Turbine Bypass -> UNIT B Bubbler Condenser)
+  ventilationActive: boolean // ВЕНТИЛЯЦИЯ guarded toggle (-1.2 R/h/s, +15 MW house load)
+  avrActive: boolean // АРВ ВОЗБУЖДЕНИЕ guarded toggle (+8 MW house load, stabilizes 50Hz & sync)
+  kgbLineActive: boolean // СВЯЗЬ КГБ guarded toggle (+10 MW house load, powers KGB Bunker trunk)
+  auxLoopBActive: boolean // ВАКУУМ КОНДЕНСАТОРА / TRIP RESET (+12 MW house load, condenser vacuum)
+  houseLoadMW: number // Total internal plant auxiliary load drawn from generator (MW)
+  wetSteamPenalty: number // 0.0 to 1.0 turbine efficiency & vibration penalty from high drum level (> +100mm)
   boronCooldown: number // 0 to 30s recharge for БОРНАЯ КИСЛОТА plunger
   az5Available: boolean
   az5Cooldown: number
@@ -272,6 +284,7 @@ export interface GameState extends ReactorState {
   setVentingSteam: (venting: boolean) => void
   adjustExcitationTrim: (deltaHz: number) => void
   toggleVentilation: (active?: boolean) => void
+  toggleAvr: (active?: boolean) => void
   toggleKgbLine: (active?: boolean) => void
   toggleAuxLoopB: (active?: boolean) => void
   setInspectingDesk: (inspecting: boolean) => void

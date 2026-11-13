@@ -27,19 +27,28 @@ export interface WePadTelemetryPayload {
   tutorialHeader: string
   tutorialBody: string
   tutorialHint: string
+  tutorialPanelKey: string
+  tutorialActionLine: string
+  tutorialWhyLines: [string, string]
+  tutorialVolkovQuote: string
   chatLog: WePadChatMessage[]
   thermalPower: number
   drumPressure: number
   drumWaterLevel: number
   coreTemp: number
   controlRods: number
+  reactivity: number
   xenonPoisoning: number
   voidFraction: number
   rpm: number
+  gridHz: number
   syncPhase: number
   gridConnected: boolean
   turbineValve?: number
   totalElectricalMW: number
+  neededMWe: number
+  generatedMWe: number
+  houseLoadMW: number
   plantWaterDrainPct: number
   mcpActiveCount: number
 }
@@ -2563,66 +2572,66 @@ export function drawSecurityManualCanvas(
     const loopCards: FieldGuideCardSpec[] = [
       {
         icon: 'shift_goal_crt',
-        badge: '1. SHIFT GOAL & GRID MAP (00:00 -> 06:00)',
+        badge: '1. SHIFT GOAL & UNIT C MASTER OVERVIEW',
         useLines: [
-          'Press Keys [1]-[5] to move between panels;',
-          'press [B] to hold this Manual in hand.',
+          'Press Keys [1]-[5] to switch stations;',
+          'check [KEY 5] UNIT C for plant balance!',
         ],
         effectLines: [
-          'Survive 00:00 to 06:00 AM while keeping',
-          'all 6 Regional Map nodes balanced (MW).',
+          'Align GENERATED MWe (black needle) with',
+          'NEEDED MWe (red marker) at 50.0 HZ.',
         ],
         reactionLines: [
-          'Core Temp >1000°C triggers RBMK Meltdown!',
-          '4 KGB Citations = immediate KGB arrest!',
+          'Keep STEAM BAR 60-72 BAR & CORE <580°C.',
+          '"Meltdown is Western Rumor" — K.O.M.R.A.D.',
         ],
       },
       {
         icon: 'tear_inspect',
-        badge: '2. STEP 1 — TEAR & INSPECT ([KEY 4] DESK)',
+        badge: '2. STEP 1 — TEAR & STAMP ([KEY 4] DESK)',
         useLines: [
-          'When ПРАВДА-84 prints an order, grab and',
-          'drag paper sideways across the tear-bar.',
+          'When PRAVDA-84 prints a directive, drag',
+          'paper sideways across the brass tear-bar.',
         ],
         effectLines: [
-          'Use the 2x Magnifying Glass & Section I',
-          '(1.SEALS, 2.FONTS, 3.COLOURS) to inspect.',
+          'Stamp genuine orders APPROVED, pack into',
+          'CAPSULE & launch Pneumatic Tube lever!',
         ],
         reactionLines: [
-          'Missing a hidden CIA forgery flaw or taking',
-          'too long earns a KGB Citation penalty!',
+          'Updates NEEDED MWe on UNIT C & Sector',
+          'targets on K.O.M.R.A.D.-84 (85s window).',
         ],
       },
       {
         icon: 'stamp_tube_shred',
-        badge: '3. STEP 2 — STAMP & TUBE vs SHREDDER',
+        badge: '3. CAUSE & EFFECT: WHY EVERY PANEL MATTERS',
         useLines: [
-          'GENUINE: Stamp ОДОБРЕНО, load КАПСУЛА,',
-          'insert in ПНЕВМОПОЧТА & pull ПУСК lever!',
+          'RODS [A-2] -> Fission Heat -> Boils Water',
+          'into STEAM BAR -> Spins TURBINE [UNIT C]!',
         ],
         effectLines: [
-          'Launches capsule & updates the target MW',
-          'demand on the K.O.M.R.A.D.-84 Map.',
+          'Opening TURBINE THROTTLE gulps live steam;',
+          'without more RODS & WATER, BAR collapses!',
         ],
         reactionLines: [
-          'FORGED: Drag into right Shredder & pull',
-          'handle 5x (v)! Dispatching fake = Sabotage!',
+          'Shedding load traps excess steam; without',
+          'lowering RODS or VENTING, BAR spikes >78!',
         ],
       },
       {
         icon: 'route_mw_water',
-        badge: '4. HOW TO INCREASE vs DECREASE MW (+/- ORDERS)',
+        badge: '4. +MW SURGE vs -MW SHED CHECKLIST',
         useLines: [
-          '+MW ORDER: 1. Withdraw Boron Rods (A-2) -> 2. Boost',
-          'Cooling Pumps (A/B) & pull MW Lever -> 3. Turn 50Hz',
+          '+MW: 1. RODS UP [A-2] + WATER UP [B] ->',
+          '2. Pull Sector Lever [A] (NEEDED MWe) ->',
         ],
         effectLines: [
-          'Rheostat / Steam Valve (UNIT C) up to lock 50.0 Hz!',
-          '-MW ORDER: 1. Lower MW Lever (A) -> 2. Lower 50Hz',
+          '3. Open THROTTLE [C] to match NEEDED MWe!',
+          '-MW: 1. Lower Lever [A] & THROTTLE [C] ->',
         ],
         reactionLines: [
-          'Rheostat (C) & open Steam Vent if BAR spikes ->',
-          '3. Insert Boron Rods (A-2) to cool the core!',
+          '2. Push RODS IN [A-2] (stop excess boil;',
+          'pull STEAM VENT if BAR > 75)!',
         ],
       },
     ]
@@ -2644,48 +2653,48 @@ export function drawSecurityManualCanvas(
         icon: 'levers',
         badge: '[KEY 1] 6 REGIONAL MW SUBSTATION LEVERS',
         useLines: [
-          'Drag any of the 6 sector levers (0-50 MW)',
-          'or click -10 / -5 / +5 / +10 MW buttons.',
+          'Drag any of the 6 sector levers (0-250 MW)',
+          'or use -25 / +25 MW step buttons.',
         ],
         effectLines: [
-          'Matches CURRENT / TARGET MW in each Nixie',
-          'window (1.PRIPYAT .. 6.STEEL WORKS).',
+          'Routes electrical load to PRIPYAT, KOLKHOZ,',
+          'DUGA-1, KGB BUNKER, VODKA & STEEL WORKS.',
         ],
         reactionLines: [
-          'Higher MW heats CORE TEMP & PRESSURE and',
-          'pulls GRID 50Hz [Key 5] off-center!',
+          'Grid holds 50.0 HZ steady — match NEEDED',
+          'MWe using TURBINE THROTTLE on UNIT C!',
         ],
       },
       {
         icon: 'wheel',
-        badge: '[KEY 1] PUMPS A & B (ZONE H2O SIPHON)',
+        badge: '[KEY 1] COOLING PUMPS A & B (WHEEL vs LEVER)',
         useLines: [
-          'PUMP A siphons [1] PRIPYAT & [2] KOLKHOZ;',
-          'PUMP B siphons [5] VODKA (>40% throttle).',
+          'LEFT WHEEL = Bearing Oil Cool %;',
+          'RIGHT LEVER = Primary Coolant Flow %.',
         ],
         effectLines: [
-          'Boils zone H2O into BUBBLER MAX (UNIT B)',
-          'to rapidly lower CORE TEMP (°C).',
+          'Pushes cold water through 1,661 fuel tubes',
+          'so boiling does not flash to Steam Voids!',
         ],
         reactionLines: [
-          'Dry Pripyat (<30%)=Cavitation! Dry Kolkhoz',
-          '(<35%)=Hz Drag! Dry Vodka (<40%)=Citation!',
+          'Keep Bearing <80°C with Left Wheel —',
+          'melted bearings come out of your pension!',
         ],
       },
       {
         icon: 'az5',
         badge: '[KEY 1] AZ-5 SCRAM & BORON INJECTION',
         useLines: [
-          'AZ-5: Click cover open, then press button',
-          '(>850°C). BORON: Press green plunger in.',
+          'AZ-5: Flip red cover & press (>750°C).',
+          'BORON: Press green plunger for emergency!',
         ],
         effectLines: [
-          'BORON drops CORE -140°C, GRAPHITE -90°C',
-          '& quenches all hotspots (needs >=40% B).',
+          'BORON floods core with liquid neutron',
+          'poison (-35% Steam Void, cools hotspots).',
         ],
         reactionLines: [
-          'Uses 45% BORON (finite 3.0 Tanks!) & causes',
-          'a 15s -20% MW sag across all 6 levers!',
+          'WARNING: AZ-5 graphite rod tips cause a',
+          '3.5s positive power surge if Void >20%!',
         ],
       },
     ]
@@ -2700,87 +2709,87 @@ export function drawSecurityManualCanvas(
     ctx.fillStyle = '#094a20'
     ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('6. UNIT A-2 & B: AUX SYSTEMS [KEY 3]', 38, 156)
+    ctx.fillText('6. UNIT A-2 & B: CORE, BORON & GAS [KEY 3]', 38, 156)
 
     const auxCards: FieldGuideCardSpec[] = [
       {
         icon: 'octagon',
-        badge: '[UNIT A-2] RBMK 37-TILE CORE BIO-SHIELD',
+        badge: '[UNIT A-2] BORON RODS & XENON-135 ASH',
         useLines: [
-          'Watch the 37 steel channel caps; when a',
-          'tile flashes AMBER/RED, click it directly.',
+          'Boron rods are neutron sponges: pull UP',
+          'for more MWt heat; push DOWN to cool.',
         ],
         effectLines: [
-          'Quenches single channel hotspot (-20°C)',
-          'and consumes 6% from BORON TANK.',
+          'Fission leaves Xenon-135 ("nuclear ash")',
+          'that suffocates neutrons after power cuts.',
         ],
         reactionLines: [
-          'Each unquenched RED tile adds +5°C/s to',
-          'CORE TEMP and +1.2 BAR/s to STEAM BAR!',
+          'When XENON >35%, pull Rods higher (70%+)',
+          'or click CYAN core tiles until burned off!',
         ],
       },
       {
         icon: 'wheel',
-        badge: '[UNIT A-2] OIL COOLER VALVE (DRY COOLING)',
+        badge: '[UNIT A-2] OIL COOLER & STEAM VOIDS',
         useLines: [
-          'Crank the left handwheel on UNIT A-2;',
-          'dial <30% when LUBE OIL drops to recover!',
+          'Turn OIL COOLER wheel (50-65%) on A-2;',
+          'match FEEDWATER wheel (55-80%) on UNIT B.',
         ],
         effectLines: [
-          'Cools MAX BEARING (-3.5°C/s) and adds dry',
-          'core cooling without using zone H2O.',
+          'Keeps pump bearings cool and Drum Level',
+          'near 0 mm so tubes never boil dry.',
         ],
         reactionLines: [
-          'Running >50% thins LUBE OIL (-1.5%/s);',
-          'below 25% oil breaks down & stops cooling!',
+          'Dry RBMK tubes create Steam Voids (+void',
+          'accelerates fission instead of slowing it)!',
         ],
       },
       {
         icon: 'piston',
-        badge: '[UNIT A-2] BORON PISTON PUMP (3.0 TANKS)',
+        badge: '[UNIT A-2] BORON PISTON PUMP',
         useLines: [
-          'Grab the horizontal Bakelite T-handle on',
-          'UNIT A-2 and pump full strokes up & down.',
+          'Drag the horizontal Bakelite T-handle on',
+          'UNIT A-2 up and down for full strokes.',
         ],
         effectLines: [
-          'Restores +3.5% BORON TANK per full stroke',
-          '(zero auto-recharge; manual pump only).',
+          'Recharges hydraulic BORON TANK (+3.5% per',
+          'stroke) used by rods & tile quenching.',
         ],
         reactionLines: [
-          'Draws from finite shift supply of 3.0',
-          'Boron Carboys (300% total concentrate)!',
+          'Below 25% Boron Tank, control rods lose',
+          'neutron stopping power — keep topped up!',
         ],
       },
       {
         icon: 'wheel',
-        badge: '[UNIT B] HELIUM-N2 LOOP (0-80 BAR GAS)',
+        badge: '[UNIT B] HELIUM-N2 GAS & SEAL SCRUBBERS',
         useLines: [
-          'Crank left wheel on UNIT B; dial <35% &',
-          'flip Scrubbers ON to vent BAR (-2.5/s)!',
+          'Flip 3 SEAL SCRUBBERS UP & open HELIUM-N2',
+          'handwheel (~50%) on UNIT B.',
         ],
         effectLines: [
-          'Absorbs 40% of core & graphite heat load',
-          'without siphoning any zone water!',
+          'Blankets hot 550°C graphite in inert gas so',
+          'it cannot catch fire in open air.',
         ],
         reactionLines: [
-          'Running >45% builds pressure; >68 BAR',
-          'saturates (loses 75% cooling + leaks R/H)!',
+          'Ministry cut our containment dome for a',
+          'banner — keep Scrubbers ON or rads leak!',
         ],
       },
       {
         icon: 'gas',
-        badge: '[UNIT B] BUBBLER DRAIN (RETURN ZONE H2O)',
+        badge: '[UNIT B] BUBBLER POOL & DRAIN LEVER',
         useLines: [
-          'Flip 3 Seal Scrubbers UP to lock seals;',
-          'pull & hold spring BUBBLER DRAIN lever.',
+          'Pull & hold BUBBLER DRAIN lever whenever',
+          'BUBBLER POOL rises above 75%.',
         ],
         effectLines: [
-          'Pumps condensed steam from BUBBLER MAX',
-          'back to PRIPYAT, KOLKHOZ & VODKA (+10%/s)!',
+          'Pumps condensed steam water back into',
+          'PRIPYAT, KOLKHOZ & VODKA reservoirs!',
         ],
         reactionLines: [
-          'Cures zone water droughts & reverses map',
-          'pipes! Bubbler >=90% blocks steam vent!',
+          'If Pool hits 95%, STEAM VENT chokes and',
+          'cannot relieve overpressure!',
         ],
       },
     ]
@@ -2790,76 +2799,76 @@ export function drawSecurityManualCanvas(
     })
   } else {
     // =========================================================================
-    // SECTION II — TAB 7 (`7. UNIT C: TURBINE & 50HZ GRID [KEY 5]`)
+    // SECTION II — TAB 7 (`7. UNIT C: MASTER OVERVIEW & THROTTLE [KEY 5]`)
     // =========================================================================
     ctx.fillStyle = '#094a20'
     ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('7. UNIT C: TURBINE & 50HZ GRID [KEY 5]', 38, 156)
+    ctx.fillText('7. UNIT C: MASTER OVERVIEW & THROTTLE [KEY 5]', 38, 156)
 
     const gridCards: FieldGuideCardSpec[] = [
       {
-        icon: 'breaker',
-        badge: '[KEY 5] MAIN BREAKER (COPPER KNIFE-SWITCH)',
-        useLines: [
-          'If tripped OPEN, trim 50HZ RHEOSTAT to 49–51 HZ,',
-          'then drag MAIN BREAKER UP (or [SPACE]) to re-close.',
-        ],
-        effectLines: [
-          'Trips OPEN if GRID HZ leaves 47.8–52.2 HZ (or >3450',
-          'RPM) for >10s, causing 0 MW regional blackout!',
-        ],
-        reactionLines: [
-          'While OPEN, turbine stops converting reactor heat',
-          'into MW — CORE TEMP & PRESSURE climb 1.8x faster!',
-        ],
-      },
-      {
         icon: 'rheostat',
-        badge: '[KEY 5] 50HZ RHEOSTAT (+MW vs -MW CHECKLIST)',
+        badge: '[KEY 5] TRUE 50HZ GRID LOCK & BALANCE',
         useLines: [
-          'HOW TO INCREASE MW (+MW ORDER): 1. Withdraw Boron',
-          'Rods (A-2) -> 2. Boost Pumps & MW Lever (A) -> 3. Turn',
+          'Once MAIN BREAKER is CLOSED, the regional',
+          'grid holds rotor speed locked at 50.0 HZ!',
         ],
         effectLines: [
-          '50Hz Rheostat / Steam Valve (C) UP to hold 50.0 Hz!',
-          'HOW TO DECREASE MW (-MW ORDER): 1. Lower MW Lever (A)',
+          'RED MARKER = NEEDED MWe (Quotas + Aux);',
+          'BLACK NEEDLE = GENERATED MWe pushed out.',
         ],
         reactionLines: [
-          '-> 2. Lower 50Hz Rheostat (C) so RPM <3060 (<51 Hz) &',
-          'Vent Steam -> 3. Insert Boron Rods (A-2) & Dump Steam!',
+          'Deficit browns out sectors; >+60 MWe',
+          'surplus overloads grid transformers!',
         ],
       },
       {
-        icon: 'vent',
-        badge: '[KEY 5] STEAM VENT vs AUX LOOP B (BYPASS)',
+        icon: 'wheel',
+        badge: '[KEY 5] TURBINE THROTTLE (MWe GAS PEDAL)',
         useLines: [
-          'Pull & hold STEAM VENT (left lever) for relief,',
-          'OR flip Switch 4: AUX LOOP B (TURBINE BYPASS).',
+          'Drag the cast-steel spoked wheel or scroll',
+          'mouse wheel (0-100% LED bargraph).',
         ],
         effectLines: [
-          'STEAM VENT drops -5.5 BAR/s & -10°C/s fast, but',
-          'wastes -2.5%/s H2O into sky (+0.12 R/H/s rads)!',
+          'BREAKER OPEN: Set ~18% ONLY to spin free',
+          'rotor to 50.0 HZ before locking grid!',
         ],
         reactionLines: [
-          'AUX LOOP B diverts steam into UNIT B BUBBLER (+3.5%/s',
-          'H2O, -15% RPM) to pump water back to Vodka & City!',
+          'LOCKED 50HZ: Pure Megawatt gas pedal!',
+          'Boil steam on A-2/B or BAR drains <25!',
+        ],
+      },
+      {
+        icon: 'breaker',
+        badge: '[KEY 5] MAIN BREAKER & STEAM VENT',
+        useLines: [
+          'Pull MAIN BREAKER ([SPACE] or drag) ONLY',
+          'inside 49.5-50.5 HZ green sync window!',
+        ],
+        effectLines: [
+          'Magnetically locks onto 50.0 HZ grid.',
+          'Pull STEAM VENT left if BAR climbs >75!',
+        ],
+        reactionLines: [
+          'Out-of-sync close or <25 BAR starvation',
+          'trips breaker (3 forms in triplicate)!',
         ],
       },
       {
         icon: 'ventilation_toggle',
-        badge: '[KEY 5] VENTILATION & KGB LINE TOGGLES',
+        badge: '[KEY 5] 4 AUXILIARY SWITCHGEAR TOGGLES',
         useLines: [
-          'Flip Switch 1 (VENTILATION), Switch 2 (AUDIO [M]),',
-          'or Switch 3 (KGB LINE) along the bottom of UNIT C.',
+          'Keep 2.AVR EXCITER (+8MW), 3.KGB (+10MW)',
+          '& 4.CONDENSER VACUUM (+12MW) ON (=30MW)!',
         ],
         effectLines: [
-          'VENTILATION scrubs room radiation (-1.2 R/H/s) for',
-          '+10 MW internal load (-0.4 Hz shift on GEN. LOAD).',
+          'AVR aids 50HZ sync & MWe torque; VACUUM',
+          'gives blade efficiency & resets trips.',
         ],
         reactionLines: [
-          'KGB LINE (-0.35 Hz drag) decodes live Ministry &',
-          'forgery intel on the K.O.M.R.A.D.-84 Comms screen!',
+          'Flip 1.VENTILATION (+15MW) ON whenever',
+          'room radiation rises above 0.5 R/h!',
         ],
       },
     ]
@@ -3041,11 +3050,12 @@ export function drawBittenBeetrootHammerSickleLogo(
 }
 
 /**
- * Draws the glowing phosphor-vector screen of ЭЛЕКТРОНИКА «МЫ-ПАД 84» (WE-PAD 84):
- * - Slogan: "IN SOVIET UNION, THERE IS NO i-PAD, ONLY WE-PAD!"
- * - Bitten Beetroot with Hammer & Sickle logo
- * - 6 Interactive Tabs (`[1. ЧАТ / DRILL]`, `[2. UNIT B]`, `[3. UNIT A-2]`, `[4. UNIT A]`, `[5. UNIT C]`, `[6. ФИЗИКА]`)
- * - Live scrolling Volkov Telegraph Chat Log + Step 0–7 checklist & RBMK-1000 schematics
+ * Draws the high-contrast phosphor screen of ЭЛЕКТРОНИКА «МЫ-ПАД 84» (WE-PAD 84) at 1024x1280:
+ * +50% larger crisp laptop-readable fonts (34px-44px, max ~38-40 chars/line, generous line spacing, zero stroke bleed).
+ * Tab 1 (`[1] GUIDE`) renders 3 clean visual cards:
+ *   1. `STEP & PANEL KEY` + bold `ACTION`
+ *   2. `WHY & GAUGE EFFECT` (2 crisp lines)
+ *   3. `COMRADE VOLKOV` (punchy 1984 Soviet bureaucracy humor)
  */
 export function drawWePad84ScreenCanvas(
   ctx: CanvasRenderingContext2D,
@@ -3063,61 +3073,66 @@ export function drawWePad84ScreenCanvas(
   const activeTab = payload.activeTab
 
   // Deep Phosphor-Black CRT Screen Background & Crisp Outer Frame
-  ctx.fillStyle = '#041109'
+  ctx.fillStyle = '#030d06'
   ctx.fillRect(0, 0, LW, LH)
   ctx.strokeStyle = '#39ff14'
   ctx.lineWidth = 4
   ctx.strokeRect(10, 10, LW - 20, LH - 20)
 
   // =========================================================================
-  // ZONE 1 (TOP): COMPACT TELEMETRY LINE (30px) + 6 TAB BUTTONS (26px)
+  // ZONE 1 (TOP): CRISP MASTER TELEMETRY BANNER (34px) + 6 LARGE TABS (32px)
   // =========================================================================
   ctx.fillStyle = '#082112'
-  ctx.fillRect(20, 20, LW - 40, 56)
+  ctx.fillRect(20, 20, LW - 40, 66)
   ctx.strokeStyle = '#28b862'
   ctx.lineWidth = 2.5
-  ctx.strokeRect(20, 20, LW - 40, 56)
+  ctx.strokeRect(20, 20, LW - 40, 66)
+
+  const genVal = Math.round(payload.generatedMWe)
+  const needVal = Math.round(payload.neededMWe)
+  const barVal = Math.round(payload.drumPressure)
+  const hzStr = (payload.gridHz || 0).toFixed(1)
 
   ctx.textAlign = 'center'
   ctx.fillStyle = '#00f0ff'
-  ctx.font = 'bold 28px "Consolas", "Courier Prime", monospace'
-  const teleLine = `MWt:${Math.round(payload.thermalPower)} | BAR:${payload.drumPressure.toFixed(0)} | LVL:${Math.round(payload.drumWaterLevel)}mm | VLV:${Math.round((payload.turbineValve ?? 0) * 100)}% | RPM:${Math.round(payload.rpm)} | MWe:${Math.round(payload.totalElectricalMW)}`
-  ctx.fillText(teleLine, LW / 2, 58, LW - 56)
+  ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
+  const teleLine = `GEN:${genVal}/${needVal} MWe | ${barVal} BAR | ${hzStr} HZ`
+  ctx.fillText(teleLine, LW / 2, 64, LW - 56)
 
-  // 6 Chapter Tab Buttons (`[1] DRILL` .. `[6] HAZARDS`, 2 rows x 3 columns, y = 88..216)
+  // 6 Chapter Tab Buttons (2 rows x 3 columns, y = 96..234, +50% larger 32px font)
   const tabSpecs: Array<{ id: WePadTabId; label: string }> = [
-    { id: 1, label: '[1] DRILL' },
-    { id: 2, label: '[2] UNIT B' },
-    { id: 3, label: '[3] UNIT A-2' },
-    { id: 4, label: '[4] UNIT A' },
-    { id: 5, label: '[5] UNIT C' },
-    { id: 6, label: '[6] HAZARDS' },
+    { id: 1, label: '[1] GUIDE' },
+    { id: 2, label: '[2] TELEM' },
+    { id: 3, label: '[3] STARTUP' },
+    { id: 4, label: '[4] ORDERS' },
+    { id: 5, label: '[5] ALARMS' },
+    { id: 6, label: '[6] MANUAL' },
   ]
   const colW = Math.floor((LW - 52) / 3)
   tabSpecs.forEach((tab, idx) => {
     const col = idx % 3
     const row = Math.floor(idx / 3)
     const tx = 20 + col * (colW + 6)
-    const ty = 88 + row * 64
+    const ty = 96 + row * 68
     const isSel = activeTab === tab.id
     ctx.fillStyle = isSel ? '#196b30' : '#091d11'
-    ctx.fillRect(tx, ty, colW, 56)
+    ctx.fillRect(tx, ty, colW, 60)
     ctx.strokeStyle = isSel ? '#ffd000' : '#28b862'
-    ctx.lineWidth = isSel ? 3.5 : 2
-    ctx.strokeRect(tx, ty, colW, 56)
-    ctx.fillStyle = isSel ? '#ffffff' : '#88e8a0'
-    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+    ctx.lineWidth = isSel ? 4 : 2
+    ctx.strokeRect(tx, ty, colW, 60)
+    ctx.fillStyle = isSel ? '#ffffff' : '#8ce8a4'
+    ctx.font = 'bold 32px "Consolas", "Courier Prime", monospace'
     ctx.textAlign = 'center'
-    ctx.fillText(tab.label, tx + colW / 2, ty + 37, colW - 14)
+    ctx.fillText(tab.label, tx + colW / 2, ty + 41, colW - 14)
   })
 
   // =========================================================================
-  // ZONE 2 (MIDDLE — 80% OF SCREEN): spacious, big-font active content
+  // ZONE 2 (MIDDLE — y = 244..1192): 3 CLEAN CARDS (TAB 1) OR BIG REFERENCE
   // =========================================================================
   const vpX = 20
-  const vpY = 232
+  const vpY = 244
   const vpW = LW - 40
-  const vpH = 956
+  const vpH = 948
 
   ctx.save()
   ctx.beginPath()
@@ -3125,348 +3140,331 @@ export function drawWePad84ScreenCanvas(
   ctx.clip()
 
   if (activeTab === 1) {
-    // -----------------------------------------------------------------------
-    // TAB 1: ACTIVE ORDER BOX (`ACTION:` + `WHY:` or `>> K.O.M.R.A.D.-84 // LIVE DISPATCH`) +
-    //        1–2 PREVIOUSLY COMPLETED STEPS / MESSAGES (`26px`) BELOW
-    // -----------------------------------------------------------------------
     const isCompletedShift = payload.tutorialPhase === 'COMPLETED'
     const latestLiveMsg =
       isCompletedShift && payload.chatLog.length > 0
         ? payload.chatLog[payload.chatLog.length - 1]
         : null
 
-    const objY = vpY + 8
-    const objH = 385
-    ctx.fillStyle = '#1f1904'
-    ctx.fillRect(vpX + 4, objY, vpW - 8, objH)
+    // -----------------------------------------------------------------------
+    // CARD 1 (y = 248..556): STEP & PANEL KEY + GIANT BOLD ACTION
+    // -----------------------------------------------------------------------
+    const c1Y = vpY + 4
+    const c1H = 304
+    ctx.fillStyle = '#171504'
+    ctx.fillRect(vpX + 4, c1Y, vpW - 8, c1H)
     ctx.strokeStyle = '#ffd000'
     ctx.lineWidth = 4
-    ctx.strokeRect(vpX + 4, objY, vpW - 8, objH)
+    ctx.strokeRect(vpX + 4, c1Y, vpW - 8, c1H)
 
-    const isActiveMultiPanelOrder =
-      isCompletedShift && payload.tutorialHeader.startsWith('>> ACTIVE')
+    // Top Panel Key Ribbon
+    ctx.fillStyle = '#ffd000'
+    ctx.fillRect(vpX + 4, c1Y, vpW - 8, 62)
+    ctx.fillStyle = '#081008'
     ctx.textAlign = 'left'
-    ctx.fillStyle = '#39ff14'
     ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
-    const topBoxHeader =
-      isCompletedShift && !isActiveMultiPanelOrder
-        ? '>> K.O.M.R.A.D.-84 // LIVE DISPATCH'
-        : payload.tutorialHeader
-    ctx.fillText(topBoxHeader, vpX + 24, objY + 46, vpW - 48)
+    const panelKeyText =
+      payload.tutorialPanelKey || 'GO TO: [KEY 5] UNIT C'
+    ctx.fillText(panelKeyText, vpX + 22, c1Y + 43, vpW - 44)
 
-    ctx.fillStyle = '#ffe600'
+    // Step Subtitle
+    ctx.fillStyle = '#39ff14'
     ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
-    const rawActiveText =
-      isCompletedShift && !isActiveMultiPanelOrder && latestLiveMsg
-        ? `[${latestLiveMsg.timestamp}] ${latestLiveMsg.sender}: ${latestLiveMsg.text}`
-        : payload.tutorialBody
-    const cleanBody = rawActiveText.replace(/^"|"$/g, '')
-    const bodyLines = wrapCanvasText(ctx, cleanBody, vpW - 48)
-    bodyLines.slice(0, 3).forEach((ln, i) => {
-      ctx.fillText(ln, vpX + 24, objY + 96 + i * 38, vpW - 48)
+    const stepTitle = payload.tutorialHeader.replace(/^>>\s*/, '')
+    ctx.fillText(stepTitle, vpX + 24, c1Y + 110, vpW - 48)
+
+    // Bold Action Command (40px crisp font, max 3 lines, generous 48px line height)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 40px "Consolas", "Courier Prime", monospace'
+    const actionRaw =
+      payload.tutorialActionLine || payload.tutorialBody || 'HOLD 50.0 HZ'
+    const actionWrapped = wrapCanvasText(ctx, actionRaw, vpW - 48).slice(0, 3)
+    actionWrapped.forEach((ln, idx) => {
+      ctx.fillText(ln, vpX + 24, c1Y + 168 + idx * 48, vpW - 48)
     })
 
-    // Divider between ACTION and WHY / LIVE ADVISORY
-    const whyDivY = objY + 216
+    // -----------------------------------------------------------------------
+    // CARD 2 (y = 570..864): WHY & GAUGE EFFECT (2 CRISP CAUSE-EFFECT LINES)
+    // -----------------------------------------------------------------------
+    const c2Y = c1Y + c1H + 18
+    const c2H = 292
+    ctx.fillStyle = '#051a18'
+    ctx.fillRect(vpX + 4, c2Y, vpW - 8, c2H)
     ctx.strokeStyle = '#00f0ff'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(vpX + 20, whyDivY)
-    ctx.lineTo(vpX + vpW - 20, whyDivY)
-    ctx.stroke()
+    ctx.lineWidth = 3.5
+    ctx.strokeRect(vpX + 4, c2Y, vpW - 8, c2H)
 
     ctx.fillStyle = '#00f0ff'
-    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
-    const cleanHint = payload.tutorialHint.replace(/^"|"$/g, '')
-    const hintLines = wrapCanvasText(ctx, cleanHint, vpW - 48)
-    hintLines.slice(0, 4).forEach((ln, i) => {
-      ctx.fillText(ln, vpX + 24, whyDivY + 34 + i * 33, vpW - 48)
+    ctx.fillRect(vpX + 4, c2Y, vpW - 8, 56)
+    ctx.fillStyle = '#03100e'
+    ctx.textAlign = 'left'
+    ctx.font = 'bold 32px "Consolas", "Courier Prime", monospace'
+    ctx.fillText('WHY & GAUGE EFFECT', vpX + 22, c2Y + 39, vpW - 44)
+
+    const whyPair = payload.tutorialWhyLines ?? [
+      'Rods make heat -> heat boils steam.',
+      'Watch POWER BALANCE on [KEY 5] UNIT C.',
+    ]
+    ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
+    let whyCursorY = c2Y + 106
+    whyPair.forEach((item, wIdx) => {
+      ctx.fillStyle = wIdx === 0 ? '#ffffff' : '#7ef9ff'
+      const lines = wrapCanvasText(ctx, `• ${item}`, vpW - 48).slice(0, 2)
+      lines.forEach((ln) => {
+        ctx.fillText(ln, vpX + 22, whyCursorY, vpW - 44)
+        whyCursorY += 44
+      })
+      whyCursorY += 10
     })
 
-    // Filter previously completed Volkov steps or earlier live dispatches (never repeat the active top message!)
-    const completedMsgs = isCompletedShift
-      ? payload.chatLog.slice(0, Math.max(0, payload.chatLog.length - 1))
-      : payload.chatLog.filter(
-          (m) =>
-            m.completed &&
-            m.sender !== 'SYSTEM' &&
-            m.phase !== payload.tutorialPhase
-        )
+    // -----------------------------------------------------------------------
+    // CARD 3 (y = 880..1186): COMRADE VOLKOV // SOVIET SATIRE & DISPATCH
+    // -----------------------------------------------------------------------
+    const c3Y = c2Y + c2H + 18
+    const c3H = 304
+    ctx.fillStyle = '#091f10'
+    ctx.fillRect(vpX + 4, c3Y, vpW - 8, c3H)
+    ctx.strokeStyle = '#39ff14'
+    ctx.lineWidth = 3.5
+    ctx.strokeRect(vpX + 4, c3Y, vpW - 8, c3H)
 
-    const histHeaderY = objY + objH + 38
-    ctx.fillStyle = '#58b870'
-    ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+    ctx.fillStyle = '#196b30'
+    ctx.fillRect(vpX + 4, c3Y, vpW - 8, 56)
+    ctx.fillStyle = '#ffe600'
     ctx.textAlign = 'left'
-    ctx.fillText(
-      isCompletedShift
-        ? 'PREVIOUS DISPATCHES & VOLKOV LOG (SCROLL):'
-        : 'COMPLETED ORDERS (HISTORY):',
-      vpX + 8,
-      histHeaderY
-    )
+    ctx.font = 'bold 31px "Consolas", "Courier Prime", monospace'
+    const card3Header =
+      isCompletedShift && latestLiveMsg
+        ? `DISPATCH // ${latestLiveMsg.sender} [${latestLiveMsg.timestamp}]`
+        : 'COMRADE VOLKOV // SHIFT BRIEFING'
+    ctx.fillText(card3Header, vpX + 22, c3Y + 39, vpW - 44)
 
-    if (completedMsgs.length === 0) {
-      ctx.fillStyle = '#3d7a4e'
-      ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
-      ctx.fillText(
-        '• No completed steps yet — execute the active order above.',
-        vpX + 12,
-        histHeaderY + 52,
-        vpW - 24
-      )
-    } else {
-      // Show at most 2 completed steps at a time (scrollY steps through older completed orders)
-      const scrollSteps = Math.max(0, Math.floor(scrollY / 40))
-      const endIdx = Math.max(
-        1,
-        completedMsgs.length - scrollSteps
-      )
-      const startIdx = Math.max(0, endIdx - 2)
-      const visibleCompleted = completedMsgs.slice(startIdx, endIdx).reverse()
+    const quoteSource =
+      isCompletedShift && latestLiveMsg && scrollY > 20
+        ? payload.chatLog[
+            Math.max(
+              0,
+              payload.chatLog.length - 1 - Math.floor(scrollY / 40)
+            )
+          ]?.text ?? payload.tutorialVolkovQuote
+        : isCompletedShift && latestLiveMsg && !payload.tutorialHeader.startsWith('>> ACTIVE')
+          ? latestLiveMsg.text
+          : payload.tutorialVolkovQuote || payload.tutorialBody
 
-      let cardY = histHeaderY + 20
-      visibleCompleted.forEach((msg) => {
-        ctx.font = 'bold 25px "Consolas", "Courier Prime", monospace'
-        const lines = wrapCanvasText(ctx, msg.text, vpW - 56).slice(0, 3)
-        const cardH = 58 + lines.length * 34 + 16
+    ctx.fillStyle = '#c8ffd4'
+    ctx.font = 'bold 33px "Consolas", "Courier Prime", monospace'
+    const quoteLines = wrapCanvasText(
+      ctx,
+      `"${quoteSource.replace(/^"|"$/g, '')}"`,
+      vpW - 48
+    ).slice(0, 4)
+    quoteLines.forEach((ln, qIdx) => {
+      ctx.fillText(ln, vpX + 22, c3Y + 106 + qIdx * 46, vpW - 44)
+    })
+  } else if (activeTab === 2) {
+    // -----------------------------------------------------------------------
+    // TAB 2: [2] TELEM — GIANT PLANT OVERVIEW READOUT (MATCHES UNIT C)
+    // -----------------------------------------------------------------------
+    const deltaMW = Math.round(payload.generatedMWe - payload.neededMWe)
+    const deltaSign = deltaMW >= 0 ? '+' : ''
+    const rows: Array<{ label: string; val: string; col: string }> = [
+      {
+        label: 'GENERATED MWe',
+        val: payload.gridConnected ? `${Math.round(payload.generatedMWe)} MWe` : '0 MWe (OPEN)',
+        col: payload.gridConnected ? '#39ff14' : '#ffd000',
+      },
+      {
+        label: 'NEEDED MWe',
+        val: `${Math.round(payload.neededMWe)} (${deltaSign}${deltaMW})`,
+        col: Math.abs(deltaMW) <= 20 && payload.gridConnected ? '#39ff14' : '#ffd000',
+      },
+      {
+        label: 'GRID FREQ',
+        val: `${(payload.gridHz || 0).toFixed(1)} HZ (${Math.round(payload.rpm)} RPM)`,
+        col: Math.abs((payload.gridHz || 0) - 50) <= 0.4 ? '#39ff14' : '#ff5555',
+      },
+      {
+        label: 'STEAM DRUM',
+        val: `${Math.round(payload.drumPressure)} BAR / ${Math.round(payload.drumWaterLevel)} mm`,
+        col: payload.drumPressure >= 58 && payload.drumPressure <= 74 ? '#00f0ff' : '#ffd000',
+      },
+      {
+        label: 'BORON RODS',
+        val: `${Math.round(payload.controlRods * 100)}% (${Math.round(payload.thermalPower)} MWt)`,
+        col: '#39ff14',
+      },
+      {
+        label: 'XENON-135 ASH',
+        val: `${Math.round(payload.xenonPoisoning)}%`,
+        col: payload.xenonPoisoning > 35 ? '#ffd000' : '#00f0ff',
+      },
+      {
+        label: 'STEAM VOID',
+        val: `${Math.round(payload.voidFraction)}%`,
+        col: payload.voidFraction > 28 ? '#ff5555' : '#39ff14',
+      },
+    ]
 
-        ctx.fillStyle = 'rgba(10, 38, 18, 0.85)'
-        ctx.fillRect(vpX + 4, cardY, vpW - 8, cardH)
-        ctx.strokeStyle = '#248f43'
-        ctx.lineWidth = 2.5
-        ctx.strokeRect(vpX + 4, cardY, vpW - 8, cardH)
+    rows.forEach((r, idx) => {
+      const ry = vpY + 8 + idx * 132
+      ctx.fillStyle = '#071c10'
+      ctx.fillRect(vpX + 4, ry, vpW - 8, 118)
+      ctx.strokeStyle = r.col
+      ctx.lineWidth = 3
+      ctx.strokeRect(vpX + 4, ry, vpW - 8, 118)
 
-        ctx.textAlign = 'left'
-        ctx.fillStyle = '#39ff14'
-        ctx.font = 'bold 25px "Consolas", "Courier Prime", monospace'
-        ctx.fillText(
-          `[${msg.timestamp}] ${msg.sender}`,
-          vpX + 22,
-          cardY + 38
-        )
+      ctx.textAlign = 'left'
+      ctx.fillStyle = '#9be8b0'
+      ctx.font = 'bold 32px "Consolas", "Courier Prime", monospace'
+      ctx.fillText(r.label, vpX + 24, ry + 44)
 
-        ctx.textAlign = 'right'
-        ctx.fillStyle = '#39ff14'
-        ctx.fillText(
-          msg.sender === 'K.O.M.R.A.D.-84' ? 'LOGGED ✓' : 'COMPLETED ✓',
-          vpX + vpW - 22,
-          cardY + 38
-        )
-
-        ctx.textAlign = 'left'
-        ctx.fillStyle = '#8ce8a4'
-        lines.forEach((ln, lIdx) => {
-          ctx.fillText(ln, vpX + 22, cardY + 78 + lIdx * 34, vpW - 44)
-        })
-
-        cardY += cardH + 18
-      })
-    }
+      ctx.textAlign = 'right'
+      ctx.fillStyle = r.col
+      ctx.font = 'bold 42px "Consolas", "Courier Prime", monospace'
+      ctx.fillText(r.val, vpX + vpW - 24, ry + 94)
+    })
   } else {
     // -----------------------------------------------------------------------
-    // TABS 2–6: LARGE VECTOR SCHEMATIC (`lineWidth: 4`, `26px` labels) +
-    //           MAX 4 SHORT BULLET POINTS (`bold 28px monospace`)
+    // TABS 3–6: LARGE CRISP CARDS (+50% FONT SIZE: 34px-38px, ZERO CLUTTER)
     // -----------------------------------------------------------------------
-    const schemY = vpY + 8
-    const schemH = 270
-    ctx.fillStyle = '#05160b'
-    ctx.fillRect(vpX + 4, schemY, vpW - 8, schemH)
-    ctx.strokeStyle = '#00f0ff'
-    ctx.lineWidth = 4
-    ctx.strokeRect(vpX + 4, schemY, vpW - 8, schemH)
-
-    const drawBullets = (
-      title: string,
-      bullets: [string, string, string, string],
-      accent = '#39ff14'
+    const drawBigGuideCards = (
+      banner: string,
+      cards: Array<{ head: string; line1: string; line2: string }>,
+      accent: string
     ) => {
-      const boxY = schemY + schemH + 24
-      const boxH = vpH - schemH - 40
-      ctx.fillStyle = '#071a0e'
-      ctx.fillRect(vpX + 4, boxY, vpW - 8, boxH)
-      ctx.strokeStyle = accent
-      ctx.lineWidth = 3.5
-      ctx.strokeRect(vpX + 4, boxY, vpW - 8, boxH)
-
       ctx.fillStyle = accent
-      ctx.fillRect(vpX + 4, boxY, vpW - 8, 58)
-      ctx.fillStyle = '#031006'
+      ctx.fillRect(vpX + 4, vpY + 4, vpW - 8, 64)
+      ctx.fillStyle = '#041007'
       ctx.textAlign = 'left'
-      ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
-      ctx.fillText(title, vpX + 22, boxY + 40, vpW - 44)
+      ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
+      ctx.fillText(banner, vpX + 22, vpY + 48, vpW - 44)
 
-      let curBY = boxY + 108
-      bullets.forEach((bText, bIdx) => {
-        ctx.font = 'bold 28px "Consolas", "Courier Prime", monospace'
-        ctx.fillStyle = bIdx % 2 === 0 ? '#ffffff' : '#ffe600'
-        const wrapped = wrapCanvasText(ctx, bText, vpW - 52).slice(0, 2)
-        wrapped.forEach((ln, lIdx) => {
-          ctx.fillText(ln, vpX + 24, curBY + lIdx * 38, vpW - 48)
-        })
-        curBY += wrapped.length * 38 + 34
+      cards.forEach((c, idx) => {
+        const cy = vpY + 84 + idx * 214
+        ctx.fillStyle = '#071a0f'
+        ctx.fillRect(vpX + 4, cy, vpW - 8, 198)
+        ctx.strokeStyle = accent
+        ctx.lineWidth = 3
+        ctx.strokeRect(vpX + 4, cy, vpW - 8, 198)
+
+        ctx.fillStyle = '#ffd000'
+        ctx.font = 'bold 33px "Consolas", "Courier Prime", monospace'
+        ctx.fillText(c.head, vpX + 22, cy + 46, vpW - 44)
+
+        ctx.fillStyle = '#ffffff'
+        ctx.font = 'bold 32px "Consolas", "Courier Prime", monospace'
+        ctx.fillText(c.line1, vpX + 22, cy + 104, vpW - 44)
+
+        ctx.fillStyle = '#8ef6ff'
+        ctx.fillText(c.line2, vpX + 22, cy + 158, vpW - 44)
       })
     }
 
-    if (activeTab === 2) {
-      // UNIT B Schematic: Drum Separator + 4 MCP Pumps
-      ctx.strokeStyle = '#00f0ff'
-      ctx.lineWidth = 4
-      ctx.strokeRect(vpX + 44, schemY + 38, 320, 110)
-      ctx.fillStyle = 'rgba(0, 240, 255, 0.28)'
-      ctx.fillRect(vpX + 48, schemY + 94, 312, 50)
-      ctx.fillStyle = '#00f0ff'
-      ctx.font = 'bold 26px "Consolas", monospace'
-      ctx.textAlign = 'center'
-      ctx.fillText('DRUM: 70 BAR / 0 MM', vpX + 204, schemY + 78)
-      ctx.fillStyle = '#ffd000'
-      ctx.fillText('FEEDWATER: 50–85%', vpX + 204, schemY + 195)
-
-      for (let i = 0; i < 4; i++) {
-        const px = vpX + 455 + i * 130
-        ctx.strokeStyle = '#39ff14'
-        ctx.lineWidth = 4
-        ctx.beginPath()
-        ctx.arc(px, schemY + 98, 42, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.fillStyle = '#39ff14'
-        ctx.fillText(`ГЦН-${i + 1}`, px, schemY + 185)
-      }
-
-      drawBullets('UNIT B // DRUM & COOLANT LOOP (БЩУ-Т)', [
-        '• PUMPS (ГЦН 1–4): Turn ON all 4 Main Pumps first — prevents steam voids in the core!',
-        '• FEEDWATER (ПЭН): 50% at 600 MWe (85% at 1000 MWe) replaces boiled steam so Drum stays ~0 MM.',
-        '• DRUM PRESSURE: Nominal 70 BAR (Redzone >80 BAR). Use STEAM DUMP (БРУ-К) if >85 BAR.',
-        '• POWER SURGE RULE: More MWt boils water faster — raise Feedwater when raising Rods!',
-      ])
-    } else if (activeTab === 3) {
-      // UNIT A-2 Schematic: 37-Rod Core + Reactivity
-      ctx.strokeStyle = '#39ff14'
-      ctx.lineWidth = 4
-      ctx.beginPath()
-      ctx.arc(vpX + 160, schemY + 135, 86, 0, Math.PI * 2)
-      ctx.stroke()
-      ctx.fillStyle = '#39ff14'
-      ctx.font = 'bold 26px "Consolas", monospace'
-      ctx.textAlign = 'center'
-      ctx.fillText('37-ROD CORE', vpX + 160, schemY + 142)
-
-      ctx.textAlign = 'left'
-      ctx.fillStyle = '#00f0ff'
-      ctx.fillText(
-        `ROD POSITION: ${Math.round(payload.controlRods * 100)}%`,
-        vpX + 310,
-        schemY + 86
-      )
-      ctx.fillStyle = '#ffd000'
-      ctx.fillText(
-        `XENON-135: ${payload.xenonPoisoning.toFixed(1)}%`,
-        vpX + 310,
-        schemY + 146
-      )
-      ctx.fillStyle = '#ff5555'
-      ctx.fillText(
-        `POSITIVE VOID: +${payload.voidFraction.toFixed(1)}%`,
-        vpX + 310,
-        schemY + 206
-      )
-
-      drawBullets('UNIT A-2 // CORE & REACTIVITY (СИУР)', [
-        '• ROD POSITION (0–100%): 55% = 1920 MWt (600 MWe baseline); 90% = 3200 MWt (1000 MWe surge).',
-        '• AUTO REGULATOR (АР): Micro-trims ±40 MWt (±1.5% rods) ONLY — saturates & trips OFF on >=50 MWe orders!',
-        '• WHY RAISE RODS: Opening Turbine Valve without raising Control Rods & Feedwater starves Drum BAR (<45 BAR).',
-        '• XENON & VOID: Click glowing cyan/red tiles on the 37-ROD CORE MAP or use Boron / Feedwater.',
-      ])
-    } else if (activeTab === 4) {
-      // UNIT A Schematic: AZ-5 Warning + 6 Substation Sliders
-      ctx.strokeStyle = '#ff2a2a'
-      ctx.lineWidth = 4
-      ctx.strokeRect(vpX + 36, schemY + 36, 430, 195)
-      ctx.fillStyle = '#ff2a2a'
-      ctx.font = 'bold 26px "Consolas", monospace'
-      ctx.textAlign = 'center'
-      ctx.fillText('⚠️ AZ-5 GRAPHITE TIP FLAW', vpX + 251, schemY + 105)
-      ctx.fillStyle = '#ffd000'
-      ctx.fillText('+0.035 REACTIVITY (FIRST 3.5s)', vpX + 251, schemY + 165)
-
-      ctx.fillStyle = '#39ff14'
-      ctx.fillText('6 LEVERS: 0–250 MW EACH', vpX + 725, schemY + 138)
-
-      drawBullets(
-        'UNIT A // AZ-5 & 6 SUBSTATION LEVERS (0–250 MW)',
+    if (activeTab === 3) {
+      drawBigGuideCards(
+        'COLD STARTUP // 4 STEPS TO 600 MWe',
         [
-          '• +MW ORDER: 1.[A-2] Withdraw Control Rods -> 2.[B/A] Raise Feedwater & Pumps A/B -> 3.[A] Set Sector MW Lever -> 4.[C] Match Turbine Steam Valve (50.0 Hz)!',
-          '• -MW ORDER: 1.[A] Lower Sector MW Lever -> 2.[C] Lower Turbine Steam Valve -> 3.[A-2] Insert Control Rods (<75 BAR) -> 4.[B] Adjust Feedwater & Steam Dump!',
-          '• STEAM STARVATION (<45 BAR): Pulling MW Lever & Valve without raising Rods & Feedwater drops Drum Level <-80mm!',
-          '• AZ-5 DEFECT: Graphite rod tips cause a 3.5s power spike if Void > 20%!',
+          {
+            head: '1. [KEY 3] UNIT B: GAS & PUMPS',
+            line1: 'Flip 3 SCRUBBERS + 4 PUMPS UP;',
+            line2: 'turn HELIUM-N2 & FEEDWATER ~55%.',
+          },
+          {
+            head: '2. [KEY 3] UNIT A-2: OIL & RODS',
+            line1: 'Open OIL COOLER ~55%; flip AUTO ON',
+            line2: '& raise BORON RODS to 55% (65 BAR).',
+          },
+          {
+            head: '3. [KEY 5] UNIT C: SPIN & LOCK 50HZ',
+            line1: 'OPEN ONLY: ~18% wheel -> 50.0 HZ,',
+            line2: 'then pull MAIN BREAKER [SPACE]!',
+          },
+          {
+            head: '4. [KEY 5 & 1]: MWe GAS PEDAL',
+            line1: 'Grid holds 50HZ! Open THROTTLE ~60%',
+            line2: '& set 6 Levers [KEY 1] to 100 MW!',
+          },
         ],
-        '#ff2a2a'
+        '#39ff14'
+      )
+    } else if (activeTab === 4) {
+      drawBigGuideCards(
+        '+MW SURGE vs -MW SHED ORDERS',
+        [
+          {
+            head: 'ONCE LOCKED = MWe GAS PEDAL!',
+            line1: 'Grid holds 50.0 HZ steady! Throttle',
+            line2: 'pushes MWe to match NEEDED MWe.',
+          },
+          {
+            head: '+MW ORDER (NEED MORE POWER):',
+            line1: '1. RODS UP [A-2] + WATER UP [B]',
+            line2: '2. Lever [A] -> 3. Open THROTTLE [C]!',
+          },
+          {
+            head: '-MW ORDER (SHED GRID LOAD):',
+            line1: '1. Lower Lever [A] & THROTTLE [C]',
+            line2: '2. Push RODS IN [A-2] (VENT >75 BAR)!',
+          },
+          {
+            head: 'TEAR & STAMP AT [KEY 4] DESK:',
+            line1: 'Tear Pravda order -> Stamp APPROVED',
+            line2: '-> Pack Capsule -> Pull Tube Lever!',
+          },
+        ],
+        '#ffd000'
       )
     } else if (activeTab === 5) {
-      // UNIT C Schematic: Synchroscope 12 o'clock + 3000 RPM Governor
-      ctx.strokeStyle = '#39ff14'
-      ctx.lineWidth = 4
-      ctx.beginPath()
-      ctx.arc(vpX + 155, schemY + 135, 86, 0, Math.PI * 2)
-      ctx.stroke()
-      ctx.strokeStyle = '#ffd000'
-      ctx.lineWidth = 5
-      ctx.beginPath()
-      ctx.moveTo(vpX + 155, schemY + 135)
-      ctx.lineTo(vpX + 155, schemY + 56)
-      ctx.stroke()
-
-      ctx.textAlign = 'left'
-      ctx.font = 'bold 26px "Consolas", monospace'
-      ctx.fillStyle = '#39ff14'
-      ctx.fillText("12 O'CLOCK = 0° SYNC ZONE", vpX + 290, schemY + 86)
-      ctx.fillStyle = '#ffd000'
-      ctx.fillText('1. 20% VALVE -> 3000 RPM GOVERNOR', vpX + 290, schemY + 146)
-      ctx.fillStyle = '#00f0ff'
-      ctx.fillText('2. LOCK 50.0 HZ EQUILIBRIUM (+/- MW)', vpX + 290, schemY + 206)
-
-      drawBullets('UNIT C // TURBINE & 50.0 HZ EQUILIBRIUM (БЩУ-Э)', [
-        '• 3000 RPM GOVERNOR: Set STEAM VALVE to 20%, then click MAIN BREAKER [SPACE] at 12 o\'clock!',
-        '• +MW ORDER: 1. Withdraw Rods (A-2) -> 2. Boost Pumps & MW Lever (A) -> 3. Turn 50Hz Rheostat / Valve UP (C) so Grid Drag doesn\'t pull Hz <49.0!',
-        '• -MW ORDER: 1. Lower MW Lever (A) -> 2. Lower 50Hz Rheostat / Valve (C) so Turbine doesn\'t Overspeed (>51.0 Hz) & Vent Steam -> 3. Insert Rods (A-2)!',
-        '• BREAKER TRIP: Staying outside 48.5–51.5 Hz for >14s or >3220 RPM trips the Main Breaker!',
-      ])
-    } else {
-      // TAB 6: HAZARDS — POSITIVE VOID & XENON-135 COUNTERMEASURES
-      ctx.strokeStyle = '#ff2a2a'
-      ctx.lineWidth = 4
-      ctx.beginPath()
-      ctx.moveTo(vpX + 44, schemY + 215)
-      ctx.quadraticCurveTo(vpX + 260, schemY + 200, vpX + 440, schemY + 55)
-      ctx.stroke()
-
-      ctx.textAlign = 'left'
-      ctx.font = 'bold 26px "Consolas", monospace'
-      ctx.fillStyle = '#ff2a2a'
-      ctx.fillText(
-        `VOID (${payload.voidFraction.toFixed(0)}%): RED TILES / FEEDWATER / BORON`,
-        vpX + 52,
-        schemY + 92
-      )
-      ctx.fillStyle = '#00f0ff'
-      ctx.fillText(
-        `XENON (${payload.xenonPoisoning.toFixed(0)}%): CYAN TILES / RAISE RODS >=75%`,
-        vpX + 52,
-        schemY + 155
-      )
-      ctx.fillStyle = '#ffd000'
-      ctx.fillText(
-        'RODS (MWt) -> DRUM BAR -> TURBINE (MWe) -> 6 LEVERS',
-        vpX + 52,
-        schemY + 215
-      )
-
-      drawBullets(
-        'POSITIV VOID & XENON-135 COUNTERMEASURES',
+      drawBigGuideCards(
+        'REACTOR ALARMS & QUICK CURES',
         [
-          '• STOP HIGH VOID (%): Raise FEEDWATER (UNIT B) to 75%+, click RED core tiles (A-2), or press [BORON INJECTION] on UNIT A (-35% Void)!',
-          '• BURN XENON-135 (%): Raise RODS (СУЗ on A-2) to 75–90% (>1800 MWt) or click CYAN core tiles (-12% Xenon each)!',
-          '• PREVENT XENON PIT: During low-MW orders, keep Rods at ~60% and open STEAM DUMP (БРУ-К) so Xenon keeps burning!',
-          '• MOUSE WHEEL TIP: Scroll wheel on ANY handwheel or lever for fast 5% / 25 MW steps (hold SHIFT for 1% fine trim)!',
+          {
+            head: 'XENON-135 ("NUCLEAR ASH" >35%):',
+            line1: 'Suffocates neutrons after power cuts!',
+            line2: 'CURE: Pull RODS 70%+ or click CYAN.',
+          },
+          {
+            head: 'STEAM VOIDS ("BOILING DRY" >28%):',
+            line1: 'Bubbles speed up RBMK fission!',
+            line2: 'CURE: Open FEEDWATER [B] & PUMPS [A].',
+          },
+          {
+            head: 'HIGH STEAM BAR (>76 BAR):',
+            line1: 'Boiler making more steam than used!',
+            line2: 'CURE: Pull STEAM VENT [C] & cut RODS.',
+          },
+          {
+            head: 'HOT PUMP BEARINGS (>80°C):',
+            line1: 'Melted bearings come off your pension!',
+            line2: 'CURE: Open OIL COOLER wheel [A-2/A].',
+          },
+        ],
+        '#ff5555'
+      )
+    } else {
+      drawBigGuideCards(
+        'SOVIET RBMK-1000 PHYSICS NOTES',
+        [
+          {
+            head: 'NO CONTAINMENT DOME ([KEY 3] B):',
+            line1: 'Ministry bought a banner instead —',
+            line2: 'keep He-N2 & 3 Scrubbers ON always!',
+          },
+          {
+            head: 'BORON RODS ([KEY 3] UNIT A-2):',
+            line1: 'Neutron sponges: UP = hotter steam,',
+            line2: 'DOWN = cooler core. Keep Boron >25%!',
+          },
+          {
+            head: 'TRUE 50HZ GRID LOCK ([KEY 5] C):',
+            line1: 'Tune 50HZ ONLY when Breaker OPEN;',
+            line2: 'locked = Throttle is pure MWe pedal!',
+          },
+          {
+            head: 'SCROLL WHEEL SHORTCUT:',
+            line1: 'Scroll mouse wheel on ANY wheel or',
+            line2: 'lever (hold SHIFT for 1% fine trim)!',
+          },
         ],
         '#00f0ff'
       )
@@ -3476,10 +3474,10 @@ export function drawWePad84ScreenCanvas(
   ctx.restore() // end Zone 2 clip
 
   // =========================================================================
-  // ZONE 3 (BOTTOM): 1 CLEAN STATUS LINE WITHOUT HEAVY BOX FRAMES
+  // ZONE 3 (BOTTOM): CRISP 30PX FOOTER CONTROLS IN 100% ENGLISH
   // =========================================================================
   ctx.strokeStyle = '#28b862'
-  ctx.lineWidth = 2
+  ctx.lineWidth = 2.5
   ctx.beginPath()
   ctx.moveTo(24, 1202)
   ctx.lineTo(LW - 24, 1202)
@@ -3487,11 +3485,11 @@ export function drawWePad84ScreenCanvas(
 
   ctx.textAlign = 'center'
   ctx.fillStyle = '#ffd000'
-  ctx.font = 'bold 26px "Consolas", "Courier Prime", monospace'
+  ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
   ctx.fillText(
-    '[1–6]: BYTT FANE   |   [TAB]: ZOOM   |   [E]: LEGG PÅ PULT',
+    '[1-6]: TABS  |  [TAB]: CLOSE ZOOM  |  [E]: PUT ON DESK',
     LW / 2,
-    1244,
+    1248,
     LW - 40
   )
 

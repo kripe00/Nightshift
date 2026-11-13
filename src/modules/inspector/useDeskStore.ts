@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import type { SectorNodeId } from '../../shared/types'
-import { useGameStore } from '../../shared/useGameStore'
+import {
+  registerMandateComplianceListener,
+  useGameStore,
+} from '../../shared/useGameStore'
 
 // Expanded 3D Desk Coordinate System (Tabletop is 2.48m wide × 1.36m deep; Green Mat #1d2b26 is 2.28m × 1.20m)
 export const PRINTER_TRAY_BOUNDARY_X_3D = -0.62
@@ -216,6 +219,11 @@ interface DeskStoreState {
   completePneumaticLaunch: () => void
   dispatchDocumentToOutbox: (id: string) => boolean
   rejectUnstampedOutboxAttempt: (docId?: string) => void
+  recordMandateComplianceOutcome: (
+    fulfilled: boolean,
+    mandateId: string,
+    reason: string
+  ) => void
   resetDeskStore: () => void
 }
 
@@ -234,17 +242,17 @@ const SECTOR_ORDER_SPECS: Record<
     candidateMWs: [150, 200, 50, 175, 125],
     forgedCandidateMWs: [225, 25, 250],
   },
-  kolkhoz: {
-    bracketLabel: '2. KOLKHOZ FARM',
-    ruTopic: 'KOLKHOZ ZARYA',
-    candidateMWs: [150, 50, 175, 125, 200],
-    forgedCandidateMWs: [225, 25, 250],
-  },
   duga: {
-    bracketLabel: '3. DUGA-1 RADAR',
+    bracketLabel: '2. DUGA-1 RADAR',
     ruTopic: 'DUGA-1 RADAR',
     candidateMWs: [175, 200, 50, 150, 225],
     forgedCandidateMWs: [250, 25, 225],
+  },
+  kolkhoz: {
+    bracketLabel: '3. KOLKHOZ FARM',
+    ruTopic: 'KOLKHOZ ZARYA',
+    candidateMWs: [150, 50, 175, 125, 200],
+    forgedCandidateMWs: [225, 25, 250],
   },
   kgb: {
     bracketLabel: '4. KGB BUNKER 07',
@@ -1365,4 +1373,31 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       },
     })
   },
+
+  recordMandateComplianceOutcome: (
+    fulfilled: boolean,
+    mandateId: string,
+    reason: string
+  ) => {
+    const state = get()
+    set({
+      commendations: fulfilled
+        ? state.commendations + 1
+        : state.commendations,
+      citations: fulfilled ? state.citations : state.citations + 1,
+      lastVerdict: {
+        docId: mandateId,
+        docTitle: fulfilled ? 'QUOTA FULFILLED' : 'QUOTA NON-COMPLIANCE',
+        decision: 'APPROVED',
+        correct: fulfilled,
+        reason,
+      },
+    })
+  },
 }))
+
+registerMandateComplianceListener((fulfilled, mandateId, reason) => {
+  useDeskStore
+    .getState()
+    .recordMandateComplianceOutcome(fulfilled, mandateId, reason)
+})

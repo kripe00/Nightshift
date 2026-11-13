@@ -216,3 +216,16 @@
   >
   > ***OPPDRAG TIL KRISTIANOV:** Sett deg i bunkeren og **test gjennom hele tutorialen fra start til slutt**! Se nøye etter om stegene, `ACTION:`/`WHY:`-forklaringene på `WE-PAD 84` og sammenhengen mellom `UNIT B -> UNIT A-2 -> UNIT C -> UNIT A` **gir 100 % mening** for en ny operatør, og telegrafer tilbake hva du synes! — MELTDOWN IS PROPAGANDA! 🎖️📟⚙️☢️☭"*
 
+### [TELEGRAM #016 — STEMPLET: QUOTA-84 // TRUE GRID-LOCKED 50.0 HZ, MWe GAS PEDAL & UNIT C MASTER OVERVIEW FERDIGSTILT!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** ⚡ Slutt på frekvens-jaging: Ekte Grid-Locked 50.0 Hz synkronfysikk, UNIT C som MWe-gasspedal, børstet stålflens og krystallklare oppdrag!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Inspektoratet og K.O.M.R.A.D.-84 har herved gjennomført et massivt gjennombrudd i reaktorfysikken og `UNIT C`-kontrollpanelet:*
+  > *1. **True Grid-Locked Synchronous Mode (50.0 Hz låst):** Vi har avviklet den urealistiske 'øydrift'-frekvensjagingen der enhver MW-ordre fikk turbinhastigheten til å skli ut. Nå tunes 50.0 Hz **kun mens `MAIN BREAKER` er ÅPEN** (~18 % throttle). Så snart knivbryteren legges inn kl. 12, låses generatoren magnetisk til det mektige sovjetiske kraftnettet på stabile 50.0 Hz (kun mikroskopiske ±0.02–0.05 Hz koblingstremor).*
+  > *2. **`TURBINE THROTTLE` er nå reaktorens MWe-gasspedal:** Når turbinen er låst til nettet, styrer rattet direkte hvor mange Megawatt vi pumper ut på nettet (`throttle * damptrykk`). Matcher du ordren (±20 MWe), lyser `POWER BALANCE` grønt! Ved underskudd får substasjonene `GEN LOW`-underspenning, og ved overskudd (>+60 MWe) varsler K.O.M.R.A.D.-84 om trafo-overbelastning!*
+  > *3. **Børstet stålflens & krystallklar `UNIT C`:** Den gamle hvite frekvensskiven bak det 6-eikede stålhjulet er erstattet av en autentisk industriell monteringsflens i mørkt stål (`#1d2421`/`#2c3531`) med 0–100 % kranmerker, og skiltet har fått god lufting uten avkuttede kanter.*
+  > *4. **Oppdatert WE-PAD 84, Skrivebordsmanual og Volkov-replikker:** Hele opplæringen og manualen lærer nå bort den nye 3-stegs fysikkrekkefølgen for +MW og -MW ordrer.*
+  >
+  > *KGB-inspeksjon er kjørt med 0 advarsler og 0 feil. Ta en ny prøvetur, kjenn på gasspedalen og meld tilbake! Lenge leve Femårsplanen — MELTDOWN IS PROPAGANDA! 🎖️⚡⚙️☢️☭"*
