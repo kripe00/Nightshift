@@ -45,6 +45,11 @@ export interface WePadTelemetryPayload {
   syncPhase: number
   gridConnected: boolean
   turbineValve?: number
+  energyCreatedMW: number
+  batteryStoredMWh: number
+  batteryStoredPct: number
+  energyDemandMW: number
+  batteryWheelPct: number
   totalElectricalMW: number
   neededMWe: number
   generatedMWe: number
@@ -1637,7 +1642,7 @@ function drawManualSchematicIcon(
         const tx = gx * 11
         const ty = -8 + gy * 11
         const isHot = (gx === 0 && gy === 0) || (gx === 1 && gy === -1)
-        ctx.fillStyle = isHot ? '#ff2a2a' : '#33ff66'
+        ctx.fillStyle = isHot ? '#ffb000' : '#33ff66'
         ctx.fillRect(tx - 4.5, ty - 4.5, 9, 9)
         ctx.strokeStyle = INK_BLACK
         ctx.lineWidth = 1.4
@@ -1645,7 +1650,7 @@ function drawManualSchematicIcon(
       }
     }
 
-    // Cursor Arrow clicking center flashing hotspot tile
+    // Cursor Arrow clicking center pulsing amber spent-rod tile
     ctx.fillStyle = '#ffffff'
     ctx.strokeStyle = INK_BLACK
     ctx.lineWidth = 2.2
@@ -1661,10 +1666,10 @@ function drawManualSchematicIcon(
     ctx.fill()
     ctx.stroke()
 
-    ctx.fillStyle = INK_RED
+    ctx.fillStyle = '#b36b00'
     ctx.font = '800 10.5px "Courier Prime", monospace'
     ctx.textAlign = 'center'
-    ctx.fillText('CLICK HOT TILE', 0, 62)
+    ctx.fillText('REFUEL SPENT ROD', 0, 62)
   } else if (kind === 'gas') {
     // Bubbler Drain & Sight-Glass: Vertical glass water column with graduation ticks next to downward pull-handle recycling water (-> H2O)
     // Left: Vertical Sight-Glass Water Column with Graduation Ticks
@@ -2598,7 +2603,7 @@ export function drawSecurityManualCanvas(
           'CAPSULE & launch Pneumatic Tube lever!',
         ],
         reactionLines: [
-          'Updates NEEDED MWe on UNIT C & Sector',
+          'Updates ENERGY DEMAND on UNIT C & Sector',
           'targets on K.O.M.R.A.D.-84 (85s window).',
         ],
       },
@@ -2606,16 +2611,16 @@ export function drawSecurityManualCanvas(
         icon: 'stamp_tube_shred',
         badge: '3. CAUSE & EFFECT: WHY EVERY PANEL MATTERS',
         useLines: [
-          'RODS [A-2] -> Fission Heat -> Boils Water',
-          'into STEAM BAR -> Spins TURBINE [UNIT C]!',
+          'RODS [A-2] + WATER [B] -> Fission Steam',
+          '-> Fills ACCUMULATOR BANKS [UNIT C]!',
         ],
         effectLines: [
-          'Opening TURBINE THROTTLE gulps live steam;',
-          'without more RODS & WATER, BAR collapses!',
+          'Turning BATTERY -> GRID wheel dispatches',
+          'stored MWh; low RODS drains Battery <10%!',
         ],
         reactionLines: [
-          'Shedding load traps excess steam; without',
-          'lowering RODS or VENTING, BAR spikes >78!',
+          'Keep RODS & FEEDWATER balanced; 4+ AMBER',
+          'spent rods sag MW & overheat core!',
         ],
       },
       {
@@ -2623,15 +2628,15 @@ export function drawSecurityManualCanvas(
         badge: '4. +MW SURGE vs -MW SHED CHECKLIST',
         useLines: [
           '+MW: 1. RODS UP [A-2] + WATER UP [B] ->',
-          '2. Pull Sector Lever [A] (NEEDED MWe) ->',
+          '2. Pull Sector Lever [A] (DEMAND MW) ->',
         ],
         effectLines: [
-          '3. Open THROTTLE [C] to match NEEDED MWe!',
-          '-MW: 1. Lower Lever [A] & THROTTLE [C] ->',
+          '3. Turn BATTERY -> GRID [C] to match!',
+          '-MW: 1. Lower Lever [A] & WHEEL [C] ->',
         ],
         reactionLines: [
-          '2. Push RODS IN [A-2] (stop excess boil;',
-          'pull STEAM VENT if BAR > 75)!',
+          '2. Insert RODS [A-2] & trim WATER [B]',
+          '(open STEAM DUMP if BAR > 76)!',
         ],
       },
     ]
@@ -2661,8 +2666,8 @@ export function drawSecurityManualCanvas(
           'DUGA-1, KGB BUNKER, VODKA & STEEL WORKS.',
         ],
         reactionLines: [
-          'Grid holds 50.0 HZ steady — match NEEDED',
-          'MWe using TURBINE THROTTLE on UNIT C!',
+          'Match total DEMAND MW on UNIT C using',
+          'the single BATTERY -> GRID handwheel!',
         ],
       },
       {
@@ -2709,55 +2714,55 @@ export function drawSecurityManualCanvas(
     ctx.fillStyle = '#094a20'
     ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('6. UNIT A-2 & B: CORE, BORON & GAS [KEY 3]', 38, 156)
+    ctx.fillText('6. UNIT A-2 & B: CORE, REFUEL & WATER [KEY 3]', 38, 156)
 
     const auxCards: FieldGuideCardSpec[] = [
       {
         icon: 'octagon',
-        badge: '[UNIT A-2] BORON RODS & XENON-135 ASH',
+        badge: '[UNIT A-2 & B] ROD & FEEDWATER BALANCE',
         useLines: [
-          'Boron rods are neutron sponges: pull UP',
-          'for more MWt heat; push DOWN to cool.',
+          'Balance CONTROL RODS [A-2] against FEED-',
+          'WATER [B] so steam heat matches cooling.',
         ],
         effectLines: [
-          'Fission leaves Xenon-135 ("nuclear ash")',
-          'that suffocates neutrons after power cuts.',
+          'Too high Rods / low Water = STEAM VOIDS.',
+          'Too low Rods / excess Water = XENON-135.',
         ],
         reactionLines: [
-          'When XENON >35%, pull Rods higher (70%+)',
-          'or click CYAN core tiles until burned off!',
+          'Keep both balanced (e.g. 55% Rods & ~50%',
+          'Feedwater) so Void & Xenon stay green!',
         ],
       },
       {
         icon: 'wheel',
-        badge: '[UNIT A-2] OIL COOLER & STEAM VOIDS',
+        badge: '[UNIT A-2] OIL COOLER & AUTO RODS (АР)',
         useLines: [
           'Turn OIL COOLER wheel (50-65%) on A-2;',
-          'match FEEDWATER wheel (55-80%) on UNIT B.',
+          'click [АР АВТОМАТ] for automatic trim.',
         ],
         effectLines: [
-          'Keeps pump bearings cool and Drum Level',
-          'near 0 mm so tubes never boil dry.',
+          'Keeps ГЦН pump bearings cool & holds steady',
+          'core reactivity once startup stabilizes.',
         ],
         reactionLines: [
-          'Dry RBMK tubes create Steam Voids (+void',
-          'accelerates fission instead of slowing it)!',
+          'Manual Scroll/Drag overrides Rods anytime;',
+          'hold SHIFT while scrolling for ±1% trim!',
         ],
       },
       {
         icon: 'piston',
-        badge: '[UNIT A-2] BORON PISTON PUMP',
+        badge: '[UNIT A-2] 37-CORE AMBER REFUELING LEVER',
         useLines: [
-          'Drag the horizontal Bakelite T-handle on',
-          'UNIT A-2 up and down for full strokes.',
+          'Spent fuel channels flash AMBER on A-2:',
+          '1) Click AMBER tile, 2) Drag LEVER DOWN!',
         ],
         effectLines: [
-          'Recharges hydraulic BORON TANK (+3.5% per',
-          'stroke) used by rods & tile quenching.',
+          'Reloads fresh fuel (+MW & tops up Boron)',
+          'once pulled cleanly to the bottom detent.',
         ],
         reactionLines: [
-          'Below 25% Boron Tank, control rods lose',
-          'neutron stopping power — keep topped up!',
+          'Each spent rod sags MW (-6.5%); 4+ spent',
+          'rods together overheat the core — reload!',
         ],
       },
       {
@@ -2804,71 +2809,71 @@ export function drawSecurityManualCanvas(
     ctx.fillStyle = '#094a20'
     ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('7. UNIT C: MASTER OVERVIEW & THROTTLE [KEY 5]', 38, 156)
+    ctx.fillText('7. UNIT C: BATTERY STORAGE & GRID WHEEL [KEY 5]', 38, 156)
 
     const gridCards: FieldGuideCardSpec[] = [
       {
         icon: 'rheostat',
-        badge: '[KEY 5] TRUE 50HZ GRID LOCK & BALANCE',
+        badge: '[KEY 5] ENERGY CREATED & BATTERY CHARGE',
         useLines: [
-          'Once MAIN BREAKER is CLOSED, the regional',
-          'grid holds rotor speed locked at 50.0 HZ!',
+          'Reactor output (ENERGY CREATED) continuously',
+          'fills ACCUMULATOR BANKS A & B (0-1000 MWh).',
         ],
         effectLines: [
-          'RED MARKER = NEEDED MWe (Quotas + Aux);',
-          'BLACK NEEDLE = GENERATED MWe pushed out.',
+          'Surplus MW charges Batteries; deficit MW',
+          'draws reserve charge instead of blacking out.',
         ],
         reactionLines: [
-          'Deficit browns out sectors; >+60 MWe',
-          'surplus overloads grid transformers!',
+          'Keep Steam 55-74 BAR & Refuel Amber Rods',
+          'so Battery charge never drops below 10%!',
         ],
       },
       {
         icon: 'wheel',
-        badge: '[KEY 5] TURBINE THROTTLE (MWe GAS PEDAL)',
+        badge: '[KEY 5] SINGLE BATTERY -> GRID WHEEL',
         useLines: [
-          'Drag the cast-steel spoked wheel or scroll',
-          'mouse wheel (0-100% LED bargraph).',
+          'Drag or scroll the center handwheel on',
+          'UNIT C to dispatch 0-1000 MW to substations.',
         ],
         effectLines: [
-          'BREAKER OPEN: Set ~18% ONLY to spin free',
-          'rotor to 50.0 HZ before locking grid!',
+          'RED MARKER = ENERGY DEMAND (Quotas + Aux);',
+          'BLACK NEEDLE = OUTPUT pushed from Batteries.',
         ],
         reactionLines: [
-          'LOCKED 50HZ: Pure Megawatt gas pedal!',
-          'Boil steam on A-2/B or BAR drains <25!',
+          'Align BLACK needle onto RED DEMAND marker',
+          'so substations stay fed without wasting MWh!',
         ],
       },
       {
-        icon: 'breaker',
-        badge: '[KEY 5] MAIN BREAKER & STEAM VENT',
+        icon: 'piston',
+        badge: '[KEY 5] ACCUMULATOR BANKS A & B',
         useLines: [
-          'Pull MAIN BREAKER ([SPACE] or drag) ONLY',
-          'inside 49.5-50.5 HZ green sync window!',
+          'Banks A (left) and B (right) show live 10-',
+          'segment battery state plus +MW/-MW net flow.',
         ],
         effectLines: [
-          'Magnetically locks onto 50.0 HZ grid.',
-          'Pull STEAM VENT left if BAR climbs >75!',
+          'Green LEDs mean healthy reserve; Amber/Red',
+          'means Grid dispatch exceeds Reactor supply.',
         ],
         reactionLines: [
-          'Out-of-sync close or <25 BAR starvation',
-          'trips breaker (3 forms in triplicate)!',
+          'Raise Rods [A-2] & Feedwater [B] cleanly',
+          'if net Battery charge stays negative!',
         ],
       },
       {
-        icon: 'ventilation_toggle',
-        badge: '[KEY 5] 4 AUXILIARY SWITCHGEAR TOGGLES',
+        icon: 'shift_goal_crt',
+        badge: '[KEY 5] CRT-84C MASTER POWER MONITOR',
         useLines: [
-          'Keep 2.AVR EXCITER (+8MW), 3.KGB (+10MW)',
-          '& 4.CONDENSER VACUUM (+12MW) ON (=30MW)!',
+          'CRT-84C displays 3 clean telemetry bays:',
+          'ENERGY CREATED, ENERGY STORED & DEMAND.',
         ],
         effectLines: [
-          'AVR aids 50HZ sync & MWe torque; VACUUM',
-          'gives blade efficiency & resets trips.',
+          'Bottom bar issues immediate plain-English',
+          'battery or demand adjustments if off-target.',
         ],
         reactionLines: [
-          'Flip 1.VENTILATION (+15MW) ON whenever',
-          'room radiation rises above 0.5 R/h!',
+          'Pair KEY 5 wheel trim with KEY 1 Substation',
+          'levers whenever Moscow changes MW quotas!',
         ],
       },
     ]
@@ -3088,15 +3093,15 @@ export function drawWePad84ScreenCanvas(
   ctx.lineWidth = 2.5
   ctx.strokeRect(20, 20, LW - 40, 66)
 
-  const genVal = Math.round(payload.generatedMWe)
-  const needVal = Math.round(payload.neededMWe)
-  const barVal = Math.round(payload.drumPressure)
-  const hzStr = (payload.gridHz || 0).toFixed(1)
+  const createdVal = Math.round(payload.energyCreatedMW)
+  const batPctVal = Math.round(payload.batteryStoredPct)
+  const gridVal = Math.round(payload.generatedMWe)
+  const demandVal = Math.round(payload.energyDemandMW)
 
   ctx.textAlign = 'center'
   ctx.fillStyle = '#00f0ff'
   ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
-  const teleLine = `GEN:${genVal}/${needVal} MWe | ${barVal} BAR | ${hzStr} HZ`
+  const teleLine = `GEN:${createdVal}MW | BAT:${batPctVal}% | GRID:${gridVal}/${demandVal}MW`
   ctx.fillText(teleLine, LW / 2, 64, LW - 56)
 
   // 6 Chapter Tab Buttons (2 rows x 3 columns, y = 96..234, +50% larger 32px font)
@@ -3265,23 +3270,28 @@ export function drawWePad84ScreenCanvas(
     // -----------------------------------------------------------------------
     // TAB 2: [2] TELEM — GIANT PLANT OVERVIEW READOUT (MATCHES UNIT C)
     // -----------------------------------------------------------------------
-    const deltaMW = Math.round(payload.generatedMWe - payload.neededMWe)
+    const deltaMW = Math.round(payload.generatedMWe - payload.energyDemandMW)
     const deltaSign = deltaMW >= 0 ? '+' : ''
     const rows: Array<{ label: string; val: string; col: string }> = [
       {
-        label: 'GENERATED MWe',
-        val: payload.gridConnected ? `${Math.round(payload.generatedMWe)} MWe` : '0 MWe (OPEN)',
-        col: payload.gridConnected ? '#39ff14' : '#ffd000',
+        label: 'ENERGY CREATED',
+        val: `${Math.round(payload.energyCreatedMW)} MW (${payload.batteryWheelPct}% OUT)`,
+        col: payload.energyCreatedMW >= 200 ? '#39ff14' : '#ffd000',
       },
       {
-        label: 'NEEDED MWe',
-        val: `${Math.round(payload.neededMWe)} (${deltaSign}${deltaMW})`,
-        col: Math.abs(deltaMW) <= 20 && payload.gridConnected ? '#39ff14' : '#ffd000',
+        label: 'ENERGY STORED',
+        val: `${Math.round(payload.batteryStoredPct)}% (${Math.round(payload.batteryStoredMWh)} MWh)`,
+        col:
+          payload.batteryStoredPct < 10
+            ? '#ff5555'
+            : payload.batteryStoredPct < 25
+              ? '#ffd000'
+              : '#39ff14',
       },
       {
-        label: 'GRID FREQ',
-        val: `${(payload.gridHz || 0).toFixed(1)} HZ (${Math.round(payload.rpm)} RPM)`,
-        col: Math.abs((payload.gridHz || 0) - 50) <= 0.4 ? '#39ff14' : '#ff5555',
+        label: 'GRID DEMAND',
+        val: `${Math.round(payload.generatedMWe)}/${Math.round(payload.energyDemandMW)} (${deltaSign}${deltaMW})`,
+        col: Math.abs(deltaMW) <= 30 ? '#39ff14' : '#ffd000',
       },
       {
         label: 'STEAM DRUM',
@@ -3362,27 +3372,27 @@ export function drawWePad84ScreenCanvas(
 
     if (activeTab === 3) {
       drawBigGuideCards(
-        'COLD STARTUP // 4 STEPS TO 600 MWe',
+        'COLD STARTUP // 4 STEPS TO BATTERY & GRID',
         [
           {
             head: '1. [KEY 3] UNIT B: GAS & PUMPS',
             line1: 'Flip 3 SCRUBBERS + 4 PUMPS UP;',
-            line2: 'turn HELIUM-N2 & FEEDWATER ~55%.',
+            line2: 'turn HELIUM-N2 & FEEDWATER ~50%.',
           },
           {
             head: '2. [KEY 3] UNIT A-2: OIL & RODS',
             line1: 'Open OIL COOLER ~55%; flip AUTO ON',
-            line2: '& raise BORON RODS to 55% (65 BAR).',
+            line2: '& raise BORON RODS to 55% (charge BAT).',
           },
           {
-            head: '3. [KEY 5] UNIT C: SPIN & LOCK 50HZ',
-            line1: 'OPEN ONLY: ~18% wheel -> 50.0 HZ,',
-            line2: 'then pull MAIN BREAKER [SPACE]!',
+            head: '3. [KEY 5] UNIT C: BATTERY WHEEL',
+            line1: 'Turn single [BATTERY -> GRID] wheel',
+            line2: 'to 600 MW (60%) to match GRID DEMAND!',
           },
           {
-            head: '4. [KEY 5 & 1]: MWe GAS PEDAL',
-            line1: 'Grid holds 50HZ! Open THROTTLE ~60%',
-            line2: '& set 6 Levers [KEY 1] to 100 MW!',
+            head: '4. [KEY 1] UNIT A: 6 SUBSTATIONS',
+            line1: 'Set all 6 substation levers to 100 MW',
+            line2: '(600 MW total) + clear any drills!',
           },
         ],
         '#39ff14'
@@ -3392,19 +3402,19 @@ export function drawWePad84ScreenCanvas(
         '+MW SURGE vs -MW SHED ORDERS',
         [
           {
-            head: 'ONCE LOCKED = MWe GAS PEDAL!',
-            line1: 'Grid holds 50.0 HZ steady! Throttle',
-            line2: 'pushes MWe to match NEEDED MWe.',
+            head: 'SINGLE BATTERY DISPATCH WHEEL!',
+            line1: 'Battery buffers reactor output! Wheel',
+            line2: 'pushes MW from Battery to match DEMAND.',
           },
           {
             head: '+MW ORDER (NEED MORE POWER):',
-            line1: '1. RODS UP [A-2] + WATER UP [B]',
-            line2: '2. Lever [A] -> 3. Open THROTTLE [C]!',
+            line1: '1. RODS UP [A-2] to charge Battery faster',
+            line2: '2. Turn [BATTERY -> GRID] UP + Levers [A]!',
           },
           {
             head: '-MW ORDER (SHED GRID LOAD):',
-            line1: '1. Lower Lever [A] & THROTTLE [C]',
-            line2: '2. Push RODS IN [A-2] (VENT >75 BAR)!',
+            line1: '1. Lower Levers [A] & [BATTERY -> GRID] [C]',
+            line2: '2. Trim RODS IN [A-2] to avoid >75 BAR!',
           },
           {
             head: 'TEAR & STAMP AT [KEY 4] DESK:',
@@ -3420,18 +3430,18 @@ export function drawWePad84ScreenCanvas(
         [
           {
             head: 'XENON-135 ("NUCLEAR ASH" >35%):',
-            line1: 'Suffocates neutrons after power cuts!',
-            line2: 'CURE: Pull RODS 70%+ or click CYAN.',
+            line1: 'Too low Rods or excess cold Feedwater!',
+            line2: 'CURE: Raise RODS [A-2] or trim FEEDWATER [B].',
           },
           {
             head: 'STEAM VOIDS ("BOILING DRY" >28%):',
-            line1: 'Bubbles speed up RBMK fission!',
-            line2: 'CURE: Open FEEDWATER [B] & PUMPS [A].',
+            line1: 'Rods too high for cooling water flow!',
+            line2: 'CURE: Raise FEEDWATER [B] or lower RODS [A-2].',
           },
           {
-            head: 'HIGH STEAM BAR (>76 BAR):',
-            line1: 'Boiler making more steam than used!',
-            line2: 'CURE: Pull STEAM VENT [C] & cut RODS.',
+            head: 'SPENT FUEL RODS (AMBER TILES ON A-2):',
+            line1: '4+ spent rods sag MW & overheat core!',
+            line2: 'CURE: Click AMBER tile + pull REFUEL LEVER.',
           },
           {
             head: 'HOT PUMP BEARINGS (>80°C):',
@@ -3443,7 +3453,7 @@ export function drawWePad84ScreenCanvas(
       )
     } else {
       drawBigGuideCards(
-        'SOVIET RBMK-1000 PHYSICS NOTES',
+        'SOVIET RBMK-1000 & BATTERY NOTES',
         [
           {
             head: 'NO CONTAINMENT DOME ([KEY 3] B):',
@@ -3452,13 +3462,13 @@ export function drawWePad84ScreenCanvas(
           },
           {
             head: 'BORON RODS ([KEY 3] UNIT A-2):',
-            line1: 'Neutron sponges: UP = hotter steam,',
-            line2: 'DOWN = cooler core. Keep Boron >25%!',
+            line1: 'Neutron sponges: UP charges Battery,',
+            line2: 'DOWN cools core. Keep Boron >25%!',
           },
           {
-            head: 'TRUE 50HZ GRID LOCK ([KEY 5] C):',
-            line1: 'Tune 50HZ ONLY when Breaker OPEN;',
-            line2: 'locked = Throttle is pure MWe pedal!',
+            head: 'HEAVY ACCUMULATOR BANK ([KEY 5] C):',
+            line1: 'Reactor fills Battery (ENERGY CREATED);',
+            line2: 'Single wheel feeds Grid (ENERGY DEMAND)!',
           },
           {
             head: 'SCROLL WHEEL SHORTCUT:',

@@ -4,9 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import * as THREE from "three";
 import * as InspectorModule from "../modules/inspector";
 import {
-  playKnifeSwitchSlam,
   playRheostatDetentClick,
-  playSteamVentHiss,
   updateTurbinePitchHum,
 } from "../modules/inspector/audio";
 import { useDeskStore } from "../modules/inspector/useDeskStore";
@@ -19,7 +17,6 @@ import { BuckshotDitherPass } from "./BuckshotDitherPass";
 import { CameraController, useCameraLookStore } from "./CameraController";
 import {
   CagedSovietJewelLamp3D,
-  HighDetailKnifeBreaker3D,
   HighDetailManometer3D,
   HighDetailReactorPanel3D,
   LeftRearWrapAroundPanel3D,
@@ -70,22 +67,19 @@ function createCrispPanelTexture(
 }
 
 interface UnitCMasterDashboardData {
-  generatedMWe: number;
-  neededMWe: number;
-  gridQuotaMWe: number;
-  houseLoadMWe: number;
-  gridHz: number;
-  rpm: number;
-  syncPhase: number;
-  gridConnected: boolean;
-  tripped: boolean;
-  throttlePct: number;
+  energyCreatedMW: number;
+  batteryStoredMWh: number;
+  batteryStoredPct: number;
+  dispatchedMW: number;
+  energyDemandMW: number;
+  wheelPct: number;
   steamBar: number;
   reactivity: number;
   rodsPct: number;
   xenonPct: number;
   xenonBurningOff: boolean;
   voidPct: number;
+  tutorialPhase: string;
   isBlackout: boolean;
 }
 
@@ -106,7 +100,7 @@ function paintUnitCMasterDashboardCRT(
     ctx.font = 'bold 34px "Kremlin", "VT323", monospace';
     ctx.textAlign = "center";
     ctx.fillText(
-      "STATION BLACKOUT // RESTORE STEAM & CLOSE MAIN BREAKER",
+      "STATION BLACKOUT // RECHARGE BATTERY BANK & RAISE RODS",
       w / 2,
       h / 2 + 10,
     );
@@ -122,263 +116,207 @@ function paintUnitCMasterDashboardCRT(
   ctx.lineWidth = 2.5;
   ctx.strokeRect(3, 3, w - 6, h - 6);
 
-  const deltaMWe = Math.round(d.generatedMWe - d.neededMWe);
-  const absDelta = Math.abs(deltaMWe);
-  const deltaStr = `${deltaMWe >= 0 ? "+" : ""}${deltaMWe} MWe`;
-  const balanceColor = !d.gridConnected
-    ? "#ffb000"
-    : absDelta <= 18
+  const isStartup = d.tutorialPhase !== "COMPLETED";
+  const netChargeMW = Math.round(d.energyCreatedMW - d.dispatchedMW);
+  const deltaDemand = Math.round(d.dispatchedMW - d.energyDemandMW);
+  const absDelta = Math.abs(deltaDemand);
+  const balanceColor = isStartup
+    ? absDelta <= 30
       ? "#33ff66"
-      : absDelta <= 65
+      : "#ffb000"
+    : absDelta <= 30
+      ? "#33ff66"
+      : absDelta <= 85
         ? "#ffb000"
         : "#ff3b3b";
-
-  // TOP ROW (y = 8..86): POWER GENERATED vs. NEEDED MWe + GRID 50HZ
-  const row1Y = 8;
-  const row1H = 78;
-
-  // Box 1: GENERATED MWe
-  ctx.fillStyle = "rgba(12, 38, 22, 0.85)";
-  ctx.fillRect(10, row1Y, 310, row1H);
-  ctx.strokeStyle = d.gridConnected ? "#2ebd59" : "#aa7a18";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(10, row1Y, 310, row1H);
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = "#8ce6a8";
-  ctx.font = 'bold 16px "Kremlin", monospace';
-  ctx.fillText("POWER GENERATED", 20, row1Y + 21);
-
-  ctx.fillStyle = "#ffb000";
-  ctx.font = 'bold 18px "VT323", monospace';
-  ctx.textAlign = "right";
-  ctx.fillText(`VALVE ${d.throttlePct}%`, 310, row1Y + 21);
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = d.gridConnected ? "#33ff66" : "#ffcc33";
-  ctx.font = 'bold 44px "VT323", monospace';
-  ctx.fillText(
-    d.gridConnected ? `${Math.round(d.generatedMWe)} MWe` : "0 MWe (OPEN)",
-    20,
-    row1Y + 64,
-  );
-
-  // Box 2: NEEDED MWe + DELTA
-  ctx.fillStyle = "rgba(12, 38, 22, 0.85)";
-  ctx.fillRect(328, row1Y, 376, row1H);
-  ctx.strokeStyle = balanceColor;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(328, row1Y, 376, row1H);
-
-  ctx.fillStyle = "#8ce6a8";
-  ctx.font = 'bold 16px "Kremlin", monospace';
-  ctx.fillText("NEEDED (QUOTA+AUX)", 338, row1Y + 21);
-
-  ctx.textAlign = "right";
-  ctx.fillStyle = "#a6d8b5";
-  ctx.font = 'bold 17px "VT323", monospace';
-  ctx.fillText(`${d.gridQuotaMWe}+${d.houseLoadMWe} AUX`, 694, row1Y + 21);
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = "#f2f5ea";
-  ctx.font = 'bold 42px "VT323", monospace';
-  ctx.fillText(`${Math.round(d.neededMWe)} MWe`, 338, row1Y + 64);
-
-  ctx.textAlign = "right";
-  ctx.fillStyle = balanceColor;
-  ctx.font = 'bold 34px "VT323", monospace';
-  ctx.fillText(
-    d.gridConnected ? `Δ ${deltaStr}` : "SYNC FIRST",
-    694,
-    row1Y + 63,
-  );
-
-  // Box 3: GRID FREQ 50HZ (True Grid-Locked Synchronous Mode)
-  const inSyncWindow =
-    !d.gridConnected &&
-    d.rpm >= 2965 &&
-    d.rpm <= 3040 &&
-    Math.abs(d.syncPhase) <= 32;
-  const hzOk = d.gridConnected ? true : inSyncWindow;
-  const hzWarn = d.gridConnected ? false : Math.abs(d.rpm - 3000) <= 180;
-  const hzColor = d.tripped
-    ? "#ff3b3b"
-    : hzOk
-      ? "#33ff66"
-      : hzWarn
-        ? "#ffb000"
-        : "#ff3b3b";
-  const gridBadge = d.tripped
-    ? "TRIPPED!"
-    : d.gridConnected
-      ? "LOCKED"
-      : inSyncWindow
-        ? "SYNC READY"
-        : `${Math.round(d.rpm)} RPM`;
-
-  ctx.fillStyle = "rgba(12, 38, 22, 0.85)";
-  ctx.fillRect(712, row1Y, 302, row1H);
-  ctx.strokeStyle = hzColor;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(712, row1Y, 302, row1H);
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = "#8ce6a8";
-  ctx.font = 'bold 16px "Kremlin", monospace';
-  ctx.fillText("GRID 50HZ", 722, row1Y + 21);
-
-  ctx.textAlign = "right";
-  ctx.fillStyle = hzColor;
-  ctx.font = 'bold 17px "Kremlin", monospace';
-  ctx.fillText(gridBadge, 1004, row1Y + 21);
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = hzColor;
-  ctx.font = 'bold 44px "VT323", monospace';
-  ctx.fillText(`${d.gridHz.toFixed(1)} HZ`, 722, row1Y + 64);
-
-  // MIDDLE ROW (y = 92..166): 4 REACTOR PHYSICS CELLS
-  const row2Y = 92;
-  const row2H = 74;
-  const cellW = 246;
-  const cellGap = 6.6;
-
-  const steamState =
-    d.steamBar < 55 ? "LOW" : d.steamBar > 75 ? "HIGH!" : "OK";
-  const steamCol =
-    d.steamBar < 45 || d.steamBar >= 79
+  const batColor =
+    d.batteryStoredPct < 8
       ? "#ff3b3b"
-      : d.steamBar < 55 || d.steamBar > 74
+      : d.batteryStoredPct < 20
         ? "#ffb000"
         : "#33ff66";
 
-  const reactSign = d.reactivity >= 0 ? "+" : "";
-  const reactCol = Math.abs(d.reactivity) > 0.015 ? "#ffb000" : "#33ff66";
+  // 3 SPACIOUS COLUMNS (y = 10..158, h = 148): ENERGY CREATED | ENERGY STORED | ENERGY DEMAND
+  const colY = 10;
+  const colH = 148;
+  const col1W = 324;
+  const col2W = 336;
+  const col3W = 324;
+  const createdRatio = THREE.MathUtils.clamp(d.energyCreatedMW / 1000, 0.02, 1);
+  const storedRatio = THREE.MathUtils.clamp(d.batteryStoredPct / 100, 0.02, 1);
+  const dispatchRatio = THREE.MathUtils.clamp(d.dispatchedMW / 1000, 0.02, 1);
+  const demandRatio = THREE.MathUtils.clamp(d.energyDemandMW / 1000, 0.02, 1);
 
-  const xenonStatus =
-    d.xenonPct < 20
-      ? "CLEAN"
-      : d.xenonBurningOff
-        ? "BURNING OFF"
-        : "POISONING CORE";
-  const xenonCol =
-    d.xenonPct >= 55 ? "#ff3b3b" : d.xenonPct >= 25 ? "#ffb000" : "#33ff66";
+  // Column 1: TOTAL ENERGY CREATED
+  ctx.fillStyle = "rgba(10, 34, 20, 0.88)";
+  ctx.fillRect(10, colY, col1W, colH);
+  ctx.strokeStyle = d.energyCreatedMW >= 200 ? "#2ebd59" : "#aa7a18";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, colY, col1W, colH);
 
-  const voidStatus = d.voidPct >= 28 ? "BOILING DRY!" : "SAFE";
-  const voidCol =
-    d.voidPct >= 45 ? "#ff3b3b" : d.voidPct >= 28 ? "#ffb000" : "#33ff66";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#8ce6a8";
+  ctx.font = 'bold 18px "Kremlin", monospace';
+  ctx.fillText("ENERGY CREATED", 22, colY + 25);
 
-  const cells = [
-    {
-      title: "STEAM",
-      val: `${Math.round(d.steamBar)} BAR`,
-      status: steamState,
-      col: steamCol,
-      bar: THREE.MathUtils.clamp(d.steamBar / 100, 0.03, 1),
-    },
-    {
-      title: "REACTIVITY",
-      val: `${reactSign}${(d.reactivity * 100).toFixed(1)}`,
-      status: `RODS ${d.rodsPct}%`,
-      col: reactCol,
-      bar: THREE.MathUtils.clamp(d.rodsPct / 100, 0.03, 1),
-    },
-    {
-      title: "XENON-135",
-      val: `${Math.round(d.xenonPct)}%`,
-      status: xenonStatus,
-      col: xenonCol,
-      bar: THREE.MathUtils.clamp(d.xenonPct / 100, 0.03, 1),
-    },
-    {
-      title: "STEAM VOID",
-      val: `${Math.round(d.voidPct)}%`,
-      status: voidStatus,
-      col: voidCol,
-      bar: THREE.MathUtils.clamp(d.voidPct / 100, 0.03, 1),
-    },
-  ];
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#a6d8b5";
+  ctx.font = 'bold 18px "VT323", monospace';
+  ctx.fillText("REACTOR GEN", 10 + col1W - 12, colY + 25);
 
-  cells.forEach((c, idx) => {
-    const cx = Math.round(10 + idx * (cellW + cellGap));
-    ctx.fillStyle = "rgba(8, 28, 16, 0.9)";
-    ctx.fillRect(cx, row2Y, cellW, row2H);
-    ctx.strokeStyle = "#1f5933";
-    ctx.lineWidth = 1.6;
-    ctx.strokeRect(cx, row2Y, cellW, row2H);
+  ctx.textAlign = "left";
+  ctx.fillStyle = d.energyCreatedMW > 960 ? "#ff3b3b" : "#33ff66";
+  ctx.font = 'bold 56px "VT323", monospace';
+  ctx.fillText(`${Math.round(d.energyCreatedMW)} MW`, 22, colY + 82);
 
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#8ce6a8";
-    ctx.font = 'bold 14px "Kremlin", monospace';
-    ctx.fillText(c.title, cx + 8, row2Y + 18);
+  ctx.fillStyle = d.steamBar >= 79 ? "#ff3b3b" : "#a6d8b5";
+  ctx.font = 'bold 20px "VT323", monospace';
+  ctx.fillText(
+    `STEAM ${Math.round(d.steamBar)} BAR  •  RODS ${d.rodsPct}%`,
+    22,
+    colY + 111,
+  );
 
-    ctx.textAlign = "right";
-    ctx.fillStyle = c.col;
-    ctx.font = 'bold 17px "VT323", monospace';
-    ctx.fillText(c.status, cx + cellW - 8, row2Y + 18);
+  ctx.fillStyle = "#0b2013";
+  ctx.fillRect(22, colY + 123, col1W - 24, 14);
+  ctx.fillStyle = d.energyCreatedMW > 960 ? "#ff3b3b" : "#33ff66";
+  ctx.fillRect(22, colY + 123, Math.round((col1W - 24) * createdRatio), 14);
 
-    ctx.textAlign = "left";
-    ctx.fillStyle = c.col;
-    ctx.font = 'bold 31px "VT323", monospace';
-    ctx.fillText(c.val, cx + 8, row2Y + 49);
+  // Column 2: ENERGY STORED (ACCUMULATOR BANKS A & B)
+  const col2X = 344;
+  ctx.fillStyle = "rgba(10, 34, 20, 0.88)";
+  ctx.fillRect(col2X, colY, col2W, colH);
+  ctx.strokeStyle = batColor;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(col2X, colY, col2W, colH);
 
-    ctx.fillStyle = "#0b2013";
-    ctx.fillRect(cx + 8, row2Y + 57, cellW - 16, 10);
-    ctx.fillStyle = c.col;
-    ctx.fillRect(cx + 8, row2Y + 57, Math.round((cellW - 16) * c.bar), 10);
-  });
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#8ce6a8";
+  ctx.font = 'bold 18px "Kremlin", monospace';
+  ctx.fillText("ENERGY STORED", col2X + 12, colY + 25);
 
-  // BOTTOM 1-LINE PLAIN-ENGLISH ACTION ADVISOR (True Grid-Locked Synchronous Mode)
+  ctx.textAlign = "right";
+  ctx.fillStyle = netChargeMW >= 0 ? "#33ff66" : "#ffb000";
+  ctx.font = 'bold 20px "VT323", monospace';
+  ctx.fillText(
+    `${netChargeMW >= 0 ? "+" : ""}${netChargeMW} MW NET`,
+    col2X + col2W - 12,
+    colY + 25,
+  );
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = batColor;
+  ctx.font = 'bold 56px "VT323", monospace';
+  ctx.fillText(`${Math.round(d.batteryStoredPct)}%`, col2X + 12, colY + 82);
+
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#d9e8dc";
+  ctx.font = 'bold 28px "VT323", monospace';
+  ctx.fillText(
+    `${Math.round(d.batteryStoredMWh)} MWh`,
+    col2X + col2W - 12,
+    colY + 80,
+  );
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = batColor;
+  ctx.font = 'bold 20px "VT323", monospace';
+  ctx.fillText(
+    d.batteryStoredPct >= 88
+      ? "BANKS A & B AT HIGH CHARGE"
+      : netChargeMW >= 0
+        ? "CHARGING ACCUMULATOR BANKS"
+        : "DISCHARGING TO REGIONAL GRID",
+    col2X + 12,
+    colY + 111,
+  );
+
+  ctx.fillStyle = "#0b2013";
+  ctx.fillRect(col2X + 12, colY + 123, col2W - 24, 14);
+  ctx.fillStyle = batColor;
+  ctx.fillRect(col2X + 12, colY + 123, Math.round((col2W - 24) * storedRatio), 14);
+
+  // Column 3: ENERGY DEMAND / BATTERY DISPATCH
+  const col3X = 690;
+  ctx.fillStyle = "rgba(10, 34, 20, 0.88)";
+  ctx.fillRect(col3X, colY, col3W, colH);
+  ctx.strokeStyle = balanceColor;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(col3X, colY, col3W, colH);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#8ce6a8";
+  ctx.font = 'bold 18px "Kremlin", monospace';
+  ctx.fillText("ENERGY DEMAND", col3X + 12, colY + 25);
+
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#ffb000";
+  ctx.font = 'bold 20px "VT323", monospace';
+  ctx.fillText(`WHEEL ${d.wheelPct}%`, col3X + col3W - 12, colY + 25);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = balanceColor;
+  ctx.font = 'bold 48px "VT323", monospace';
+  ctx.fillText(
+    `${Math.round(d.dispatchedMW)} / ${Math.round(d.energyDemandMW)} MW`,
+    col3X + 12,
+    colY + 81,
+  );
+
+  ctx.fillStyle = balanceColor;
+  ctx.font = 'bold 20px "VT323", monospace';
+  const deltaText =
+    absDelta <= 30
+      ? "GRID LOAD MATCHED"
+      : deltaDemand < 0
+        ? `SHORTFALL: ${deltaDemand} MW`
+        : `OVER-DISPATCH: +${deltaDemand} MW`;
+  ctx.fillText(deltaText, col3X + 12, colY + 111);
+
+  const barX = col3X + 12;
+  const barW = col3W - 24;
+  ctx.fillStyle = "#0b2013";
+  ctx.fillRect(barX, colY + 123, barW, 14);
+  ctx.fillStyle = balanceColor;
+  ctx.fillRect(barX, colY + 123, Math.round(barW * dispatchRatio), 14);
+  const targetMarkerX = barX + Math.round(barW * demandRatio);
+  ctx.fillStyle = "#ff3b3b";
+  ctx.fillRect(targetMarkerX - 2, colY + 119, 4, 22);
+
+  // BOTTOM 1-LINE PLAIN-ENGLISH BATTERY ADVISOR
   let advisorText =
-    "> GRID LOCKED AT 50.0 HZ — GENERATED MWe MATCHES STATION DEMAND";
+    "> BATTERY STORAGE ONLINE — GRID DISPATCH MATCHES ENERGY DEMAND";
   let advisorCol = "#33ff66";
 
-  if (d.tripped) {
+  if (d.batteryStoredPct < 10) {
     advisorText =
-      "> BREAKER TRIPPED! FLIP SWITCH 4 [RESET] -> SPIN TO 50.0 HZ (~18%) -> PULL [MAIN BREAKER]";
+      "> BATTERY CHARGE CRITICAL (<10%): WITHDRAW RODS [A-2] & MATCH FEEDWATER [B] TO RECHARGE";
     advisorCol = "#ff3b3b";
-  } else if (!d.gridConnected) {
-    if (d.steamBar < 50) {
-      advisorText = `> COLD BOIL-UP (${Math.round(d.steamBar)}/60 BAR): RAISE [CONTROL RODS] ON A-2 TO BOIL STEAM FIRST`;
-      advisorCol = "#ffb000";
-    } else if (inSyncWindow) {
-      advisorText =
-        "> 50.0 HZ SYNC READY! PULL [MAIN BREAKER] KNIFE SWITCH ([SPACE]) TO LOCK GRID";
-      advisorCol = "#33ff66";
-    } else {
-      advisorText =
-        "> SPIN TURBINE TO 50.0 HZ (~18% THROTTLE), THEN PULL [MAIN BREAKER] TO LOCK GRID";
-      advisorCol = "#ffb000";
-    }
-  } else if (deltaMWe < -15 && d.steamBar < 58) {
+  } else if (deltaDemand < -30) {
+    advisorText = `> TURN [BATTERY -> GRID] WHEEL UP TO SUPPLY ${Math.round(d.energyDemandMW)} MW DEMAND`;
+    advisorCol = !isStartup && absDelta > 90 ? "#ff4d4d" : "#ffb000";
+  } else if (deltaDemand > 35) {
+    advisorText = `> +${deltaDemand} MW OVER-DISPATCH: TURN [BATTERY -> GRID] WHEEL DOWN TO SAVE CHARGE`;
+    advisorCol = !isStartup && deltaDemand > 90 ? "#ff4d4d" : "#ffb000";
+  } else if (d.steamBar >= 79) {
+    advisorText = `> STEAM PRESSURE HIGH (${Math.round(d.steamBar)} BAR): INSERT [RODS] SLIGHTLY OR OPEN [STEAM DUMP]`;
+    advisorCol = "#ff3b3b";
+  } else if (d.voidPct >= 38) {
     advisorText =
-      "> LOW STEAM PRESSURE: RAISE [CONTROL RODS] ON A-2 & [FEEDWATER] ON B BEFORE OPENING THROTTLE!";
-    advisorCol = "#ff4d4d";
-  } else if (deltaMWe < -15) {
-    advisorText = `> ${deltaMWe} MWe DEFICIT: OPEN [TURBINE THROTTLE] TO PUSH MORE MWe TO GRID`;
-    advisorCol = Math.abs(deltaMWe) > 60 ? "#ff4d4d" : "#ffb000";
-  } else if (deltaMWe > 15) {
-    advisorText = `> +${deltaMWe} MWe SURPLUS TO GRID: LOWER [TURBINE THROTTLE] TO MATCH DEMAND & TRIM RODS [A-2]`;
-    advisorCol = deltaMWe > 60 ? "#ff4d4d" : "#ffb000";
-  } else if (d.steamBar >= 78) {
-    advisorText = `> STEAM OVERPRESSURE (${Math.round(d.steamBar)} BAR): PULL [STEAM VENT] LEFT OR PUSH [RODS] IN ON A-2!`;
-    advisorCol = "#ff3b3b";
-  } else if (d.voidPct >= 35) {
-    advisorText =
-      "> STEAM VOIDS HIGH! RAISE PUMP THROTTLE [A] & FEEDWATER [B] NOW";
-    advisorCol = "#ff3b3b";
+      "> STEAM VOIDS HIGH: RAISE [FEEDWATER] ON UNIT B OR TRIM [RODS] ON UNIT A-2";
+    advisorCol = "#ffb000";
   }
 
   ctx.fillStyle = "rgba(10, 32, 18, 0.95)";
-  ctx.fillRect(10, 171, w - 20, 29);
+  ctx.fillRect(10, 165, w - 20, 34);
   ctx.strokeStyle = advisorCol;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(10, 171, w - 20, 29);
+  ctx.lineWidth = 1.8;
+  ctx.strokeRect(10, 165, w - 20, 34);
 
   ctx.textAlign = "left";
   ctx.fillStyle = advisorCol;
-  ctx.font = 'bold 22px "VT323", monospace';
-  ctx.fillText(advisorText, 18, 193, w - 36);
+  ctx.font = 'bold 24px "VT323", monospace';
+  ctx.fillText(advisorText, 20, 190, w - 40);
 }
 
 function createNearestCanvasTexture(
@@ -1612,61 +1550,16 @@ const SovietConsoleCornerWedge3D: React.FC<{
  */
 const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   const lastRightDrawRef = useRef(0);
-  const breakerArmRef = useRef<THREE.Group>(null);
   const rheostatRingMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const rheostatPointerMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const wasBlackoutRef = useRef(false);
-  const breakerDragRef = useRef<{
-    active: boolean;
-    startY: number;
-    progress: number;
-  }>({ active: false, startY: 0, progress: 0 });
-
-  const breakerPlateTex = useMemo(
-    () =>
-      makePlaqueTex("MAIN BREAKER", "50HZ GRID LOCK [SPACE]", {
-        width: 384,
-        height: 104,
-        titleSize: 30,
-        subSize: 21,
-        titleColor: "#ffcc00",
-        titleStroke: "#ffcc00",
-        subColor: "#44ff77",
-        subStroke: "#44ff77",
-        borderColor: "#ff2a2a",
-      }),
-    [],
-  );
+  const batteryCellBarMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
 
   useFrame(({ clock }) => {
     const s = useGameStore.getState();
-
-    if (s.isBlackout && !wasBlackoutRef.current) {
-      playKnifeSwitchSlam(false);
-    }
-    wasBlackoutRef.current = s.isBlackout;
-
-    if (breakerArmRef.current) {
-      const targetProgress = breakerDragRef.current.active
-        ? breakerDragRef.current.progress
-        : s.phase === "playing" && Boolean(s.turbines[0]?.gridConnected)
-          ? 1
-          : 0;
-      const targetRotX = -0.55 + targetProgress * 1.1;
-      breakerArmRef.current.rotation.x = THREE.MathUtils.lerp(
-        breakerArmRef.current.rotation.x,
-        targetRotX,
-        0.25,
-      );
-    }
-
     const now = clock.getElapsedTime();
 
-    // Pulse TURBINE STEAM VALVE ring & pointer stripe during Tutorial Step 4, 5 & 6
-    const highlightRheo =
-      s.tutorialPhase === "STEP_4_SPIN_TURBINE" ||
-      s.tutorialPhase === "STEP_5_SYNC_GRID" ||
-      s.tutorialPhase === "STEP_6_BASELINE_600MW";
+    // Pulse single BATTERY -> GRID wheel ONLY during Tutorial Step 4
+    const highlightRheo = s.tutorialPhase === "STEP_4_SPIN_TURBINE";
     if (rheostatRingMatRef.current) {
       if (highlightRheo) {
         const pulse = (Math.sin(now * 6.0) + 1) * 0.5;
@@ -1695,32 +1588,17 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
     }
   });
 
-  const steamLeverArmRef = useRef<THREE.Group>(null);
-  const steamDragRef = useRef<{
-    active: boolean;
-    startY: number;
-    progress: number;
-    lastHissTime: number;
-  }>({ active: false, startY: 0, progress: 0, lastHissTime: 0 });
-
   const rheostatWheelRef = useRef<THREE.Group>(null);
-
-  const toggleDragRef = useRef<{
-    activeIdx: number | null;
-    startY: number;
-  }>({ activeIdx: null, startY: 0 });
-  const toggleBatRefs = useRef<Array<THREE.Group | null>>([]);
-  const toggleLampRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
   const rightStatusMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const throttleLedMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
   const throttleReadoutMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const lastThrottlePctRef = useRef(-1);
+  const lastThrottleMwRef = useRef(-1);
   const prevXenonRef = useRef(0);
   const xenonBurningRef = useRef(false);
 
   const throttleReadoutTex = useMemo(
     () =>
-      createCrispPanelTexture(128, 52, (ctx, w, h) => {
+      createNearestCanvasTexture(160, 56, (ctx, w, h) => {
         ctx.fillStyle = "#08120c";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#b8a46b";
@@ -1729,34 +1607,50 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         ctx.fillStyle = "#33ff66";
         ctx.font = 'bold 34px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("0%", w / 2, 37);
+        ctx.fillText("0 MW", w / 2, 39);
       }),
     [],
   );
 
-  const steamPlateTex = useMemo(
+  const bankAPlateTex = useMemo(
     () =>
-      makePlaqueTex("STEAM VENT", "DUMP OVERPRESSURE", {
+      makePlaqueTex("ACCUMULATOR BANK A", "500 MWH CELL ARRAY", {
         width: 384,
         height: 104,
-        titleSize: 32,
-        subSize: 22,
-        titleColor: "#ff4444",
-        titleStroke: "#ff4444",
-        subColor: "#ffcc00",
-        subStroke: "#ffcc00",
-        borderColor: "#ff2a2a",
+        titleSize: 27,
+        subSize: 20,
+        titleColor: "#33ff66",
+        titleStroke: "#33ff66",
+        subColor: "#e6dec3",
+        subStroke: "#e6dec3",
+        borderColor: "#b8a46b",
+      }),
+    [],
+  );
+
+  const bankBPlateTex = useMemo(
+    () =>
+      makePlaqueTex("ACCUMULATOR BANK B", "500 MWH CELL ARRAY", {
+        width: 384,
+        height: 104,
+        titleSize: 27,
+        subSize: 20,
+        titleColor: "#33ff66",
+        titleStroke: "#33ff66",
+        subColor: "#e6dec3",
+        subStroke: "#e6dec3",
+        borderColor: "#b8a46b",
       }),
     [],
   );
 
   const rheostatPlateTex = useMemo(
     () =>
-      makePlaqueTex("TURBINE THROTTLE", "MATCH STEAM TO MWe", {
-        width: 384,
+      makePlaqueTex("BATTERY -> GRID", "TURN WHEEL TO DISPATCH MW", {
+        width: 420,
         height: 104,
-        titleSize: 29,
-        subSize: 21,
+        titleSize: 30,
+        subSize: 20,
         titleColor: "#44ff77",
         titleStroke: "#44ff77",
         subColor: "#ffffff",
@@ -1766,31 +1660,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
     [],
   );
 
-  const toggleSpecs = useMemo(() => {
-    const items = [
-      { id: 0, label: "VENTILATION", sub: "-1.2 R/H (+15MW)", color: "#44ff77" },
-      { id: 1, label: "AVR EXCITER", sub: "50HZ SYNC (+8MW)", color: "#ffcc00" },
-      { id: 2, label: "KGB LINE", sub: "BUNKER #4 (+10MW)", color: "#44ff77" },
-      { id: 3, label: "COND. VACUUM", sub: "TORQUE/RST (+12MW)", color: "#ffcc00" },
-    ];
-    return items.map((item) => ({
-      ...item,
-      texture: makePlaqueTex(item.label, item.sub, {
-        width: 352,
-        height: 104,
-        titleSize: 29,
-        subSize: 21,
-        titleColor: item.color,
-        titleStroke: item.color,
-        subColor: "#ffffff",
-        subStroke: "#ffffff",
-        borderColor: "#b8a46b",
-      }),
-    }));
-  }, []);
-
   const rightPanelGroupRef = useRef<THREE.Group>(null);
-  const rheostatDraggingRef = useRef(false);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
@@ -1893,13 +1763,13 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   const rightHeaderPlateTex = useMemo(
     () =>
       makePlaqueTex(
-        "STATION POWER DISPATCH // UNIT C",
-        "GENERATED VS. DEMAND MWe  •  50HZ SYNC  •  BAR / XENON / VOID",
+        "ENERGY STORAGE & GRID DISPATCH // UNIT C",
+        "ENERGY CREATED  •  BATTERY STORED  •  GRID DEMAND  •  SINGLE OUTPUT WHEEL",
         {
           width: 960,
           height: 120,
-          titleSize: 24,
-          subSize: 18,
+          titleSize: 23,
+          subSize: 17,
           titleColor: "#ffcc00",
           titleStroke: "#ffcc00",
           subColor: "#44ff77",
@@ -1910,43 +1780,15 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
     [],
   );
 
-  const rightStatusTex = useMemo(() => createCrispPanelTexture(1024, 208), []);
+  const rightStatusTex = useMemo(() => createNearestCanvasTexture(1024, 208), []);
 
   useFrame(({ clock }, dt) => {
     const s = useGameStore.getState();
     const t = clock.getElapsedTime();
-    const t0 = s.turbines[0];
-    const totalMW = Math.round(s.totalElectricalMW);
 
-    // 1. Animate Spring-Loaded Steam Relief Lever (`STEAM VENT`)
-    if (steamLeverArmRef.current) {
-      const targetProg = steamDragRef.current.active
-        ? steamDragRef.current.progress
-        : s.ventingSteam
-          ? 1.0
-          : 0;
-      const steamShake =
-        s.ventingSteam && targetProg > 0.35
-          ? Math.sin(t * 52) * 0.035
-          : 0;
-      const targetAngleX = -0.52 + targetProg * 1.12 + steamShake;
-      steamLeverArmRef.current.rotation.x = THREE.MathUtils.lerp(
-        steamLeverArmRef.current.rotation.x,
-        targetAngleX,
-        steamDragRef.current.active ? 0.32 : 0.22,
-      );
-      if (
-        s.ventingSteam &&
-        t - steamDragRef.current.lastHissTime > 0.16
-      ) {
-        steamDragRef.current.lastHissTime = t;
-        playSteamVentHiss(Math.max(0.5, targetProg));
-      }
-    }
-
-    // 2. Animate Cast-Steel 6-Spoke Turbine Throttle Handwheel + Vertical 10-Segment LED Bargraph (0-100%)
-    const valveRatio = s.isBlackout ? 0 : (t0?.valve ?? 0);
-    const valvePctNow = Math.round(valveRatio * 100);
+    // 1. Animate Single Cast-Steel Battery-to-Grid Output Wheel + 10-Segment Bargraph
+    const valveRatio = s.isBlackout ? 0 : s.batteryOutputValve;
+    const dispatchedMWNow = s.isBlackout ? 0 : Math.round(valveRatio * 1000);
     if (rheostatWheelRef.current) {
       const targetRotZ = -valveRatio * Math.PI * 2.2;
       const alpha = Math.min(1, dt * 28);
@@ -1960,8 +1802,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
     for (let seg = 0; seg < 10; seg++) {
       const ledMat = throttleLedMatRefs.current[seg];
       if (!ledMat) continue;
-      const segThreshold = (seg + 1) * 10;
-      const isLit = !s.isBlackout && valvePctNow >= segThreshold - 5;
+      const segThreshold = (seg + 1) * 100;
+      const isLit = !s.isBlackout && dispatchedMWNow >= segThreshold - 50;
       const segCol =
         seg >= 8 ? "#ff4444" : seg >= 6 ? "#ffb000" : "#33ff66";
       ledMat.color.set(isLit ? segCol : "#121a16");
@@ -1969,8 +1811,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       ledMat.emissiveIntensity = isLit ? 1.55 : 0.04;
     }
 
-    if (valvePctNow !== lastThrottlePctRef.current) {
-      lastThrottlePctRef.current = valvePctNow;
+    if (dispatchedMWNow !== lastThrottleMwRef.current) {
+      lastThrottleMwRef.current = dispatchedMWNow;
       const rdTex = throttleReadoutMatRef.current?.map as
         | THREE.CanvasTexture
         | undefined;
@@ -1982,39 +1824,26 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         rdCtx.strokeStyle = "#b8a46b";
         rdCtx.lineWidth = 3;
         rdCtx.strokeRect(2, 2, rdCanvas.width - 4, rdCanvas.height - 4);
-        rdCtx.fillStyle = valvePctNow >= 85 ? "#ffb000" : "#33ff66";
+        rdCtx.fillStyle = dispatchedMWNow >= 850 ? "#ffb000" : "#33ff66";
         rdCtx.font = 'bold 34px "VT323", monospace';
         rdCtx.textAlign = "center";
-        rdCtx.fillText(`${valvePctNow}%`, rdCanvas.width / 2, 37);
+        rdCtx.fillText(`${dispatchedMWNow} MW`, rdCanvas.width / 2, 39);
         rdTex.needsUpdate = true;
       }
     }
 
-    // 3. Animate Guarded Metal Toggle Bats (+35° / -35°) & Caged Jewel Lamps
-    const toggleStates = [
-      s.ventilationActive,
-      s.avrActive,
-      s.kgbLineActive,
-      s.auxLoopBActive && !t0?.tripped,
-    ];
-    for (let i = 0; i < 4; i++) {
-      const bat = toggleBatRefs.current[i];
-      const isOn = toggleStates[i] ?? false;
-      if (bat) {
-        const targetRotX = isOn ? -0.61 : 0.61; // +/- 35 degrees
-        bat.rotation.x = THREE.MathUtils.lerp(bat.rotation.x, targetRotX, 0.28);
-      }
-      const lampMat = toggleLampRefs.current[i];
-      if (lampMat) {
-        const isFaultLamp =
-          (i === 1 && !s.avrActive) ||
-          (i === 3 && (Boolean(t0?.tripped) || !s.auxLoopBActive));
-        const activeCol = isFaultLamp ? "#ff2a2a" : "#33ff66";
-        const lit = isFaultLamp || isOn;
-        lampMat.color.set(lit ? activeCol : "#1c2621");
-        lampMat.emissive.set(lit ? activeCol : "#000000");
-        lampMat.emissiveIntensity = lit ? 1.45 : 0.05;
-      }
+    // 2. Animate 10 Accumulator Charge Bars across Bank A (0-50%) & Bank B (55-100%)
+    const chargePct = s.batteryStoredPct;
+    const chargeCol =
+      chargePct < 15 ? "#ff2a2a" : chargePct < 30 ? "#ffb000" : "#33ff66";
+    for (let i = 0; i < 10; i++) {
+      const barMat = batteryCellBarMatRefs.current[i];
+      if (!barMat) continue;
+      const threshold = (i + 1) * 10 - 5;
+      const isLit = !s.isBlackout && chargePct >= threshold;
+      barMat.color.set(isLit ? chargeCol : "#121a16");
+      barMat.emissive.set(isLit ? chargeCol : "#000000");
+      barMat.emissiveIntensity = isLit ? 1.4 : 0.05;
     }
 
     // Update UNIT C Master Overview Dashboard (`CRT-84C`, 1024x208) — throttled to ~13 FPS (0.075s)
@@ -2026,25 +1855,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       xenonBurningRef.current = true;
     }
 
-    const rpmVal = Math.round(t0?.rpm ?? 0);
-    const curHz = t0?.freqHz ?? 0;
-    const freqVal = curHz.toFixed(1);
-    const phaseVal = Math.round(t0?.syncPhase ?? 0);
-    const houseMW = Math.round(s.houseLoadMW);
-    const gridQuotaMW = Object.values(s.targetSectorMW).reduce(
-      (acc, v) => acc + v,
-      0,
-    );
-    const gridConn = Boolean(t0?.gridConnected);
-    const generatedGrossMWe = gridConn ? totalMW + houseMW : 0;
-    const neededGrossMWe = gridQuotaMW + houseMW;
+    const energyCreatedRound = Math.round(s.energyCreatedMW);
+    const batMWhRound = Math.round(s.batteryStoredMWh);
+    const batPctRound = Math.round(s.batteryStoredPct);
+    const dispatchedRound = Math.round(s.totalElectricalMW);
+    const demandRound = Math.round(s.energyDemandMW);
+    const wheelPctRound = Math.round(s.batteryOutputValve * 100);
     const steamBarRound = Math.round(s.drumPressure);
     const rodsPct = Math.round(s.controlRodLevel);
     const xenonRound = Math.round(s.xenon);
     const voidPct = Math.round(s.voidFraction * 100);
     const reactKey = Math.round(s.reactivity * 1000);
 
-    const rSig = `${s.phase}|${generatedGrossMWe}|${neededGrossMWe}|${gridQuotaMW}|${houseMW}|${rpmVal}|${freqVal}|${phaseVal}|${valvePctNow}|${gridConn}|${Boolean(t0?.tripped)}|${steamBarRound}|${rodsPct}|${xenonRound}|${xenonBurningRef.current}|${voidPct}|${reactKey}|${s.isBlackout}`;
+    const rSig = `${s.phase}|${s.tutorialPhase}|${energyCreatedRound}|${batMWhRound}|${batPctRound}|${dispatchedRound}|${demandRound}|${wheelPctRound}|${steamBarRound}|${rodsPct}|${xenonRound}|${xenonBurningRef.current}|${voidPct}|${reactKey}|${s.isBlackout}`;
     const rTex = rightStatusMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (rTex && rTex.userData.lastSig !== rSig) {
       lastRightDrawRef.current = t;
@@ -2053,22 +1876,19 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       const ctx = canvas.getContext("2d");
       if (ctx) {
         paintUnitCMasterDashboardCRT(ctx, canvas.width, canvas.height, {
-          generatedMWe: generatedGrossMWe,
-          neededMWe: neededGrossMWe,
-          gridQuotaMWe: gridQuotaMW,
-          houseLoadMWe: houseMW,
-          gridHz: curHz,
-          rpm: rpmVal,
-          syncPhase: phaseVal,
-          gridConnected: gridConn,
-          tripped: Boolean(t0?.tripped),
-          throttlePct: valvePctNow,
+          energyCreatedMW: s.energyCreatedMW,
+          batteryStoredMWh: s.batteryStoredMWh,
+          batteryStoredPct: s.batteryStoredPct,
+          dispatchedMW: s.totalElectricalMW,
+          energyDemandMW: s.energyDemandMW,
+          wheelPct: wheelPctRound,
           steamBar: s.drumPressure,
           reactivity: s.reactivity,
           rodsPct,
           xenonPct: s.xenon,
           xenonBurningOff: xenonBurningRef.current,
           voidPct,
+          tutorialPhase: s.tutorialPhase,
           isBlackout: s.isBlackout,
         });
         rTex.needsUpdate = true;
@@ -2078,50 +1898,38 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
   const unitCMimicSegments = useMemo<readonly MimicSegmentSpec[]>(
     () => [
-      // Left Oxide-Red High-Pressure Steam Line from STEAM VENT (x=-0.62, y=1.00) up left flank (x=-0.84) to RPM & GRID 50HZ gauges (y=1.775)
-      { x: -0.73, y: 1.0, w: 0.22, h: 0.015, color: "#a83830" },
-      { x: -0.84, y: 1.388, w: 0.016, h: 0.785, color: "#a83830" },
-      { x: -0.72, y: 1.775, w: 0.24, h: 0.015, color: "#a83830" },
-      { x: -0.30, y: 1.775, w: 0.60, h: 0.015, color: "#a83830" },
-      // Center Muted-Yellow 50Hz Excitation & Synchronizer Line connecting STEAM VENT, 50HZ RHEOSTAT (x=-0.04) and MAIN BREAKER (x=+0.56)
-      { x: -0.33, y: 1.0, w: 0.58, h: 0.015, color: "#c8a838" },
-      { x: 0.26, y: 1.0, w: 0.60, h: 0.015, color: "#c8a838" },
-      // Right Yellow/Copper Main Breaker Busbar up right flank (x=+0.84) to MW LOAD & GRID 50HZ gauges (y=1.775)
-      { x: 0.70, y: 1.0, w: 0.28, h: 0.015, color: "#c8a838" },
-      { x: 0.84, y: 1.388, w: 0.016, h: 0.785, color: "#c8a838" },
-      { x: 0.72, y: 1.775, w: 0.24, h: 0.015, color: "#c8a838" },
-      { x: 0.30, y: 1.775, w: 0.60, h: 0.015, color: "#c8a838" },
-      // Lower Auxiliary Distribution Busbar at y=0.775 feeding the 4 Guarded Toggle Switches (VENTILATION, AUDIO, KGB LINE, AUX LOOP B)
-      { x: 0.0, y: 0.775, w: 1.68, h: 0.016, color: "#388898" },
-      { x: 0.84, y: 0.888, w: 0.015, h: 0.225, color: "#c8a838" },
-      { x: -0.63, y: 0.742, w: 0.014, h: 0.065, color: "#388898" },
-      { x: -0.21, y: 0.742, w: 0.014, h: 0.065, color: "#388898" },
-      { x: 0.21, y: 0.742, w: 0.014, h: 0.065, color: "#388898" },
-      { x: 0.63, y: 0.742, w: 0.014, h: 0.065, color: "#388898" },
+      // Left Cyan Accumulator Bus from raised Bank A (x=-0.63, y=1.06) up to ENERGY CREATED & ENERGY STORED gauges (y=1.79)
+      { x: -0.745, y: 1.06, w: 0.23, h: 0.015, color: "#388898" },
+      { x: -0.86, y: 1.425, w: 0.016, h: 0.73, color: "#388898" },
+      { x: -0.74, y: 1.79, w: 0.24, h: 0.015, color: "#388898" },
+      { x: -0.31, y: 1.79, w: 0.62, h: 0.015, color: "#c8a838" },
+      // Center DC Busbar connecting raised Bank A (x=-0.63), Single BATTERY -> GRID Wheel (x=0), and Bank B (x=+0.63)
+      { x: -0.315, y: 1.06, w: 0.63, h: 0.016, color: "#c8a838" },
+      { x: 0.315, y: 1.06, w: 0.63, h: 0.016, color: "#c8a838" },
+      // Right Copper Dispatch Busbar up right flank (x=+0.86) to ENERGY STORED & ENERGY DEMAND gauges (y=1.79)
+      { x: 0.745, y: 1.06, w: 0.23, h: 0.015, color: "#c8a838" },
+      { x: 0.86, y: 1.425, w: 0.016, h: 0.73, color: "#c8a838" },
+      { x: 0.74, y: 1.79, w: 0.24, h: 0.015, color: "#c8a838" },
+      { x: 0.31, y: 1.79, w: 0.62, h: 0.015, color: "#c8a838" },
     ],
     [],
   );
 
   const unitCMimicNodes = useMemo<readonly MimicNodeSpec[]>(
     () => [
-      { x: -0.84, y: 1.775, color: "#a83830" },
-      { x: -0.84, y: 1.0, color: "#a83830" },
-      { x: -0.30, y: 1.775, color: "#a83830" },
-      { x: 0.30, y: 1.775, color: "#c8a838" },
-      { x: 0.84, y: 1.775, color: "#c8a838" },
-      { x: 0.84, y: 1.0, color: "#c8a838" },
-      { x: -0.63, y: 0.775, color: "#388898" },
-      { x: -0.21, y: 0.775, color: "#388898" },
-      { x: 0.21, y: 0.775, color: "#388898" },
-      { x: 0.63, y: 0.775, color: "#388898" },
+      { x: -0.86, y: 1.79, color: "#388898" },
+      { x: -0.86, y: 1.06, color: "#388898" },
+      { x: -0.31, y: 1.79, color: "#c8a838" },
+      { x: 0.31, y: 1.79, color: "#c8a838" },
+      { x: 0.86, y: 1.79, color: "#c8a838" },
+      { x: 0.86, y: 1.06, color: "#c8a838" },
     ],
     [],
   );
 
   const unitCRecessedWells = useMemo(
     () => [
-      // Recessed dark instrument wells behind Middle Row controls and Lower Row 4 toggle switches
-      { x: 0, y: 0.56, w: 1.84, h: 0.36 },
+      { x: 0, y: 1.055, w: 1.84, h: 0.44 },
     ],
     [],
   );
@@ -2144,18 +1952,20 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           width={1.98}
           unitCode="C"
           annunciatorLabels={[
+            "ENERGY GEN",
+            "BATTERY %",
+            "GRID DEMAND",
+            "CHARGE FLOW",
             "STEAM BAR",
-            "50HZ SYNC",
-            "MW BALANCE",
-            "XENON-135",
-            "STEAM VOID",
-            "GRID LOCK",
+            "GRID ONLINE",
           ]}
           mimicSegments={unitCMimicSegments}
           mimicNodes={unitCMimicNodes}
           recessedWells={unitCRecessedWells}
           dividerY={1.305}
           lowerLedgeY={0.775}
+          hideChartRecorders={true}
+          hideStripMeters={true}
         />
 
         {/* Heavy Stepped Bevel Plates, Welded Seams, Corner L-Angle Iron Trim & Hex Bolts */}
@@ -2212,9 +2022,9 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           </group>
         ))}
 
-        {/* Top Riveted Header Plaque: TURBINE & 50HZ GRID PANEL (Centered cleanly inside top frame with generous margin) */}
-        <mesh position={[0, 2.13, 0.044]}>
-          <planeGeometry args={[1.64, 0.148]} />
+        {/* Top Riveted Header Plaque: Clear of overhead canopy overhang */}
+        <mesh position={[0, 2.095, 0.044]}>
+          <planeGeometry args={[1.58, 0.138]} />
           <meshStandardMaterial
             map={rightHeaderPlateTex}
             emissive="#ffffff"
@@ -2297,104 +2107,69 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           </group>
         ))}
 
-        {/* Upper Synoptic Bay — 3 Intuitive Master Analog Gauges (STEAM PRESSURE • GRID SYNC 50HZ • POWER BALANCE) */}
-        <group position={[0, 1.775, 0.03]}>
+        {/* Upper Synoptic Bay — 3 Uncluttered Battery & Energy Dispatch Gauges */}
+        <group position={[0, 1.79, 0.03]}>
           <HighDetailManometer3D
-            position={[-0.60, 0, 0]}
-            title="STEAM PRESSURE"
-            cyrillicSub="LIVE STEAM BAR"
-            unit="0-100 BAR"
+            position={[-0.62, 0, 0]}
+            title="ENERGY CREATED"
+            cyrillicSub="REACTOR OUTPUT"
+            unit="0-1000 MW"
             serial="№ 84-C1"
             min={0}
-            max={100}
-            safeBand={[60, 72]}
-            lowDangerThreshold={35}
-            dangerThreshold={78}
-            getValue={() => useGameStore.getState().drumPressure}
-            getAlertLevel={(s) => {
-              const gc = Boolean(s.turbines[0]?.gridConnected);
-              return (gc && s.drumPressure < 42) || s.drumPressure >= 80
+            max={1000}
+            safeBand={[500, 850]}
+            dangerThreshold={960}
+            getValue={() => useGameStore.getState().energyCreatedMW}
+            getAlertLevel={(s) =>
+              s.energyCreatedMW > 960
                 ? "critical"
-                : (gc && s.drumPressure < 54) || s.drumPressure > 75
+                : s.tutorialPhase === "COMPLETED" && s.energyCreatedMW < 200
                   ? "warn"
-                  : "normal";
-            }}
+                  : "normal"
+            }
           />
           <HighDetailManometer3D
             position={[0, 0, 0]}
-            title="GRID SYNC 50HZ"
-            cyrillicSub="50.0 HZ • 0° SYNC"
-            unit="45-55 HZ"
+            title="ENERGY STORED"
+            cyrillicSub="BATTERY CHARGE"
+            unit="0-100 %"
             serial="№ 84-C2"
-            min={45}
-            max={55}
-            centerNominal={true}
-            safeBand={[49.5, 50.5]}
-            lowDangerThreshold={48.6}
-            dangerThreshold={51.4}
-            dialZoneLabels={{
-              leftLabel: "UNDERSPEED / ADD STEAM",
-              rightLabel: "OVERSPEED / CUT STEAM",
-              topLabel: "50.0 HZ • 0°",
-            }}
-            getValue={() => {
-              const st = useGameStore.getState();
-              const hz = st.turbines[0]?.freqHz ?? 0;
-              return THREE.MathUtils.clamp(hz < 1 ? 45 : hz, 45, 55);
-            }}
-            getAlertLevel={(s) => {
-              const gc = Boolean(s.turbines[0]?.gridConnected);
-              const hz = s.turbines[0]?.freqHz ?? 0;
-              if (s.turbines[0]?.tripped) return "critical";
-              if (!gc) {
-                return Math.abs(hz - 50.0) <= 0.6 ? "normal" : "warn";
-              }
-              return "normal";
-            }}
+            min={0}
+            max={100}
+            safeBand={[25, 95]}
+            lowDangerThreshold={10}
+            dangerThreshold={101}
+            getValue={() => useGameStore.getState().batteryStoredPct}
+            getAlertLevel={(s) =>
+              s.batteryStoredPct < 8
+                ? "critical"
+                : s.batteryStoredPct < 20
+                  ? "warn"
+                  : "normal"
+            }
           />
           <HighDetailManometer3D
-            position={[0.60, 0, 0]}
-            title="POWER BALANCE"
-            cyrillicSub="GEN VS NEEDED MWe"
-            unit="0-1000 MWe"
+            position={[0.62, 0, 0]}
+            title="ENERGY DEMAND"
+            cyrillicSub="OUTPUT VS DEMAND"
+            unit="0-1000 MW"
             serial="№ 84-C3"
             min={0}
             max={1000}
-            dangerThreshold={940}
+            dangerThreshold={950}
             powerBalanceMode={true}
-            getValue={() => {
-              const st = useGameStore.getState();
-              const gc = Boolean(st.turbines[0]?.gridConnected);
-              return gc ? st.totalElectricalMW + st.houseLoadMW : 0;
-            }}
-            secondaryGetValue={() => {
-              const st = useGameStore.getState();
-              const totQuota = Object.values(st.targetSectorMW).reduce(
-                (a, b) => a + b,
-                0,
-              );
-              return totQuota + st.houseLoadMW;
-            }}
+            getValue={() => useGameStore.getState().totalElectricalMW}
+            secondaryGetValue={() => useGameStore.getState().energyDemandMW}
             getAlertLevel={(s) => {
-              const gc = Boolean(s.turbines[0]?.gridConnected);
-              const totQuota = Object.values(s.targetSectorMW).reduce(
-                (a, b) => a + b,
-                0,
-              );
-              const genGross = gc ? s.totalElectricalMW + s.houseLoadMW : 0;
-              const needGross = totQuota + s.houseLoadMW;
-              const diff = Math.abs(genGross - needGross);
-              return s.isBlackout || Boolean(s.turbines[0]?.tripped)
-                ? "critical"
-                : !gc || diff > 55
-                  ? "warn"
-                  : "normal";
+              if (s.tutorialPhase !== "COMPLETED") return "normal";
+              const diff = Math.abs(s.totalElectricalMW - s.energyDemandMW);
+              return diff > 95 ? "critical" : diff > 30 ? "warn" : "normal";
             }}
           />
         </group>
 
         {/* Wide Master Telemetry Dashboard CRT (`CRT-84C`) on Angled Tier-2 Riser */}
-        <group position={[0, 1.462, 0.04]} rotation={[-0.08, 0, 0]}>
+        <group position={[0, 1.475, 0.042]} rotation={[-0.08, 0, 0]}>
           <SovietCRTMonitorBay3D
             position={[0, 0, 0]}
             screenMatRef={rightStatusMatRef}
@@ -2403,186 +2178,30 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           />
         </group>
 
-        {/* Upper Sloped Desk Row: Spring-Loaded Steam Relief Lever (`СБРОС ПАРА`) + Rotary Excitation Rheostat (`ВОЗБУЖДЕНИЕ 50 ГЦ`) + 20-Part MAIN BREAKER (`ГЛАВНЫЙ РУБИЛЬНИК`) */}
-        <group position={[0, 1.035, 0.165]} rotation={[-0.406, 0, 0]}>
-          {/* 1. Spring-Loaded Steam Relief Pull-Lever (`СБРОС ПАРА / STEAM VENT БРУ-К`) */}
-          <group
-            position={[-0.62, 0, 0.015]}
-            onPointerOver={(e) => {
-              e.stopPropagation();
-              useGameStore
-                .getState()
-                .setHoveredControlHint(
-                  "STEAM VENT (БРУ-К): Vents live steam into UNIT B Bubbler Pool (-BAR/s, fills Bubbler) | Scroll or Click/Drag",
-                );
-            }}
-            onPointerOut={(e) => {
-              e.stopPropagation();
-              useGameStore.getState().setHoveredControlHint(null);
-            }}
-            onWheel={(e: ThreeEvent<WheelEvent>) => {
-              if (useCameraLookStore.getState().isFreeLookMode) return;
-              e.stopPropagation();
-              e.nativeEvent?.stopImmediatePropagation?.();
-              const wantOpen = e.deltaY < 0;
-              const s = useGameStore.getState();
-              if (s.ventingSteam !== wantOpen) {
-                s.setVentingSteam(wantOpen);
-                steamDragRef.current.progress = wantOpen ? 1.0 : 0;
-                playSwitchClank(true);
-                if (wantOpen) playSteamVentHiss(0.6);
-              }
-            }}
-            onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-              if (useCameraLookStore.getState().isFreeLookMode) return;
-              e.stopPropagation();
-              const wasOpen = useGameStore.getState().ventingSteam;
-              let dragged = false;
-              steamDragRef.current = {
-                active: true,
-                startY: e.nativeEvent.clientY,
-                progress: wasOpen ? 1.0 : 0.35,
-                lastHissTime: 0,
-              };
-              playSwitchClank(true);
-              playSteamVentHiss(0.6);
-              useGameStore.getState().setVentingSteam(!wasOpen);
-              const handleMove = (ev: PointerEvent) => {
-                if (!steamDragRef.current.active) return;
-                const dy = ev.clientY - steamDragRef.current.startY;
-                if (Math.abs(dy) >= 8) {
-                  dragged = true;
-                }
-                const prog = THREE.MathUtils.clamp(
-                  (wasOpen ? 1.0 : 0.2) + dy / 70,
-                  0,
-                  1.0,
-                );
-                steamDragRef.current.progress = prog;
-                if (dragged) {
-                  useGameStore.getState().setVentingSteam(prog >= 0.45);
-                }
-              };
-              const handleUp = () => {
-                steamDragRef.current.active = false;
-                steamDragRef.current.progress = useGameStore.getState().ventingSteam
-                  ? 1.0
-                  : 0;
-                playSwitchClank(false);
-                window.removeEventListener("pointermove", handleMove);
-                window.removeEventListener("pointerup", handleUp);
-                window.removeEventListener("pointercancel", handleUp);
-              };
-              window.addEventListener("pointermove", handleMove);
-              window.addEventListener("pointerup", handleUp);
-              window.addEventListener("pointercancel", handleUp);
-            }}
-          >
-            <mesh position={[0, 0.258, 0.006]} castShadow>
-              <boxGeometry args={[0.44, 0.112, 0.01]} />
-              <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
-            </mesh>
-            <mesh position={[0, 0.258, 0.012]}>
-              <planeGeometry args={[0.425, 0.103]} />
-              <meshStandardMaterial
-                map={steamPlateTex}
-                emissive="#ffffff"
-                emissiveMap={steamPlateTex}
-                emissiveIntensity={0.35}
-                roughness={0.55}
-              />
-            </mesh>
-            <SovietBacklitIndicatorBlock3D
-              position={[0, 0.184, 0.022]}
-              label="VENT"
-              getAlertState={(s) => ({
-                level:
-                  s.pressureBar >= 80
-                    ? "critical"
-                    : s.pressureBar > 76
-                      ? "warn"
-                      : "normal",
-                acknowledged: steamDragRef.current.active,
-              })}
+        {/* High-Mounted Sloped Deck Row (Raised cleanly ABOVE Inspector Desk Occlusion Shadow!) */}
+        <group position={[0, 1.055, 0.152]} rotation={[-0.406, 0, 0]}>
+          {/* Matte Steel Backing Plate for Energy Storage Deck */}
+          <mesh position={[0, 0.01, -0.01]} castShadow receiveShadow>
+            <boxGeometry args={[1.82, 0.44, 0.022]} />
+            <meshStandardMaterial
+              color="#1e2723"
+              roughness={0.48}
+              metalness={0.55}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
             />
-            {/* Heavy Cast-Iron Quadrant Housing & Return Coil Spring */}
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[0.24, 0.32, 0.064]} />
-              <meshStandardMaterial
-                color="#141816"
-                roughness={0.45}
-                metalness={0.68}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.008}
-              />
-            </mesh>
-            {/* Visible Return Coil Spring */}
-            {[-0.08, -0.04, 0, 0.04, 0.08].map((sy, sIdx) => (
-              <mesh
-                key={sIdx}
-                position={[-0.085, sy, 0.036]}
-                rotation={[Math.PI / 2, 0, 0]}
-              >
-                <torusGeometry args={[0.016, 0.0035, 6, 12]} />
-                <meshStandardMaterial
-                  color="#c8d2cc"
-                  metalness={0.9}
-                  roughness={0.22}
-                />
-              </mesh>
-            ))}
-            <group ref={steamLeverArmRef} position={[0, 0, 0.036]}>
-              {[-0.036, 0.036].map((lx, lIdx) => (
-                <mesh
-                  key={lIdx}
-                  position={[lx, 0, 0.085]}
-                  rotation={[Math.PI / 2, 0, 0]}
-                  castShadow
-                >
-                  <cylinderGeometry args={[0.011, 0.013, 0.17, 10]} />
-                  <meshStandardMaterial
-                    color="#d0dad4"
-                    metalness={0.9}
-                    roughness={0.2}
-                  />
-                </mesh>
-              ))}
-              {/* Hazard-Striped Red/Yellow Steam Relief T-Handle */}
-              <mesh
-                position={[0, 0, 0.17]}
-                rotation={[0, 0, Math.PI / 2]}
-                castShadow
-              >
-                <cylinderGeometry args={[0.028, 0.028, 0.18, 14]} />
-                <meshStandardMaterial
-                  color="#ff2a2a"
-                  emissive="#ff2a2a"
-                  emissiveIntensity={0.35}
-                  roughness={0.35}
-                />
-              </mesh>
-              {[-0.045, 0, 0.045].map((hx, hIdx) => (
-                <mesh
-                  key={hIdx}
-                  position={[hx, 0, 0.17]}
-                  rotation={[0, 0, Math.PI / 2]}
-                >
-                  <cylinderGeometry args={[0.03, 0.03, 0.022, 14]} />
-                  <meshStandardMaterial color="#ffb000" roughness={0.35} />
-                </mesh>
-              ))}
-            </group>
-          </group>
+          </mesh>
 
-          {/* 2. Heavy Cast-Steel 6-Spoke TURBINE THROTTLE Handwheel + Vertical 10-Segment LED Bargraph (0-100%) */}
+          {/* 1. Single Cast-Steel 6-Spoke BATTERY -> GRID Dispatch Handwheel + 10-Segment Bargraph (0-1000 MW) */}
           <group
-            position={[-0.04, 0, 0.015]}
+            position={[-0.01, -0.015, 0.018]}
+            scale={[1.02, 1.02, 1.02]}
             onPointerOver={(e) => {
               e.stopPropagation();
               const g = useGameStore.getState();
               g.setHoveredDiagnosticId("grid");
               g.setHoveredControlHint(
-                "TURBINE THROTTLE (0–100%): Drag Wheel or Scroll (±4% | Shift ±1%) to align GENERATED with NEEDED MWe",
+                "BATTERY -> GRID (0–1000 MW): Drag Wheel or Scroll (±40 MW | Shift ±10 MW) to dispatch stored power to the grid",
               );
             }}
             onPointerOut={(e) => {
@@ -2600,7 +2219,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
               const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 0.01 : 0.04);
               const s = useGameStore.getState();
-              const curValve = s.turbines[0]?.valve ?? 0;
+              const curValve = s.batteryOutputValve;
               const nextValve = THREE.MathUtils.clamp(
                 Math.round((curValve + step) * 100) / 100,
                 0,
@@ -2608,7 +2227,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               );
               if (Math.abs(nextValve - curValve) >= 0.001) {
                 playRheostatDetentClick(Math.round(nextValve * 100));
-                s.setTurbineSteamValve(nextValve);
+                s.setBatteryOutputValve(nextValve);
                 if (rheostatWheelRef.current) {
                   rheostatWheelRef.current.rotation.z =
                     -nextValve * Math.PI * 2.2;
@@ -2618,7 +2237,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             onPointerDown={(e: ThreeEvent<PointerEvent>) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
-              rheostatDraggingRef.current = true;
               const r3fTarget = e.target as unknown as {
                 setPointerCapture?: (id: number) => void;
                 releasePointerCapture?: (id: number) => void;
@@ -2643,8 +2261,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               const startX = e.nativeEvent.clientX;
               const startY = e.nativeEvent.clientY;
               let prevY = startY;
-              let totalMove = 0;
-              let currentVal = useGameStore.getState().turbines[0]?.valve ?? 0;
+              let currentVal = useGameStore.getState().batteryOutputValve;
               const initR = Math.hypot(startX - centerX, startY - centerY);
               let hasValidAngle = initR >= 8;
               let prevAngle = hasValidAngle
@@ -2653,11 +2270,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               let lastDetent = Math.round(currentVal * 100);
 
               const handleMove = (ev: PointerEvent) => {
-                totalMove = Math.max(
-                  totalMove,
-                  Math.hypot(ev.clientX - startX, ev.clientY - startY),
-                );
-
                 const dy = prevY - ev.clientY;
                 prevY = ev.clientY;
 
@@ -2698,29 +2310,14 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                     lastDetent = nextDetent;
                     playRheostatDetentClick(nextDetent);
                   }
-                  useGameStore.getState().setTurbineSteamValve(currentVal);
+                  useGameStore.getState().setBatteryOutputValve(currentVal);
                 }
               };
               const handleUp = () => {
-                rheostatDraggingRef.current = false;
                 r3fTarget?.releasePointerCapture?.(e.pointerId);
                 window.removeEventListener("pointermove", handleMove);
                 window.removeEventListener("pointerup", handleUp);
                 window.removeEventListener("pointercancel", handleUp);
-                if (totalMove < 5) {
-                  const s = useGameStore.getState();
-                  const curV = s.turbines[0]?.valve ?? 0;
-                  const nextV =
-                    curV < 0.18
-                      ? 0.20
-                      : curV < 0.58
-                        ? 0.60
-                        : curV < 0.85
-                          ? 0.85
-                          : 0.0;
-                  playRheostatDetentClick(Math.round(nextV * 100));
-                  s.setTurbineSteamValve(nextV);
-                }
                 playSwitchClank(false);
               };
               window.addEventListener("pointermove", handleMove);
@@ -2733,12 +2330,12 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               <boxGeometry args={[0.42, 0.34, 0.14]} />
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
-            <mesh position={[0, 0.258, 0.006]} castShadow>
-              <boxGeometry args={[0.465, 0.112, 0.01]} />
+            <mesh position={[0, 0.215, 0.006]} castShadow>
+              <boxGeometry args={[0.485, 0.108, 0.01]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.258, 0.012]}>
-              <planeGeometry args={[0.45, 0.103]} />
+            <mesh position={[0, 0.215, 0.012]}>
+              <planeGeometry args={[0.47, 0.098]} />
               <meshStandardMaterial
                 map={rheostatPlateTex}
                 emissive="#ffffff"
@@ -2748,25 +2345,16 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               />
             </mesh>
             <SovietBacklitIndicatorBlock3D
-              position={[0, 0.184, 0.022]}
-              label="MWe"
+              position={[0, 0.148, 0.022]}
+              label="DISPATCH"
               getAlertState={(s) => {
-                const gc = Boolean(s.turbines[0]?.gridConnected);
-                const totTarget = Object.values(s.targetSectorMW).reduce(
-                  (a, b) => a + b,
-                  0,
-                );
-                const genGross = gc ? s.totalElectricalMW + s.houseLoadMW : 0;
-                const needGross = totTarget + s.houseLoadMW;
-                const diff = Math.abs(genGross - needGross);
+                if (s.tutorialPhase !== "COMPLETED") {
+                  return { level: "normal", acknowledged: false };
+                }
+                const diff = Math.abs(s.totalElectricalMW - s.energyDemandMW);
                 return {
-                  level:
-                    gc && diff > 65
-                      ? "critical"
-                      : gc && diff > 22
-                        ? "warn"
-                        : "normal",
-                  acknowledged: rheostatDraggingRef.current,
+                  level: diff > 90 ? "critical" : diff > 30 ? "warn" : "normal",
+                  acknowledged: false,
                 };
               }}
             />
@@ -2870,10 +2458,10 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               </group>
             </group>
 
-            {/* Right Sub-Assembly: Illuminated 10-Segment Vertical 3D LED Bargraph (0-100%) + Digital % Badge */}
-            <group position={[0.138, -0.012, 0.016]}>
+            {/* Right Sub-Assembly: Illuminated 10-Segment Vertical 3D LED Bargraph (0-1000 MW) + Digital MW Badge */}
+            <group position={[0.145, -0.012, 0.016]}>
               <mesh castShadow receiveShadow>
-                <boxGeometry args={[0.088, 0.278, 0.024]} />
+                <boxGeometry args={[0.102, 0.278, 0.024]} />
                 <meshStandardMaterial
                   color="#101613"
                   roughness={0.46}
@@ -2882,9 +2470,9 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                   bumpScale={0.005}
                 />
               </mesh>
-              {/* Digital % Readout Window at Top of Bargraph */}
+              {/* Digital MW Readout Window at Top of Bargraph */}
               <mesh position={[0, 0.106, 0.014]}>
-                <planeGeometry args={[0.074, 0.036]} />
+                <planeGeometry args={[0.088, 0.042]} />
                 <meshStandardMaterial
                   ref={throttleReadoutMatRef}
                   map={throttleReadoutTex}
@@ -2899,7 +2487,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 const segY = -0.112 + segIdx * 0.021;
                 return (
                   <mesh key={`tled-${segIdx}`} position={[0, segY, 0.014]}>
-                    <boxGeometry args={[0.062, 0.0145, 0.008]} />
+                    <boxGeometry args={[0.068, 0.0145, 0.008]} />
                     <meshStandardMaterial
                       ref={(el) => {
                         throttleLedMatRefs.current[segIdx] = el;
@@ -2915,171 +2503,151 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             </group>
           </group>
 
-          {/* 3. Heavy Multi-Part Copper Knife-Switch MAIN BREAKER (`50HZ GRID LOCK`) */}
-          <HighDetailKnifeBreaker3D
-            breakerArmRef={breakerArmRef}
-            breakerDragRef={breakerDragRef}
-            breakerPlateTex={breakerPlateTex}
-          />
-          <SovietBacklitIndicatorBlock3D
-            position={[0.56, 0.184, 0.038]}
-            label="GRID"
-            getAlertState={(s) => ({
-              level:
-                s.isBlackout || Boolean(s.turbines[0]?.tripped)
-                  ? "critical"
-                  : !s.turbines[0]?.gridConnected
-                    ? "warn"
-                    : "normal",
-              acknowledged: breakerDragRef.current.active,
-            })}
-          />
-        </group>
-
-        {/* Lower Sloped Desk Row: 4 Guarded Metal Toggle Switches (with U-Shaped Side Safety Guards & Caged Jewel Lamps) Mounted Flush on the Sloped Sage-Green Desk */}
-        <group position={[0, 0.545, 0.376]} rotation={[-0.406, 0, 0]}>
-          <mesh position={[0, 0.02, -0.008]} castShadow receiveShadow>
-            <boxGeometry args={[1.82, 0.32, 0.024]} />
-            <meshStandardMaterial
-              color="#222a27"
-              roughness={0.45}
-              metalness={0.55}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.006}
-            />
-          </mesh>
-          {/* Single Horizontal Row: 4 Guarded Metal Toggle Switches (`VENTILATION`, `AVR EXCITER`, `KGB LINE`, `COND. VACUUM`) */}
-          {toggleSpecs.map((tSpec, tIdx) => {
-            const triggerToggle = () => {
-              playSwitchClank(false);
-              const s = useGameStore.getState();
-              if (tIdx === 0) {
-                s.toggleVentilation();
-              } else if (tIdx === 1) {
-                s.toggleAvr();
-              } else if (tIdx === 2) {
-                s.toggleKgbLine();
-              } else if (s.turbines[0]?.tripped) {
-                s.resetTurbineTrip();
-              } else {
-                s.toggleAuxLoopB();
-              }
-            };
-            const switchHint =
-              tIdx === 0
-                ? "SWITCH 1 [VENTILATION]: Purges containment radiation (-1.2 R/h/s) | Draws +15 MWe house load"
-                : tIdx === 1
-                  ? "SWITCH 2 [AVR EXCITER]: 50Hz Generator Excitation & Sync Damping | Draws +8 MWe house load (Required for Main Breaker!)"
-                  : tIdx === 2
-                    ? "SWITCH 3 [KGB LINE]: Powers Sector #4 KGB Bunker Trunk & Live Intel | Draws +10 MWe house load"
-                    : "SWITCH 4 [COND. VACUUM / RST]: Condenser Vacuum Pump (+12 MWe house load, full turbine torque) & Resets Turbine Trip";
-            return (
-              <group
-                key={`toggle-${tSpec.id}`}
-                position={[-0.63 + tIdx * 0.42, -0.02, 0.018]}
-                onPointerOver={(e) => {
-                  e.stopPropagation();
-                  useGameStore.getState().setHoveredControlHint(switchHint);
-                }}
-                onPointerOut={(e) => {
-                  e.stopPropagation();
-                  useGameStore.getState().setHoveredControlHint(null);
-                }}
-                onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-                  if (useCameraLookStore.getState().isFreeLookMode) return;
-                  e.stopPropagation();
-                  toggleDragRef.current = {
-                    activeIdx: tIdx,
-                    startY: e.nativeEvent.clientY,
-                  };
-                  const domElem = e.nativeEvent.target as Element | null;
-                  domElem?.setPointerCapture?.(e.pointerId);
-                }}
-                onPointerUp={(e: ThreeEvent<PointerEvent>) => {
-                  if (toggleDragRef.current.activeIdx !== tIdx) return;
-                  e.stopPropagation();
-                  toggleDragRef.current.activeIdx = null;
-                  const domElem = e.nativeEvent.target as Element | null;
-                  if (domElem?.hasPointerCapture?.(e.pointerId)) {
-                    domElem.releasePointerCapture(e.pointerId);
-                  }
-                  triggerToggle();
-                }}
-              >
-                {/* Engraved Brass/Iron Plaque Above Toggle (+25% larger) */}
-                <mesh position={[0, 0.112, 0.004]} castShadow>
-                  <boxGeometry args={[0.342, 0.098, 0.008]} />
-                  <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
-                </mesh>
-                <mesh position={[0, 0.112, 0.01]}>
-                  <planeGeometry args={[0.33, 0.09]} />
-                  <meshStandardMaterial
-                    map={tSpec.texture}
-                    emissive="#ffffff"
-                    emissiveMap={tSpec.texture}
-                    emissiveIntensity={0.36}
-                    roughness={0.65}
-                  />
-                </mesh>
-                <CagedSovietJewelLamp3D
-                  position={[-0.088, 0.0, 0.012]}
-                  lampMatRef={{
-                    get current() {
-                      return toggleLampRefs.current[tIdx] ?? null;
-                    },
-                    set current(el: THREE.MeshStandardMaterial | null) {
-                      toggleLampRefs.current[tIdx] = el;
-                    },
-                  }}
-                  scale={0.78}
+          {/* 2 & 3. Non-Interactive 3D Soviet Heavy Accumulator Cell Banks (Left & Right, Compact High-Mount) */}
+          {[
+            { x: -0.63, tex: bankAPlateTex, offset: 0 },
+            { x: 0.63, tex: bankBPlateTex, offset: 5 },
+          ].map((bank) => (
+            <group
+              key={`acc-bank-${bank.offset}`}
+              position={[bank.x, -0.02, 0.015]}
+              scale={[0.95, 0.88, 0.95]}
+            >
+              {/* Brass Bank Header Plaque */}
+              <mesh position={[0, 0.228, 0.006]} castShadow>
+                <boxGeometry args={[0.44, 0.106, 0.01]} />
+                <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+              </mesh>
+              <mesh position={[0, 0.228, 0.012]}>
+                <planeGeometry args={[0.425, 0.096]} />
+                <meshStandardMaterial
+                  map={bank.tex}
+                  emissive="#ffffff"
+                  emissiveMap={bank.tex}
+                  emissiveIntensity={0.35}
+                  roughness={0.55}
                 />
-                {/* Hex Brass Mounting Nut */}
-                <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-                  <cylinderGeometry args={[0.026, 0.029, 0.018, 6]} />
-                  <meshStandardMaterial
-                    color="#b8a46b"
-                    metalness={0.86}
-                    roughness={0.26}
-                    bumpMap={brassTex.bumpMap}
-                    bumpScale={0.005}
-                  />
-                </mesh>
-                {/* U-Shaped Side Safety Guard Brackets */}
-                {[-0.032, 0.032].map((gx, gIdx) => (
-                  <group key={gIdx} position={[gx, 0, 0.02]}>
-                    <mesh castShadow>
-                      <boxGeometry args={[0.007, 0.068, 0.038]} />
-                      <meshStandardMaterial
-                        color="#b8a46b"
-                        metalness={0.85}
-                        roughness={0.28}
-                      />
-                    </mesh>
-                  </group>
-                ))}
-                {/* Chrome Bat-Handle Toggle Bat (+35° / -35°) */}
-                <group
-                  ref={(el) => {
-                    toggleBatRefs.current[tIdx] = el;
-                  }}
-                  position={[0, 0, 0.012]}
-                >
-                  <mesh
-                    position={[0, 0, 0.03]}
-                    rotation={[Math.PI / 2, 0, 0]}
-                    castShadow
-                  >
-                    <cylinderGeometry args={[0.0105, 0.0065, 0.062, 10]} />
+              </mesh>
+              {/* Heavy Steel Cell Housing & Bakelite Top Insulator */}
+              <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.38, 0.29, 0.056]} />
+                <meshStandardMaterial
+                  color="#18211b"
+                  roughness={0.46}
+                  metalness={0.62}
+                  bumpMap={ironTex.bumpMap}
+                  bumpScale={0.008}
+                />
+              </mesh>
+              <mesh position={[0, 0.128, 0.032]} castShadow>
+                <boxGeometry args={[0.34, 0.038, 0.024]} />
+                <meshStandardMaterial color="#141414" roughness={0.32} metalness={0.18} />
+              </mesh>
+              {/* Twin Copper/Brass Terminal Posts + Horizontal Bridge Busbar */}
+              {[-0.105, 0.105].map((tx, tid) => (
+                <group key={`term-${tid}`} position={[tx, 0.128, 0.05]}>
+                  <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+                    <cylinderGeometry args={[0.022, 0.026, 0.036, 12]} />
                     <meshStandardMaterial
-                      color="#d8e2dc"
-                      metalness={0.92}
-                      roughness={0.18}
+                      color="#b8a46b"
+                      metalness={0.88}
+                      roughness={0.24}
+                      bumpMap={brassTex.bumpMap}
+                      bumpScale={0.004}
+                    />
+                  </mesh>
+                  <mesh position={[0, -0.145, -0.012]} castShadow>
+                    <cylinderGeometry args={[0.044, 0.048, 0.22, 14]} />
+                    <meshStandardMaterial
+                      color="#23332b"
+                      roughness={0.44}
+                      metalness={0.55}
                     />
                   </mesh>
                 </group>
-              </group>
-            );
-          })}
+              ))}
+              <mesh position={[0, 0.078, 0.046]} castShadow>
+                <boxGeometry args={[0.22, 0.018, 0.012]} />
+                <meshStandardMaterial color="#c88d44" metalness={0.85} roughness={0.26} />
+              </mesh>
+              {/* Central Armored Window Housing with 5 Illuminated Charge Bars */}
+              <mesh position={[0, -0.035, 0.034]} castShadow>
+                <boxGeometry args={[0.105, 0.175, 0.018]} />
+                <meshStandardMaterial color="#0c120f" roughness={0.45} metalness={0.65} />
+              </mesh>
+              {Array.from({ length: 5 }).map((_, bIdx) => {
+                const barY = -0.098 + bIdx * 0.031;
+                return (
+                  <mesh key={`batbar-${bIdx}`} position={[0, barY, 0.046]}>
+                    <boxGeometry args={[0.078, 0.02, 0.008]} />
+                    <meshStandardMaterial
+                      ref={(el) => {
+                        batteryCellBarMatRefs.current[bank.offset + bIdx] = el;
+                      }}
+                      color="#121a16"
+                      emissive="#000000"
+                      emissiveIntensity={0.05}
+                      roughness={0.28}
+                    />
+                  </mesh>
+                );
+              })}
+            </group>
+          ))}
+        </group>
+
+        {/* Non-Interactive Bolted Lower Access Service Apron (Cleanly occupies lower desk-shadow skirt) */}
+        <group position={[0, 0.62, 0.34]} rotation={[-0.406, 0, 0]}>
+          {[-0.46, 0.46].map((ax, aIdx) => (
+            <group key={`apron-bay-${aIdx}`} position={[ax, 0, 0.008]}>
+              <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.82, 0.30, 0.018]} />
+                <meshStandardMaterial
+                  color="#1b2320"
+                  metalness={0.62}
+                  roughness={0.5}
+                  bumpMap={ironTex.bumpMap}
+                  bumpScale={0.006}
+                />
+              </mesh>
+              {[-0.08, -0.025, 0.03, 0.085].map((ly, lIdx) => (
+                <mesh
+                  key={`louver-${lIdx}`}
+                  position={[0, ly, 0.01]}
+                  castShadow
+                >
+                  <boxGeometry args={[0.64, 0.016, 0.008]} />
+                  <meshStandardMaterial
+                    color="#121816"
+                    metalness={0.55}
+                    roughness={0.58}
+                  />
+                </mesh>
+              ))}
+              {(
+                [
+                  [-0.37, 0.12],
+                  [0.37, 0.12],
+                  [-0.37, -0.12],
+                  [0.37, -0.12],
+                ] as const
+              ).map(([bx, by], bIdx) => (
+                <mesh
+                  key={`apron-bolt-${bIdx}`}
+                  position={[bx, by, 0.012]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                  castShadow
+                >
+                  <cylinderGeometry args={[0.009, 0.009, 0.008, 6]} />
+                  <meshStandardMaterial
+                    color="#b8a46b"
+                    metalness={0.85}
+                    roughness={0.28}
+                  />
+                </mesh>
+              ))}
+            </group>
+          ))}
         </group>
       </group>
 
@@ -3293,7 +2861,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
     if (reactorSpotRef.current) {
       reactorSpotRef.current.intensity = isBlackout
         ? 0.35
-        : (2.1 + Math.sin(t * 17.0) * 0.08) * humFlicker;
+        : 2.1 * humFlicker;
     }
 
     if (rearPoolLightRef.current) {
@@ -3556,7 +3124,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     const state = useGameStore.getState();
     const deskState = useDeskStore.getState();
     const activeDeskDoc = deskState.documents[0] ?? null;
-    const timeBucket = Math.floor(now * 4);
+    const timeBucket = Math.floor(now * 2);
     const lastEntryId =
       state.terminalEntries[state.terminalEntries.length - 1]?.id ?? "0";
     const cdSec = Math.ceil(deskState.directiveCooldown);
@@ -3568,20 +3136,22 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       (sum, s) => sum + s.allocatedMW,
       0,
     );
-    const hasGenDeficit = totalAllocatedMW > state.totalElectricalMW + 15;
+    const hasGenDeficit =
+      state.tutorialPhase === "COMPLETED" &&
+      totalAllocatedMW > state.totalElectricalMW + 15;
     const latestChatMsg =
       state.wePadChatLog[state.wePadChatLog.length - 1] ?? null;
     const contextualHint =
       state.hoveredControlHint ??
       (state.coreTemp > 520 && state.controlRods > 0.75
         ? "⚠️ HIGH REACTIVITY: INSERT CONTROL RODS (UNIT A-2) OR BOOST PUMPS TO AVOID OVERHEAT!"
-        : hasGenDeficit && state.tutorialPhase === "COMPLETED"
-          ? `⚠️ GENERATION DEFICIT: RAISE RODS (UNIT A-2) & TURBINE VALVE (UNIT C) FOR ${totalAllocatedMW} MWe!`
+        : hasGenDeficit
+          ? `⚠️ GRID DEFICIT: TURN [BATTERY -> GRID] WHEEL ON UNIT C OR RAISE RODS (A-2) FOR ${totalAllocatedMW} MW!`
           : rawHint);
     const subSig = state.substations
       .map((s) => `${s.id}:${s.allocatedMW}:${s.targetMW}:${s.statusText}:${s.quotaOk ? 1 : 0}`)
       .join(",");
-    const skalaSig = `${Math.round(state.heliumPressure)}:${Math.round(state.graphiteTemp)}:${Math.round(state.bubblerLevel)}:${state.sealToggles.join("")}:${Math.round(state.pumpAHeat)}:${Math.round(state.pumpBHeat)}:${Math.round(state.boronTankLevel)}:${Object.keys(state.channelHotspots).length}:${Math.round(state.pressureBar)}:${Math.round(state.gridHz * 10)}:${Math.round(state.turbines[0]?.rpm ?? 0)}:${Boolean(state.turbines[0]?.gridConnected)}:${Boolean(state.turbines[0]?.tripped)}`;
+    const skalaSig = `${Math.round(state.heliumPressure)}:${Math.round(state.graphiteTemp)}:${Math.round(state.bubblerLevel)}:${state.sealToggles.join("")}:${Math.round(state.pumpAHeat)}:${Math.round(state.pumpBHeat)}:${Math.round(state.boronTankLevel)}:${Object.keys(state.channelHotspots).length}:${Math.round(state.pressureBar)}:${Math.round(state.energyCreatedMW)}:${Math.round(state.batteryStoredPct)}:${Math.round(state.batteryOutputValve * 100)}:${Math.round(state.energyDemandMW)}`;
     const sig = `${timeBucket}|${skalaSig}|${state.phase}|${state.tutorialPhase}|${state.tutorialPrompt.header}|${state.tutorialPrompt.body}|${latestChatMsg?.id ?? ""}|${cdSec}|${contextualHint ?? ""}|${Math.round(state.controlRods * 100)}|${Math.round(state.totalElectricalMW)}|${Math.round(state.drumWaterLevel)}|${Math.round(state.drumPressure)}|${subSig}|${deskState.printingDoc?.id ?? ""}|${deskState.capsuleState}|${deskState.hatchOpen}|${lastEntryId}|${state.bubblerDraining}|${state.auxLoopBActive}|${state.kgbLineActive}|${activeDeskDoc?.id ?? "NONE"}|${activeDeskDoc?.stamps.length ?? 0}|${Math.round(state.pumpThrottle[0])}|${Math.round(state.pumpThrottle[1])}|${Math.round(state.waterReservoir)}|${Math.round(state.waterUsage)}|${Math.round(state.coreTemp / 2) * 2}|${state.ciaIntrusionActive}|${Math.round(state.ciaIntrusionProgress)}|${state.komradOverrideLocked}|${state.isBlackout}|${bulletinIdx}`;
     const tex = crtMatRef.current?.map as THREE.CanvasTexture | undefined;
     const canvas = tex?.image as HTMLCanvasElement | undefined;
@@ -3695,8 +3265,6 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       const unmetSub = state.substations.find(
         (s) => Math.abs(s.allocatedMW - s.targetMW) >= 15,
       );
-      const t0 = state.turbines[0];
-      const rpmVal = Math.round(t0?.rpm ?? 0);
 
       // 1. UNIT B (`[KEY 3] UNIT B // GAS & BUBBLER`)
       const activePumpCount = state.mcpActive.filter(Boolean).length;
@@ -3736,18 +3304,19 @@ const Komrad84SplitScreenCrt3D: React.FC<{
         0,
       );
       const targetMWtForOrder = (totalTargetGridMW / 1000) * 3200;
-      const steamDrawMWtEst = (t0?.valve ?? 0) * 3200;
+      const steamDrawMWtEst = state.batteryOutputValve * 3200;
       const highReactivityOverheat =
         state.coreTemp > 550 && state.controlRodLevel > 78;
       const apSaturated =
+        state.tutorialPhase === "COMPLETED" &&
         isCoreOperating &&
         !state.autoRodEnabled &&
         (Math.abs(targetMWtForOrder - state.thermalPower) > 180 ||
           Math.abs(steamDrawMWtEst - state.thermalPower) > 200);
       const bayA2Status: "OK" | "WARN" | "ALERT" =
-        hotspotCount >= 3 || bearingTemp > 90 || highReactivityOverheat
+        hotspotCount >= 4 || bearingTemp > 90 || highReactivityOverheat
           ? "ALERT"
-          : hotspotCount >= 2 ||
+          : hotspotCount >= 1 ||
               apSaturated ||
               bearingTemp > 80 ||
               state.boronTankLevel < 22 ||
@@ -3757,19 +3326,21 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       const bayA2Line =
         highReactivityOverheat
           ? "🚨 HIGH REACTIVITY! INSERT [RODS] ON A-2!"
-          : hotspotCount >= 2
-            ? "⚠️ CORE HOTSPOT! CLICK [37-TILE MAP]"
-            : bearingTemp > 90
-              ? "🚨 BEARINGS >90°C! OPEN [OIL COOLER]!"
-              : bearingTemp > 80
-                ? "⚠️ BEARINGS WARM! TURN [OIL COOLER]"
-                : state.boronTankLevel < 22
-                  ? "⚠️ BORON <22% (WEAK RODS)! PUMP [BORON]"
-                  : apSaturated
-                    ? "⚠️ AP SATURATED! MOVE [CONTROL RODS]!"
-                    : isCoreOperating && state.pressureBar < 42
-                      ? "⚡ LOW STEAM! RAISE [BORON RODS]"
-                      : `RODS: ${Math.round(state.controlRodLevel)}% | BEARINGS: ${bearingTemp}°C | BORON: ${Math.round(state.boronTankLevel)}%`;
+          : hotspotCount >= 4
+            ? "🚨 SPENT FUEL OVERHEAT! REFUEL ON A-2!"
+            : hotspotCount >= 1
+              ? `⚠️ ${hotspotCount} SPENT ROD(S)! CLICK AMBER & PULL LEVER`
+              : bearingTemp > 90
+                ? "🚨 BEARINGS >90°C! OPEN [OIL COOLER]!"
+                : bearingTemp > 80
+                  ? "⚠️ BEARINGS WARM! TURN [OIL COOLER]"
+                  : state.boronTankLevel < 22
+                    ? "⚠️ BORON <22% (WEAK RODS)! PULL [REFUEL LEVER]"
+                    : apSaturated
+                      ? "⚠️ AP SATURATED! MOVE [CONTROL RODS]!"
+                      : isCoreOperating && state.pressureBar < 42
+                        ? "⚡ LOW STEAM! RAISE [BORON RODS]"
+                        : `RODS: ${Math.round(state.controlRodLevel)}% | BEARINGS: ${bearingTemp}°C | BORON: ${Math.round(state.boronTankLevel)}%`;
 
       // 3. UNIT A (`[KEY 1] UNIT A // LOOP & MW`)
       const bayAStatus: "OK" | "WARN" | "ALERT" =
@@ -3778,7 +3349,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           : state.pressureBar > 77 ||
               state.radiationLevel > 3.5 ||
               (isCoreOperating && state.pressureBar < 36) ||
-              Boolean(unmetSub)
+              (state.tutorialPhase === "COMPLETED" && Boolean(unmetSub))
             ? "WARN"
             : "OK";
       const bayALine =
@@ -3796,47 +3367,31 @@ const Komrad84SplitScreenCrt3D: React.FC<{
                     ? `⚡ MW ORDER: SET SECTOR [${unmetSub.id}] -> ${unmetSub.targetMW} MW`
                     : `CORE: ${Math.round(state.coreTemp)}°C | STEAM: ${Math.round(state.pressureBar)} BAR | MW: ${totalSuppliedMW}`;
 
-      // 4. UNIT C (`[KEY 5] UNIT C // POWER DISPATCH` — True Grid-Locked Mode)
-      const genGrossC = t0?.gridConnected
-        ? totalGenMW + Math.round(state.houseLoadMW)
-        : 0;
-      const needGrossC = totalTargetGridMW + Math.round(state.houseLoadMW);
-      const deltaMWeC = Math.round(genGrossC - needGrossC);
+      // 4. UNIT C (`[KEY 5] UNIT C // ENERGY STORAGE & BATTERY DISPATCH`)
+      const createdMW = Math.round(state.energyCreatedMW);
+      const demandMW = Math.round(state.energyDemandMW);
+      const batPct = Math.round(state.batteryStoredPct);
+      const deltaDemandC = Math.round(totalGenMW - demandMW);
       const bayCStatus: "OK" | "WARN" | "ALERT" =
         state.isBlackout ||
-        Boolean(t0?.tripped) ||
-        !state.avrActive ||
-        (Boolean(t0?.gridConnected) && Math.abs(deltaMWeC) > 65)
+        batPct < 8 ||
+        (state.tutorialPhase === "COMPLETED" && Math.abs(deltaDemandC) > 90)
           ? "ALERT"
-          : !t0?.gridConnected ||
-              !state.auxLoopBActive ||
-              state.wetSteamPenalty > 0.12 ||
-              Math.abs(deltaMWeC) > 20 ||
+          : batPct < 20 ||
+              (state.tutorialPhase === "COMPLETED" && Math.abs(deltaDemandC) > 30) ||
               state.pressureBar > 77
             ? "WARN"
             : "OK";
       const bayCLine =
-        state.isBlackout || Boolean(t0?.tripped)
-          ? "🚨 BREAKER TRIPPED! RESET & SYNC [UNIT C]"
-          : !t0?.gridConnected
-            ? `⚡ SPIN 50HZ (${rpmVal} RPM) -> PULL [BREAKER]`
-            : !state.avrActive
-              ? "🚨 AVR OFF! FLIP SWITCH 2 [AVR EXCITER]"
-              : !state.auxLoopBActive
-                ? "⚠️ VACUUM OFF! FLIP SWITCH 4 [COND. VAC]"
-                : state.wetSteamPenalty > 0.12
-                  ? "⚠️ WET STEAM VIBRATION! LOWER [FEEDWATER]"
-                  : deltaMWeC < -20 && state.pressureBar < 58
-                    ? "⚠️ LOW STEAM! RAISE [RODS] & [FEEDWATER]"
-                    : deltaMWeC < -20
-                      ? `⚡ ${deltaMWeC} MWe DEFICIT! OPEN [THROTTLE]`
-                      : deltaMWeC > 60
-                        ? `🚨 +${deltaMWeC} MWe SURPLUS! LOWER [THROTTLE]`
-                        : deltaMWeC > 20
-                          ? `⚠️ +${deltaMWeC} MWe SURPLUS! TRIM [THROTTLE]`
-                          : state.pressureBar > 77
-                            ? "⚠️ PRESSURE >77 BAR! PULL [STEAM VENT]"
-                            : `LOCKED 50.0 HZ | GEN: ${genGrossC}/${needGrossC} MWe`;
+        state.isBlackout || batPct < 8
+          ? "🚨 BATTERY LOW (<8%)! RAISE [RODS] ON A-2"
+          : state.tutorialPhase === "COMPLETED" && deltaDemandC < -30
+            ? `⚡ ${deltaDemandC} MW DEFICIT! TURN [WHEEL] UP`
+            : state.tutorialPhase === "COMPLETED" && deltaDemandC > 35
+              ? `⚠️ +${deltaDemandC} MW SURPLUS! TRIM [WHEEL] DOWN`
+              : state.pressureBar > 77
+                ? "⚠️ PRESSURE >77 BAR! TRIM [RODS] ON A-2"
+                : `GEN: ${createdMW}MW | BAT: ${batPct}% | GRID: ${totalGenMW}/${demandMW}MW`;
 
       const skalaBays = [
         {
@@ -3855,7 +3410,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           line: bayALine,
         },
         {
-          header: "[KEY 5] UNIT C // POWER DISPATCH",
+          header: "[KEY 5] UNIT C // ENERGY STORAGE",
           status: bayCStatus,
           line: bayCLine,
         },
@@ -3871,9 +3426,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
             ? "#ff2a2a"
             : "#881414"
           : isWarn
-            ? blinkOn
-              ? "#ffaa11"
-              : "#b87408"
+            ? "#d99014"
             : "#28ff66";
 
         ctx.fillStyle = isCrit
@@ -4394,12 +3947,17 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       const zWater = opts.zoneWaterPct ?? 0;
       const tgtWater = opts.targetWaterPct ?? 85;
       const waterOk = !opts.hasWater || zWater >= opts.minWater;
-      const isAlert = !opts.quotaOk;
+      const isColdStartPreDispatch =
+        state.tutorialPhase !== "COMPLETED" &&
+        state.tutorialPhase !== "STEP_6_BASELINE_600MW";
+      const isAlert = !opts.quotaOk && !isColdStartPreDispatch;
       const borderCol = opts.quotaOk
         ? "#39ff14"
-        : powered || waterOk
-          ? "#ffd000"
-          : "#ff2a2a";
+        : isColdStartPreDispatch
+          ? "#3b7a4c"
+          : powered || waterOk
+            ? "#ffd000"
+            : "#ff2a2a";
 
       // Solid Dark Card Backing (`rgba(2, 10, 4, 0.94)`)
       ctx.fillStyle = isAlert
@@ -4971,9 +4529,14 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       const stripY = mapY + mapH - 46;
       const stripW = mapW - 16;
       const stripH = 40;
+      const hintCrit =
+        state.coreTemp >= 580 ||
+        state.drumPressure >= 80 ||
+        Boolean(state.turbines[0]?.tripped);
       ctx.fillStyle = "rgba(42, 24, 2, 0.97)";
       ctx.fillRect(stripX, stripY, stripW, stripH);
-      ctx.strokeStyle = timeBucket % 2 === 0 ? "#ffe600" : "#ff2a2a";
+      ctx.strokeStyle =
+        hintCrit && timeBucket % 2 === 1 ? "#ff2a2a" : "#ffb000";
       ctx.lineWidth = 3;
       ctx.strokeRect(stripX, stripY, stripW, stripH);
       ctx.font = '900 26px "VT323", "Consolas", monospace';
@@ -5129,13 +4692,12 @@ const Komrad84SplitScreenCrt3D: React.FC<{
 
     // Tall Bottom >> VOLKOV TRAINING DRILL / >> K.O.M.R.A.D.-84 // LIVE DISPATCH Box
     const isDrillActive = state.tutorialPhase !== "COMPLETED";
-    const drillBorderPulse =
-      isDrillActive && timeBucket % 2 === 0 ? "#44ff66" : "#ffe600";
+    const drillBorderCol = isDrillActive ? "#39ff14" : "#2e9e4f";
     ctx.fillStyle = isDrillActive
       ? "rgba(32, 22, 2, 0.97)"
       : "rgba(22, 16, 2, 0.95)";
     ctx.fillRect(chatX + 8, aiBoxY, chatW - 16, aiBoxH);
-    ctx.strokeStyle = drillBorderPulse;
+    ctx.strokeStyle = drillBorderCol;
     ctx.lineWidth = isDrillActive ? 4 : 3;
     ctx.strokeRect(chatX + 8, aiBoxY, chatW - 16, aiBoxH);
 
@@ -5218,8 +4780,8 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       drawHeavyCrtText(
         ctx,
         state.phase === "boot"
-          ? "CLICK SCREEN OR PULL 3D MAIN BREAKER LEVER ([SPACE])"
-          : "CLICK SCREEN OR PULL 3D MAIN BREAKER LEVER ([SPACE]) TO RESET",
+          ? "CLICK SCREEN TO START SHIFT"
+          : "CLICK SCREEN TO RESET SHIFT",
         w / 2,
         482,
         "#39ff14",
@@ -6167,7 +5729,7 @@ export const ControlRoomScene: React.FC = React.memo(() => {
   useEffect(() => {
     const timer = window.setInterval(() => {
       setBulletinIdx((prev) => prev + 1);
-    }, 6500);
+    }, 18000);
     return () => window.clearInterval(timer);
   }, []);
 

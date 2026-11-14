@@ -58,7 +58,9 @@ export interface ReactorState {
   iodine: number;             // Iodine-135 fission product inventory (0 to 100)
   xenon: number;              // Xenon-135 neutron poison inventory (0 to 100)
   rodTilesFlux: number[];     // 37 local channel flux readouts (0-100%) on UNIT A-2
-  coreTileAnomalies: Record<number, 'void' | 'xenon'>; // Local channel void/xenon pockets on 37-tile matrix
+  coreTileAnomalies: Record<number, 'spent'>; // Spent uranium fuel channels requiring refueling on 37-tile matrix
+  selectedRefuelChannel: number | null; // Currently targeted spent channel for the UNIT A-2 refueling lever
+  fuelBurnupTimer: number;    // Accumulated fission burnup toward the next spent fuel channel
 
   // --- Primary Loop Hydraulics, Bearings, Steam Drum & Bubbler Pool (UNIT A <-> UNIT B <-> UNIT C) ---
   coolantFlow: number;        // 0.0 to 1.15 total core coolant mass flow
@@ -76,10 +78,14 @@ export interface ReactorState {
   reliefValveOpen: boolean;   // Automatic safety relief valve (opens >= 85 BAR, closes <= 75 BAR)
   roomRadiation: number;      // Control room / containment radiation in R/h
 
-  // --- Turbines, Aux House Bus & 50Hz Regional Grid (UNIT C <-> UNIT A) ---
-  turbines: [TurbineState, TurbineState]; // TG-1 & TG-2 (1050 MWe gross / 1000 MWe net rated)
-  houseLoadMW: number;        // Internal plant electrical load (Ventilation + AVR + KGB Trunk + Condenser + Pumps)
-  totalElectricalMW: number;  // Net MWe available to the 6 regional substations
+  // --- Turbines, Aux House Bus, Energy Storage & Regional Grid (UNIT C <-> UNIT A) ---
+  turbines: [TurbineState, TurbineState]; // Legacy compatibility mirror (Unit C now uses Battery Dispatch)
+  houseLoadMW: number;        // Internal plant electrical load (Ventilation + KGB Trunk)
+  energyCreatedMW: number;    // Live electrical power generated into Station Battery (0-1050 MW)
+  batteryStoredMWh: number;   // Energy stored in Station Battery Bank (0-1000 MWh, /10 = 0-100%)
+  batteryOutputValve: number; // Single UNIT C wheel (0.0-1.0 => 0-1000 MW from Battery to Grid)
+  energyDemandMW: number;     // Total regional grid demand (sum of substations.targetMW)
+  totalElectricalMW: number;  // Net MW delivered from Station Battery to the 6 regional substations
   substations: SubstationQuota[]; // 6 Substation levers on UNIT A (#1..#6)
 
   // --- Catastrophic Failure Flags ---
@@ -113,15 +119,16 @@ export interface TutorialPrompt {
 // Physical RBMK-1000 Constants
 const NOMINAL_THERMAL_MW = 3200;
 const NOMINAL_PRESSURE_BAR = 70;
-const TURBINE_GROSS_RATED_MWE = 1050; // 1000 MWe net + ~30-50 MWe internal house switchgear
+const MAX_BATTERY_INPUT_MW = 1050;
 const ROD_SPEED = 0.015;
 const AZ5_SPEED = 0.055;             // ~18s full insertion with 3.5s graphite displacer tip effect
 const VOID_COEFFICIENT = 0.028;      // Positive void coefficient (+alpha_phi)
 const DOPPLER_COEFFICIENT = 0.00004; // Negative fuel Doppler coefficient
 const XENON_SCALE = 0.0012;
 
-const DEFAULT_VOID_TILES = [6, 18, 24] as const;
-const DEFAULT_XENON_TILES = [10, 18, 28] as const;
+const SPENT_FUEL_CHANNEL_ORDER = [
+  18, 12, 24, 6, 30, 16, 20, 8, 28, 14, 22, 10, 26, 3, 33, 17, 19,
+] as const;
 
 function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
@@ -144,7 +151,7 @@ export function createColdStartState(): ReactorState {
     steamDumpValve: false,
     ventingSteam: false,
     bubblerDraining: false,
-    ventilationActive: false,
+    ventilationActive: true,
     avrActive: true,
     kgbLineActive: true,
     condenserVacActive: true,
@@ -167,6 +174,8 @@ export function createColdStartState(): ReactorState {
     xenon: 0,
     rodTilesFlux: new Array(37).fill(0),
     coreTileAnomalies: {},
+    selectedRefuelChannel: null,
+    fuelBurnupTimer: 0,
 
     coolantFlow: 0.08,
     pumpAHeat: 6,
@@ -187,7 +196,11 @@ export function createColdStartState(): ReactorState {
       { valve: 0, rpm: 0, freqHz: 0, syncPhase: 0, gridConnected: false, electricalMW: 0, tripped: false },
       { valve: 0, rpm: 0, freqHz: 0, syncPhase: 90, gridConnected: false, electricalMW: 0, tripped: false },
     ],
-    houseLoadMW: 30,
+    houseLoadMW: 25,
+    energyCreatedMW: 0,
+    batteryStoredMWh: 250,
+    batteryOutputValve: 0,
+    energyDemandMW: 600,
     totalElectricalMW: 0,
     substations: [
       { id: 1, name: 'PRIPYAT CITY', allocatedMW: 0, targetMW: 100, maxMW: 250, requiresH2O: false, allocatedH2O: 85, targetH2O: 85, statusText: 'HEATING COLD', quotaOk: false },
@@ -216,75 +229,74 @@ export function triggerBoronInjection(state: ReactorState): boolean {
   state.boronDampingTimer = 8.0;
   state.coreTemp = Math.max(120, state.coreTemp - 95);
   state.graphiteTemp = Math.max(120, state.graphiteTemp - 55);
-  const nextAnomalies: Record<number, 'void' | 'xenon'> = {};
-  for (const [k, v] of Object.entries(state.coreTileAnomalies)) {
-    if (v !== 'void') {
-      nextAnomalies[Number(k)] = v;
-    }
-  }
-  state.coreTileAnomalies = nextAnomalies;
   return true;
 }
 
 /**
- * Interactive Channel Trimming on RBMK CORE (37 ROD TILES) on UNIT A-2:
- * Consumes hydraulic/liquid boron pressure (`boronTankLevel`); effectiveness scales down if Boron Tank is low!
+ * Selects a spent fuel channel on the 37-tile RBMK CORE map (UNIT A-2)
+ * before operating the 3D ROD REFUELING LEVER.
+ */
+export function selectCoreChannelForRefuel(
+  state: ReactorState,
+  tileIndex: number
+): { selected: number | null; isSpent: boolean } {
+  if (state.coreTileAnomalies[tileIndex] === 'spent') {
+    state.selectedRefuelChannel = tileIndex;
+    return { selected: tileIndex, isSpent: true };
+  }
+  return { selected: state.selectedRefuelChannel, isSpent: false };
+}
+
+/**
+ * Executes a full downward stroke on the 3D ROD REFUELING LEVER (UNIT A-2):
+ * Reloads the currently selected spent uranium fuel channel and tops up hydraulic boron pressure.
+ */
+export function refuelSelectedCoreChannel(state: ReactorState): {
+  refueledChannel: number | null;
+  remainingSpent: number;
+  hasUnselectedSpent: boolean;
+} {
+  const transfer = Math.min(8, 100 - state.boronTankLevel, state.boronReservePool);
+  if (transfer > 0) {
+    state.boronTankLevel = Number((state.boronTankLevel + transfer).toFixed(1));
+    state.boronReservePool = Number((state.boronReservePool - transfer).toFixed(1));
+  }
+
+  const ch = state.selectedRefuelChannel;
+  if (ch !== null && state.coreTileAnomalies[ch] === 'spent') {
+    const nextAnom = { ...state.coreTileAnomalies };
+    delete nextAnom[ch];
+    state.coreTileAnomalies = nextAnom;
+    state.selectedRefuelChannel = null;
+    state.rodTilesFlux[ch] = Math.min(100, (state.thermalPower / NOMINAL_THERMAL_MW) * 100);
+    state.coreTemp = Math.max(120, state.coreTemp - 14);
+    return {
+      refueledChannel: ch,
+      remainingSpent: Object.keys(nextAnom).length,
+      hasUnselectedSpent: false,
+    };
+  }
+
+  const remainingSpent = Object.keys(state.coreTileAnomalies).length;
+  return {
+    refueledChannel: null,
+    remainingSpent,
+    hasUnselectedSpent: remainingSpent > 0,
+  };
+}
+
+/**
+ * Compatibility alias retained for existing callers.
  */
 export function trimCoreChannelTile(
   state: ReactorState,
   tileIndex: number
-): { trimmed: 'void' | 'xenon' | 'none'; remainingPct: number } {
-  const directType = state.coreTileAnomalies[tileIndex];
-
-  let targetType: 'void' | 'xenon' | null = directType ?? null;
-  if (!targetType) {
-    if (state.voidFraction >= 0.20 && state.voidFraction * 100 >= state.xenon) {
-      targetType = 'void';
-    } else if (state.xenon >= 20) {
-      targetType = 'xenon';
-    }
-  }
-
-  const boronAuthority = state.boronTankLevel >= 15 ? 1.0 : 0.35 + (state.boronTankLevel / 15) * 0.65;
-
-  if (targetType === 'void') {
-    state.boronTankLevel = Math.max(0, state.boronTankLevel - 4.5);
-    state.voidFraction = Math.max(0, state.voidFraction - 0.12 * boronAuthority);
-    state.coreTemp = Math.max(100, state.coreTemp - 12 * boronAuthority);
-    const nextAnomalies = { ...state.coreTileAnomalies };
-    if (nextAnomalies[tileIndex] === 'void') {
-      delete nextAnomalies[tileIndex];
-    } else if (boronAuthority > 0.6) {
-      const firstVoidKey = Object.keys(nextAnomalies).find(
-        (k) => nextAnomalies[Number(k)] === 'void'
-      );
-      if (firstVoidKey !== undefined) {
-        delete nextAnomalies[Number(firstVoidKey)];
-      }
-    }
-    state.coreTileAnomalies = nextAnomalies;
-    return { trimmed: 'void', remainingPct: Math.round(state.voidFraction * 100) };
-  }
-
-  if (targetType === 'xenon') {
-    state.boronTankLevel = Math.max(0, state.boronTankLevel - 3.0);
-    state.xenon = Math.max(0, state.xenon - 12);
-    const nextAnomalies = { ...state.coreTileAnomalies };
-    if (nextAnomalies[tileIndex] === 'xenon') {
-      delete nextAnomalies[tileIndex];
-    } else {
-      const firstXenonKey = Object.keys(nextAnomalies).find(
-        (k) => nextAnomalies[Number(k)] === 'xenon'
-      );
-      if (firstXenonKey !== undefined) {
-        delete nextAnomalies[Number(firstXenonKey)];
-      }
-    }
-    state.coreTileAnomalies = nextAnomalies;
-    return { trimmed: 'xenon', remainingPct: Math.round(state.xenon) };
-  }
-
-  return { trimmed: 'none', remainingPct: Math.round(state.voidFraction * 100) };
+): { trimmed: 'spent' | 'none'; remainingPct: number } {
+  const res = selectCoreChannelForRefuel(state, tileIndex);
+  return {
+    trimmed: res.isSpent ? 'spent' : 'none',
+    remainingPct: Object.keys(state.coreTileAnomalies).length,
+  };
 }
 
 /**
@@ -294,7 +306,11 @@ export function trimCoreChannelTile(
  * 3. Steam Drum Mass & Pressure Bridge + Bubbler Pool & Drain (UNIT B + UNIT A -> UNIT C)
  * 4. Turbine Mechanical Torque vs. 50Hz Electrical Load & Aux Switchgear (UNIT C <-> UNIT A)
  */
-export function stepReactorSimulation(state: ReactorState, dt: number): void {
+export function stepReactorSimulation(
+  state: ReactorState,
+  dt: number,
+  tutorialPhase: TutorialPhase = 'COMPLETED'
+): void {
   const delta = Math.min(dt, 0.1);
 
   if (state.boronDampingTimer > 0) {
@@ -325,13 +341,19 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
     );
   }
 
-  // Moving control rods or active АР servo regulation consumes hydraulic boron accumulator pressure
+  // Moving control rods or active АР servo regulation consumes hydraulic boron accumulator pressure;
+  // passive reserve replenishment keeps hydraulic pressure healthy during normal operation.
   const rodTravel = Math.abs(state.controlRods - prevRods);
   if (rodTravel > 0.0001 && !state.az5Active) {
     state.boronTankLevel = Math.max(0, state.boronTankLevel - rodTravel * 18.0);
   }
   if (state.autoRodEnabled && state.thermalPower > 300) {
     state.boronTankLevel = Math.max(0, state.boronTankLevel - 0.14 * delta);
+  }
+  if (!state.az5Active && state.boronTankLevel < 75 && state.boronReservePool > 0) {
+    const trickle = Math.min(0.18 * delta, state.boronReservePool);
+    state.boronTankLevel += trickle;
+    state.boronReservePool -= trickle;
   }
 
   // Low Boron Tank (< 25%) degrades negative neutron absorption worth of inserted control rods!
@@ -496,8 +518,38 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
       ? 1.0
       : clamp(1.0 - ((-90 - state.drumWaterLevel) / 260) * 0.62, 0.32, 1.0);
 
-  // Secondary Helium-N2 loop removes dry moderator heat alongside primary water loop
-  const heatInput = state.thermalPower * 0.16;
+  // Fuel Channel Burnup & Refueling Accounting (37 RBMK Fuel Channels on UNIT A-2)
+  const spentCount = Object.keys(state.coreTileAnomalies).length;
+  const fuelEfficiency = Math.max(0.55, 1 - spentCount * 0.065);
+  if (tutorialPhase === 'COMPLETED' && state.thermalPower > 300 && spentCount < 6) {
+    const burnRate = 0.55 + 0.65 * (state.thermalPower / NOMINAL_THERMAL_MW);
+    state.fuelBurnupTimer += burnRate * delta;
+    if (state.fuelBurnupTimer >= 42.0) {
+      state.fuelBurnupTimer -= 42.0;
+      let nextChannel: number | undefined = SPENT_FUEL_CHANNEL_ORDER.find(
+        (ch) => !state.coreTileAnomalies[ch]
+      );
+      if (nextChannel === undefined) {
+        for (let i = 0; i < 37; i++) {
+          if (!state.coreTileAnomalies[i]) {
+            nextChannel = i;
+            break;
+          }
+        }
+      }
+      if (nextChannel !== undefined) {
+        state.coreTileAnomalies = {
+          ...state.coreTileAnomalies,
+          [nextChannel]: 'spent',
+        };
+      }
+    }
+  }
+
+  // Secondary Helium-N2 loop removes dry moderator heat alongside primary water loop;
+  // 4+ un-refueled spent fuel rods cause localized core overheat until reloaded!
+  const spentOverheatInput = spentCount >= 4 ? (spentCount - 3) * 42.0 : 0;
+  const heatInput = state.thermalPower * 0.16 + spentOverheatInput;
   const ambientCooling = (state.coreTemp - 25) * 0.02;
   const gasHeatRemoval = Math.max(0, state.coreTemp - 180) * gasCoolingPower * 0.55;
   const waterHeatRemoval =
@@ -506,146 +558,103 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   state.coreTemp += (heatInput - ambientCooling - gasHeatRemoval - waterHeatRemoval) * 0.22 * delta;
   state.coreTemp = Math.max(20, state.coreTemp);
 
-  let voidTileCount = 0;
-  let xenonTileCount = 0;
-  for (const val of Object.values(state.coreTileAnomalies)) {
-    if (val === 'void') voidTileCount += 1;
-    else if (val === 'xenon') xenonTileCount += 1;
-  }
-
-  // Positive Void Fraction: driven by thermal-to-flow ratio, low drum water (< -80mm), and low pressure
-  let targetVoid = 0;
-  if (state.coreTemp > boilingPoint - 12) {
-    const heatToFlowRatio =
-      (state.thermalPower / NOMINAL_THERMAL_MW) /
-      Math.max(0.15, state.coolantFlow * waterSubmergence);
-    const pressureDropFactor = Math.max(
-      0.65,
-      NOMINAL_PRESSURE_BAR / Math.max(18, state.drumPressure)
-    );
-    const lowWaterVoidPenalty =
-      state.drumWaterLevel < -60
-        ? Math.min(0.62, ((-60 - state.drumWaterLevel) / 240) * 0.58)
-        : 0;
-    const highRodLowWaterSpike =
-      state.controlRods > 0.80 && (state.drumWaterLevel < -90 || state.waterReservoir < 40)
-        ? 0.22
-        : 0;
-    const baseBoilingVoid = Math.max(0, heatToFlowRatio * 0.40 * pressureDropFactor - 0.08);
-    targetVoid = Math.min(1.0, baseBoilingVoid + lowWaterVoidPenalty + highRodLowWaterSpike);
-  }
-
-  const voidTileFloor = voidTileCount * 0.145;
-  const effectiveTargetVoid = Math.max(targetVoid, voidTileFloor);
-  state.voidFraction += (effectiveTargetVoid - state.voidFraction) * 1.45 * delta;
-
-  // Cold feedwater surplus suppresses core steam voids
-  const nominalFeedwaterNeed = (state.thermalPower / 1920) * 0.50;
-  const surplusFeedwater = Math.max(
-    0,
-    state.feedwaterValve * reservoirSuctionFactor - nominalFeedwaterNeed
-  );
-  if (surplusFeedwater > 0.03 && state.voidFraction > 0.08) {
-    state.voidFraction = Math.max(0.04, state.voidFraction - surplusFeedwater * 0.34 * delta);
-    if (surplusFeedwater >= 0.14 && voidTileCount > 0 && state.voidFraction < voidTileCount * 0.14) {
-      const firstVoidKey = Object.keys(state.coreTileAnomalies).find(
-        (k) => state.coreTileAnomalies[Number(k)] === 'void'
-      );
-      if (firstVoidKey !== undefined) {
-        const nextAnom = { ...state.coreTileAnomalies };
-        delete nextAnom[Number(firstVoidKey)];
-        state.coreTileAnomalies = nextAnom;
-        voidTileCount -= 1;
-      }
-    }
-  }
-
-  if (state.boronDampingTimer > 0) {
-    state.voidFraction = Math.max(0, state.voidFraction - 0.05 * delta);
-  }
-  state.voidFraction = clamp(state.voidFraction, 0, 1.0);
-
-  if (state.voidFraction > 0.35 && voidTileCount === 0) {
-    const nextAnom = { ...state.coreTileAnomalies };
-    for (const tid of DEFAULT_VOID_TILES) {
-      nextAnom[tid] = 'void';
-    }
-    state.coreTileAnomalies = nextAnom;
-  } else if (state.voidFraction < 0.22 && voidTileCount > 0) {
-    const nextAnom: Record<number, 'void' | 'xenon'> = {};
-    for (const [k, v] of Object.entries(state.coreTileAnomalies)) {
-      if (v !== 'void') nextAnom[Number(k)] = v;
-    }
-    state.coreTileAnomalies = nextAnom;
-  }
-
-  // Xenon-135 & Iodine-135 Fission Poison Kinetics (~50% smoother evolution over 15-30s)
-  const normalizedPower = state.thermalPower / NOMINAL_THERMAL_MW;
-  const iodineProduction = normalizedPower * 0.95;
-  const iodineDecay = state.iodine * 0.024;
-  state.iodine = clamp(state.iodine + (iodineProduction - iodineDecay) * delta, 0, 100);
-
-  const xenonFromIodine =
-    state.iodine > 12 && state.thermalPower < 1650
-      ? (state.iodine - 10) * (1 - state.thermalPower / 1800) * 0.08
-      : iodineDecay;
-
-  const isXenonBurnoutActive = state.thermalPower >= 1800 && state.controlRods >= 0.60;
-  if (isXenonBurnoutActive && state.xenon > 5) {
-    state.xenon = Math.max(0, state.xenon - 2.2 * delta);
-    if (xenonTileCount > 0 && state.xenon < xenonTileCount * 14) {
-      const firstXenonKey = Object.keys(state.coreTileAnomalies).find(
-        (k) => state.coreTileAnomalies[Number(k)] === 'xenon'
-      );
-      if (firstXenonKey !== undefined) {
-        const nextAnom = { ...state.coreTileAnomalies };
-        delete nextAnom[Number(firstXenonKey)];
-        state.coreTileAnomalies = nextAnom;
-        xenonTileCount -= 1;
-      }
-    }
-  } else {
-    const passiveBurnout = state.xenon * normalizedPower * 0.028;
-    const xenonNaturalDecay = state.xenon * 0.008;
-    state.xenon += (xenonFromIodine - passiveBurnout - xenonNaturalDecay) * delta;
-  }
-
-  const xenonTileFloor = xenonTileCount * 14;
-  if (!isXenonBurnoutActive && xenonTileFloor > state.xenon) {
-    state.xenon += (xenonTileFloor - state.xenon) * 0.65 * delta;
-  }
-  state.xenon = clamp(state.xenon, 0, 100);
-
-  if (state.xenon > 30 && xenonTileCount === 0) {
-    const nextAnom = { ...state.coreTileAnomalies };
-    for (const tid of DEFAULT_XENON_TILES) {
-      if (!nextAnom[tid]) nextAnom[tid] = 'xenon';
-    }
-    state.coreTileAnomalies = nextAnom;
-  } else if (state.xenon < 20 && xenonTileCount > 0) {
-    const nextAnom: Record<number, 'void' | 'xenon'> = {};
-    for (const [k, v] of Object.entries(state.coreTileAnomalies)) {
-      if (v !== 'xenon') nextAnom[Number(k)] = v;
-    }
-    state.coreTileAnomalies = nextAnom;
-  }
-
-  // Net Reactivity & Fission Thermal Output (`thermalPower` in MWt)
-  // Low boronTankLevel reduces negative rod worth (effective rod withdrawal creeps higher!)
+  // Low Boron Tank (< 25%) degrades negative neutron absorption worth of inserted control rods!
   const effectiveRodPosition = clamp(
     state.controlRods + (1 - state.controlRods) * (1 - boronEffectiveness) * 0.34,
     0,
     1
   );
+
+  // Coupled Control Rods (UNIT A-2) <-> Feedwater Inflow (UNIT B) Reactivity Balance:
+  // - Rod heat demand scales 1-to-1 with fresh fuel: 55% rods => 0.50, matching 50% Feedwater @ 4 pumps.
+  // - Rod > Water (+imbalance): positive reactivity -> Steam Void rises.
+  // - Water > Rod (-imbalance): cold over-quench -> negative reactivity -> Xenon-135 rises.
+  const rodHeatDemand =
+    effectiveRodPosition <= 0.10
+      ? 0
+      : ((effectiveRodPosition - 0.10) / 0.90) * fuelEfficiency;
+  const pumpDelivery = clamp(state.coolantFlow / 0.80, 0.20, 1.02) * waterSubmergence;
+  const effectiveWaterInflow = state.feedwaterValve * reservoirSuctionFactor * pumpDelivery;
+  const rodWaterImbalance = rodHeatDemand - effectiveWaterInflow;
+
+  // Reactivity-Moderated Steam Void Fraction (No tile latching)
+  let targetVoid = 0;
+  if (state.coreTemp > boilingPoint - 12 || state.thermalPower > 180) {
+    const excessHeatOverWater = Math.max(0, rodWaterImbalance - 0.05) * 1.55;
+    const lowWaterVoidPenalty =
+      state.drumWaterLevel < -60
+        ? Math.min(0.55, ((-60 - state.drumWaterLevel) / 240) * 0.52)
+        : 0;
+    const baselineBoilingVoid =
+      state.thermalPower > 200
+        ? clamp(0.06 + (state.thermalPower / NOMINAL_THERMAL_MW) * 0.08, 0, 0.16)
+        : 0;
+    targetVoid = clamp(
+      baselineBoilingVoid + excessHeatOverWater + lowWaterVoidPenalty,
+      0,
+      1.0
+    );
+  }
+
+  const voidRate = targetVoid > state.voidFraction ? 1.15 : 1.35;
+  state.voidFraction += (targetVoid - state.voidFraction) * voidRate * delta;
+
+  if (rodWaterImbalance < -0.03 && state.voidFraction > 0.04) {
+    state.voidFraction = Math.max(
+      0.04,
+      state.voidFraction - Math.abs(rodWaterImbalance) * 0.35 * delta
+    );
+  }
+  if (state.boronDampingTimer > 0) {
+    state.voidFraction = Math.max(0, state.voidFraction - 0.06 * delta);
+  }
+  state.voidFraction = clamp(state.voidFraction, 0, 1.0);
+
+  // Reactivity-Moderated Xenon-135 & Iodine-135 Fission Poison Kinetics (Cold-start protected)
+  const normalizedPower = state.thermalPower / NOMINAL_THERMAL_MW;
+  const iodineProduction = normalizedPower * 0.95;
+  const iodineDecay = state.iodine * 0.024;
+  state.iodine = clamp(state.iodine + (iodineProduction - iodineDecay) * delta, 0, 100);
+
+  const coreHasStarted =
+    state.iodine > 2.5 || state.coreTemp > 145 || state.thermalPower > 180;
+  if (coreHasStarted) {
+    const overcoolExcess = Math.max(0, -rodWaterImbalance - 0.055);
+    const lowFluxDrop =
+      state.iodine > 10 && effectiveRodPosition < 0.38
+        ? (0.38 - effectiveRodPosition) * 5.5
+        : 0;
+    if (overcoolExcess > 0 || lowFluxDrop > 0) {
+      const xenonBuildRate =
+        overcoolExcess * 11.5 + lowFluxDrop + state.iodine * 0.025;
+      state.xenon += xenonBuildRate * delta;
+    } else {
+      const targetEqXenon = state.thermalPower > 150 ? 6 : 0;
+      const burnSpeed =
+        1.6 + Math.max(0, rodWaterImbalance) * 4.5 + normalizedPower * 0.9;
+      if (state.xenon > targetEqXenon) {
+        state.xenon = Math.max(targetEqXenon, state.xenon - burnSpeed * delta);
+      } else {
+        state.xenon += (targetEqXenon - state.xenon) * 0.35 * delta;
+      }
+    }
+  }
+  state.xenon = clamp(state.xenon, 0, 100);
+
+  // Net Reactivity & Fission Thermal Output (`thermalPower` in MWt)
   const graphiteReactivity =
     state.graphiteTemp > 540 ? ((state.graphiteTemp - 540) / 220) * 0.025 : 0;
   const rodReactivity = (effectiveRodPosition - 0.48) * 0.08;
+  const waterBalanceReactivity = coreHasStarted
+    ? clamp(rodWaterImbalance * 0.048, -0.028, 0.028)
+    : 0;
   const voidReactivity = state.voidFraction * VOID_COEFFICIENT;
   const xenonReactivity = -state.xenon * XENON_SCALE;
   const dopplerReactivity = -(state.coreTemp - 280) * DOPPLER_COEFFICIENT;
 
   state.reactivity =
     rodReactivity +
+    waterBalanceReactivity +
     voidReactivity +
     xenonReactivity +
     dopplerReactivity +
@@ -662,6 +671,7 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   } else {
     baseEquilibriumMW = 3200 + ((effectiveRodPosition - 0.90) / 0.10) * 380;
   }
+  baseEquilibriumMW *= fuelEfficiency;
 
   const voidPowerBonus =
     effectiveRodPosition > 0.10
@@ -675,26 +685,7 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   const boronDampingPenalty = state.boronDampingTimer > 0 ? 520 : 0;
   const az5SpikeMW = az5TipReactivityBonus > 0 ? az5TipReactivityBonus * 25000 : 0;
 
-  // Auto Regulator (АР) micro-trimming saturates & trips OFF if demand or steam draw diverges > 120-160 MWt
-  const turbineValveAvg = (state.turbines[0].valve + state.turbines[1].valve) * 0.5;
-  const approxSteamDrawMWe = state.turbines[0].tripped
-    ? 0
-    : gridConnected
-      ? turbineValveAvg * 1000
-      : turbineValveAvg * 250;
-  const steamDrawMWt = (approxSteamDrawMWe / 1000) * NOMINAL_THERMAL_MW;
-  const totalTargetGridMW = state.substations.reduce((s, x) => s + x.targetMW, 0);
-  const targetDemandMWt = (totalTargetGridMW / 1000) * NOMINAL_THERMAL_MW;
-
-  if (state.autoRodEnabled && !state.az5Active && gridConnected) {
-    if (
-      Math.abs(steamDrawMWt - baseEquilibriumMW) > 130 ||
-      Math.abs(targetDemandMWt - baseEquilibriumMW) >= 160
-    ) {
-      state.autoRodEnabled = false;
-    }
-  }
-
+  // Auto Regulator (АР) stays latched unless AZ-5 emergency scram is active
   const apMicroTrimMWt =
     state.autoRodEnabled && !state.az5Active && effectiveRodPosition > 0.10 && state.boronTankLevel > 8
       ? clamp(-(voidPowerBonus - xenonPowerPenalty), -45, 45)
@@ -725,11 +716,8 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   // Update 37-tile RBMK Core Map local flux values
   const fluxPercent = Math.min(100, (state.thermalPower / NOMINAL_THERMAL_MW) * 100);
   for (let i = 0; i < 37; i++) {
-    const anomaly = state.coreTileAnomalies[i];
-    if (anomaly === 'void') {
-      state.rodTilesFlux[i] = 98;
-    } else if (anomaly === 'xenon') {
-      state.rodTilesFlux[i] = 18;
+    if (state.coreTileAnomalies[i] === 'spent') {
+      state.rodTilesFlux[i] = 10;
     } else {
       const radialWeight = i < 7 ? 1.15 : i < 19 ? 1.0 : 0.85;
       state.rodTilesFlux[i] = Math.min(100, fluxPercent * radialWeight);
@@ -739,47 +727,44 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   // ============================================================================
   // STAGE 3B: STEAM DRUM WATER MASS, SINGLE-TRUTH PRESSURE & BUBBLER POOL
   // ============================================================================
-  // 1. Steam Boiled from Core Heat + Coolant Circulation + Drum Submergence (in gross MWe steam units:
-  //    At 1920 MWt nominal, 4/4 pumps @ 60% throttle -> boils 630 MWe gross steam = 600 MWe net + 30 MWe house load)
+  // 1. Steam Boiled from Core Heat + Coolant Circulation + Drum Submergence:
+  //    At 1920 MWt nominal (55% rods), 4/4 pumps @ 60% throttle -> boils 600 MW steam into battery generators
   const voidBoilingPenalty =
     state.voidFraction > 0.34 ? clamp(1.0 - (state.voidFraction - 0.34) * 1.15, 0.32, 1.0) : 1.0;
   const pumpTransferCapMWe = (state.coolantFlow / 0.78) * 760;
   const rawThermalSteamMWe =
     state.coreTemp > boilingPoint - 22
-      ? (state.thermalPower / 1920) * 630
-      : (state.thermalPower / 1920) * 210;
+      ? (state.thermalPower / 1920) * 600
+      : (state.thermalPower / 1920) * 180;
   const steamBoiledMWe =
     Math.min(rawThermalSteamMWe, pumpTransferCapMWe * 1.38) *
     waterSubmergence *
     voidBoilingPenalty;
 
-  // 2. Feedwater Mass Inflow (`feedwaterValve = 0.50` supplies exactly `630 MWe` mass equivalent)
-  const feedwaterSupplyMWe = state.feedwaterValve * 1260 * reservoirSuctionFactor;
+  // 2. Feedwater Mass Inflow (`feedwaterValve = 0.50` supplies exactly `600 MW` mass equivalent)
+  const feedwaterSupplyMWe = state.feedwaterValve * 1200 * reservoirSuctionFactor;
 
   // Integrate Drum Water Level (`drumWaterLevel` in mm: `d(Level)/dt = k_lvl * (FeedwaterIn - SteamBoiled)`):
-  // During cold/pre-sync startup (`!gridConnected` and `feedwaterValve <= 0.62`), a deaerator overflow weir
-  // prevents unboiled 50% startup water from flooding > +55mm while warming up, whereas over-feeding (>68%)
-  // or failing to lower Feedwater after dropping load online floods past +100mm into Wet Steam Carryover!
   const netWaterMassMWe = feedwaterSupplyMWe - steamBoiledMWe;
   let dWaterMmPerSec = netWaterMassMWe * 0.058;
 
-  if (!gridConnected && state.drumWaterLevel > 45 && netWaterMassMWe > 0 && state.feedwaterValve <= 0.65) {
-    // Startup high-level overflow weir returns cold excess smoothly before grid sync
+  if (state.drumPressure < 58 && state.drumWaterLevel > 45 && netWaterMassMWe > 0 && state.feedwaterValve <= 0.65) {
+    // Startup high-level overflow weir returns cold excess smoothly during initial drum boil-up
     dWaterMmPerSec = (52 - state.drumWaterLevel) * 0.55;
   } else if (Math.abs(netWaterMassMWe) < 34 && Math.abs(state.drumWaterLevel) < 68) {
-    // Gentle natural level self-centering within nominal ±34 MWe balance band
+    // Gentle natural level self-centering within nominal ±34 MW balance band
     dWaterMmPerSec += -state.drumWaterLevel * 0.22;
   }
 
   state.drumWaterLevel = clamp(state.drumWaterLevel + dWaterMmPerSec * delta, -400, 400);
 
-  // Wet Steam Carryover (`drumWaterLevel > +100mm`): floods moisture separators and slugs turbine blades!
+  // Wet Steam Carryover (`drumWaterLevel > +100mm`): floods moisture separators and reduces charger efficiency
   state.wetSteamSeverity =
     state.drumWaterLevel > 100
       ? clamp((state.drumWaterLevel - 100) / 170, 0, 1)
       : 0;
 
-  // 3. Bubbler Pool Back-Pressure & Steam Relief / Vent / Condenser Dump
+  // 3. Bubbler Pool Back-Pressure, Automatic Steam Generator Intake & Relief
   if (state.drumPressure >= 85) state.reliefValveOpen = true;
   if (state.drumPressure <= 75) state.reliefValveOpen = false;
 
@@ -790,17 +775,13 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
       : 1.0;
 
   const pressureHeadRatio = Math.max(0.15, state.drumPressure / NOMINAL_PRESSURE_BAR);
-  const turbineGrossDrawMWe = state.turbines[0].tripped
-    ? 0
-    : turbineValveAvg * TURBINE_GROSS_RATED_MWE * pressureHeadRatio;
+  const boilerHead = clamp((state.drumPressure - 16) / 52, 0, 1.12);
+  const autoGenSteamDrawMWe =
+    state.az5Active || state.coreMeltdown || state.steamExplosion
+      ? 0
+      : Math.min(MAX_BATTERY_INPUT_MW, steamBoiledMWe * boilerHead);
 
-  // Pre-sync automatic БРУ-К startup pressure regulator bleeds surplus steam above 70 BAR while off-grid
-  const preSyncBypassMWe =
-    !gridConnected && state.drumPressure > 69.5 && steamBoiledMWe > turbineGrossDrawMWe
-      ? (steamBoiledMWe - turbineGrossDrawMWe) * clamp((state.drumPressure - 69.0) * 0.55, 0, 1) * bubblerReliefCapacity
-      : 0;
-
-  // Manual UNIT C Steam Vent & Automatic Relief Valve dump steam into the Bubbler Pool
+  // Manual Steam Vent & Automatic Relief Valve dump steam into the Bubbler Pool
   const manualVentMWe =
     (state.ventingSteam || state.steamDumpValve)
       ? 260 * pressureHeadRatio * bubblerReliefCapacity
@@ -815,11 +796,14 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
       ? 145 * pressureHeadRatio
       : 0;
 
+  const coreOverheatPressureMWe =
+    state.coreTemp > 580 ? (state.coreTemp - 580) * 0.35 : 0;
+
   // Single Source of Truth Differential Equation for `drumPressure` (BAR):
   const netSteamBalanceMWe =
-    steamBoiledMWe -
-    turbineGrossDrawMWe -
-    preSyncBypassMWe -
+    steamBoiledMWe +
+    coreOverheatPressureMWe -
+    autoGenSteamDrawMWe -
     manualVentMWe -
     safetyReliefMWe -
     condenserDrainSteamMWe;
@@ -828,9 +812,7 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   if (state.thermalPower < 10 && state.drumPressure > 1.0) {
     state.drumPressure = Math.max(1.0, state.drumPressure - 1.3 * delta);
   } else {
-    // Smooth 15-30s pressure evolution: pre-sync cold boil-up builds to 65 BAR steadily;
-    // online, every ±100 MWe steam mismatch shifts drumPressure by ±1.05 BAR/s!
-    const pressurizationGain = !gridConnected && state.drumPressure < 64 ? 0.0155 : 0.0105;
+    const pressurizationGain = state.drumPressure < 64 ? 0.0155 : 0.0105;
     state.drumPressure += netSteamBalanceMWe * pressurizationGain * delta;
 
     // If Bubbler Pool is choked (>= 95%) while relief/vent is trying to open, back-pressure rises
@@ -840,11 +822,10 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   }
   state.drumPressure = clamp(state.drumPressure, 1.0, 120.0);
 
-  // 4. Bubbler Pool Level (`bubblerLevel` 0-100%) & Regional Water Reservoir Conservation (~60% calmer auxiliary fill)
+  // 4. Bubbler Pool Level (`bubblerLevel` 0-100%) & Regional Water Reservoir Conservation
   const steamIntoBubblerPctPerSec =
     ((manualVentMWe + safetyReliefMWe) / 260) * 2.1 +
-    (preSyncBypassMWe / 600) * 0.18 +
-    (gridConnected && !state.condenserVacActive ? 1.1 : 0);
+    (state.thermalPower > 400 && !state.condenserVacActive ? 0.65 : 0);
   const bubblerDrainOutPctPerSec = state.bubblerDraining && state.bubblerLevel > 4 ? 9.5 : 0.22;
 
   state.bubblerLevel = clamp(
@@ -854,11 +835,9 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   );
 
   // Water Reservoir & Regional Basins:
-  // Closed-loop condensed turbine steam returns ~98.5% to hotwell; open Steam Vent / Relief wastes water!
-  // Pulling BUBBLER DRAIN recycles condensed bubbler water back into the regional basins!
   const wastedVentWaterRate = ((manualVentMWe + safetyReliefMWe) / 260) * 0.9;
   const highPumpDrawRate =
-    gridConnected
+    state.thermalPower > 400
       ? Math.max(0, (state.pumpThrottle[0] + state.pumpThrottle[1]) * 0.5 - 66) * 0.014 +
         Math.max(0, state.feedwaterValve - 0.58) * 0.55
       : 0;
@@ -882,152 +861,46 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   );
 
   // ============================================================================
-  // STAGE 4: TURBINE TORQUE, 4 AUX SWITCHES, 50HZ GRID & RADIATION (UNIT C <-> UNIT A)
+  // STAGE 4: STATION BATTERY STORAGE, SINGLE GRID WHEEL & RADIATION (UNIT C <-> UNIT A)
   // ============================================================================
-  // Internal Plant House Electrical Load (`houseLoadMW`) controlled by UNIT C Aux Switchgear:
-  // Baseline ON switches = AVR (8 MW) + KGB Trunk (10 MW) + Condenser Vacuum (12 MW) = 30 MW;
-  // Flipping Ventilation ON adds +15 MW (= 45 MW total house load).
-  state.houseLoadMW =
-    (state.ventilationActive ? 15 : 0) +
-    (state.avrActive ? 8 : 0) +
-    (state.kgbLineActive ? 10 : 0) +
-    (state.condenserVacActive ? 12 : 0);
+  const wetSteamEff = 1.0 - state.wetSteamSeverity * 0.25;
+  const vacEff = state.condenserVacActive ? 1.0 : 0.82;
+  state.energyCreatedMW =
+    state.az5Active || state.coreMeltdown || state.steamExplosion
+      ? 0
+      : Math.round(clamp(autoGenSteamDrawMWe * wetSteamEff * vacEff, 0, MAX_BATTERY_INPUT_MW));
 
-  const totalAllocatedMW = state.substations.reduce((s, x) => s + x.allocatedMW, 0);
+  state.energyDemandMW = state.substations.reduce((s, x) => s + x.targetMW, 0);
+  state.batteryOutputValve = clamp(state.batteryOutputValve, 0, 1);
+  const requestedGridMW = Math.round(state.batteryOutputValve * 1000);
 
-  // Efficiency multipliers from Wet Steam Carryover, Condenser Vacuum (Switch 4), and AVR Excitation (Switch 2)
-  const wetSteamTorqueEff = 1.0 - state.wetSteamSeverity * 0.28;
-  const condenserTorqueEff = state.condenserVacActive ? 1.0 : 0.78;
-  const avrTorqueEff = state.avrActive ? 1.0 : 0.92;
+  // Battery supplies requestedGridMW while stored charge > 1 MWh; if depleted, caps at energyCreatedMW
+  const deliveredGridMW =
+    state.batteryStoredMWh > 1.0
+      ? requestedGridMW
+      : Math.min(requestedGridMW, state.energyCreatedMW);
 
+  const netChargeFlowMW = state.energyCreatedMW - deliveredGridMW;
+  state.batteryStoredMWh = clamp(
+    state.batteryStoredMWh + netChargeFlowMW * 0.045 * delta,
+    0,
+    1000
+  );
+
+  state.totalElectricalMW = deliveredGridMW;
+  state.houseLoadMW = (state.ventilationActive ? 15 : 0) + (state.kgbLineActive ? 10 : 0);
+
+  const syncedRpm = clamp((state.energyCreatedMW / 600) * 3000, 0, 3000);
+  const isOnline = deliveredGridMW > 0 || state.energyCreatedMW > 20;
   state.turbines.forEach((turb) => {
-    if (turb.tripped) {
-      turb.valve = 0;
-      turb.gridConnected = false;
-    }
-
-    const pressureFactor =
-      state.drumPressure >= 58
-        ? state.drumPressure / NOMINAL_PRESSURE_BAR
-        : state.drumPressure >= 40
-          ? 0.52 + ((state.drumPressure - 40) / 18) * (58 / NOMINAL_PRESSURE_BAR - 0.52)
-          : Math.max(0.12, (state.drumPressure - 8) / 32) * 0.52;
-
-    const steamForce =
-      turb.tripped
-        ? 0
-        : turb.valve * pressureFactor * wetSteamTorqueEff * condenserTorqueEff;
-
-    if (!turb.gridConnected) {
-      // PHASE A — UNSYNCHRONIZED (MAIN BREAKER OPEN — Cold Start & Post-Blackout Recovery):
-      // Free-spinning rotor with zero electrical grid load. Around ~15%-20% throttle (~18% nominal
-      // at 65-70 BAR), rotor reaches 3000 RPM / 50.0 Hz (49.5-50.5 Hz green sync window).
-      // Opening much higher (>24%) with no grid load accelerates rotor into unloaded overspeed!
-      if (!turb.tripped && turb.valve > 0.01 && state.drumPressure >= 25) {
-        const steamHeadScale = clamp(state.drumPressure / 66, 0.35, 1.12);
-        let freeTargetRpm: number;
-        if (turb.valve <= 0.22) {
-          const rawSpinRpm = (turb.valve / 0.18) * 3000 * steamHeadScale;
-          // Gentle AVR governor capture inside ~15%-21% throttle when steam pressure is healthy
-          if (
-            state.avrActive &&
-            turb.valve >= 0.15 &&
-            turb.valve <= 0.21 &&
-            state.drumPressure >= 54
-          ) {
-            freeTargetRpm = 3000 + (turb.valve - 0.18) * 420;
-          } else {
-            freeTargetRpm = rawSpinRpm;
-          }
-        } else {
-          freeTargetRpm =
-            (3025 + (turb.valve - 0.22) * 560) * clamp(steamHeadScale, 0.55, 1.12);
-        }
-        turb.rpm += (freeTargetRpm - turb.rpm) * 1.85 * delta;
-        if (
-          state.avrActive &&
-          turb.valve >= 0.16 &&
-          turb.valve <= 0.20 &&
-          Math.abs(3000 - turb.rpm) < 8
-        ) {
-          turb.rpm = 3000;
-        }
-      } else {
-        const coastTargetRpm = steamForce * 9000;
-        turb.rpm += (coastTargetRpm - turb.rpm) * 1.45 * delta;
-      }
-
-      turb.rpm = Math.max(0, turb.rpm);
-      turb.freqHz = Number((turb.rpm / 60).toFixed(2));
-      turb.electricalMW = 0;
-
-      const freqDiffHz = (turb.rpm - 3000) / 60;
-      if (Math.abs(freqDiffHz) <= 0.52 && turb.rpm >= 2965) {
-        // Inside the 49.5-50.5 Hz green sync window: synchroscope gently aligns to 0° (12 o'clock)
-        turb.syncPhase += (0 - turb.syncPhase) * Math.min(1, delta * 4.5);
-        if (Math.abs(turb.syncPhase) < 0.5) turb.syncPhase = 0;
-      } else {
-        const slipHz =
-          Math.abs(freqDiffHz) < 0.15
-            ? 0.25
-            : Math.sign(freqDiffHz) * Math.min(1.6, Math.abs(freqDiffHz));
-        let nextPhase = turb.syncPhase + slipHz * 360 * delta;
-        nextPhase = ((((nextPhase + 180) % 360) + 360) % 360) - 180;
-        turb.syncPhase = nextPhase;
-      }
-
-      if (turb.rpm > 3360) {
-        turb.tripped = true;
-        turb.valve = 0;
-      }
-    } else {
-      // PHASE B — TRUE GRID-LOCKED SYNCHRONOUS OPERATION (MAIN BREAKER CLOSED):
-      // Generator rotor is magnetically locked onto the vast 50.0 Hz Soviet regional grid
-      // (3000 RPM / 50.0 Hz steady, with only tiny ±0.02-0.05 Hz micro-load tremors on transients).
-      // TURBINE THROTTLE now directly controls Electrical Torque / Megawatts pushed to the grid!
-      const grossMechanicalMWe = Math.min(
-        1200,
-        steamForce * TURBINE_GROSS_RATED_MWE * avrTorqueEff
-      );
-      const netAvailableMWe = Math.max(0, grossMechanicalMWe - state.houseLoadMW);
-      turb.electricalMW = Math.min(550, Math.round(netAvailableMWe * 0.5));
-
-      const wetMicroTremorHz =
-        state.wetSteamSeverity > 0.05
-          ? Math.sin(Date.now() * 0.024) * Math.min(0.05, state.wetSteamSeverity * 0.08)
-          : 0;
-      const targetLockedHz = 50.0 + wetMicroTremorHz;
-      const targetLockedRpm = targetLockedHz * 60;
-
-      turb.rpm = clamp(
-        turb.rpm + (targetLockedRpm - turb.rpm) * Math.min(1, delta * 6.5),
-        2997,
-        3003
-      );
-      if (Math.abs(3000 - turb.rpm) < 0.4 && state.wetSteamSeverity <= 0.05) {
-        turb.rpm = 3000;
-      }
-      turb.freqHz = Number((turb.rpm / 60).toFixed(2));
-      turb.syncPhase = 0;
-
-      // Reverse-Power / Steam Starvation Protection & Severe Crisis Trip:
-      // Breaker ONLY trips open during locked play if steam pressure collapses (< 25 BAR —
-      // motoring the turbine!) or during an emergency AZ-5 scram / severe core crisis.
-      if (
-        state.drumPressure < 25 ||
-        state.az5Active ||
-        state.coreMeltdown ||
-        state.steamExplosion
-      ) {
-        turb.tripped = true;
-        turb.gridConnected = false;
-        turb.valve = 0;
-        turb.electricalMW = 0;
-      }
-    }
+    turb.valve = state.batteryOutputValve;
+    turb.rpm = syncedRpm;
+    turb.freqHz = isOnline ? 50.0 : 0;
+    turb.syncPhase = 0;
+    turb.gridConnected = isOnline;
+    turb.electricalMW = Math.round(deliveredGridMW * 0.5);
+    turb.tripped = false;
   });
-
-  state.totalElectricalMW = state.turbines[0].electricalMW + state.turbines[1].electricalMW;
 
   // Containment & Control Room Radiation Conservation (`roomRadiation` in R/h):
   // - Leaks upward when UNIT B Seal Scrubbers (`sealToggles`) are OFF under gas pressure,
@@ -1056,15 +929,12 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
   );
 
   // ============================================================================
-  // STAGE 5: SUBSTATION QUOTA & TELEMETRY EVALUATION (GRID-LOCKED POWER BALANCE)
+  // STAGE 5: SUBSTATION QUOTA & TELEMETRY EVALUATION (BATTERY DISPATCH BALANCE)
   // ============================================================================
-  const gridLocked = Boolean(state.turbines[0]?.gridConnected);
+  const totalAllocatedMW = state.substations.reduce((s, x) => s + x.allocatedMW, 0);
   const totalTargetMW = state.substations.reduce((s, x) => s + x.targetMW, 0);
-  const generatedGrossMWe = gridLocked ? state.totalElectricalMW + state.houseLoadMW : 0;
-  const allocatedGrossMWe = totalAllocatedMW + state.houseLoadMW;
-  const neededGrossMWe = totalTargetMW + state.houseLoadMW;
-  const surplusGrossMWe = generatedGrossMWe - neededGrossMWe;
-  const hasEnoughPower = gridLocked && generatedGrossMWe >= allocatedGrossMWe - 20;
+  const hasEnoughPower = state.totalElectricalMW >= totalAllocatedMW - 20;
+  const surplusGridMW = state.totalElectricalMW - totalTargetMW;
 
   state.substations[0].allocatedH2O = Math.round(state.pripyatWater);
   state.substations[2].allocatedH2O = Math.round(state.kolkhozWater);
@@ -1075,9 +945,9 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
     const mwMet = hasEnoughPower && leverMatchesTarget;
 
     if (!hasEnoughPower && sub.allocatedMW > 0) {
-      sub.statusText = `GEN LOW (${Math.round(state.totalElectricalMW)}/${totalAllocatedMW}MW)`;
-    } else if (gridLocked && surplusGrossMWe > 60 && sub.allocatedMW > 0) {
-      sub.statusText = `SURPLUS (+${Math.round(surplusGrossMWe)}MW)`;
+      sub.statusText = `LOW OUT (${Math.round(state.totalElectricalMW)}/${totalAllocatedMW}MW)`;
+    } else if (surplusGridMW > 65 && sub.allocatedMW > 0) {
+      sub.statusText = `SURPLUS (+${Math.round(surplusGridMW)}MW)`;
     } else if (sub.id === 1) {
       sub.statusText = mwMet ? 'HEATING OK' : 'HEATING LOW';
     } else if (sub.id === 2) {
@@ -1101,55 +971,22 @@ export function stepReactorSimulation(state: ReactorState, dt: number): void {
 }
 
 /**
- * Main Breaker Synchronization on UNIT C
+ * Legacy compatibility stub (UNIT C now dispatches continuously via Station Battery Bank)
  */
 export function toggleGridBreaker(state: ReactorState, turbineIndex: 0 | 1 = 0): {
   success: boolean;
   reason?: string;
 } {
   const turb = state.turbines[turbineIndex];
-
-  if (turb.gridConnected) {
-    state.turbines.forEach((t) => {
-      t.gridConnected = false;
-      t.electricalMW = 0;
-    });
-    return { success: true };
+  if (turb) {
+    turb.tripped = false;
+    turb.gridConnected = true;
   }
-
-  if (turb.tripped) {
-    return { success: false, reason: 'TURBINE TRIPPED // FLIP COND/RESET SWITCH 4 ON UNIT C' };
-  }
-
-  if (state.drumPressure < 30) {
-    return { success: false, reason: 'LOW STEAM PRESSURE (<30 BAR) // BOIL STEAM FIRST' };
-  }
-
-  const phaseError = Math.abs(turb.syncPhase);
-  const maxPhaseWindow = state.avrActive ? 55 : 32;
-
-  if (turb.rpm >= 2965 && turb.rpm <= 3040 && phaseError <= maxPhaseWindow) {
-    state.turbines.forEach((t) => {
-      t.tripped = false;
-      t.gridConnected = true;
-      t.rpm = 3000;
-      t.freqHz = 50.0;
-      t.syncPhase = 0;
-    });
-    return { success: true };
-  } else {
-    turb.tripped = true;
-    turb.gridConnected = false;
-    turb.valve = 0;
-    return {
-      success: false,
-      reason: `OUT OF SYNC! (${(turb.rpm / 60).toFixed(1)} HZ / ${Math.round(turb.rpm)} RPM — SPIN TO 50.0 HZ FIRST!)`
-    };
-  }
+  return { success: true };
 }
 
 /**
- * Volkov Training Drill & Live Multi-Panel Causal Order Guide (Steps 0–8 + Live Shift)
+ * Volkov Training Drill & Live Multi-Panel Causal Order Guide (Steps 0–7 + Live Shift)
  */
 export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhase): TutorialPrompt {
   switch (currentPhase) {
@@ -1159,7 +996,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       }
       return {
         phase: 'STEP_0_PICKUP_WEPAD',
-        header: '>> STEP 0/8 [DESK — WE-PAD 84]:',
+        header: '>> STEP 0/7 [DESK — WE-PAD 84]:',
         body: 'ACTION: PRESS [E] (OR CLICK) TO PICK UP YOUR "WE-PAD 84" TABLET FROM THE DESK ([TAB] TO INSPECT CLOSE-UP).',
         hint: 'WHY: Your WePad 84 links to Plant Director Volkov and tracks live RBMK-1000 physics across all consoles.',
         panelKey: 'GO TO: [KEY 4] INSPECTOR DESK',
@@ -1180,7 +1017,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       }
       return {
         phase: 'STEP_1_COOLING',
-        header: '>> STEP 1/8 [KEY 3 -> UNIT B // COOLING & GAS]:',
+        header: '>> STEP 1/7 [KEY 3 -> UNIT B // COOLING & GAS]:',
         body: 'ACTION: ON [UNIT B], START ALL 4 "MAIN CIRC. PUMPS", SCROLL "FEEDWATER VALVE" TO 50%, AND VERIFY SCRUBBERS / HE-N2 GAS.',
         hint: 'WHY: Flooded fuel tubes keep DRUM LEVEL near 0mm & STEAM VOID low; He-N2 & Scrubbers cool graphite bricks; Oil Cooler saves bearings.',
         panelKey: 'GO TO: [KEY 3] UNIT B (FAR LEFT)',
@@ -1200,7 +1037,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       }
       return {
         phase: 'STEP_2_PULL_RODS',
-        header: '>> STEP 2/8 [KEY 3 -> UNIT A-2 // BORON RODS]:',
+        header: '>> STEP 2/7 [KEY 3 -> UNIT A-2 // BORON RODS]:',
         body: 'ACTION: FLIP ON "AUTO REGULATOR (AP)" AND SCROLL "CONTROL ROD DRIVE" WHEEL UP TO 55% WITHDRAWN.',
         hint: 'WHY: Boron control rods act as neutron sponges. Pulling them UP raises REACTIVITY and heats core water (~1920 MWt).',
         panelKey: 'GO TO: [KEY 3] UNIT A-2 (MID-LEFT)',
@@ -1215,64 +1052,47 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
     }
 
     case 'STEP_3_BUILD_STEAM': {
-      if (state.drumPressure >= 60) {
+      if (state.energyCreatedMW >= 420 && state.drumPressure >= 54) {
         return evaluateTutorial(state, 'STEP_4_SPIN_TURBINE');
       }
       return {
         phase: 'STEP_3_BUILD_STEAM',
-        header: '>> STEP 3/8 [KEY 5 -> UNIT C MASTER OVERVIEW]:',
-        body: 'ACTION: PRESS [KEY 5] TO VIEW UNIT C MASTER CONSOLE AND WATCH "STEAM PRESSURE" CLIMB INTO THE 60-72 BAR GREEN BAND.',
-        hint: 'WHY: Fission heat boils circulating core water into high-pressure steam (60-72 BAR) right above your Turbine Throttle.',
+        header: '>> STEP 3/7 [KEY 5 -> UNIT C // CHARGE BATTERY]:',
+        body: 'ACTION: PRESS [KEY 5] TO VIEW UNIT C ENERGY STORAGE AND WATCH "ENERGY CREATED" CLIMB TO ~600 MW AS STEAM CHARGES THE BATTERY.',
+        hint: 'WHY: Fission steam automatically spins the turbo-chargers into the Station Battery Bank, building stored energy before grid dispatch.',
         panelKey: 'GO TO: [KEY 5] UNIT C (RIGHT WALL)',
-        actionLine: 'WATCH [STEAM PRESSURE] HIT 60+ BAR',
+        actionLine: 'WATCH [ENERGY CREATED] & [ENERGY STORED] CLIMB',
         whyLines: [
-          'Fission heat boils flooded core tubes into live steam.',
-          'Left gauge & CRT-84C show STEAM entering 60-72 BAR green.'
+          'Core steam automatically creates ~600 MW into the Battery Bank.',
+          'Left gauge shows ENERGY CREATED; center shows ENERGY STORED %.'
         ],
         volkovQuote:
-          '"Admire the new UNIT C Master Console! Even a sleep-deprived bureaucrat can read GENERATED vs. NEEDED MWe here."'
+          '"No synchronizing flywheels in the dark anymore! Steam charges the giant Soviet Battery Bank—just watch the needle climb."'
       };
     }
 
     case 'STEP_4_SPIN_TURBINE': {
-      const t1 = state.turbines[0];
-      if (t1.valve >= 0.14 && t1.rpm >= 2965 && t1.rpm <= 3040) {
-        return evaluateTutorial(state, 'STEP_5_SYNC_GRID');
+      if (state.totalElectricalMW >= 550) {
+        return evaluateTutorial(state, 'STEP_6_BASELINE_600MW');
       }
       return {
         phase: 'STEP_4_SPIN_TURBINE',
-        header: '>> STEP 4/8 [KEY 5 -> UNIT C // SPIN TO 50.0 HZ]:',
-        body: 'ACTION: WHILE MAIN BREAKER IS OPEN, TURN "TURBINE THROTTLE" TO ~18% UNTIL "GRID SYNC 50HZ" HITS 50.0 HZ (12 O\'CLOCK).',
-        hint: 'WHY: You ONLY tune 50.0 Hz while off-grid so the free-spinning rotor matches the Soviet grid\'s rhythm before closing the breaker!',
+        header: '>> STEP 4/7 [KEY 5 -> UNIT C // BATTERY TO GRID]:',
+        body: 'ACTION: TURN THE SINGLE [BATTERY -> GRID] WHEEL ON UNIT C TO 600 MW (60%) TO MATCH ENERGY DEMAND.',
+        hint: 'WHY: This single wheel controls how much power flows out of the Battery Bank to the 6 regional stations.',
         panelKey: 'GO TO: [KEY 5] UNIT C (CENTER WHEEL)',
-        actionLine: 'TURN [TURBINE THROTTLE] TO ~18% (50.0 HZ)',
+        actionLine: 'TURN [BATTERY -> GRID] WHEEL TO 600 MW (60%)',
         whyLines: [
-          'Only tune 50.0 HZ while [MAIN BREAKER] is OPEN (unloaded).',
-          '~18% steam spins our rotor to 3000 RPM to match the grid!'
+          'One wheel controls energy sent from Battery to Grid.',
+          'Match 600 MW ENERGY DEMAND while Battery buffers flow!'
         ],
         volkovQuote:
-          '"Tune 50.0 Hz ONLY while the breaker is open! Close it out of sync and our 200-ton rotor exits through the roof—which requires three forms in triplicate."'
+          '"One wheel, Comrade! Even the Minister\'s nephew couldn\'t confuse this—turn it up to 600 MW so the grid stops complaining."'
       };
     }
 
     case 'STEP_5_SYNC_GRID': {
-      if (state.turbines[0].gridConnected === true) {
-        return evaluateTutorial(state, 'STEP_6_BASELINE_600MW');
-      }
-      return {
-        phase: 'STEP_5_SYNC_GRID',
-        header: '>> STEP 5/8 [KEY 5 -> UNIT C // 50HZ GRID LOCK]:',
-        body: 'ACTION: CONFIRM CRT-84C SHOWS "SYNC READY" IN THE 50.0 HZ GREEN WINDOW, THEN PULL "MAIN BREAKER" ([SPACE] OR DRAG).',
-        hint: 'WHY: Closing inside 49.5-50.5 Hz magnetically locks our rotor onto the massive 50.0 Hz Soviet grid—holding speed steady!',
-        panelKey: 'GO TO: [KEY 5] UNIT C (RIGHT SWITCH)',
-        actionLine: 'CLOSE [MAIN BREAKER] AT 50.0 HZ [SPACE]',
-        whyLines: [
-          'Magnetically locks our rotor onto the 50.0 HZ Soviet grid.',
-          'Once LOCKED, the grid holds 50.0 HZ steady—Throttle = MWe!'
-        ],
-        volkovQuote:
-          '"Close it out of sync and our 200-ton rotor exits through the roof—which requires three forms in triplicate."'
-      };
+      return evaluateTutorial(state, 'STEP_6_BASELINE_600MW');
     }
 
     case 'STEP_6_BASELINE_600MW': {
@@ -1280,68 +1100,72 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         (s) => Math.abs(s.allocatedMW - s.targetMW) <= 15
       );
       if (state.totalElectricalMW >= 550 && allLeversMatch) {
-        state.voidFraction = 0.50;
-        state.coreTileAnomalies = { 6: 'void', 18: 'void', 24: 'void' };
+        state.feedwaterValve = 0.24;
+        state.nitrogenLoopValve = 24;
+        state.voidFraction = 0.44;
+        state.coreTileAnomalies = {};
+        state.selectedRefuelChannel = null;
         return evaluateTutorial(state, 'STEP_7_VOID_DRILL');
       }
       return {
         phase: 'STEP_6_BASELINE_600MW',
-        header: '>> STEP 6/8 [UNIT C & KEY 1 UNIT A // MWe GAS PEDAL]:',
-        body: 'ACTION: NOW THAT 50.0 HZ IS LOCKED, OPEN "TURBINE THROTTLE" (UNIT C) TO ~60% TO MATCH NEEDED MWe, AND SET ALL 6 LEVERS (UNIT A) TO 100 MW.',
-        hint: 'WHY: Once LOCKED at 50.0 Hz, the grid holds your speed steady—TURBINE THROTTLE now acts purely as your Megawatt gas pedal!',
-        panelKey: 'GO TO: [KEY 5] UNIT C -> [KEY 1] UNIT A',
-        actionLine: 'THROTTLE ~60% (MWe GAS PEDAL) & 6 LEVERS 100MW',
+        header: '>> STEP 5/7 [KEY 1 -> UNIT A // 6 SECTOR LEVERS]:',
+        body: 'ACTION: GO TO UNIT A [KEY 1] AND SET ALL 6 SECTOR LEVERS TO 100 MW TO RECEIVE 600 MW FROM THE BATTERY.',
+        hint: 'WHY: The 6 sector levers allocate your 600 MW battery output to each Soviet sector cleanly.',
+        panelKey: 'GO TO: [KEY 1] UNIT A (6 LEVERS)',
+        actionLine: 'SET ALL 6 SECTOR LEVERS ON UNIT A TO 100 MW',
         whyLines: [
-          'Grid holds 50.0 HZ steady—Throttle is now your MWe gas pedal!',
-          'Line up GENERATED needle with RED NEEDED MWe & set 6 Levers.'
+          'Distributes your 600 MW battery output across all 6 sectors.',
+          'Ensure UNIT C wheel stays near 600 MW ENERGY DEMAND.'
         ],
         volkovQuote:
-          '"Once locked at 50.0 Hz, stop worrying about speed—the grid holds your rotor! Now the throttle wheel is pure Megawatt gas pedal!"'
+          '"Pull all six substation levers to 100 MW! Pripyat needs kettles, Duga needs radar, and the Vodka Plant needs pumps!"'
       };
     }
 
     case 'STEP_7_VOID_DRILL': {
-      if (state.voidFraction < 0.25) {
-        state.voidFraction = 0.08;
-        state.xenon = 50;
-        state.coreTileAnomalies = { 10: 'xenon', 18: 'xenon', 28: 'xenon' };
+      if (state.voidFraction < 0.24 && state.xenon < 24 && state.feedwaterValve >= 0.42) {
+        state.voidFraction = 0.10;
+        state.xenon = 6;
+        state.coreTileAnomalies = { 12: 'spent', 24: 'spent' };
+        state.selectedRefuelChannel = null;
         return evaluateTutorial(state, 'STEP_8_XENON_DRILL');
       }
       return {
         phase: 'STEP_7_VOID_DRILL',
-        header: '>> STEP 7/8 [KEY 3 UNIT A-2 // STEAM VOID DRILL]:',
-        body: 'ACTION: STEAM VOID SPIKE (50%)! CLICK GLOWING RED TILES ON THE "37-ROD CORE MAP" (UNIT A-2) OR PRESS "BORON INJECTION" (UNIT A) BELOW 25%!',
-        hint: 'WHY: Dry/overheated fuel tubes form steam bubbles (STEAM VOID) that accelerate RBMK fission! Flood tubes & quench red channels.',
-        panelKey: 'GO TO: [KEY 3] UNIT A-2 (CORE MAP)',
-        actionLine: 'CLICK RED CORE TILES UNTIL VOID < 25%',
+        header: '>> STEP 6/7 [KEY 3 UNIT B & A-2 // ROD & WATER BALANCE]:',
+        body: 'ACTION: STEAM VOID (44%) FROM LOW FEEDWATER! TURN [FEEDWATER VALVE] ON UNIT B BACK TO ~50% TO MATCH YOUR 55% CONTROL RODS UNTIL VOID < 24%!',
+        hint: 'WHY: Feedwater & Control Rods must stay balanced together! Too little water for your rods raises VOID; too much cold water for your rods raises XENON!',
+        panelKey: 'GO TO: [KEY 3] UNIT B & UNIT A-2',
+        actionLine: 'MATCH FEEDWATER (~50%) TO RODS (~55%) UNTIL VOID < 24%',
         whyLines: [
-          'Boiling bubbles (STEAM VOID) speed up RBMK neutrons!',
-          'Trimming red channels & extra Feedwater collapses voids.'
+          'Too much Rod heat vs. Feedwater -> Steam Void rises!',
+          'Too much cold Feedwater vs. Rods -> Xenon-135 rises!'
         ],
         volkovQuote:
-          '"Western physicists call positive void reactivity a flaw. We call it enthusiastic self-heating uranium!"'
+          '"Rods and water are dance partners, Comrade! Starve the water and steam voids race; drown the rods and Xenon ash chokes the fire."'
       };
     }
 
     case 'STEP_8_XENON_DRILL': {
-      if (state.xenon < 25) {
+      if (Object.keys(state.coreTileAnomalies).length === 0) {
         state.xenon = 4;
-        state.coreTileAnomalies = {};
+        state.selectedRefuelChannel = null;
         return evaluateTutorial(state, 'COMPLETED');
       }
       return {
         phase: 'STEP_8_XENON_DRILL',
-        header: '>> STEP 8/8 [KEY 3 UNIT A-2 // XENON-135 "NUCLEAR ASH"]:',
-        body: 'ACTION: XENON-135 POISONING (50%)! CLICK CYAN TILES ON "37-ROD CORE MAP" (UNIT A-2) OR PULL "CONTROL RODS" UP TO BURN XENON BELOW 25%!',
-        hint: 'WHY: Xenon-135 is fission exhaust ("nuclear ash") that absorbs neutrons after power drops, requiring extra rod withdrawal until it burns off.',
-        panelKey: 'GO TO: [KEY 3] UNIT A-2 (CYAN TILES)',
-        actionLine: 'CLICK CYAN TILES OR RAISE RODS (<25%)',
+        header: '>> STEP 7/7 [KEY 3 UNIT A-2 // ROD REFUELING]:',
+        body: 'ACTION: 2 FUEL RODS SPENT! CLICK A GLOWING AMBER TILE ON "RBMK CORE" (UNIT A-2) TO SELECT IT, THEN DRAG THE [ROD REFUELING LEVER] DOWN TO RELOAD BOTH!',
+        hint: 'WHY: Spent uranium rods cut MW output (~6.5% each) and 4+ spent rods overheat the core! Click an amber tile, then pull the Refueling Lever on UNIT A-2.',
+        panelKey: 'GO TO: [KEY 3] UNIT A-2 (CORE & LEVER)',
+        actionLine: 'CLICK AMBER CORE TILE -> PULL [ROD REFUELING LEVER] DOWN',
         whyLines: [
-          'Xenon-135 ("nuclear ash") chokes neutrons after power drops.',
-          'Pull Boron Rods UP or trim cyan tiles until Xenon burns off!'
+          'Spent amber rods reduce MW created & drain the battery.',
+          '4+ un-refueled rods cause core heat buildup — refuel promptly!'
         ],
         volkovQuote:
-          '"Xenon-135 is lazy nuclear ash clogging the furnace. Pull the rods a notch higher until the flux incinerates it!"'
+          '"Refueling an RBMK while it runs at 2,000 megawatts is perfectly routine! Lock onto the amber cap and pull the crane lever."'
       };
     }
 
@@ -1349,130 +1173,109 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       const totalTargetMW = state.substations.reduce((s, x) => s + x.targetMW, 0);
       const totalAllocatedMW = state.substations.reduce((s, x) => s + x.allocatedMW, 0);
       const unmetSub = state.substations.find((x) => Math.abs(x.allocatedMW - x.targetMW) >= 5);
-      const targetGrossMW = totalTargetMW + state.houseLoadMW;
-      const generatedGrossMW = state.turbines[0]?.gridConnected
-        ? state.totalElectricalMW + state.houseLoadMW
-        : 0;
-      const deltaGrossMW = Math.round(generatedGrossMW - targetGrossMW);
-      const targetMWt = Math.round((targetGrossMW / 630) * 1920);
-      const reqFeedwaterPct = Math.min(100, Math.round((targetGrossMW / 630) * 50));
-      const reqValvePct = Math.min(100, Math.round((targetGrossMW / TURBINE_GROSS_RATED_MWE) * 100));
+      const dispatchedMW = state.totalElectricalMW;
+      const demandMW = totalTargetMW;
+      const deltaMW = Math.round(dispatchedMW - demandMW);
+      const targetMWt = Math.round((demandMW / 600) * 1920);
+      const reqFeedwaterPct = Math.min(100, Math.round((demandMW / 600) * 50));
+      const reqWheelPct = Math.min(100, Math.round(demandMW / 10));
       const curRodPct = Math.round(state.controlRods * 100);
       const curFwPct = Math.round(state.feedwaterValve * 100);
-      const curValvePct = Math.round((state.turbines[0]?.valve ?? 0) * 100);
-
-      if (!state.turbines[0]?.gridConnected) {
-        return {
-          phase: 'COMPLETED',
-          header: '>> MAIN BREAKER OPEN // RE-SYNCHRONIZE TO 50.0 HZ:',
-          body: 'ACTION: ENSURE STEAM >= 55 BAR, SPIN [TURBINE THROTTLE] TO ~18% (50.0 HZ), AND CLOSE [MAIN BREAKER] ON UNIT C!',
-          hint: 'WHY: Tune 50.0 Hz ONLY while breaker is OPEN; once closed, the grid locks your speed at 50.0 Hz!',
-          panelKey: 'GO TO: [KEY 5] UNIT C (SPIN & LOCK)',
-          actionLine: 'SPIN TO 50.0 HZ (~18%) -> PULL [MAIN BREAKER]',
-          whyLines: [
-            'If tripped, flip Switch 4 [CONDENSER VACUUM] to reset.',
-            'Spin to 50.0 HZ (~18% throttle), then close [MAIN BREAKER]!'
-          ],
-          volkovQuote:
-            '"You dropped off the Soviet grid! Match 50.0 Hz while open, then slam the Main Breaker shut!"'
-        };
-      }
+      const curWheelPct = Math.round(state.batteryOutputValve * 100);
 
       const isPlusOrder =
         totalTargetMW > totalAllocatedMW + 5 ||
         (unmetSub !== undefined && unmetSub.targetMW > unmetSub.allocatedMW) ||
-        deltaGrossMW < -20 ||
-        state.thermalPower < targetMWt - 110 ||
-        state.drumPressure < 58;
+        deltaMW < -25 ||
+        state.energyCreatedMW < demandMW - 90 ||
+        state.batteryStoredMWh < 180;
       const isMinusOrder =
         totalTargetMW < totalAllocatedMW - 5 ||
         (unmetSub !== undefined && unmetSub.targetMW < unmetSub.allocatedMW) ||
-        deltaGrossMW > 20 ||
-        state.thermalPower > targetMWt + 130 ||
+        deltaMW > 25 ||
+        state.energyCreatedMW > demandMW + 160 ||
         state.drumPressure > 76;
 
       if (isPlusOrder) {
-        const s1Ok = state.thermalPower >= targetMWt - 110;
-        const s2Ok = state.feedwaterValve * 100 >= reqFeedwaterPct - 5 && state.drumPressure >= 58;
+        const s1Ok = state.thermalPower >= targetMWt - 110 && state.energyCreatedMW >= demandMW - 90;
+        const s2Ok = state.feedwaterValve * 100 >= reqFeedwaterPct - 5 && state.drumPressure >= 54;
         const s3Ok = !unmetSub && Math.abs(totalAllocatedMW - totalTargetMW) < 6;
-        const s4Ok = Math.abs(deltaGrossMW) <= 20;
-        const nextPanel = !s1Ok
-          ? 'GO TO: [KEY 3] UNIT A-2 (BORON RODS)'
-          : !s2Ok
-            ? 'GO TO: [KEY 3] UNIT B (FEEDWATER)'
-            : !s3Ok
-              ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
-              : 'GO TO: [KEY 5] UNIT C (THROTTLE PEDAL)';
-        const nextAction = !s1Ok
-          ? `1. RODS UP (${curRodPct}%) -> ~${targetMWt} MWt`
-          : !s2Ok
-            ? `1B. FEEDWATER UP ${curFwPct}% -> ${reqFeedwaterPct}%`
-            : !s3Ok
-              ? `2. PULL ${unmetSub ? unmetSub.name : 'SECTOR'} LEVER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
-              : s4Ok
-                ? 'POWER BALANCED AT 50.0 HZ LOCKED'
-                : `3. OPEN THROTTLE (${curValvePct}% -> ~${reqValvePct}%) TO ${targetGrossMW} MWe`;
+        const s4Ok = Math.abs(deltaMW) <= 25;
+        const nextPanel = !s4Ok
+          ? 'GO TO: [KEY 5] UNIT C (BATTERY WHEEL)'
+          : !s3Ok
+            ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
+            : !s1Ok
+              ? 'GO TO: [KEY 3] UNIT A-2 (BORON RODS)'
+              : 'GO TO: [KEY 3] UNIT B (FEEDWATER)';
+        const nextAction = !s4Ok
+          ? `3. TURN BATTERY WHEEL [C] (${curWheelPct}% -> ${reqWheelPct}%) TO ${demandMW} MW`
+          : !s3Ok
+            ? `2. PULL ${unmetSub ? unmetSub.name : 'SECTOR'} LEVER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
+            : !s1Ok
+              ? `1. RODS UP (${curRodPct}%) -> ~${targetMWt} MWt TO RECHARGE BATTERY`
+              : `1B. FEEDWATER UP ${curFwPct}% -> ${reqFeedwaterPct}%`;
         return {
           phase: 'COMPLETED',
-          header: `>> ACTIVE +MW ORDER (${totalAllocatedMW} -> ${totalTargetMW} MW // NEED ${targetGrossMW} MWe):`,
-          body: `${s1Ok && s2Ok ? '[OK]' : '[1]'} RODS UP [A-2] (${curRodPct}%) + FEEDWATER UP [B] (${curFwPct}%->${reqFeedwaterPct}%) | ${s3Ok ? '[OK]' : '[2]'} PULL SECTOR LEVER [A]`,
-          hint: `${s4Ok ? '[OK]' : '[3]'} OPEN TURBINE THROTTLE [C] (${curValvePct}% -> ~${reqValvePct}%) until GENERATED (${Math.round(generatedGrossMW)}) lines up with NEEDED (${targetGrossMW} MWe)!`,
+          header: `>> ACTIVE +MW ORDER (OUT ${Math.round(dispatchedMW)} -> DEMAND ${demandMW} MW):`,
+          body: `${s1Ok && s2Ok ? '[OK]' : '[1]'} RODS UP [A-2] (${curRodPct}%) + WATER [B] (${curFwPct}%->${reqFeedwaterPct}%) | ${s3Ok ? '[OK]' : '[2]'} LEVER [A]`,
+          hint: `${s4Ok ? '[OK]' : '[3]'} TURN BATTERY WHEEL [C] (${curWheelPct}% -> ${reqWheelPct}%) SO GRID OUT (${Math.round(dispatchedMW)} MW) MATCHES DEMAND (${demandMW} MW)!`,
           panelKey: nextPanel,
           actionLine: nextAction,
           whyLines: [
-            '1. Rods [A-2] + Feedwater [B] boil extra steam so BAR holds.',
-            '2. Pull Lever [A] -> 3. Open Throttle [C] to match NEEDED MWe!'
+            '1. Rods [A-2] + Water [B] keep Battery charging at Demand.',
+            '2. Pull Lever [A] -> 3. Turn Battery Wheel [C] to Demand MW!'
           ],
           volkovQuote:
-            '"Grid holds 50.0 Hz steady! Boil extra steam first, pull the sector lever, then press your Turbine Throttle MWe gas pedal!"'
+            '"Battery buffers the grid while you raise the rods, Comrade—just dial the UNIT C wheel to match demand!"'
         };
       }
 
       if (isMinusOrder) {
         const s1LeversOk = !unmetSub && Math.abs(totalAllocatedMW - totalTargetMW) < 6;
-        const s1ThrottleOk = Math.abs(deltaGrossMW) <= 20;
-        const s2RodsOk = state.thermalPower <= targetMWt + 120 && state.drumPressure <= 75;
+        const s1WheelOk = Math.abs(deltaMW) <= 25;
+        const s2RodsOk = state.energyCreatedMW <= demandMW + 160 && state.drumPressure <= 76;
         const nextPanel = !s1LeversOk
           ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
-          : !s1ThrottleOk
-            ? 'GO TO: [KEY 5] UNIT C (THROTTLE & VENT)'
+          : !s1WheelOk
+            ? 'GO TO: [KEY 5] UNIT C (BATTERY WHEEL)'
             : 'GO TO: [KEY 3] UNIT A-2 (PUSH RODS IN)';
         const nextAction = !s1LeversOk
           ? `1. LOWER ${unmetSub ? unmetSub.name : 'SECTOR'} LEVER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
-          : !s1ThrottleOk
-            ? `1B. LOWER THROTTLE (${curValvePct}% -> ~${reqValvePct}%) TO ${targetGrossMW} MWe`
+          : !s1WheelOk
+            ? `1B. TURN BATTERY WHEEL (${curWheelPct}% -> ${reqWheelPct}%) TO ${demandMW} MW`
             : !s2RodsOk
-              ? `2. PUSH RODS IN (${curRodPct}%) & VENT IF >75 BAR`
-              : 'WATCH XENON-135 ON UNIT C CRT-84C';
+              ? `2. PUSH RODS IN (${curRodPct}%) SO BATTERY DOESN'T OVERCHARGE`
+              : 'BATTERY & GRID BALANCED';
         return {
           phase: 'COMPLETED',
-          header: `>> ACTIVE -MW ORDER (${totalAllocatedMW} -> ${totalTargetMW} MW // NEED ${targetGrossMW} MWe):`,
-          body: `${s1LeversOk && s1ThrottleOk ? '[OK]' : '[1]'} LOWER SECTOR LEVER [A] & TURBINE THROTTLE [C] (${curValvePct}% -> ~${reqValvePct}%) TO MATCH ${targetGrossMW} MWe`,
-          hint: `${s2RodsOk ? '[OK]' : '[2]'} PUSH RODS IN [A-2] (${curRodPct}% -> ~${targetMWt} MWt) so STEAM BAR doesn't spike (use STEAM VENT if BAR > 75)!`,
+          header: `>> ACTIVE -MW ORDER (OUT ${Math.round(dispatchedMW)} -> DEMAND ${demandMW} MW):`,
+          body: `${s1LeversOk && s1WheelOk ? '[OK]' : '[1]'} LOWER SECTOR LEVER [A] & BATTERY WHEEL [C] (${curWheelPct}% -> ${reqWheelPct}%) TO ${demandMW} MW`,
+          hint: `${s2RodsOk ? '[OK]' : '[2]'} PUSH RODS IN [A-2] (${curRodPct}% -> ~${targetMWt} MWt) SO BATTERY DOESN'T OVERCHARGE!`,
           panelKey: nextPanel,
           actionLine: nextAction,
           whyLines: [
-            '1. Lower Sector Lever [A] & Throttle [C] to stop MWe surplus.',
-            '2. Push Rods IN [A-2] to stop excess boiling (VENT if >75 BAR)!'
+            '1. Lower Sector Lever [A] & Battery Wheel [C] to shed load.',
+            '2. Push Rods IN [A-2] to match Energy Created to Demand!'
           ],
           volkovQuote:
-            '"Ease off the Throttle MWe pedal to stop over-pumping transformers, then push Boron Rods in before steam pressure pops the drum!"'
+            '"Ease back the UNIT C wheel to stop flooding the suburbs, then push Boron Rods in so the Battery Bank doesn\'t boil!"'
         };
       }
 
       return {
         phase: 'COMPLETED',
-        header: '>> GRID LOCKED AT 50.0 HZ // POWER BALANCED:',
-        body: 'GENERATED MWe MATCHES NEEDED MWe AT 50.0 HZ! CHECK [KEY 4] DESK FOR PRAVDA ORDERS & MONITOR [KEY 5] UNIT C.',
-        hint: '+MW: 1. Rods [A-2] + Water [B] -> 2. Lever [A] -> 3. Open Throttle [C].  -MW: 1. Lower Lever [A] & Throttle [C] -> 2. Push Rods IN [A-2].',
+        header: `>> BATTERY & GRID BALANCED (${Math.round(dispatchedMW)}/${Math.round(demandMW)} MW):`,
+        body: `DISPATCHED OUTPUT MATCHES ENERGY DEMAND (${Math.round(state.batteryStoredMWh / 10)}% BATTERY STORED)! CHECK [KEY 4] DESK FOR PRAVDA ORDERS.`,
+        hint: '+MW: 1. Rods [A-2] + Water [B] -> 2. Lever [A] -> 3. Battery Wheel [C].  -MW: 1. Lower Lever [A] & Wheel [C] -> 2. Push Rods IN [A-2].',
         panelKey: 'CHECK: [KEY 4] DESK & [KEY 5] UNIT C',
         actionLine: 'AWAIT NEXT PRAVDA-84 POWER ORDER',
         whyLines: [
-          'Grid holds 50.0 HZ steady; POWER BALANCE needles match.',
+          'ENERGY CREATED charges the Battery; single UNIT C wheel feeds Grid.',
           'Tear incoming Pravda slips on [KEY 4] Desk to update quotas.'
         ],
         volkovQuote:
-          '"50.0 Hz locked, Megawatts matched, steam at 68 BAR. Naturally, Moscow will ruin this peace with a teletype order any second."'
+          '"Battery banked, megawatts balanced, tea warm. Naturally, Moscow will ruin this peace with a teletype order any second."'
       };
     }
   }

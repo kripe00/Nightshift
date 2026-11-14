@@ -853,8 +853,8 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
     const newDoc = buildSingleTargetDeskDocument(blueprint, docSequence++)
     set({
       printingDoc: newDoc,
-      directiveCooldown: 22.0,
-      nextPrintReadyAtMs: Date.now() + 22000,
+      directiveCooldown: 30.0,
+      nextPrintReadyAtMs: Date.now() + 30000,
       nextTemplateIndex:
         (state.nextTemplateIndex + 1) % SINGLE_TARGET_BLUEPRINTS.length,
     })
@@ -1348,7 +1348,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         correct,
         reason: correct
           ? `PNEUMATIC DISPATCH RECEIVED BY K.O.M.R.A.D.-84: ${activeMandate ? activeMandate.requirementText : doc.powerOrderText}`
-          : `SABOTAGE DISPATCHED (3 RED HOTSPOTS + RESERVOIR -24% + HZ DESYNC): ${doc.forgeryReason}`,
+          : `SABOTAGE DISPATCHED (2 SPENT FUEL CHANNELS + TREASON STRIKE): ${doc.forgeryReason}`,
       },
     })
   },

@@ -3,10 +3,347 @@
 
 import { useGameStore } from '../../shared/useGameStore'
 
+type AuxChannelPhase =
+  | 'idle'
+  | 'fading_in'
+  | 'playing'
+  | 'fading_out'
+  | 'restoring'
+
+interface MediaBusWindow extends Window {
+  __k84NativeVolDesc?: PropertyDescriptor
+  __k84NativePlay?: () => Promise<void>
+  __k84CleanupAuxBus?: () => void
+}
+
+const AUX_CHANNEL_SRC = './sprites/desk_hardware/desk_aux_84.mp3'
+const AUX_PEAK_VOLUME = 0.58
+const AUX_FADE_IN_MS = 2200
+const AUX_FADE_OUT_SEC = 3.2
+const AUX_RESTORE_MS = 2200
+
+let auxCalibTrack: HTMLAudioElement | null = null
+let auxPhase: AuxChannelPhase = 'idle'
+let auxPhaseStartMs = 0
+let auxTimerId: number | null = null
+let bgDuckGain = 1
+
+const trackedBgMedia = new Set<HTMLMediaElement>()
+const intendedBgVolumes = new WeakMap<HTMLMediaElement, number>()
+const heldAuxCodes = new Set<string>()
+
+function clampUnit(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1
+}
+
+function applyBgDuckGain(gain: number): void {
+  bgDuckGain = clampUnit(gain)
+  if (typeof window === 'undefined') return
+  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
+  if (!setNativeVol) return
+  for (const el of trackedBgMedia) {
+    const intended = intendedBgVolumes.get(el) ?? 0.38
+    setNativeVol.call(el, clampUnit(intended * bgDuckGain))
+  }
+}
+
+function installMediaGainBus(): void {
+  if (typeof window === 'undefined' || typeof HTMLMediaElement === 'undefined') return
+  const win = window as MediaBusWindow
+  if (!win.__k84NativeVolDesc) {
+    const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume')
+    if (desc?.get && desc?.set) {
+      win.__k84NativeVolDesc = desc
+    }
+  }
+  if (!win.__k84NativePlay) {
+    win.__k84NativePlay = HTMLMediaElement.prototype.play
+  }
+
+  const nativeDesc = win.__k84NativeVolDesc
+  const nativePlay = win.__k84NativePlay
+  const nativeGet = nativeDesc?.get
+  const nativeSet = nativeDesc?.set
+  if (!nativeGet || !nativeSet || !nativePlay) return
+
+  Object.defineProperty(HTMLMediaElement.prototype, 'volume', {
+    configurable: true,
+    enumerable: nativeDesc.enumerable ?? true,
+    get(this: HTMLMediaElement): number {
+      if (this === auxCalibTrack) {
+        return nativeGet.call(this) as number
+      }
+      return intendedBgVolumes.get(this) ?? (nativeGet.call(this) as number)
+    },
+    set(this: HTMLMediaElement, value: number): void {
+      const clamped = clampUnit(value)
+      if (this === auxCalibTrack) {
+        nativeSet.call(this, clamped)
+        return
+      }
+      trackedBgMedia.add(this)
+      intendedBgVolumes.set(this, clamped)
+      nativeSet.call(this, clampUnit(clamped * bgDuckGain))
+    },
+  })
+
+  HTMLMediaElement.prototype.play = function (this: HTMLMediaElement): Promise<void> {
+    if (this !== auxCalibTrack) {
+      trackedBgMedia.add(this)
+      const currentIntended =
+        intendedBgVolumes.get(this) ?? clampUnit(nativeGet.call(this) as number)
+      intendedBgVolumes.set(this, currentIntended)
+      nativeSet.call(this, clampUnit(currentIntended * bgDuckGain))
+    }
+    return nativePlay.call(this)
+  }
+}
+
+function setAuxTrackVolume(vol: number): void {
+  if (!auxCalibTrack || typeof window === 'undefined') return
+  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
+  const clamped = clampUnit(vol)
+  if (setNativeVol) {
+    setNativeVol.call(auxCalibTrack, clamped)
+  } else {
+    auxCalibTrack.volume = clamped
+  }
+}
+
+function clearAuxTimer(): void {
+  if (auxTimerId !== null && typeof window !== 'undefined') {
+    window.clearInterval(auxTimerId)
+    auxTimerId = null
+  }
+}
+
+function stopAuxAndRestoreImmediate(): void {
+  clearAuxTimer()
+  if (auxCalibTrack) {
+    auxCalibTrack.pause()
+    auxCalibTrack.currentTime = 0
+    setAuxTrackVolume(0)
+  }
+  auxPhase = 'idle'
+  applyBgDuckGain(1)
+}
+
+function beginRestorePhase(): void {
+  if (auxPhase === 'restoring' || auxPhase === 'idle') return
+  if (auxCalibTrack) {
+    auxCalibTrack.pause()
+    auxCalibTrack.currentTime = 0
+    setAuxTrackVolume(0)
+  }
+  auxPhase = 'restoring'
+  auxPhaseStartMs = performance.now()
+}
+
+function tickAuxChannel(): void {
+  if (!auxCalibTrack || auxPhase === 'idle') {
+    clearAuxTimer()
+    return
+  }
+  auxCalibTrack.muted = useGameStore.getState().isMusicMuted
+  const now = performance.now()
+
+  if (auxPhase === 'fading_in') {
+    const t = Math.min(1, (now - auxPhaseStartMs) / AUX_FADE_IN_MS)
+    const ease = 0.5 - 0.5 * Math.cos(Math.PI * t)
+    applyBgDuckGain(1 - ease)
+    setAuxTrackVolume(AUX_PEAK_VOLUME * ease)
+    if (t >= 1) {
+      auxPhase = 'playing'
+    }
+    return
+  }
+
+  if (auxPhase === 'playing') {
+    applyBgDuckGain(0)
+    setAuxTrackVolume(AUX_PEAK_VOLUME)
+    const dur = auxCalibTrack.duration
+    if (
+      Number.isFinite(dur) &&
+      dur > 0 &&
+      dur - auxCalibTrack.currentTime <= AUX_FADE_OUT_SEC
+    ) {
+      auxPhase = 'fading_out'
+    }
+    return
+  }
+
+  if (auxPhase === 'fading_out') {
+    const dur = auxCalibTrack.duration
+    const rem =
+      Number.isFinite(dur) && dur > 0
+        ? Math.max(0, dur - auxCalibTrack.currentTime)
+        : 0
+    const p = 1 - Math.min(1, rem / AUX_FADE_OUT_SEC)
+    const ease = 0.5 - 0.5 * Math.cos(Math.PI * p)
+    applyBgDuckGain(0)
+    setAuxTrackVolume(AUX_PEAK_VOLUME * (1 - ease))
+    if (auxCalibTrack.ended || rem <= 0.05) {
+      beginRestorePhase()
+    }
+    return
+  }
+
+  if (auxPhase === 'restoring') {
+    const t = Math.min(1, (now - auxPhaseStartMs) / AUX_RESTORE_MS)
+    const ease = 0.5 - 0.5 * Math.cos(Math.PI * t)
+    applyBgDuckGain(ease)
+    if (t >= 1) {
+      applyBgDuckGain(1)
+      clearAuxTimer()
+      auxPhase = 'idle'
+    }
+  }
+}
+
+function startAuxSequence(): void {
+  if (typeof window === 'undefined' || auxPhase !== 'idle') return
+  installMediaGainBus()
+
+  if (!auxCalibTrack) {
+    auxCalibTrack = new Audio(AUX_CHANNEL_SRC)
+    auxCalibTrack.loop = false
+    auxCalibTrack.preload = 'auto'
+  }
+
+  auxCalibTrack.onended = () => {
+    if (
+      auxPhase === 'fading_in' ||
+      auxPhase === 'playing' ||
+      auxPhase === 'fading_out'
+    ) {
+      beginRestorePhase()
+    }
+  }
+  auxCalibTrack.onerror = () => {
+    stopAuxAndRestoreImmediate()
+  }
+
+  auxCalibTrack.currentTime = 0
+  auxCalibTrack.muted = useGameStore.getState().isMusicMuted
+  setAuxTrackVolume(0)
+
+  auxPhase = 'fading_in'
+  auxPhaseStartMs = performance.now()
+  clearAuxTimer()
+  auxTimerId = window.setInterval(tickAuxChannel, 40)
+
+  const nativePlay = (window as MediaBusWindow).__k84NativePlay
+  const playPromise = nativePlay
+    ? nativePlay.call(auxCalibTrack)
+    : auxCalibTrack.play()
+  void playPromise.catch(() => {
+    stopAuxAndRestoreImmediate()
+  })
+}
+
+function normalizeAuxToken(e: KeyboardEvent): string | null {
+  const keyLower = typeof e.key === 'string' ? e.key.toLowerCase() : ''
+  if (e.code === 'ShiftLeft') return 'ShiftLeft'
+  if (e.code === 'KeyA' || keyLower === 'a') return 'KeyA'
+  if (e.code === 'KeyZ' || keyLower === 'z') return 'KeyZ'
+  if (e.code === 'Digit5' || e.code === 'Numpad5' || e.key === '5') return 'Digit5'
+  return null
+}
+
+export function isAuxChordPartial(): boolean {
+  return (
+    (heldAuxCodes.has('ShiftLeft') &&
+      (heldAuxCodes.has('KeyA') || heldAuxCodes.has('KeyZ'))) ||
+    (heldAuxCodes.has('KeyA') && heldAuxCodes.has('KeyZ'))
+  )
+}
+
+function installAuxChannelBus(): void {
+  if (typeof window === 'undefined') return
+  installMediaGainBus()
+
+  const win = window as MediaBusWindow
+  win.__k84CleanupAuxBus?.()
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    const target = e.target
+    if (target instanceof HTMLElement) {
+      const tag = target.tagName.toLowerCase()
+      if (
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        target.isContentEditable
+      ) {
+        return
+      }
+    }
+
+    const tok = normalizeAuxToken(e)
+    const wasPartial = isAuxChordPartial()
+    if (tok) {
+      heldAuxCodes.add(tok)
+    }
+    if (
+      heldAuxCodes.has('ShiftLeft') &&
+      heldAuxCodes.has('KeyA') &&
+      heldAuxCodes.has('KeyZ') &&
+      heldAuxCodes.has('Digit5')
+    ) {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      startAuxSequence()
+    } else if (tok === 'Digit5' && wasPartial) {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+    }
+  }
+
+  const onKeyUp = (e: KeyboardEvent) => {
+    const tok = normalizeAuxToken(e)
+    if (tok) {
+      heldAuxCodes.delete(tok)
+    }
+    if (e.code) {
+      heldAuxCodes.delete(e.code)
+    }
+    if (!e.shiftKey) {
+      heldAuxCodes.delete('ShiftLeft')
+    }
+  }
+
+  const clearHeld = () => {
+    heldAuxCodes.clear()
+  }
+
+  const onVisibility = () => {
+    if (document.hidden) {
+      heldAuxCodes.clear()
+    }
+  }
+
+  window.addEventListener('keydown', onKeyDown, true)
+  window.addEventListener('keyup', onKeyUp, true)
+  window.addEventListener('blur', clearHeld)
+  document.addEventListener('visibilitychange', onVisibility)
+
+  win.__k84CleanupAuxBus = () => {
+    window.removeEventListener('keydown', onKeyDown, true)
+    window.removeEventListener('keyup', onKeyUp, true)
+    window.removeEventListener('blur', clearHeld)
+    document.removeEventListener('visibilitychange', onVisibility)
+  }
+}
+
+if (typeof window !== 'undefined') {
+  installAuxChannelBus()
+}
+
 let ctx: AudioContext | null = null
 let globalMuteInstalled = false
 
 export function installGlobalMuteController(): void {
+  installAuxChannelBus()
   if (typeof window === 'undefined' || globalMuteInstalled) return
   globalMuteInstalled = true
 
@@ -1704,14 +2041,14 @@ export function updateTurbinePitchHum(
     const filter = ctx.createBiquadFilter()
     const gain = ctx.createGain()
 
-    osc50.type = 'sawtooth'
+    osc50.type = 'sine'
     osc100.type = 'triangle'
     osc50.frequency.setValueAtTime(50, now)
     osc100.frequency.setValueAtTime(100, now)
 
     filter.type = 'lowpass'
-    filter.frequency.setValueAtTime(165, now)
-    filter.Q.setValueAtTime(2.2, now)
+    filter.frequency.setValueAtTime(125, now)
+    filter.Q.setValueAtTime(1.1, now)
 
     gain.gain.setValueAtTime(0.0001, now)
 
@@ -1737,11 +2074,16 @@ export function updateTurbinePitchHum(
   const pitchRatio = Math.max(0.25, Math.min(1.35, rpm / 3000))
   const fBase = 50.0 * pitchRatio
   const loadFactor = Math.min(1.0, totalAllocatedMW / 1000)
-  const targetGain = Math.min(
-    0.048,
-    0.012 + loadFactor * 0.018 + voltageDipIntensity * 0.022
-  )
-  const targetCutoff = 135 + pitchRatio * 55 + voltageDipIntensity * 95
+  const spinFactor = rpm < 80 ? 0 : Math.min(1.0, (rpm - 80) / 2920)
+  const targetGain =
+    spinFactor <= 0
+      ? 0.0001
+      : Math.min(
+          0.036,
+          spinFactor * (0.0035 + loadFactor * 0.0055) +
+            voltageDipIntensity * 0.02
+        )
+  const targetCutoff = 105 + pitchRatio * 45 + voltageDipIntensity * 95
 
   turbineHumCtrl.osc50.frequency.setTargetAtTime(fBase, now, 0.05)
   turbineHumCtrl.osc100.frequency.setTargetAtTime(fBase * 2, now, 0.05)

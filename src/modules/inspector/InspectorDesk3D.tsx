@@ -40,6 +40,7 @@ import {
 } from './useDeskStore'
 import {
   installGlobalMuteController,
+  isAuxChordPartial,
   playAmberWarningChime,
   playBobbleBoingSound,
   playBreechHatchLatchSound,
@@ -1609,6 +1610,9 @@ export function InspectorDesk3D() {
       if (gs.wePadHeld) {
         if (gs.wePadInspecting && e.code.startsWith('Digit')) {
           const num = parseInt(e.code.replace('Digit', ''), 10)
+          if (num === 5 && isAuxChordPartial()) {
+            return
+          }
           if (num >= 1 && num <= 6) {
             e.preventDefault()
             playPageTurnSound()
@@ -1923,8 +1927,6 @@ export function InspectorDesk3D() {
   const shredPlateTex = useMemo(() => createNearestCanvasTexture(256, 96), [])
 
   const buildWePadPayload = (gs = useGameStore.getState()): WePadTelemetryPayload => {
-    const gridConn = Boolean(gs.turbines[0]?.gridConnected)
-    const totQuota = Object.values(gs.targetSectorMW).reduce((a, b) => a + b, 0)
     const houseMW = Math.round(gs.houseLoadMW)
     return {
       activeTab: gs.wePadActiveTab,
@@ -1950,11 +1952,16 @@ export function InspectorDesk3D() {
       rpm: gs.turbines[0].rpm,
       gridHz: gs.turbines[0].freqHz,
       syncPhase: gs.turbines[0].syncPhase,
-      gridConnected: gridConn,
-      turbineValve: gs.turbines[0].valve,
+      gridConnected: Boolean(gs.turbines[0]?.gridConnected),
+      turbineValve: gs.batteryOutputValve,
+      energyCreatedMW: gs.energyCreatedMW,
+      batteryStoredMWh: gs.batteryStoredMWh,
+      batteryStoredPct: gs.batteryStoredPct,
+      energyDemandMW: gs.energyDemandMW,
+      batteryWheelPct: Math.round(gs.batteryOutputValve * 100),
       totalElectricalMW: gs.totalElectricalMW,
-      neededMWe: totQuota + houseMW,
-      generatedMWe: gridConn ? gs.totalElectricalMW + houseMW : 0,
+      neededMWe: gs.energyDemandMW,
+      generatedMWe: gs.totalElectricalMW,
       houseLoadMW: houseMW,
       plantWaterDrainPct: gs.plantWaterDrainPct,
       mcpActiveCount: gs.mcpActive.filter(Boolean).length,
@@ -2920,7 +2927,6 @@ export function InspectorDesk3D() {
 
     // 0b. Update 3D Illuminated 6-Lamp Master Annunciator Strip (`ТАБЛО ТРЕВОГИ`) & Distinct Audio Warning Chimes
     const maxBearingC = 20 + Math.max(gameState.pumpAHeat, gameState.pumpBHeat)
-    const hzDrift = Math.abs(gameState.gridHz - 50.0)
     const waterInDrought =
       gameState.waterReservoir < 22 ||
       Math.abs(gameState.drumWaterLevel) > 180 ||
@@ -2935,6 +2941,10 @@ export function InspectorDesk3D() {
       gameState.vodkaWater < 42
 
     // Severity levels: 0 = Dim Normal, 1 = Amber Early Warning, 2 = Critical Red (or 3 = Incoming Order Emerald/Amber Flash)
+    const isCompletedPhase = gameState.tutorialPhase === 'COMPLETED'
+    const batteryDispatchDiff = Math.abs(
+      gameState.totalElectricalMW - gameState.energyDemandMW
+    )
     const nextLevels = [
       gameState.coreTemp > 680 ? 2 : gameState.coreTemp > 560 ? 1 : 0,
       waterInDrought ? 2 : waterLow ? 1 : 0,
@@ -2948,12 +2958,11 @@ export function InspectorDesk3D() {
           ? 1
           : 0,
       maxBearingC > 90 ? 2 : maxBearingC > 80 ? 1 : 0,
-      (Boolean(gameState.turbines[0]?.gridConnected) && hzDrift > 1.2) ||
-      !gameState.avrActive ||
-      !gameState.auxLoopBActive
+      gameState.batteryStoredPct < 8 ||
+      (isCompletedPhase && batteryDispatchDiff > 90)
         ? 2
-        : (Boolean(gameState.turbines[0]?.gridConnected) && hzDrift > 0.65) ||
-            gameState.wetSteamPenalty > 0.12
+        : gameState.batteryStoredPct < 20 ||
+            (isCompletedPhase && batteryDispatchDiff > 35)
           ? 1
           : 0,
       printingDoc !== null ? 3 : 0,
@@ -3002,12 +3011,17 @@ export function InspectorDesk3D() {
       }
     }
 
-    if (crossedIntoAmber && gameState.phase === 'playing') {
+    const allowTutorialAudio =
+      gameState.tutorialPhase === 'COMPLETED' ||
+      gameState.coreTemp > 720 ||
+      gameState.drumPressure > 90
+    if (crossedIntoAmber && gameState.phase === 'playing' && allowTutorialAudio) {
       playAmberWarningChime()
     }
     if (
       anyCriticalRed &&
       gameState.phase === 'playing' &&
+      allowTutorialAudio &&
       t - lastKlaxonPulseTimeRef.current >= 6.5
     ) {
       lastKlaxonPulseTimeRef.current = t
@@ -3015,14 +3029,10 @@ export function InspectorDesk3D() {
     }
 
     // 0c. 5-Stage KGB Operator Qualification Drill (`УЧЕБНАЯ ТРЕВОГА`):
-    //     - Play confirmation chime when tutorialStep advances
     //     - Pulse required 3D hardware lamps/knobs with Amber-Gold -> Emerald (`Math.sin(t * 6)`)
     const curTutStep = gameState.tutorialStep
     if (prevTutorialStepRef.current !== curTutStep) {
       prevTutorialStepRef.current = curTutStep
-      if (gameState.phase === 'playing') {
-        playAmberWarningChime()
-      }
     }
 
     const tutPulse = (Math.sin(t * 6.0) + 1) * 0.5
@@ -3309,7 +3319,7 @@ export function InspectorDesk3D() {
 
     // 3B. Refresh WE-PAD 84 Live Screen CanvasTexture when telemetry or chat updates
     const gsNow = useGameStore.getState()
-    const wePadSig = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${gsNow.tutorialPhase}|${gsNow.tutorialPrompt.actionLine}|${gsNow.wePadChatLog.length}|${manualScrollY}|${Math.round(gsNow.thermalPower / 10)}|${Math.round(gsNow.drumPressure)}|${Math.round(gsNow.drumWaterLevel / 5)}|${Math.round(gsNow.turbines[0].valve * 100)}|${Math.round(gsNow.turbines[0].rpm / 20)}|${gsNow.turbines[0].freqHz.toFixed(1)}|${Math.round(gsNow.totalElectricalMW / 5)}|${Math.round(gsNow.xenon)}|${Math.round(gsNow.voidFraction * 100)}|${gsNow.plantWaterDrainPct}`
+    const wePadSig = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${gsNow.tutorialPhase}|${gsNow.tutorialPrompt.actionLine}|${gsNow.wePadChatLog.length}|${manualScrollY}|${Math.round(gsNow.thermalPower / 10)}|${Math.round(gsNow.drumPressure)}|${Math.round(gsNow.drumWaterLevel / 5)}|${Math.round(gsNow.energyCreatedMW / 5)}|${Math.round(gsNow.batteryStoredPct)}|${Math.round(gsNow.energyDemandMW)}|${Math.round(gsNow.batteryOutputValve * 100)}|${Math.round(gsNow.totalElectricalMW / 5)}|${Math.round(gsNow.xenon)}|${Math.round(gsNow.voidFraction * 100)}|${gsNow.plantWaterDrainPct}`
     const mTex = manualMatRef.current?.map as THREE.CanvasTexture | undefined
     if (mTex && lastWePadSigRef.current !== wePadSig) {
       lastWePadSigRef.current = wePadSig

@@ -5,8 +5,9 @@ import {
   evaluateTutorial,
   stepReactorSimulation,
   toggleGridBreaker,
-   triggerBoronInjection,
-  trimCoreChannelTile,
+  triggerBoronInjection,
+  selectCoreChannelForRefuel,
+  refuelSelectedCoreChannel,
   type ReactorState,
   type SubstationQuota,
   type TutorialPhase,
@@ -115,6 +116,8 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
     xenon: state.xenon,
     rodTilesFlux: [...state.rodTilesFlux],
     coreTileAnomalies: { ...(state.coreTileAnomalies ?? {}) },
+    selectedRefuelChannel: state.selectedRefuelChannel ?? null,
+    fuelBurnupTimer: state.fuelBurnupTimer ?? 0,
     coolantFlow: state.coolantFlow,
     pumpAHeat: state.pumpAHeat,
     pumpBHeat: state.pumpBHeat,
@@ -134,6 +137,10 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
       { ...state.turbines[1] },
     ],
     houseLoadMW: state.houseLoadMW,
+    energyCreatedMW: state.energyCreatedMW,
+    batteryStoredMWh: state.batteryStoredMWh,
+    batteryOutputValve: state.batteryOutputValve,
+    energyDemandMW: state.energyDemandMW,
     totalElectricalMW: state.totalElectricalMW,
     substations: state.substations.map((s) => ({ ...s })),
     coreMeltdown: state.coreMeltdown,
@@ -174,7 +181,9 @@ function mapReactorToGameStateFields(
 
   const channelHotspots: Record<number, HotspotSeverity> = {}
   for (const [k, v] of Object.entries(r.coreTileAnomalies ?? {})) {
-    channelHotspots[Number(k)] = v === 'void' ? 'red' : 'cyan'
+    if (v === 'spent') {
+      channelHotspots[Number(k)] = 'amber'
+    }
   }
 
   return {
@@ -220,6 +229,11 @@ function mapReactorToGameStateFields(
     kgbLineActive: r.kgbLineActive,
     auxLoopBActive: r.condenserVacActive,
     houseLoadMW: Number(r.houseLoadMW.toFixed(1)),
+    energyCreatedMW: Math.round(r.energyCreatedMW),
+    batteryStoredMWh: Number(r.batteryStoredMWh.toFixed(1)),
+    batteryStoredPct: Math.round(Math.max(0, Math.min(100, r.batteryStoredMWh / 10))),
+    batteryOutputValve: Number(r.batteryOutputValve.toFixed(3)),
+    energyDemandMW: Math.round(r.energyDemandMW),
     wetSteamPenalty: Number(r.wetSteamSeverity.toFixed(2)),
     sectorMW,
     targetSectorMW,
@@ -284,28 +298,26 @@ export function getContextualDiagnosticHint(
           return `⚙️ PUMP BEARINGS HOT (${Math.round(20 + maxPumpHeat)}°C / OIL ${Math.round(state.lubeOilPressure)} PSI): OPEN BEARING COOLER VALVES ON UNIT A / A-2!`
         }
         if (state.boronTankLevel < 25) {
-          return `🧪 LOW BORON TANK (${Math.round(state.boronTankLevel)}%): STROKE MANUAL BORON PUMP ON UNIT A-2 [KEY 3] TO RESTORE ROD WORTH!`
+          return `🧪 LOW BORON TANK (${Math.round(state.boronTankLevel)}%): PASSIVE FEED TRICKLE ACTIVE — REFUEL AMBER CHANNELS ON UNIT A-2 [KEY 3]!`
+        }
+        const spentCount = Object.keys(state.coreTileAnomalies ?? {}).length
+        if (spentCount >= 4) {
+          return `☢️ SPENT FUEL OVERHEAT (${spentCount} AMBER CHANNELS): CLICK AN AMBER TILE & PULL [ROD REFUELING LEVER] ON UNIT A-2 [KEY 3]!`
         }
         return state.voidFraction > 0.35
-          ? `⚠️ STEAM VOIDS (${Math.round(state.voidFraction * 100)}%): RAISE FEEDWATER (UNIT B), CLICK RED CORE TILES, OR PRESS [BORON INJECTION] ON UNIT A!`
-          : `☢️ XENON POISONING (${Math.round(state.xenon)}%): WITHDRAW RODS (СУЗ) TO BURN XENON OR CLICK CYAN TILES ON 37-CORE MAP!`
+          ? `⚠️ STEAM VOIDS (${Math.round(state.voidFraction * 100)}%): RAISE [FEEDWATER] (UNIT B) OR LOWER [RODS] (UNIT A-2), OR PRESS [BORON INJECTION] ON UNIT A!`
+          : `☢️ XENON POISONING (${Math.round(state.xenon)}%): RAISE [RODS (СУЗ)] (UNIT A-2) OR TRIM EXCESS [FEEDWATER] (UNIT B) TO BALANCE REACTIVITY!`
       case 'grid':
-        if (state.turbines[0]?.tripped) {
-          return '🚨 TURBINE TRIPPED! FLIP [COND. VAC / RESET] ON UNIT C [KEY 5], HOLD 3000 RPM (50.0 HZ) & SYNC AT 12 O’CLOCK!'
+        if (state.batteryStoredPct < 8) {
+          return '🔋 BATTERY BANK LOW (<8%): WITHDRAW RODS (A-2) TO GENERATE >500 MW AND RECHARGE ACCUMULATORS!'
         }
-        if (!state.avrActive && (state.turbines[0]?.rpm ?? 0) > 1200) {
-          return '⚡ AVR EXCITER OFF: FLIP [AVR EXCITER] SWITCH ON UNIT C [KEY 5] TO STABILIZE 50.0 HZ & PHASE SYNC!'
+        if (state.totalElectricalMW > state.energyDemandMW + 60) {
+          return '⚡ GRID OVER-DISPATCH: LOWER [BATTERY -> GRID] WHEEL ON UNIT C [KEY 5] TO MATCH ENERGY DEMAND!'
         }
-        if (!state.auxLoopBActive && state.turbines[0]?.gridConnected) {
-          return '⚙️ CONDENSER VACUUM LOST: FLIP [COND. VACUUM] SWITCH ON UNIT C [KEY 5] TO RESTORE TURBINE TORQUE!'
+        if (state.totalElectricalMW < state.energyDemandMW - 40) {
+          return '⚡ DEMAND DEFICIT: TURN [BATTERY -> GRID] WHEEL UP ON UNIT C [KEY 5] TO SUPPLY THE GRID!'
         }
-        if (state.turbines[0]?.gridConnected && state.gridHz > 50.6) {
-          return '⚠️ TURBINE OVERSPEED (>50.6 HZ): SURPLUS STEAM TORQUE! LOWER TURBINE VALVE OR VENT STEAM (UNIT C)!'
-        }
-        if (state.turbines[0]?.gridConnected && state.gridHz < 49.4) {
-          return '⚠️ GRID FREQUENCY SAG (<49.4 HZ): RAISE RODS (A-2), BOOST PUMPS (A/B) & OPEN TURBINE VALVE (C)!'
-        }
-        return '⚙️ TURBOGENERATOR SYNC: ADJUST TURBINE STEAM VALVE ON UNIT C [KEY 5] TO 3000 RPM (50.0 HZ) & CLOSE MAIN BREAKER AT 0°!'
+        return '🔋 BATTERY BANK & DISPATCH OK: BALANCE UNIT A SUBSTATIONS TO MATCH ENERGY DEMAND WITH THE UNIT C WHEEL.'
       case 'order':
         return '📄 NEW DIRECTIVE IN PRINTER: PRESS [KEY 4] -> TEAR PAPER, INSPECT SEAL/FONT/COLOR, STAMP & DISPATCH (TUBE) OR SHRED!'
     }
@@ -318,9 +330,6 @@ export function getContextualDiagnosticHint(
   if (state.coreTemp > 520 && state.controlRodLevel > 75) {
     return '⚠️ HIGH REACTIVITY: INSERT CONTROL RODS (UNIT A-2) OR BOOST PUMPS TO AVOID OVERHEAT!'
   }
-  if (state.turbines[0]?.tripped) {
-    return hintForAlarm('grid')
-  }
   const totalSectMW =
     state.sectorMW.pripyat +
     state.sectorMW.duga +
@@ -330,14 +339,14 @@ export function getContextualDiagnosticHint(
     state.sectorMW.steel
   if (
     state.drumPressure < 42 &&
-    ((state.turbines[0]?.valve ?? 0) > 0.25 || totalSectMW > 200) &&
+    (state.batteryOutputValve > 0.25 || totalSectMW > 200) &&
     state.tutorialPhase === 'COMPLETED'
   ) {
-    return '⚠️ STEAM STARVATION (<42 BAR): WITHDRAW BORON RODS (UNIT A-2) & BOOST COOLING PUMPS (UNIT A) TO PRODUCE MORE STEAM!'
+    return '⚠️ STEAM STARVATION (<42 BAR): WITHDRAW BORON RODS (UNIT A-2) & BOOST COOLING PUMPS (UNIT A) TO CHARGE THE BATTERY!'
   }
   if (
-    state.turbines[0]?.gridConnected &&
-    (state.gridHz > 50.6 || state.gridHz < 49.2 || !state.avrActive || !state.auxLoopBActive)
+    state.tutorialPhase === 'COMPLETED' &&
+    (state.batteryStoredPct < 10 || Math.abs(state.totalElectricalMW - state.energyDemandMW) > 90)
   ) {
     return hintForAlarm('grid')
   }
@@ -949,7 +958,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         steamDumpValve: false,
         ventingSteam: false,
         bubblerDraining: false,
-        ventilationActive: false,
+        ventilationActive: true,
         avrActive: true,
         kgbLineActive: true,
         condenserVacActive: true,
@@ -968,6 +977,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         voidFraction: 0.14,
         rodTilesFlux: new Array(37).fill(60),
         coreTileAnomalies: {},
+        selectedRefuelChannel: null,
+        fuelBurnupTimer: 0,
         coreTemp: 445,
         graphiteTemp: 435,
         heliumPressure: 39,
@@ -1004,7 +1015,11 @@ export const useGameStore = create<GameState>((set, get) => ({
             tripped: false,
           },
         ],
-        houseLoadMW: 30,
+        houseLoadMW: 25,
+        energyCreatedMW: 600,
+        batteryStoredMWh: 650,
+        batteryOutputValve: 0.60,
+        energyDemandMW: 600,
         totalElectricalMW: 600,
         substations: [
           { id: 1, name: 'PRIPYAT CITY', allocatedMW: 100, targetMW: 100, maxMW: 250, requiresH2O: false, allocatedH2O: 85, targetH2O: 85, statusText: 'HEATING OK',  quotaOk: true },
@@ -1366,20 +1381,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     })
   },
 
-  setTurbineSteamValve: (valveRatioOrPct: number) => {
+  setBatteryOutputValve: (valveRatioOrPct: number) => {
     set((state) => {
       const normalized =
         valveRatioOrPct > 1.0001 ? valveRatioOrPct / 100 : valveRatioOrPct
       const clamped = Math.max(0, Math.min(1, Number(normalized.toFixed(3))))
-      // Klikk på TURBINE STEAM VALVE tilbakestiller umiddelbart turb.tripped = false
       const nextTurbines: [typeof state.turbines[0], typeof state.turbines[1]] = [
-        { ...state.turbines[0], valve: clamped, tripped: false },
-        { ...state.turbines[1], valve: clamped, tripped: false },
+        { ...state.turbines[0], valve: clamped, tripped: false, gridConnected: clamped > 0.01 },
+        { ...state.turbines[1], valve: clamped, tripped: false, gridConnected: clamped > 0.01 },
       ]
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
+        batteryOutputValve: clamped,
         turbines: nextTurbines,
       }
+      stepReactorSimulation(nextReactor, 0.001)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       const nextChatLog = syncWePadChatOnPhaseChange(
@@ -1392,6 +1408,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         wePadChatLog: nextChatLog,
       }
     })
+  },
+
+  setTurbineSteamValve: (valveRatioOrPct: number) => {
+    get().setBatteryOutputValve(valveRatioOrPct)
   },
 
   setShiftKeyHeld: (held: boolean) => {
@@ -1435,35 +1455,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       const sub = findSubById(state.substations, subId)
       const prevMW = Math.round(sub?.allocatedMW ?? 0)
       const maxMW = sub?.maxMW ?? 250
-      const rawClamped = Math.max(0, Math.min(maxMW, Math.round(targetMW / 25) * 25))
-
-      // Boron Rod Reactivity MW Ceiling:
-      // Fully inserted rods (<10%) cap total grid draw to 150 MW; withdrawing rods >50% unlocks >600 MW surge capacity!
-      const rodPct = state.controlRods * 100
-      const rodMwCeiling =
-        rodPct < 10
-          ? 150
-          : rodPct < 50
-            ? 600
-            : Math.round(600 + ((rodPct - 50) / 35) * 600)
-      const otherSectorsMW = state.substations.reduce(
-        (sum, s) => (s.id === subId ? sum : sum + s.allocatedMW),
-        0
-      )
-      const rodAllowedMax = Math.max(
-        prevMW,
-        Math.min(maxMW, Math.floor(Math.max(0, rodMwCeiling - otherSectorsMW) / 25) * 25)
-      )
-      const clamped = rawClamped > prevMW ? Math.min(rawClamped, rodAllowedMax) : rawClamped
-      const hitRodCeiling = rawClamped > clamped
+      const clamped = Math.max(0, Math.min(maxMW, Math.round(targetMW / 25) * 25))
 
       const deltaMW = clamped - prevMW
       if (deltaMW === 0) {
-        if (hitRodCeiling) {
-          return {
-            lastDecisionFeedback: `MW CEILING LOCKED BY BORON RODS (${Math.round(rodPct)}%): WITHDRAW RODS >50% ON UNIT A-2 TO UNLOCK HIGHER MW!`,
-          }
-        }
         return state
       }
 
@@ -1475,82 +1470,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         substations: nextSubstations,
       }
 
-      // Immediate Electromechanical Transient Shock (True Grid-Locked 50.0 Hz Mode:
-      // only tiny ±0.02–0.05 Hz micro-load tremors on rotor while steam drum takes physical BAR sag/spike)
-      let nextGridImpulse = state.gridTransientImpulse
-      let nextSteamImpulse = state.steamTransientImpulse
-      let nextVoltageDip = state.voltageDipIntensity
-
-      if (deltaMW > 0) {
-        const hzTremor = Math.max(-0.05, -0.0005 * deltaMW)
-        const rpmTremor = hzTremor * 60
-        const barSag = -0.15 * deltaMW
-        nextGridImpulse = Math.max(-0.05, Math.min(0.05, nextGridImpulse + hzTremor))
-        nextSteamImpulse = Math.max(-11, Math.min(11, nextSteamImpulse + barSag))
-        nextVoltageDip = Math.max(nextVoltageDip, Math.min(0.72, deltaMW / 20))
-
-        nextReactor.lubeOilPressure = Math.max(
-          28,
-          Number((state.lubeOilPressure - Math.min(4.5, deltaMW * 0.06)).toFixed(1))
-        )
-        nextReactor.pumpAHeat = Math.min(
-          100,
-          Number((state.pumpAHeat + deltaMW * 0.04).toFixed(1))
-        )
-        nextReactor.pumpBHeat = Math.min(
-          100,
-          Number((state.pumpBHeat + deltaMW * 0.04).toFixed(1))
-        )
-        nextReactor.drumPressure = Math.max(16, nextReactor.drumPressure + barSag)
-        nextReactor.turbines = nextReactor.turbines.map((t) =>
-          t.gridConnected
-            ? {
-                ...t,
-                rpm: Math.max(2997, 3000 + rpmTremor),
-                freqHz: Number((Math.max(2997, 3000 + rpmTremor) / 60).toFixed(2)),
-              }
-            : { ...t }
-        ) as [typeof nextReactor.turbines[0], typeof nextReactor.turbines[1]]
-
-        if (deltaMW >= 75 && state.tutorialPhase === 'COMPLETED' && state.coolantFlow < 0.72) {
-          const nextAnom = { ...(nextReactor.coreTileAnomalies ?? {}) }
-          const candidateTiles = [4, 8, 12, 16, 20, 22, 26, 30, 33]
-          const startIdx = (subId * 3 + Math.round(clamped / 25)) % candidateTiles.length
-          let added = 0
-          for (let i = 0; i < candidateTiles.length && added < 1; i++) {
-            const tileId = candidateTiles[(startIdx + i) % candidateTiles.length]
-            if (!nextAnom[tileId]) {
-              nextAnom[tileId] = 'void'
-              added += 1
-            }
-          }
-          nextReactor.coreTileAnomalies = nextAnom
-          nextReactor.voidFraction = Math.min(1.0, nextReactor.voidFraction + 0.025 * added)
-        }
-      } else {
-        const absDelta = Math.abs(deltaMW)
-        const hzTremor = Math.min(0.05, 0.0005 * absDelta)
-        const rpmTremor = hzTremor * 60
-        const barSpike = 0.20 * absDelta
-        nextGridImpulse = Math.max(-0.05, Math.min(0.05, nextGridImpulse + hzTremor))
-        nextSteamImpulse = Math.max(-11, Math.min(11, nextSteamImpulse + barSpike))
-        nextVoltageDip = Math.max(nextVoltageDip, Math.min(0.32, absDelta / 45))
-
-        nextReactor.drumPressure = Math.min(110, nextReactor.drumPressure + barSpike)
-        nextReactor.drumWaterLevel = Math.min(
-          340,
-          nextReactor.drumWaterLevel + Math.min(24, 0.5 * absDelta)
-        )
-        nextReactor.turbines = nextReactor.turbines.map((t) =>
-          t.gridConnected
-            ? {
-                ...t,
-                rpm: Math.min(3003, 3000 + rpmTremor),
-                freqHz: Number((Math.min(3003, 3000 + rpmTremor) / 60).toFixed(2)),
-              }
-            : { ...t }
-        ) as [typeof nextReactor.turbines[0], typeof nextReactor.turbines[1]]
-      }
+      const nextVoltageDip =
+        state.tutorialPhase === 'COMPLETED'
+          ? Math.max(state.voltageDipIntensity, Math.min(0.18, Math.abs(deltaMW) / 150))
+          : state.voltageDipIntensity
 
       stepReactorSimulation(nextReactor, 0.001)
       const prevPhase = state.tutorialPhase
@@ -1562,12 +1485,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       )
       return {
         ...mapped,
-        gridTransientImpulse: nextGridImpulse,
-        steamTransientImpulse: nextSteamImpulse,
         voltageDipIntensity: nextVoltageDip,
-        lastDecisionFeedback: hitRodCeiling
-          ? `MW CEILING LOCKED BY BORON RODS (${Math.round(rodPct)}%): WITHDRAW RODS >50% ON UNIT A-2 TO UNLOCK HIGHER MW!`
-          : state.lastDecisionFeedback,
         wePadChatLog: nextChatLog,
       }
     })
@@ -1740,13 +1658,32 @@ export const useGameStore = create<GameState>((set, get) => ({
     })
   },
 
-  quenchChannelHotspot: (channelIndex: number) => {
+  selectChannelForRefuel: (channelIndex: number) => {
     set((state) => {
       const nextReactor: ReactorState = extractReactorState(state)
-      const res = trimCoreChannelTile(nextReactor, channelIndex)
-      if (res.trimmed === 'none') {
-        return state
+      const res = selectCoreChannelForRefuel(nextReactor, channelIndex)
+      if (!res.isSpent) {
+        const hasSpent = Object.keys(nextReactor.coreTileAnomalies).length > 0
+        return {
+          lastDecisionFeedback: hasSpent
+            ? `CHANNEL #${channelIndex + 1} IS NOMINAL — CLICK A PULSING AMBER TILE TO TARGET REFUELING.`
+            : `CHANNEL #${channelIndex + 1} NOMINAL (SUZ RODS AT ${Math.round(state.controlRodLevel)}%).`,
+        }
       }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const feedbackMsg = `TARGET LOCKED: CHANNEL #${channelIndex + 1} (SPENT FUEL) — DRAG [ROD REFUELING LEVER] DOWN TO RELOAD!`
+      return {
+        ...mapped,
+        lastDecisionFeedback: feedbackMsg,
+      }
+    })
+  },
+
+  executeRefuelLeverStroke: () => {
+    set((state) => {
+      const nextReactor: ReactorState = extractReactorState(state)
+      const res = refuelSelectedCoreChannel(nextReactor)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       let nextChatLog = syncWePadChatOnPhaseChange(
@@ -1754,11 +1691,23 @@ export const useGameStore = create<GameState>((set, get) => ({
         prevPhase,
         mapped.tutorialPrompt
       )
-      const feedbackMsg =
-        res.trimmed === 'void'
-          ? `CHANNEL #${channelIndex + 1} VOID HOTSPOT TRIMMED (-> ${res.remainingPct}% VOID, BORON ${Math.round(nextReactor.boronTankLevel)}%)!`
-          : `CHANNEL #${channelIndex + 1} XENON POCKET PURGED (-> ${res.remainingPct}% XENON, BORON ${Math.round(nextReactor.boronTankLevel)}%)!`
-      if (mapped.tutorialPhase === prevPhase && mapped.tutorialPhase === 'COMPLETED') {
+      let feedbackMsg: string
+      if (res.refueledChannel !== null) {
+        feedbackMsg =
+          res.remainingSpent > 0
+            ? `CHANNEL #${res.refueledChannel + 1} REFUELED! (${res.remainingSpent} SPENT AMBER CHANNEL${res.remainingSpent === 1 ? '' : 'S'} LEFT)`
+            : `CHANNEL #${res.refueledChannel + 1} REFUELED! ALL 37 CHANNELS NOMINAL.`
+      } else if (res.hasUnselectedSpent) {
+        feedbackMsg =
+          'NO AMBER TILE SELECTED! CLICK A PULSING AMBER CORE TILE FIRST, THEN PULL [ROD REFUELING LEVER].'
+      } else {
+        feedbackMsg = `FUEL CRANE CYCLED — ALL CHANNELS NOMINAL (BORON TANK ${Math.round(nextReactor.boronTankLevel)}%).`
+      }
+      if (
+        res.refueledChannel !== null &&
+        mapped.tutorialPhase === prevPhase &&
+        mapped.tutorialPhase === 'COMPLETED'
+      ) {
         nextChatLog = [
           ...nextChatLog.slice(-30),
           createWePadChatMessage('SYSTEM', feedbackMsg, { level: 'normal' }),
@@ -1768,6 +1717,22 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...mapped,
         lastDecisionFeedback: feedbackMsg,
         wePadChatLog: nextChatLog,
+      }
+    })
+  },
+
+  quenchChannelHotspot: (channelIndex: number) => {
+    set((state) => {
+      const nextReactor: ReactorState = extractReactorState(state)
+      const res = selectCoreChannelForRefuel(nextReactor, channelIndex)
+      if (!res.isSpent) {
+        return state
+      }
+      const prevPhase = state.tutorialPhase
+      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      return {
+        ...mapped,
+        lastDecisionFeedback: `TARGET LOCKED: CHANNEL #${channelIndex + 1} (SPENT FUEL) — DRAG [ROD REFUELING LEVER] DOWN TO RELOAD!`,
       }
     })
   },
@@ -1982,7 +1947,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   injectBoronAcid: () => {
     set((state) => {
       if (state.boronTankLevel < 20) {
-        const warnMsg = `BORON TANK LOW (${Math.round(state.boronTankLevel)}% < 20%)! STROKE MANUAL BORON PUMP ON UNIT A-2 OR BOOST FEEDWATER (UNIT B)!`
+        const warnMsg = `BORON TANK LOW (${Math.round(state.boronTankLevel)}% < 20%)! CYCLE [ROD REFUELING LEVER] ON UNIT A-2 OR BOOST FEEDWATER (UNIT B)!`
         const warnEntry = createLogEntry(
           state.shiftTimeMinutes,
           'K.O.M.R.A.D.-84',
@@ -2062,6 +2027,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       let nextHz = state.gridHz
       let nextStrikes = state.treasonStrikes
       let nextHotspots = { ...state.channelHotspots }
+      let nextCoreTileAnomalies = { ...(state.coreTileAnomalies ?? {}) }
       let nextSealToggles: [boolean, boolean, boolean] = [
         ...state.sealToggles,
       ] as [boolean, boolean, boolean]
@@ -2154,10 +2120,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         const plantGuidance =
           totalDeltaMW >= 25
-            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): 1)[A-2] RAISE RODS -> 2)[B/A] FEEDWATER & PUMPS -> 3)[A] SET MW LEVER -> 4)[C] ALIGN POWER BALANCE VIA TURBINE THROTTLE!`
+            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): 1)[A-2] RAISE RODS & [B] MATCH FEEDWATER -> 2)[A] SET MW LEVER -> 3)[C] TURN [BATTERY -> GRID] WHEEL UP!`
             : totalDeltaMW <= -25
-              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): 1)[A] LOWER MW LEVER -> 2)[C] EASE TURBINE THROTTLE & VENT >75 BAR -> 3)[A-2] INSERT RODS -> 4)[B] TRIM FEEDWATER!`
-              : `DIVERT POWER (${newTotalMW} MWe TOTAL): RE-BALANCE UNIT A LEVERS & VERIFY UNIT C 50.0 HZ!`
+              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): 1)[A] LOWER MW LEVER -> 2)[C] DIAL DOWN [BATTERY -> GRID] WHEEL -> 3)[A-2] INSERT RODS & [B] TRIM FEEDWATER!`
+              : `DIVERT POWER (${newTotalMW} MWe TOTAL): RE-BALANCE UNIT A LEVERS & VERIFY UNIT C [BATTERY -> GRID] WHEEL!`
 
         const routeReqText = `${changeDescriptions.join(' & ')} // ${plantGuidance}`
 
@@ -2194,7 +2160,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (!state.isGodMode) {
           nextStrikes = Math.min(3, state.treasonStrikes + 1)
         }
-        feedback = `CIA SABOTAGE DISPATCHED (${flawText ?? 'FORGERY'})! TREASON STRIKE RECORDED!`
+        nextCoreTileAnomalies = {
+          ...nextCoreTileAnomalies,
+          7: 'spent',
+          29: 'spent',
+        }
+        nextHotspots = {
+          ...nextHotspots,
+          7: 'amber',
+          29: 'amber',
+        }
+        feedback = `CIA SABOTAGE DISPATCHED (${flawText ?? 'FORGERY'} — 2 SPENT RODS)! TREASON STRIKE RECORDED!`
         logLevel = 'danger'
       }
 
@@ -2228,6 +2204,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         excitationTrim: nextTrim,
         gridHz: nextHz,
         treasonStrikes: nextStrikes,
+        coreTileAnomalies: nextCoreTileAnomalies,
         channelHotspots: nextHotspots,
         sealToggles: nextSealToggles,
         containmentSealLocked: nextSealLocked,
@@ -2277,9 +2254,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         ? 0
         : Number((state.voltageDipIntensity * Math.exp(-dt * 3.1)).toFixed(3))
 
-    const wasGridConnected = Boolean(state.turbines[0]?.gridConnected)
     const baseReactor = extractReactorState(state)
-    stepReactorSimulation(baseReactor, dt)
+    stepReactorSimulation(baseReactor, dt, state.tutorialPhase)
 
     if (state.isGodMode) {
       baseReactor.coreMeltdown = false
@@ -2302,19 +2278,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       prevTutorialPhase,
       mapped.tutorialPrompt
     )
-
-    if (wasGridConnected && !baseReactor.turbines[0]?.gridConnected) {
-      const tripMsg =
-        baseReactor.drumPressure < 25
-          ? '🚨 [REVERSE-POWER PROTECTION TRIP]: STEAM PRESSURE COLLAPSED (<25 BAR) — MAIN BREAKER OPENED TO PREVENT MOTORING! BOIL STEAM >=55 BAR, RESET SWITCH 4, AND RE-SYNC AT 50.0 HZ!'
-          : '🚨 [MAIN BREAKER TRIPPED OPEN]: GENERATOR DISCONNECTED FROM SOVIET GRID! STABILIZE CORE, RESET SWITCH 4 ON UNIT C, AND RE-SYNC AT 50.0 HZ!'
-      nextFeedback = tripMsg
-      nextChatLog = [
-        ...nextChatLog.slice(-30),
-        createWePadChatMessage('SYSTEM', tripMsg, { level: 'danger' }),
-      ]
-      newLogs.push(createLogEntry(state.shiftTimeMinutes, 'K.O.M.R.A.D.-84', tripMsg, 'danger'))
-    }
 
     if (mapped.tutorialPhase !== prevTutorialPhase) {
       const transitionText =
@@ -2358,14 +2321,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         (sum, s) => sum + s.targetMW,
         0
       )
-      const gridConnected = Boolean(baseReactor.turbines[0]?.gridConnected)
-      const generatedGrossMWe = gridConnected
-        ? baseReactor.totalElectricalMW + baseReactor.houseLoadMW
-        : 0
-      const neededGrossMWe = totalTargetMW + baseReactor.houseLoadMW
-      const deltaGrossMWe = generatedGrossMWe - neededGrossMWe
-      const powerBalanceMatched =
-        gridConnected && Math.abs(deltaGrossMWe) <= 20
+      const dispatchedMWe = baseReactor.totalElectricalMW
+      const neededMWe = Math.max(totalTargetMW, baseReactor.energyDemandMW)
+      const deltaDispatchMWe = dispatchedMWe - neededMWe
+      const powerBalanceMatched = Math.abs(deltaDispatchMWe) <= 25
 
       const allQuotasOk = baseReactor.substations.every((s) => s.quotaOk)
       const failingSub = baseReactor.substations.find((s) => !s.quotaOk)
@@ -2382,7 +2341,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               complianceRemainingSec: 0,
             }
             nextInstability = Math.max(0, nextInstability - 10)
-            const okReason = `DIRECTIVE QUOTA FULFILLED (${nextMandate.title}) — ${Math.round(generatedGrossMWe)}/${Math.round(neededGrossMWe)} MWe BALANCED AT 50.0 HZ! +1 COMMENDATION.`
+            const okReason = `DIRECTIVE QUOTA FULFILLED (${nextMandate.title}) — ${Math.round(dispatchedMWe)}/${Math.round(neededMWe)} MWe DISPATCHED FROM BATTERY! +1 COMMENDATION.`
             pushKomradLiveDispatch(okReason, 'normal')
             mandateComplianceListener?.(true, nextMandate.id, okReason)
           } else {
@@ -2398,7 +2357,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           const rem = (nextMandate.complianceRemainingSec ?? 65) - dt
           if (rem <= 0) {
             nextInstability = Math.min(100, nextInstability + 16)
-            const failReason = `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title} (GEN ${Math.round(generatedGrossMWe)} vs NEED ${Math.round(neededGrossMWe)} MWe) — +16% INSTABILITY!`
+            const failReason = `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title} (GRID ${Math.round(dispatchedMWe)} vs DEMAND ${Math.round(neededMWe)} MWe) — +16% INSTABILITY!`
             pushKomradLiveDispatch(failReason, 'danger')
             mandateComplianceListener?.(false, nextMandate.id, failReason)
             nextMandate = {
@@ -2418,14 +2377,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         nextInstability = Number(Math.max(0, nextInstability - 0.6 * dt).toFixed(2))
       }
 
-      // 2. Sustained Over-Generation Transformer Overload (> +60 MWe surplus pushed into grid)
-      if (gridConnected && deltaGrossMWe > 60) {
+      // 2. Sustained Over-Dispatch (> +75 MWe surplus pushed into grid from Battery)
+      if (deltaDispatchMWe > 75) {
         surplusOverloadSeconds += dt
         if (surplusOverloadSeconds >= 16) {
           surplusOverloadSeconds = 0
           nextInstability = Math.min(100, nextInstability + 10)
           pushKomradLiveDispatch(
-            `⚡ [TRANSFORMER OVERLOAD: +${Math.round(deltaGrossMWe)} MWe SURPLUS]: OVER-PUMPING MEGAWATTS INTO GRID SUBSTATIONS! LOWER [TURBINE THROTTLE] ON UNIT C & PUSH [CONTROL RODS] IN ON A-2 (+10% INSTABILITY)!`,
+            `⚡ [GRID OVER-DISPATCH: +${Math.round(deltaDispatchMWe)} MWe SURPLUS]: OVER-FEEDING SUBSTATIONS FROM BATTERY! LOWER [BATTERY -> GRID] WHEEL ON UNIT C (+10% INSTABILITY)!`,
             'warn'
           )
         }
@@ -2498,13 +2457,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         )
       }
       if (
-        gridConnected &&
-        (totalAllocatedMW > baseReactor.totalElectricalMW + 25 || deltaGrossMWe < -25)
+        totalAllocatedMW > dispatchedMWe + 25 ||
+        deltaDispatchMWe < -30
       ) {
         tryHazard(
           'GEN_DEFICIT',
-          Math.max(totalAllocatedMW + baseReactor.houseLoadMW, neededGrossMWe),
-          generatedGrossMWe,
+          Math.max(totalAllocatedMW, neededMWe),
+          dispatchedMWe,
           'warn'
         )
       }
@@ -2543,7 +2502,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (
         !hazardFired &&
         isCalm &&
-        shiftElapsedSeconds - lastKomradPropagandaSec >= 45
+        shiftElapsedSeconds - lastKomradPropagandaSec >= 65
       ) {
         lastKomradPropagandaSec = shiftElapsedSeconds
         komradDispatchSeed += 1

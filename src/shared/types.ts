@@ -206,6 +206,7 @@ export interface GameState extends ReactorState {
   auxLoopBActive: boolean // ВАКУУМ КОНДЕНСАТОРА / TRIP RESET (+12 MW house load, condenser vacuum)
   houseLoadMW: number // Total internal plant auxiliary load drawn from generator (MW)
   wetSteamPenalty: number // 0.0 to 1.0 turbine efficiency & vibration penalty from high drum level (> +100mm)
+  batteryStoredPct: number // 0 to 100% accumulator storage charge level
   boronCooldown: number // 0 to 30s recharge for БОРНАЯ КИСЛОТА plunger
   az5Available: boolean
   az5Cooldown: number
@@ -265,6 +266,7 @@ export interface GameState extends ReactorState {
   setRodTargetRate: (rate: -1 | 0 | 1) => void
   setAutoRodEnabled: (enabled?: boolean) => void
   setTurbineSteamValve: (valveRatioOrPct: number) => void
+  setBatteryOutputValve: (valveRatioOrPct: number) => void
   setShiftKeyHeld: (held: boolean) => void
   shiftPower: (system: SystemType, deltaMW: number) => void
   setSubsystemPower: (system: SystemType, targetMW: number) => void
@@ -277,6 +279,8 @@ export interface GameState extends ReactorState {
   adjustControlRodLevel: (deltaPct: number) => void
   pumpBoronTank: (amountPct?: number) => void
   quenchChannelHotspot: (channelIndex: number) => void
+  selectChannelForRefuel: (channelIndex: number) => void
+  executeRefuelLeverStroke: () => void
   setNitrogenLoopValve: (valvePct: number) => void
   setBubblerDraining: (draining: boolean) => void
   toggleSealSwitch: (toggleIndex: 0 | 1 | 2, active?: boolean) => void

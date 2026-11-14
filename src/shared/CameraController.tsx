@@ -48,9 +48,9 @@ const STATION_CAMERA_POSES: Record<CameraStation, CameraPose> = {
     fov: 56,
   },
   aux: {
-    position: [-0.12, 1.24, 2.02],
-    target: [1.76, 1.16, 2.02],
-    fov: 58,
+    position: [-0.12, 1.32, 2.02],
+    target: [1.76, 1.34, 2.02],
+    fov: 56,
   },
 };
 
