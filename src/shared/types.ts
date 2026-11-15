@@ -229,6 +229,7 @@ export interface GameState extends ReactorState {
   shiftRunId: number
   hoveredDiagnosticId: DiagnosticAlarmId | null
   hoveredControlHint: string | null
+  diagFeedActive: boolean
 
   // Shared Actions
   setActiveStation: (station: CameraStation) => void
@@ -327,6 +328,7 @@ export interface GameState extends ReactorState {
     isExpanded?: boolean
   ) => void
   toggleMusicMute: () => void
+  setDiagFeedActive: (active: boolean) => void
   setGodMode: (enabled: boolean) => void
   debugSetTemp: (temp: number) => void
   debugTriggerBlackout: () => void

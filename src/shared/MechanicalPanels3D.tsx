@@ -682,6 +682,12 @@ export const SovietModularSteelCabinet3D: React.FC<
                 ? "warn"
                 : "normal";
           }
+          if (idx === 4) {
+            if (s.tutorialPhase === "STEP_2_PULL_RODS" && !s.autoRodEnabled) {
+              return "warn";
+            }
+            return !s.autoRodEnabled && isOperating ? "warn" : "normal";
+          }
           return s.boronTankLevel < 18 ||
             (isOperating && s.pressureBar < 26) ||
             s.pressureBar >= 80
@@ -1112,8 +1118,42 @@ export const SovietModularSteelCabinet3D: React.FC<
             const cellSpacing = (width - 0.16) / 6;
             const cx = -((width - 0.16) / 2) + cellSpacing * (tIdx + 0.5);
             const cellW = cellSpacing - 0.016;
+            const isAutoRodsTile = unitCode === "A2" && tIdx === 4;
             return (
-              <group key={`tablo-${tIdx}`} position={[cx, -0.004, 0.064]}>
+              <group
+                key={`tablo-${tIdx}`}
+                position={[cx, -0.004, 0.064]}
+                onPointerDown={
+                  isAutoRodsTile
+                    ? (e) => {
+                        if (useCameraLookStore.getState().isFreeLookMode) return;
+                        e.stopPropagation();
+                        playSwitchClank(true);
+                        useGameStore.getState().setAutoRodEnabled();
+                      }
+                    : undefined
+                }
+                onPointerOver={
+                  isAutoRodsTile
+                    ? (e) => {
+                        e.stopPropagation();
+                        useGameStore
+                          .getState()
+                          .setHoveredControlHint(
+                            "[CLICK AUTO RODS]: TOGGLE AUTOMATIC ROD REGULATOR (ON / OFF)",
+                          );
+                      }
+                    : undefined
+                }
+                onPointerOut={
+                  isAutoRodsTile
+                    ? (e) => {
+                        e.stopPropagation();
+                        useGameStore.getState().setHoveredControlHint(null);
+                      }
+                    : undefined
+                }
+              >
                 <mesh>
                   <boxGeometry args={[cellW + 0.008, 0.088, 0.008]} />
                   <meshStandardMaterial
@@ -2025,6 +2065,7 @@ export interface SovietBacklitIndicatorBlock3DProps {
   scale?: number;
   label: string;
   onClick?: (e: ThreeEvent<MouseEvent>) => void;
+  onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOut?: (e: ThreeEvent<PointerEvent>) => void;
   getAlertState: (state: ReturnType<typeof useGameStore.getState>) => {
@@ -2048,6 +2089,7 @@ export const SovietBacklitIndicatorBlock3D: React.FC<
   scale = 1,
   label,
   onClick,
+  onPointerDown,
   onPointerOver,
   onPointerOut,
   getAlertState,
@@ -2158,9 +2200,17 @@ export const SovietBacklitIndicatorBlock3D: React.FC<
       rotation={rotation}
       scale={scale}
       onClick={onClick}
+      onPointerDown={onPointerDown}
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
     >
+      {/* Generous invisible proud hit-box collider so interactive buttons never miss raycasts */}
+      {(onClick || onPointerDown) && (
+        <mesh position={[0, 0, 0.014]}>
+          <boxGeometry args={[0.116, 0.056, 0.036]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
       {/* Recessed Warm Cast-Iron & Brushed-Brass Mounting Bezel (`0.098m × 0.042m × 0.01m`) */}
       <mesh castShadow receiveShadow>
         <boxGeometry args={[0.098, 0.042, 0.01]} />
@@ -5727,12 +5777,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
     () =>
       makePlaqueTex(
         variant === "rear" ? "FEEDWATER / GAS" : "CONTROL ROD DRIVE",
-        variant === "rear" ? "ПЭН & HE-N2 (0-100%)" : "ROD POS: 0–100% (SCROLL)",
+        variant === "rear" ? "ПЭН & HE-N2 (0-100%)" : "AUTO RODS & 0–100% WHEEL",
         {
           width: 512,
           height: 168,
           titleSize: 58,
-          subSize: 44,
+          subSize: variant === "rear" ? 44 : 40,
           titleColor: "#ffffff",
           titleStroke: "#000000",
           subColor: "#ffcc00",
@@ -6241,7 +6291,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       s.graphiteTemp > 540 ||
       Math.abs(s.reactivity) > 0.015 ||
       (rodPct > 75 && s.coreTemp > 520);
-    const sig = `${variant}|${Math.round(s.thermalPower)}|${Math.round(s.drumPressure)}|${Math.round(s.drumWaterLevel)}|${fwPct}|${s.graphiteTemp}|${Math.round(s.heliumPressure)}|${bubblerPct}|${boronPct}|${Math.round(s.boronReservePool)}|${rodPct}|${voidPct}|${xenonPct}|${s.reactivity.toFixed(3)}|${s.autoRodEnabled}|${s.bubblerDraining}|${s.containmentSealLocked}|${s.mcpActive.join(",")}|${activeHotspots}|${s.selectedRefuelChannel ?? "none"}|${s.isBlackout}`;
+    const sig = `${variant}|${s.tutorialPhase}|${Math.round(s.thermalPower)}|${Math.round(s.drumPressure)}|${Math.round(s.drumWaterLevel)}|${fwPct}|${s.graphiteTemp}|${Math.round(s.heliumPressure)}|${bubblerPct}|${boronPct}|${Math.round(s.boronReservePool)}|${rodPct}|${voidPct}|${xenonPct}|${s.reactivity.toFixed(3)}|${s.autoRodEnabled}|${s.bubblerDraining}|${s.containmentSealLocked}|${s.mcpActive.join(",")}|${activeHotspots}|${s.selectedRefuelChannel ?? "none"}|${s.isBlackout}`;
     const tex = vfdMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (tex && tex.userData.lastSig !== sig) {
       lastVfdDrawRef.current = t;
@@ -6295,9 +6345,11 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               ? `⚠️ STEAM VOIDS (${voidPct}%): RAISE [FEEDWATER] (UNIT B), LOWER RODS, OR PRESS [BORON INJECTION]!`
               : xenonPct > 35
                 ? `⚠️ XENON-135 (${xenonPct}%): RAISE [RODS (СУЗ)] OR TRIM EXCESS [FEEDWATER] (UNIT B) TO BALANCE!`
-                : activeHotspots > 0
-                  ? `> ${activeHotspots} SPENT ROD(S) AMBER: ${s.selectedRefuelChannel !== null ? `CH #${s.selectedRefuelChannel + 1} LOCKED — PULL REFUEL LEVER!` : "CLICK AMBER TILE TO TARGET REFUEL!"}`
-                  : `> RODS: ${rodPct}% | FEEDWATER: ${fwPct}% | REACTIVITY BALANCED | FUEL: 37/37 OK`;
+                : s.tutorialPhase === "STEP_2_PULL_RODS" && !s.autoRodEnabled
+                  ? `> STEP 2: CLICK [AUTO RODS] BUTTON (ABOVE LEFT ROD WHEEL) TO ENGAGE AUTO REGULATOR!`
+                  : activeHotspots > 0
+                    ? `> ${activeHotspots} SPENT ROD(S) AMBER: ${s.selectedRefuelChannel !== null ? `CH #${s.selectedRefuelChannel + 1} LOCKED — PULL REFUEL LEVER!` : "CLICK AMBER TILE TO TARGET REFUEL!"}`
+                    : `> RODS: ${rodPct}% | FEEDWATER: ${fwPct}% | REACTIVITY BALANCED | FUEL: 37/37 OK`;
 
         paintSovietCRTScreen(ctx, 768, 144, {
           headerCode: variant === "rear" ? "CRT-84B" : "CRT-84A2",
@@ -6322,7 +6374,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
           footerLine:
             variant === "rear"
               ? `ГЦН: ${s.mcpActive.filter(Boolean).length}/4 • SEALS: ${s.containmentSealLocked ? "LOCKED" : "LEAK!"} • ПЭН/GAS: ${fwPct}% • BUBBLER DRAIN: ${s.bubblerDraining ? "OPEN" : "SHUT"}`
-              : `MWt: ${Math.round(s.thermalPower)}/3200 • АР: ${s.autoRodEnabled ? "AUTO" : "MANUAL"} • BORON: ${boronPct}% • SPENT RODS: ${activeHotspots}`,
+              : `MWt: ${Math.round(s.thermalPower)}/3200 • AUTO RODS: ${s.autoRodEnabled ? "ON" : "OFF"} • BORON: ${boronPct}% • SPENT RODS: ${activeHotspots}`,
           isBlackout: s.isBlackout,
         });
         tex.needsUpdate = true;
@@ -6697,15 +6749,15 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               />
             </mesh>
             <CagedSovietJewelLamp3D
-              position={[-0.115, 0.115, 0.024]}
+              position={[-0.118, 0.128, 0.026]}
               lampMatRef={oilLampMatRef}
               scale={0.82}
             />
             <SovietBacklitIndicatorBlock3D
-              position={[0.04, 0.115, 0.024]}
-              scale={0.88}
-              label="АР АВТОМАТ"
-              onClick={(e) => {
+              position={[0.032, 0.128, 0.036]}
+              scale={1.12}
+              label="AUTO RODS"
+              onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
                 playSwitchClank(true);
@@ -6716,7 +6768,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 useGameStore
                   .getState()
                   .setHoveredControlHint(
-                    "[CLICK АР АВТОМАТ]: TOGGLE AUTOMATIC ROD REGULATOR (АР)",
+                    "[CLICK AUTO RODS]: TOGGLE AUTOMATIC ROD REGULATOR (ON / OFF)",
                   );
               }}
               onPointerOut={(e) => {
@@ -6733,7 +6785,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               })}
             />
             {/* Semicircular Brushed-Brass 0-100% Scale Arc */}
-            <mesh position={[-0.035, -0.02, 0.022]}>
+            <mesh position={[-0.035, -0.032, 0.022]}>
               <torusGeometry args={[0.092, 0.0065, 8, 22, Math.PI]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -6746,7 +6798,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
             {/* Stepped Cast-Iron Valve Body & Stuffing Box */}
             <group
-              position={[-0.035, -0.02, 0.022]}
+              position={[-0.035, -0.032, 0.022]}
               onWheel={(e: ThreeEvent<WheelEvent>) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
@@ -6803,9 +6855,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
               {/* Chipped Dark Olive-Drab Cast-Iron 6-Spoke Handwheel */}
               <group ref={oilWheelRef} position={[0, 0, 0.07]}>
-                {/* Generous Invisible Full-Disc Hit Collider so clicking or dragging never misses */}
+                {/* Tight Hit Collider matching physical handwheel so AUTO RODS above is never occluded */}
                 <mesh rotation={[Math.PI / 2, 0, 0]}>
-                  <cylinderGeometry args={[0.135, 0.135, 0.11, 16]} />
+                  <cylinderGeometry args={[0.092, 0.092, 0.044, 16]} />
                   <meshBasicMaterial transparent opacity={0} depthWrite={false} />
                 </mesh>
                 <mesh castShadow>
@@ -7747,9 +7799,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 />
               </mesh>
               <group ref={gasWheelRef} position={[0, 0, 0.058]}>
-                {/* Generous Invisible Full-Disc Hit Collider so clicking or dragging never misses */}
+                {/* Tight Hit Collider matching physical handwheel without occluding indicator above */}
                 <mesh rotation={[Math.PI / 2, 0, 0]}>
-                  <cylinderGeometry args={[0.135, 0.135, 0.11, 16]} />
+                  <cylinderGeometry args={[0.092, 0.092, 0.044, 16]} />
                   <meshBasicMaterial transparent opacity={0} depthWrite={false} />
                 </mesh>
                 {/* Chipped Deep Oxidized Crimson Enamel Cast-Iron Handwheel (#6e1a14) */}

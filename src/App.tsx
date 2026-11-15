@@ -15,6 +15,7 @@ export function App() {
   const phase = useGameStore((s) => s.phase)
   const tick = useGameStore((s) => s.tick)
   const isMusicMuted = useGameStore((s) => s.isMusicMuted)
+  const diagFeedActive = useGameStore((s) => s.diagFeedActive)
   const wePadHeld = useGameStore((s) => s.wePadHeld)
   const wePadInspecting = useGameStore((s) => s.wePadInspecting)
 
@@ -40,7 +41,7 @@ export function App() {
         s.coreTemp >= 760 ||
         s.redlineInstability >= 50
       startSoundtrack()
-      updateSoundtrackState(isRedline, s.isMusicMuted)
+      updateSoundtrackState(isRedline, s.isMusicMuted || s.diagFeedActive)
     }
 
     window.addEventListener('pointerdown', syncSoundtrack, { passive: true })
@@ -61,8 +62,8 @@ export function App() {
       s.powerAllocation.facility
     const isRedline =
       totalMW > s.maxSafePower || s.coreTemp >= 760 || s.redlineInstability >= 50
-    updateSoundtrackState(isRedline, isMusicMuted)
-  }, [isMusicMuted, phase])
+    updateSoundtrackState(isRedline, isMusicMuted || diagFeedActive)
+  }, [isMusicMuted, diagFeedActive, phase])
 
   // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase,
   // or to re-close the Main Breaker during an active shift if it tripped open (isBlackout === true).

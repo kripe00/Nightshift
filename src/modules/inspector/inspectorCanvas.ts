@@ -2735,17 +2735,17 @@ export function drawSecurityManualCanvas(
       },
       {
         icon: 'wheel',
-        badge: '[UNIT A-2] OIL COOLER & AUTO RODS (АР)',
+        badge: '[UNIT A-2] CONTROL ROD WHEEL & [AUTO RODS]',
         useLines: [
-          'Turn OIL COOLER wheel (50-65%) on A-2;',
-          'click [АР АВТОМАТ] for automatic trim.',
+          'Click [AUTO RODS] button above left wheel;',
+          'scroll/drag CONTROL RODS (55% nominal).',
         ],
         effectLines: [
-          'Keeps ГЦН pump bearings cool & holds steady',
-          'core reactivity once startup stabilizes.',
+          '[AUTO RODS] micro-trims core reactivity;',
+          'pulling rods UP boils more steam -> MW.',
         ],
         reactionLines: [
-          'Manual Scroll/Drag overrides Rods anytime;',
+          'Manual Scroll/Drag adjusts Rods anytime;',
           'hold SHIFT while scrolling for ±1% trim!',
         ],
       },
@@ -3380,8 +3380,8 @@ export function drawWePad84ScreenCanvas(
             line2: 'turn HELIUM-N2 & FEEDWATER ~50%.',
           },
           {
-            head: '2. [KEY 3] UNIT A-2: OIL & RODS',
-            line1: 'Open OIL COOLER ~55%; flip AUTO ON',
+            head: '2. [KEY 3] UNIT A-2: AUTO RODS & 55%',
+            line1: 'Click [AUTO RODS] ON (above left wheel)',
             line2: '& raise BORON RODS to 55% (charge BAT).',
           },
           {

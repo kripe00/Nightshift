@@ -1038,10 +1038,10 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       return {
         phase: 'STEP_2_PULL_RODS',
         header: '>> STEP 2/7 [KEY 3 -> UNIT A-2 // BORON RODS]:',
-        body: 'ACTION: FLIP ON "AUTO REGULATOR (AP)" AND SCROLL "CONTROL ROD DRIVE" WHEEL UP TO 55% WITHDRAWN.',
+        body: 'ACTION: ON [UNIT A-2] LEFT BAY, CLICK THE PULSING [AUTO RODS] BUTTON ABOVE THE WHEEL AND RAISE RODS TO 55%.',
         hint: 'WHY: Boron control rods act as neutron sponges. Pulling them UP raises REACTIVITY and heats core water (~1920 MWt).',
         panelKey: 'GO TO: [KEY 3] UNIT A-2 (MID-LEFT)',
-        actionLine: 'FLIP [AUTO RODS] ON & RAISE RODS 55%',
+        actionLine: 'CLICK [AUTO RODS] (ABOVE WHEEL) & RODS 55%',
         whyLines: [
           'Boron rods act as neutron sponges inside the core.',
           'Pulling them UP raises REACTIVITY & THERMAL MWt gauge.'

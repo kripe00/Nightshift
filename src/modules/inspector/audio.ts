@@ -5,9 +5,8 @@ import { useGameStore } from '../../shared/useGameStore'
 
 type AuxChannelPhase =
   | 'idle'
-  | 'fading_in'
+  | 'syncing'
   | 'playing'
-  | 'fading_out'
   | 'restoring'
 
 interface MediaBusWindow extends Window {
@@ -16,17 +15,42 @@ interface MediaBusWindow extends Window {
   __k84CleanupAuxBus?: () => void
 }
 
-const AUX_CHANNEL_SRC = './sprites/desk_hardware/desk_aux_84.mp3'
-const AUX_PEAK_VOLUME = 0.58
-const AUX_FADE_IN_MS = 2200
-const AUX_FADE_OUT_SEC = 3.2
-const AUX_RESTORE_MS = 2200
+type RvfcVideoElement = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: (now: number, metadata: unknown) => void) => number
+  cancelVideoFrameCallback?: (handle: number) => void
+}
 
-let auxCalibTrack: HTMLAudioElement | null = null
+const AUX_DIAG_FEED_SRC = './sys/skala84_diag.mp4?v=85'
+const AUX_PEAK_VOLUME = 0.78
+const AUX_SYNC_GLITCH_MS = 250
+const AUX_MAX_PREBUFFER_MS = 1500
+const AUX_RESTORE_MS = 1800
+
+let auxDiagVideo: HTMLVideoElement | null = null
 let auxPhase: AuxChannelPhase = 'idle'
 let auxPhaseStartMs = 0
+let auxDiagTriggerMs = 0
+let auxActiveRunId = -1
 let auxTimerId: number | null = null
+let auxFrameSeq = 0
+let auxRvfcHandle: number | null = null
 let bgDuckGain = 1
+
+export function getSkalaDiagFeedElement(): HTMLVideoElement | null {
+  return auxDiagVideo
+}
+
+export function getSkalaDiagFeedStartMs(): number {
+  return auxDiagTriggerMs
+}
+
+export function getSkalaDiagFeedFrameSeq(): number {
+  return auxFrameSeq
+}
+
+export function isSkalaDiagFeedSyncing(): boolean {
+  return auxPhase === 'syncing'
+}
 
 const trackedBgMedia = new Set<HTMLMediaElement>()
 const intendedBgVolumes = new WeakMap<HTMLMediaElement, number>()
@@ -70,14 +94,14 @@ function installMediaGainBus(): void {
     configurable: true,
     enumerable: nativeDesc.enumerable ?? true,
     get(this: HTMLMediaElement): number {
-      if (this === auxCalibTrack) {
+      if (this === auxDiagVideo) {
         return nativeGet.call(this) as number
       }
       return intendedBgVolumes.get(this) ?? (nativeGet.call(this) as number)
     },
     set(this: HTMLMediaElement, value: number): void {
       const clamped = clampUnit(value)
-      if (this === auxCalibTrack) {
+      if (this === auxDiagVideo) {
         nativeSet.call(this, clamped)
         return
       }
@@ -88,7 +112,7 @@ function installMediaGainBus(): void {
   })
 
   HTMLMediaElement.prototype.play = function (this: HTMLMediaElement): Promise<void> {
-    if (this !== auxCalibTrack) {
+    if (this !== auxDiagVideo) {
       trackedBgMedia.add(this)
       const currentIntended =
         intendedBgVolumes.get(this) ?? clampUnit(nativeGet.call(this) as number)
@@ -100,13 +124,13 @@ function installMediaGainBus(): void {
 }
 
 function setAuxTrackVolume(vol: number): void {
-  if (!auxCalibTrack || typeof window === 'undefined') return
+  if (!auxDiagVideo || typeof window === 'undefined') return
   const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
   const clamped = clampUnit(vol)
   if (setNativeVol) {
-    setNativeVol.call(auxCalibTrack, clamped)
+    setNativeVol.call(auxDiagVideo, clamped)
   } else {
-    auxCalibTrack.volume = clamped
+    auxDiagVideo.volume = clamped
   }
 }
 
@@ -117,72 +141,161 @@ function clearAuxTimer(): void {
   }
 }
 
+function cancelVideoFramePump(vid: HTMLVideoElement | null): void {
+  if (auxRvfcHandle !== null && vid) {
+    const rvfcVid = vid as RvfcVideoElement
+    rvfcVid.cancelVideoFrameCallback?.(auxRvfcHandle)
+  }
+  auxRvfcHandle = null
+}
+
+function pumpVideoFrameCallback(vid: HTMLVideoElement): void {
+  cancelVideoFramePump(vid)
+  const rvfcVid = vid as RvfcVideoElement
+  if (typeof rvfcVid.requestVideoFrameCallback !== 'function') return
+  const onFrame = () => {
+    if (auxDiagVideo !== vid || auxPhase !== 'playing') {
+      auxRvfcHandle = null
+      return
+    }
+    auxFrameSeq += 1
+    auxRvfcHandle = rvfcVid.requestVideoFrameCallback?.(onFrame) ?? null
+  }
+  auxRvfcHandle = rvfcVid.requestVideoFrameCallback(onFrame)
+}
+
+function mountHiddenDiagVideo(vid: HTMLVideoElement): void {
+  if (typeof document === 'undefined') return
+  document.querySelectorAll('video[data-k84-diag="1"]').forEach((node) => {
+    if (node !== vid) {
+      if (node instanceof HTMLVideoElement) {
+        node.pause()
+      }
+      node.remove()
+    }
+  })
+  vid.dataset.k84Diag = '1'
+  vid.tabIndex = -1
+  vid.setAttribute('aria-hidden', 'true')
+  vid.style.cssText =
+    'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;'
+  if (!vid.isConnected && document.body) {
+    document.body.appendChild(vid)
+  }
+}
+
+function unmountHiddenDiagVideo(vid: HTMLVideoElement | null): void {
+  cancelVideoFramePump(vid)
+  if (vid && vid.isConnected) {
+    vid.remove()
+  }
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('video[data-k84-diag="1"]').forEach((node) => {
+      if (node instanceof HTMLVideoElement) {
+        node.pause()
+      }
+      node.remove()
+    })
+  }
+}
+
 function stopAuxAndRestoreImmediate(): void {
   clearAuxTimer()
-  if (auxCalibTrack) {
-    auxCalibTrack.pause()
-    auxCalibTrack.currentTime = 0
+  unmountHiddenDiagVideo(auxDiagVideo)
+  if (auxDiagVideo) {
+    auxDiagVideo.pause()
+    if (auxDiagVideo.readyState >= 1) {
+      auxDiagVideo.currentTime = 0
+    }
     setAuxTrackVolume(0)
   }
+  auxFrameSeq = 0
   auxPhase = 'idle'
   applyBgDuckGain(1)
+  if (useGameStore.getState().diagFeedActive) {
+    useGameStore.getState().setDiagFeedActive(false)
+  }
 }
 
 function beginRestorePhase(): void {
   if (auxPhase === 'restoring' || auxPhase === 'idle') return
-  if (auxCalibTrack) {
-    auxCalibTrack.pause()
-    auxCalibTrack.currentTime = 0
+  unmountHiddenDiagVideo(auxDiagVideo)
+  if (auxDiagVideo) {
+    auxDiagVideo.pause()
+    if (auxDiagVideo.readyState >= 1) {
+      auxDiagVideo.currentTime = 0
+    }
     setAuxTrackVolume(0)
+  }
+  auxFrameSeq = 0
+  if (useGameStore.getState().diagFeedActive) {
+    useGameStore.getState().setDiagFeedActive(false)
   }
   auxPhase = 'restoring'
   auxPhaseStartMs = performance.now()
 }
 
+function tryLaunchSyncedPlayback(): void {
+  if (!auxDiagVideo || auxPhase !== 'syncing') return
+  const st = useGameStore.getState()
+  if (!st.diagFeedActive || st.phase !== 'playing' || st.shiftRunId !== auxActiveRunId) {
+    stopAuxAndRestoreImmediate()
+    return
+  }
+
+  const elapsedMs = performance.now() - auxDiagTriggerMs
+  if (elapsedMs < AUX_SYNC_GLITCH_MS) return
+
+  const canStart =
+    auxDiagVideo.readyState >= 3 ||
+    (auxDiagVideo.readyState >= 2 && elapsedMs >= AUX_MAX_PREBUFFER_MS)
+  if (!canStart) return
+
+  auxPhase = 'playing'
+  auxPhaseStartMs = performance.now()
+  auxDiagVideo.currentTime = 0
+  auxDiagVideo.playbackRate = 1
+  auxDiagVideo.muted = st.isMusicMuted
+  setAuxTrackVolume(AUX_PEAK_VOLUME)
+  pumpVideoFrameCallback(auxDiagVideo)
+
+  const nativePlay = (window as MediaBusWindow).__k84NativePlay
+  const playPromise = nativePlay
+    ? nativePlay.call(auxDiagVideo)
+    : auxDiagVideo.play()
+  void playPromise.catch(() => {
+    stopAuxAndRestoreImmediate()
+  })
+}
+
 function tickAuxChannel(): void {
-  if (!auxCalibTrack || auxPhase === 'idle') {
+  if (!auxDiagVideo || auxPhase === 'idle') {
     clearAuxTimer()
     return
   }
-  auxCalibTrack.muted = useGameStore.getState().isMusicMuted
+  const st = useGameStore.getState()
   const now = performance.now()
 
-  if (auxPhase === 'fading_in') {
-    const t = Math.min(1, (now - auxPhaseStartMs) / AUX_FADE_IN_MS)
-    const ease = 0.5 - 0.5 * Math.cos(Math.PI * t)
-    applyBgDuckGain(1 - ease)
-    setAuxTrackVolume(AUX_PEAK_VOLUME * ease)
-    if (t >= 1) {
-      auxPhase = 'playing'
+  if (auxPhase === 'syncing') {
+    if (!st.diagFeedActive || st.phase !== 'playing' || st.shiftRunId !== auxActiveRunId) {
+      stopAuxAndRestoreImmediate()
+      return
     }
+    auxDiagVideo.muted = st.isMusicMuted
+    applyBgDuckGain(0)
+    tryLaunchSyncedPlayback()
     return
   }
 
   if (auxPhase === 'playing') {
+    if (!st.diagFeedActive || st.phase !== 'playing' || st.shiftRunId !== auxActiveRunId) {
+      stopAuxAndRestoreImmediate()
+      return
+    }
+    auxDiagVideo.muted = st.isMusicMuted
     applyBgDuckGain(0)
     setAuxTrackVolume(AUX_PEAK_VOLUME)
-    const dur = auxCalibTrack.duration
-    if (
-      Number.isFinite(dur) &&
-      dur > 0 &&
-      dur - auxCalibTrack.currentTime <= AUX_FADE_OUT_SEC
-    ) {
-      auxPhase = 'fading_out'
-    }
-    return
-  }
-
-  if (auxPhase === 'fading_out') {
-    const dur = auxCalibTrack.duration
-    const rem =
-      Number.isFinite(dur) && dur > 0
-        ? Math.max(0, dur - auxCalibTrack.currentTime)
-        : 0
-    const p = 1 - Math.min(1, rem / AUX_FADE_OUT_SEC)
-    const ease = 0.5 - 0.5 * Math.cos(Math.PI * p)
-    applyBgDuckGain(0)
-    setAuxTrackVolume(AUX_PEAK_VOLUME * (1 - ease))
-    if (auxCalibTrack.ended || rem <= 0.05) {
+    if (auxDiagVideo.ended) {
       beginRestorePhase()
     }
     return
@@ -202,43 +315,59 @@ function tickAuxChannel(): void {
 
 function startAuxSequence(): void {
   if (typeof window === 'undefined' || auxPhase !== 'idle') return
+  const st = useGameStore.getState()
+  if (st.diagFeedActive || st.phase !== 'playing') return
   installMediaGainBus()
 
-  if (!auxCalibTrack) {
-    auxCalibTrack = new Audio(AUX_CHANNEL_SRC)
-    auxCalibTrack.loop = false
-    auxCalibTrack.preload = 'auto'
+  if (!auxDiagVideo) {
+    auxDiagVideo = document.createElement('video')
+    auxDiagVideo.playsInline = true
+    auxDiagVideo.setAttribute('playsinline', '')
+    auxDiagVideo.preload = 'auto'
+    auxDiagVideo.loop = false
   }
 
-  auxCalibTrack.onended = () => {
-    if (
-      auxPhase === 'fading_in' ||
-      auxPhase === 'playing' ||
-      auxPhase === 'fading_out'
-    ) {
+  mountHiddenDiagVideo(auxDiagVideo)
+  const srcChanged = auxDiagVideo.getAttribute('src') !== AUX_DIAG_FEED_SRC
+  if (srcChanged) {
+    auxDiagVideo.src = AUX_DIAG_FEED_SRC
+  }
+  if (srcChanged || auxDiagVideo.readyState < 3) {
+    auxDiagVideo.load()
+  }
+
+  auxDiagVideo.oncanplay = () => {
+    tryLaunchSyncedPlayback()
+  }
+  auxDiagVideo.oncanplaythrough = () => {
+    tryLaunchSyncedPlayback()
+  }
+  auxDiagVideo.onended = () => {
+    if (auxPhase === 'syncing' || auxPhase === 'playing') {
       beginRestorePhase()
     }
   }
-  auxCalibTrack.onerror = () => {
+  auxDiagVideo.onerror = () => {
     stopAuxAndRestoreImmediate()
   }
 
-  auxCalibTrack.currentTime = 0
-  auxCalibTrack.muted = useGameStore.getState().isMusicMuted
+  auxDiagVideo.pause()
+  if (auxDiagVideo.readyState >= 1) {
+    auxDiagVideo.currentTime = 0
+  }
+  auxDiagVideo.playbackRate = 1
+  auxDiagVideo.muted = st.isMusicMuted
   setAuxTrackVolume(0)
+  applyBgDuckGain(0)
 
-  auxPhase = 'fading_in'
-  auxPhaseStartMs = performance.now()
+  auxDiagTriggerMs = performance.now()
+  auxActiveRunId = st.shiftRunId
+  auxPhase = 'syncing'
+  auxPhaseStartMs = auxDiagTriggerMs
+  auxFrameSeq = 0
+  st.setDiagFeedActive(true)
   clearAuxTimer()
-  auxTimerId = window.setInterval(tickAuxChannel, 40)
-
-  const nativePlay = (window as MediaBusWindow).__k84NativePlay
-  const playPromise = nativePlay
-    ? nativePlay.call(auxCalibTrack)
-    : auxCalibTrack.play()
-  void playPromise.catch(() => {
-    stopAuxAndRestoreImmediate()
-  })
+  auxTimerId = window.setInterval(tickAuxChannel, 20)
 }
 
 function normalizeAuxToken(e: KeyboardEvent): string | null {
@@ -292,7 +421,9 @@ function installAuxChannelBus(): void {
     ) {
       e.preventDefault()
       e.stopImmediatePropagation()
-      startAuxSequence()
+      if (!e.repeat) {
+        startAuxSequence()
+      }
     } else if (tok === 'Digit5' && wasPartial) {
       e.preventDefault()
       e.stopImmediatePropagation()
@@ -332,6 +463,7 @@ function installAuxChannelBus(): void {
     window.removeEventListener('keyup', onKeyUp, true)
     window.removeEventListener('blur', clearHeld)
     document.removeEventListener('visibilitychange', onVisibility)
+    stopAuxAndRestoreImmediate()
   }
 }
 

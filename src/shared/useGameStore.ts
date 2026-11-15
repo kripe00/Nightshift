@@ -775,6 +775,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   shiftRunId: 0,
   hoveredDiagnosticId: null,
   hoveredControlHint: null,
+  diagFeedActive: false,
 
   setActiveStation: (station: CameraStation) => {
     set({ activeStation: station })
@@ -1101,6 +1102,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
       hoveredControlHint: null,
+      diagFeedActive: false,
       terminalEntries: [...state.terminalEntries.slice(-24), entry],
       terminalLogs: [
         ...state.terminalLogs.slice(-24),
@@ -1129,6 +1131,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       tutorialDrainSeconds: 0,
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
+      diagFeedActive: false,
       lastDecisionFeedback: mapped.tutorialPrompt.header,
       activeMandate: null,
       wePadActiveTab: 1,
@@ -2216,6 +2219,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         lastDecisionFeedback: feedback,
         wePadChatLog: nextChatLog,
         phase: nextPhase,
+        diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
@@ -2530,6 +2534,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         lastDecisionFeedback: nextFeedback,
         phase: nextPhase,
+        diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
         wePadChatLog: nextChatLog,
         terminalEntries: updatedEntries,
         terminalLogs: updatedEntries.map(
@@ -2546,6 +2551,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         voltageDipIntensity: nextVoltageDip,
         hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         phase: nextPhase,
+        diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
       })
     }
   },
@@ -2764,6 +2770,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({ isMusicMuted: !state.isMusicMuted }))
   },
 
+  setDiagFeedActive: (active: boolean) => {
+    set({ diagFeedActive: active })
+  },
+
   approveDirective: (id: string) => {
     get().resolveDirective(id, 'APPROVED')
   },
@@ -2781,7 +2791,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   debugCompleteShift: () => {
-    set({ shiftTimeMinutes: 360, phase: 'victory' })
+    set({ shiftTimeMinutes: 360, phase: 'victory', diagFeedActive: false })
   },
 
   tick: () => {
@@ -2818,6 +2828,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       printerProgress: nextPrinterProgress,
       activeDirectives: nextDirectives,
       phase: nextPhase,
+      diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
     })
   },
 }))

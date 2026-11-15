@@ -4,6 +4,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import * as THREE from "three";
 import * as InspectorModule from "../modules/inspector";
 import {
+  getSkalaDiagFeedElement,
+  getSkalaDiagFeedFrameSeq,
+  getSkalaDiagFeedStartMs,
+  isSkalaDiagFeedSyncing,
   playRheostatDetentClick,
   updateTurbinePitchHum,
 } from "../modules/inspector/audio";
@@ -3088,6 +3092,56 @@ const Komrad84SplitScreenCrt3D: React.FC<{
 }> = React.memo(({ bulletinIdx, onCycleBulletin }) => {
   const crtMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const lastCrtDrawRef = useRef(0);
+  const lastDiagVideoTimeRef = useRef(-1);
+  const lastDiagFrameSeqRef = useRef(-1);
+  const lastDiagGlitchTickRef = useRef(-1);
+
+  const crtDiagOverlayCanvas = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1600;
+    canvas.height = 1000;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      // Solid opaque top & bottom letterbox bars (ensure previous MM:SS clears every frame)
+      ctx.fillStyle = "#020804";
+      ctx.fillRect(0, 0, 1600, 50);
+      ctx.fillRect(0, 950, 1600, 50);
+
+      // Subtle CRT scanlines across the 1600x1000 display
+      ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+      for (let y = 0; y < 1000; y += 6) {
+        ctx.fillRect(0, y, 1600, 2);
+      }
+
+      // Outer phosphor frame
+      ctx.strokeStyle = "rgba(57, 255, 20, 0.55)";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(6, 6, 1588, 988);
+
+      // Minimalist emerald phosphor header bar + divider + static channel title
+      ctx.fillStyle = "rgba(2, 10, 4, 0.88)";
+      ctx.fillRect(8, 8, 1584, 40);
+      ctx.strokeStyle = "#1e6b34";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(8, 48);
+      ctx.lineTo(1592, 48);
+      ctx.stroke();
+
+      ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
+      ctx.textAlign = "left";
+      drawHeavyCrtText(
+        ctx,
+        "КАНАЛ АЗ-5 // СЛУЖЕБНЫЙ ЭФИР",
+        24,
+        36,
+        "#39ff14",
+        0.85,
+        900,
+      );
+    }
+    return canvas;
+  }, []);
 
   const crtTexture = useMemo(() => {
     const canvas = document.createElement("canvas");
@@ -3119,9 +3173,133 @@ const Komrad84SplitScreenCrt3D: React.FC<{
 
   useFrame(({ clock }) => {
     const now = clock.getElapsedTime();
-    if (now - lastCrtDrawRef.current < 0.08) return;
-
     const state = useGameStore.getState();
+    if (!state.diagFeedActive) {
+      lastDiagVideoTimeRef.current = -1;
+      lastDiagFrameSeqRef.current = -1;
+      lastDiagGlitchTickRef.current = -1;
+      if (now - lastCrtDrawRef.current < 0.08) return;
+    }
+
+    const tex = crtMatRef.current?.map as THREE.CanvasTexture | undefined;
+    const canvas = tex?.image as HTMLCanvasElement | undefined;
+    if (state.diagFeedActive) {
+      if (!canvas || !tex) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const w = 1600;
+      const h = 1000;
+      const vid = getSkalaDiagFeedElement();
+      const syncing = isSkalaDiagFeedSyncing();
+
+      if (syncing || !vid || vid.readyState < 2) {
+        const elapsedMs = Math.max(
+          0,
+          performance.now() - getSkalaDiagFeedStartMs(),
+        );
+        const tick = Math.floor(elapsedMs / 35);
+        if (tick === lastDiagGlitchTickRef.current) return;
+        lastDiagGlitchTickRef.current = tick;
+        lastCrtDrawRef.current = 0;
+        tex.userData.lastSig = "";
+
+        ctx.save();
+        ctx.scale(canvas.width / w, canvas.height / h);
+        ctx.fillStyle = "#020804";
+        ctx.fillRect(0, 0, w, h);
+
+        // 250ms Phosphor Sync Glitch & Horizontal Hold Interference Bars
+        for (let i = 0; i < 28; i++) {
+          const bandY = (tick * 137 + i * 71) % h;
+          const bandH = 4 + ((i * 19 + tick * 7) % 18);
+          ctx.fillStyle =
+            i % 5 === 0
+              ? "rgba(57, 255, 20, 0.32)"
+              : "rgba(18, 96, 40, 0.28)";
+          ctx.fillRect(0, bandY, w, bandH);
+        }
+        for (let s = 0; s < 140; s++) {
+          const sx = (s * 263 + tick * 191) % (w - 40);
+          const sy = (s * 179 + tick * 89) % h;
+          const sw = 12 + ((s * 29) % 72);
+          ctx.fillStyle = "rgba(57, 255, 20, 0.24)";
+          ctx.fillRect(sx, sy, sw, 3);
+        }
+
+        ctx.fillStyle = "rgba(3, 18, 8, 0.9)";
+        ctx.fillRect(340, 420, 920, 150);
+        ctx.strokeStyle = "#39ff14";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(340, 420, 920, 150);
+
+        ctx.font = '700 38px "Consolas", "Lucida Console", monospace';
+        ctx.textAlign = "center";
+        drawHeavyCrtText(
+          ctx,
+          "[ПРОТОКОЛ АЗ-5 // ПЕРЕХВАТ КАНАЛА]",
+          w / 2,
+          508,
+          "#39ff14",
+          0.9,
+          880,
+        );
+        ctx.restore();
+        tex.needsUpdate = true;
+        return;
+      }
+
+      const vTime = vid.currentTime;
+      const frameSeq = getSkalaDiagFeedFrameSeq();
+      if (
+        lastDiagVideoTimeRef.current >= 0 &&
+        frameSeq === lastDiagFrameSeqRef.current &&
+        Math.abs(vTime - lastDiagVideoTimeRef.current) < 0.004
+      ) {
+        return;
+      }
+      lastDiagVideoTimeRef.current = vTime;
+      lastDiagFrameSeqRef.current = frameSeq;
+      lastCrtDrawRef.current = 0;
+      tex.userData.lastSig = "";
+
+      ctx.save();
+      ctx.scale(canvas.width / w, canvas.height / h);
+
+      const vw = vid.videoWidth || 1280;
+      const vh = vid.videoHeight || 720;
+      const fit = Math.min(1600 / vw, 900 / vh);
+      const drawW = Math.round(vw * fit);
+      const drawH = Math.round(vh * fit);
+      const drawX = Math.round((w - drawW) / 2);
+      const drawY = Math.round(50 + (900 - drawH) / 2);
+      if (drawW < 1600 || drawH < 900) {
+        ctx.fillStyle = "#020804";
+        ctx.fillRect(0, 50, 1600, 900);
+      }
+      ctx.drawImage(vid, drawX, drawY, drawW, drawH);
+      ctx.drawImage(crtDiagOverlayCanvas, 0, 0);
+
+      const curSec = Math.max(0, Math.floor(vTime || 0));
+      const mm = String(Math.floor(curSec / 60)).padStart(2, "0");
+      const ss = String(curSec % 60).padStart(2, "0");
+      ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
+      ctx.textAlign = "right";
+      drawHeavyCrtText(
+        ctx,
+        `${mm}:${ss}`,
+        w - 24,
+        36,
+        "#39ff14",
+        0.85,
+        200,
+      );
+
+      ctx.restore();
+      tex.needsUpdate = true;
+      return;
+    }
+
     const deskState = useDeskStore.getState();
     const activeDeskDoc = deskState.documents[0] ?? null;
     const timeBucket = Math.floor(now * 2);
@@ -3153,8 +3331,6 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       .join(",");
     const skalaSig = `${Math.round(state.heliumPressure)}:${Math.round(state.graphiteTemp)}:${Math.round(state.bubblerLevel)}:${state.sealToggles.join("")}:${Math.round(state.pumpAHeat)}:${Math.round(state.pumpBHeat)}:${Math.round(state.boronTankLevel)}:${Object.keys(state.channelHotspots).length}:${Math.round(state.pressureBar)}:${Math.round(state.energyCreatedMW)}:${Math.round(state.batteryStoredPct)}:${Math.round(state.batteryOutputValve * 100)}:${Math.round(state.energyDemandMW)}`;
     const sig = `${timeBucket}|${skalaSig}|${state.phase}|${state.tutorialPhase}|${state.tutorialPrompt.header}|${state.tutorialPrompt.body}|${latestChatMsg?.id ?? ""}|${cdSec}|${contextualHint ?? ""}|${Math.round(state.controlRods * 100)}|${Math.round(state.totalElectricalMW)}|${Math.round(state.drumWaterLevel)}|${Math.round(state.drumPressure)}|${subSig}|${deskState.printingDoc?.id ?? ""}|${deskState.capsuleState}|${deskState.hatchOpen}|${lastEntryId}|${state.bubblerDraining}|${state.auxLoopBActive}|${state.kgbLineActive}|${activeDeskDoc?.id ?? "NONE"}|${activeDeskDoc?.stamps.length ?? 0}|${Math.round(state.pumpThrottle[0])}|${Math.round(state.pumpThrottle[1])}|${Math.round(state.waterReservoir)}|${Math.round(state.waterUsage)}|${Math.round(state.coreTemp / 2) * 2}|${state.ciaIntrusionActive}|${Math.round(state.ciaIntrusionProgress)}|${state.komradOverrideLocked}|${state.isBlackout}|${bulletinIdx}`;
-    const tex = crtMatRef.current?.map as THREE.CanvasTexture | undefined;
-    const canvas = tex?.image as HTMLCanvasElement | undefined;
     if (!canvas || !tex || tex.userData.lastSig === sig) return;
     lastCrtDrawRef.current = now;
     tex.userData.lastSig = sig;
