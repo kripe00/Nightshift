@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { updatePointerLockInteraction } from './pointerLockState'
 import { useGameStore } from './useGameStore'
 
 export const DebugMenu: React.FC = () => {
@@ -27,6 +28,13 @@ export const DebugMenu: React.FC = () => {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  useEffect(() => {
+    updatePointerLockInteraction({ debugMenuOpen: isOpen })
+    if (isOpen && document.pointerLockElement) {
+      document.exitPointerLock?.()
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 

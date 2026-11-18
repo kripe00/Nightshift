@@ -19,7 +19,6 @@ import {
   BREECH_CHAMBER_DROP_ZONE_3D,
   CAPSULE_CRADLE_POS_3D,
   INK_COLOR_HEX,
-  MANUAL_DEFAULT_POS_3D,
   OUTBOX_BREECH_POS_3D,
   OUTBOX_DROP_ZONE_3D,
   PAPER_COLOR_HEX,
@@ -120,7 +119,7 @@ function createCrispDocumentCanvasTexture(
   const tex = new THREE.CanvasTexture(canvas)
   tex.magFilter = THREE.LinearFilter
   tex.minFilter = THREE.LinearFilter
-  tex.anisotropy = 8
+  tex.anisotropy = 1
   tex.generateMipmaps = false
   tex.colorSpace = THREE.SRGBColorSpace
   tex.needsUpdate = true
@@ -156,10 +155,24 @@ function getDeskLocalHitFromEvent(
 
 const MANUAL_BASE_W = 0.38
 const MANUAL_BASE_H = 0.45
-const MANUAL_SCALE = 1.48
+const DESK_ROOT_SCALE = 0.72
+const WEPAD_DOCK_SCALE = 0.55
 const MANUAL_HELD_SCALE = 0.315
 const MANUAL_INSPECT_SCALE = 0.58
-const _manualDeskQuat = new THREE.Quaternion()
+const WEPAD_DOCK_POS_3D = {
+  x: 1.28,
+  y: 0.968,
+  z: 0.42,
+} as const
+const WEPAD_DOCK_PITCH_X = 0.52 // ~29.8° upward tilt toward operator
+const WEPAD_DOCK_YAW_Y = -0.34 // ~19.5° inward yaw (-X, +Z) toward seated player
+const _manualDeskEuler = new THREE.Euler(
+  WEPAD_DOCK_PITCH_X,
+  WEPAD_DOCK_YAW_Y,
+  0,
+  'YXZ'
+)
+const _manualDeskQuat = new THREE.Quaternion().setFromEuler(_manualDeskEuler)
 const _manualHeldLocalQuat = new THREE.Quaternion().setFromEuler(
   new THREE.Euler(Math.PI / 2 - 0.12, 0.16, -0.02, 'YXZ')
 )
@@ -172,10 +185,10 @@ const _manualDeskPos = new THREE.Vector3()
 const _manualHeldWorldPos = new THREE.Vector3()
 
 const MANUAL_BOUNDS_3D = {
-  x: MANUAL_DEFAULT_POS_3D.x,
-  z: MANUAL_DEFAULT_POS_3D.z,
-  width: MANUAL_BASE_W * MANUAL_SCALE,
-  height: MANUAL_BASE_H * MANUAL_SCALE,
+  x: WEPAD_DOCK_POS_3D.x,
+  z: WEPAD_DOCK_POS_3D.z,
+  width: MANUAL_BASE_W * WEPAD_DOCK_SCALE,
+  height: MANUAL_BASE_H * WEPAD_DOCK_SCALE,
 }
 
 const STRIP_VARIANCE = [
@@ -1485,6 +1498,8 @@ export function InspectorDesk3D() {
   const manualInspectBlendRef = useRef<number>(0)
   const lastWePadChatLenRef = useRef<number>(wePadChatLen)
   const manualGroupRef = useRef<THREE.Group | null>(null)
+  const manualScreenMeshRef = useRef<THREE.Mesh | null>(null)
+  const wePadDockLedMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
   const manualPosRef = useRef<{
     x: number
     z: number
@@ -1553,9 +1568,27 @@ export function InspectorDesk3D() {
 
   const toggleManualHeld = () => {
     manualPosRef.current.dragging = false
+    const willHold = !useGameStore.getState().wePadHeld
     useGameStore.getState().toggleWePadHeld()
-    playSwitchClank(true)
-    playLineFeedTick(1)
+    if (willHold) {
+      playSwitchClank(true)
+      playDetentClick(2)
+      playLineFeedTick(1)
+    } else {
+      playSwitchClank(false)
+      playDetentClick(1)
+      window.setTimeout(() => playLineFeedTick(2), 55)
+    }
+    const curHint = useGameStore.getState().hoveredControlHint
+    if (curHint && curHint.includes('WE-PAD 84')) {
+      useGameStore
+        .getState()
+        .setHoveredControlHint(
+          willHold
+            ? '[CLICK / E]: STOW WE-PAD 84 IN CORNER DOCK'
+            : '[CLICK / E]: PICK UP WE-PAD 84 FROM DOCK'
+        )
+    }
     lensDirtyRef.current = true
   }
 
@@ -1575,7 +1608,7 @@ export function InspectorDesk3D() {
         }
       }
 
-      // [E] (or [B]): Pick up WE-PAD 84 from desk OR put it back down on desk
+      // [E] (or [B]): Pick up WE-PAD 84 from corner dock OR stow it back in dock
       if (
         e.code === 'KeyE' ||
         e.key === 'e' ||
@@ -1585,11 +1618,7 @@ export function InspectorDesk3D() {
         e.key === 'B'
       ) {
         e.preventDefault()
-        manualPosRef.current.dragging = false
-        useGameStore.getState().toggleWePadHeld()
-        playSwitchClank(true)
-        playLineFeedTick(1)
-        lensDirtyRef.current = true
+        toggleManualHeld()
         return
       }
 
@@ -1678,6 +1707,9 @@ export function InspectorDesk3D() {
         dx: number
         dz: number
         plungerStep: number
+        suppressDockClick: boolean
+        dockCooldownTimerId: number | null
+        returnTimerId: number | null
       }
     >
   >({
@@ -1698,6 +1730,9 @@ export function InspectorDesk3D() {
       dx: 0,
       dz: 0,
       plungerStep: 0,
+      suppressDockClick: false,
+      dockCooldownTimerId: null,
+      returnTimerId: null,
     },
     SHREDDED: {
       homeX: 0.38,
@@ -1716,6 +1751,9 @@ export function InspectorDesk3D() {
       dx: 0,
       dz: 0,
       plungerStep: 0,
+      suppressDockClick: false,
+      dockCooldownTimerId: null,
+      returnTimerId: null,
     },
   })
 
@@ -1748,8 +1786,6 @@ export function InspectorDesk3D() {
   const wornMatTex = useMemo(() => getWornInspectionMatTextures(), [])
   const mahoganyTex = useMemo(() => getWeatheredMahoganyTextures(), [])
 
-  const bankersLampSpotRef = useRef<THREE.SpotLight | null>(null)
-  const bankersLampTargetRef = useRef<THREE.Object3D | null>(null)
   const manometerNeedleRef = useRef<THREE.Group | null>(null)
   const lastStripDeformSigRef = useRef<string>('')
   const lastLensDrawTimeRef = useRef<number>(0)
@@ -1781,16 +1817,17 @@ export function InspectorDesk3D() {
       stampBodyShred: getCloned('stamp_body'),
       stampPlungerApprove: getCloned('stamp_plunger'),
       stampPlungerShred: getCloned('stamp_plunger'),
-      magnifierFrame: getCloned('magnifier_frame'),
     }
   }, [deskPropsGltf.scene])
 
   useEffect(() => {
     applySovietPBRToHierarchy(deskGroupRef.current)
-    if (bankersLampSpotRef.current && bankersLampTargetRef.current) {
-      bankersLampSpotRef.current.target = bankersLampTargetRef.current
-      bankersLampTargetRef.current.updateMatrixWorld()
-    }
+    deskGroupRef.current?.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = false
+        obj.receiveShadow = false
+      }
+    })
   }, [])
 
   // 3 Heavy Ribbed Rubber/Braided Power Cables + Pneumatic Capillary Tube (`<tubeGeometry>` along `CatmullRomCurve3`)
@@ -1829,6 +1866,130 @@ export function InspectorDesk3D() {
         8,
         false
       ),
+    }
+  }, [])
+
+  // Compound Lathe-Turned Geometries for the 1984 Soviet Optical Loupe (Aged Brass Bezel, Ferrule, Walnut Grip & Pommel)
+  const magnifierGeometries = useMemo(() => {
+    const v2 = (r: number, y: number) => new THREE.Vector2(r, y)
+
+    // 1. Stepped Machined Aged-Brass Outer Bezel (inner bore r = 0.146 > 0.145 lens aperture; outer r = 0.173)
+    const bezelPts = [
+      v2(0.146, -0.0125),
+      v2(0.167, -0.0125),
+      v2(0.1725, -0.008),
+      v2(0.1725, -0.0015),
+      v2(0.1692, 0.001),
+      v2(0.1692, 0.0038),
+      v2(0.173, 0.0062),
+      v2(0.173, 0.0128),
+      v2(0.168, 0.0172),
+      v2(0.1585, 0.0172),
+      v2(0.1565, 0.0136),
+      v2(0.1505, 0.0136),
+      v2(0.146, 0.0092),
+      v2(0.146, -0.0125),
+    ]
+    const bezelLathe = new THREE.LatheGeometry(bezelPts, 48)
+
+    // 2. Recessed Gunmetal / Blued-Steel Inner Lens Retaining Ring (r = 0.1446..0.1512, strictly outside clear inner lens)
+    const retainerPts = [
+      v2(0.1446, 0.0082),
+      v2(0.1512, 0.0082),
+      v2(0.1512, 0.0132),
+      v2(0.1495, 0.0144),
+      v2(0.1456, 0.0144),
+      v2(0.1446, 0.0126),
+      v2(0.1446, 0.0082),
+    ]
+    const retainerLathe = new THREE.LatheGeometry(retainerPts, 48)
+
+    // 3. Stepped Brass Neck Ferrule Collar (local y = 0.014..0.038 along handle axis from r = 0.170 outer bezel wall)
+    const ferrulePts = [
+      v2(0, 0.014),
+      v2(0.0142, 0.014),
+      v2(0.0142, 0.0175),
+      v2(0.0126, 0.0205),
+      v2(0.0126, 0.0245),
+      v2(0.0172, 0.0275),
+      v2(0.0172, 0.0325),
+      v2(0.0188, 0.0355),
+      v2(0.0188, 0.0385),
+      v2(0.0162, 0.0385),
+      v2(0, 0.036),
+    ]
+    const ferruleLathe = new THREE.LatheGeometry(ferrulePts, 28)
+
+    // 4. Contoured Lathe-Turned Walnut Handle (local y = 0.036..0.156, tapered neck + ergonomic belly swell + 3 turned V-grooves)
+    const handlePts: THREE.Vector2[] = [v2(0, 0.036)]
+    const yStart = 0.036
+    const yLen = 0.12
+    const steps = 40
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      const y = yStart + t * yLen
+      const neckDip = -0.003 * Math.sin(Math.PI * Math.min(1, t / 0.28))
+      const palmSwell =
+        0.0072 *
+        Math.pow(
+          Math.sin(Math.PI * Math.max(0, (t - 0.12) / 0.88)),
+          1.15
+        )
+      const g1 = 0.0018 * Math.exp(-Math.pow((t - 0.25) / 0.018, 2))
+      const g2 = 0.0014 * Math.exp(-Math.pow((t - 0.31) / 0.016, 2))
+      const g3 = 0.0018 * Math.exp(-Math.pow((t - 0.82) / 0.018, 2))
+      const r = 0.0166 + neckDip + palmSwell + 0.0022 * t - g1 - g2 - g3
+      handlePts.push(v2(r, y))
+    }
+    handlePts.push(v2(0, yStart + yLen))
+    const handleLathe = new THREE.LatheGeometry(handlePts, 32)
+
+    // 5. Turned Stepped Brass End-Cap Pommel Bolster (local y = 0.158..0.179, flat-domed machined bolster)
+    const pommelPts = [
+      v2(0, 0.158),
+      v2(0.0204, 0.158),
+      v2(0.0204, 0.1635),
+      v2(0.0188, 0.1665),
+      v2(0.0188, 0.1705),
+      v2(0.0155, 0.1745),
+      v2(0.0105, 0.1772),
+      v2(0.0068, 0.1788),
+      v2(0, 0.179),
+    ]
+    const pommelLathe = new THREE.LatheGeometry(pommelPts, 32)
+
+    return {
+      bezelLathe,
+      retainerLathe,
+      ferruleLathe,
+      handleLathe,
+      pommelLathe,
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      magnifierGeometries.bezelLathe.dispose()
+      magnifierGeometries.retainerLathe.dispose()
+      magnifierGeometries.ferruleLathe.dispose()
+      magnifierGeometries.handleLathe.dispose()
+      magnifierGeometries.pommelLathe.dispose()
+    }
+  }, [magnifierGeometries])
+
+  useEffect(() => {
+    const stamps = stampStateRef.current
+    return () => {
+      for (const stamp of [stamps.APPROVED, stamps.SHREDDED]) {
+        if (stamp.returnTimerId !== null) {
+          window.clearTimeout(stamp.returnTimerId)
+          stamp.returnTimerId = null
+        }
+        if (stamp.dockCooldownTimerId !== null) {
+          window.clearTimeout(stamp.dockCooldownTimerId)
+          stamp.dockCooldownTimerId = null
+        }
+      }
     }
   }, [])
 
@@ -1970,6 +2131,8 @@ export function InspectorDesk3D() {
 
   // Guardrail 4: Immediate WE-PAD 84 Texture & Lens Refresh when tab, scroll, chat or handheld state changes
   const lastWePadSigRef = useRef<string>('')
+  const lastWePadDrawTimeRef = useRef<number>(-1)
+  const lastWePadUiKeyRef = useRef<string>('')
   useEffect(() => {
     lastWePadSigRef.current = ''
     lensDirtyRef.current = true
@@ -2192,6 +2355,40 @@ export function InspectorDesk3D() {
     []
   )
 
+  const wePadDockPlaqueTex = useMemo(
+    () =>
+      createNearestCanvasTexture(256, 56, (ctx, w, h) => {
+        ctx.fillStyle = '#18211b'
+        ctx.fillRect(0, 0, w, h)
+        ctx.strokeStyle = '#b8a46b'
+        ctx.lineWidth = 4
+        ctx.strokeRect(3, 3, w - 6, h - 6)
+        ctx.strokeStyle = '#8c7a4b'
+        ctx.lineWidth = 2
+        ctx.strokeRect(8, 8, w - 16, h - 16)
+        apply16ColorBayerDither(ctx, w, h, 14)
+
+        ctx.fillStyle = '#d4be7f'
+        for (const [rx, ry] of [
+          [16, h / 2],
+          [w - 16, h / 2],
+        ]) {
+          ctx.beginPath()
+          ctx.arc(rx, ry, 4, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        ctx.fillStyle = '#e6dec3'
+        ctx.font = 'bold 20px "Courier Prime", monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText('МЫ-ПАД 84', w / 2, 27)
+        ctx.fillStyle = '#b8a46b'
+        ctx.font = 'bold 15px "VT323", monospace'
+        ctx.fillText('ДОК-ГНЕЗДО БЛ-84', w / 2, 46)
+      }),
+    []
+  )
+
   const loadedDoc = useMemo(
     () => documents.find((d) => d.status === 'loaded_in_shredder') ?? null,
     [documents]
@@ -2223,7 +2420,6 @@ export function InspectorDesk3D() {
   const pneumaticStatusLampMatRef = useRef<THREE.MeshStandardMaterial | null>(
     null
   )
-  const pneumaticStatusLightRef = useRef<THREE.PointLight | null>(null)
 
   // Tutorial 3D Hardware Highlighting Material Refs (Amber-Gold -> Emerald Pulse)
   const printerLampMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
@@ -2658,26 +2854,6 @@ export function InspectorDesk3D() {
         pneumaticStatusLampMatRef.current.emissive.set('#0a2412')
         pneumaticStatusLampMatRef.current.emissiveIntensity = 0.25
       }
-    }
-    if (pneumaticStatusLightRef.current) {
-      const lightActive =
-        pneumaticAnimRef.current.active ||
-        isSealedAndReady ||
-        curHatchOpen ||
-        curCapsuleState === 'CRADLE_PACKED' ||
-        hasApprovedDocOnDesk
-      pneumaticStatusLightRef.current.visible = lightActive
-      pneumaticStatusLightRef.current.color.set(
-        pneumaticAnimRef.current.active || isSealedAndReady
-          ? '#33ff66'
-          : '#ffb000'
-      )
-      pneumaticStatusLightRef.current.intensity =
-        pneumaticAnimRef.current.active
-          ? 1.5
-          : isSealedAndReady
-            ? 1.1
-            : 0.55 + Math.sin(t * 7.5) * 0.25
     }
 
     // Step 1 Animation: Paper rolling into scroll & sliding inside Carrier Cylinder (`КАПСУЛА`) on Desk Cradle
@@ -3317,49 +3493,62 @@ export function InspectorDesk3D() {
       }
     }
 
-    // 3B. Refresh WE-PAD 84 Live Screen CanvasTexture when telemetry or chat updates
+    // 3B. Refresh WE-PAD 84 Live Screen CanvasTexture when telemetry or chat updates (12.5 Hz background throttle, paused during diagFeed unless inspecting)
     const gsNow = useGameStore.getState()
-    const wePadSig = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${gsNow.tutorialPhase}|${gsNow.tutorialPrompt.actionLine}|${gsNow.wePadChatLog.length}|${manualScrollY}|${Math.round(gsNow.thermalPower / 10)}|${Math.round(gsNow.drumPressure)}|${Math.round(gsNow.drumWaterLevel / 5)}|${Math.round(gsNow.energyCreatedMW / 5)}|${Math.round(gsNow.batteryStoredPct)}|${Math.round(gsNow.energyDemandMW)}|${Math.round(gsNow.batteryOutputValve * 100)}|${Math.round(gsNow.totalElectricalMW / 5)}|${Math.round(gsNow.xenon)}|${Math.round(gsNow.voidFraction * 100)}|${gsNow.plantWaterDrainPct}`
-    const mTex = manualMatRef.current?.map as THREE.CanvasTexture | undefined
-    if (mTex && lastWePadSigRef.current !== wePadSig) {
-      lastWePadSigRef.current = wePadSig
-      const canvas = mTex.image as HTMLCanvasElement
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        drawWePad84ScreenCanvas(
-          ctx,
-          canvas.width,
-          canvas.height,
-          buildWePadPayload(gsNow),
-          manualScrollY
-        )
-        mTex.needsUpdate = true
+    const uiKey = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${manualScrollY}|${gsNow.wePadChatLog.length}`
+    const uiChanged = uiKey !== lastWePadUiKeyRef.current
+    if (uiChanged) {
+      lastWePadUiKeyRef.current = uiKey
+    }
+    if (
+      uiChanged ||
+      ((!gsNow.diagFeedActive || gsNow.wePadInspecting) &&
+        (lastWePadDrawTimeRef.current < 0 ||
+          t - lastWePadDrawTimeRef.current >= 0.08))
+    ) {
+      lastWePadDrawTimeRef.current = t
+      const wePadSig = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${gsNow.tutorialPhase}|${gsNow.tutorialPrompt.actionLine}|${gsNow.wePadChatLog.length}|${manualScrollY}|${Math.round(gsNow.thermalPower / 10)}|${Math.round(gsNow.drumPressure)}|${Math.round(gsNow.drumWaterLevel / 5)}|${Math.round(gsNow.energyCreatedMW / 5)}|${Math.round(gsNow.batteryStoredPct)}|${Math.round(gsNow.energyDemandMW)}|${Math.round(gsNow.batteryOutputValve * 100)}|${Math.round(gsNow.totalElectricalMW / 5)}|${Math.round(gsNow.xenon)}|${Math.round(gsNow.voidFraction * 100)}|${gsNow.plantWaterDrainPct}`
+      const mTex = manualMatRef.current?.map as THREE.CanvasTexture | undefined
+      if (mTex && lastWePadSigRef.current !== wePadSig) {
+        lastWePadSigRef.current = wePadSig
+        const canvas = mTex.image as HTMLCanvasElement
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          drawWePad84ScreenCanvas(
+            ctx,
+            canvas.width,
+            canvas.height,
+            buildWePadPayload(gsNow),
+            manualScrollY
+          )
+          mTex.needsUpdate = true
+        }
       }
     }
 
-    // 4. Update 3D Positions of Magnifier, Handheld/Desk WE-PAD 84 & Rubber Stamps
-    const manualBaseY = manualPosRef.current.dragging
-      ? BASE_MAT_Y + 0.024
-      : BASE_MAT_Y + 0.012
+    // 4. Update 3D Positions of Magnifier, Handheld/Corner-Docked WE-PAD 84 & Rubber Stamps
+    const manualBaseY = WEPAD_DOCK_POS_3D.y
     const targetHoldBlend = gsNow.wePadHeld ? 1 : 0
-    manualHoldBlendRef.current = THREE.MathUtils.lerp(
+    manualHoldBlendRef.current = THREE.MathUtils.damp(
       manualHoldBlendRef.current,
       targetHoldBlend,
-      Math.min(1, dt * 12)
+      12,
+      dt
     )
-    if (Math.abs(manualHoldBlendRef.current - targetHoldBlend) < 0.002) {
+    if (Math.abs(manualHoldBlendRef.current - targetHoldBlend) < 0.0015) {
       manualHoldBlendRef.current = targetHoldBlend
     }
     const holdBlend = manualHoldBlendRef.current
     const smoothHold = holdBlend * holdBlend * (3 - 2 * holdBlend)
 
     const targetInspectBlend = gsNow.wePadHeld && gsNow.wePadInspecting ? 1 : 0
-    manualInspectBlendRef.current = THREE.MathUtils.lerp(
+    manualInspectBlendRef.current = THREE.MathUtils.damp(
       manualInspectBlendRef.current,
       targetInspectBlend,
-      Math.min(1, dt * 14)
+      14,
+      dt
     )
-    if (Math.abs(manualInspectBlendRef.current - targetInspectBlend) < 0.002) {
+    if (Math.abs(manualInspectBlendRef.current - targetInspectBlend) < 0.0015) {
       manualInspectBlendRef.current = targetInspectBlend
     }
     const inspectBlend = manualInspectBlendRef.current
@@ -3368,12 +3557,12 @@ export function InspectorDesk3D() {
     if (manualGroupRef.current) {
       if (smoothHold <= 0.0001) {
         manualGroupRef.current.position.set(
-          manualPosRef.current.x,
-          manualBaseY,
-          manualPosRef.current.z
+          WEPAD_DOCK_POS_3D.x,
+          WEPAD_DOCK_POS_3D.y,
+          WEPAD_DOCK_POS_3D.z
         )
         manualGroupRef.current.quaternion.copy(_manualDeskQuat)
-        manualGroupRef.current.scale.setScalar(MANUAL_SCALE)
+        manualGroupRef.current.scale.setScalar(WEPAD_DOCK_SCALE)
       } else {
         const perspCam = camera as THREE.PerspectiveCamera
         const fovRad = THREE.MathUtils.degToRad(perspCam.fov || 56)
@@ -3398,9 +3587,9 @@ export function InspectorDesk3D() {
           deskGroupRef.current.worldToLocal(_manualHeldWorldPos)
         }
         _manualDeskPos.set(
-          manualPosRef.current.x,
-          manualBaseY,
-          manualPosRef.current.z
+          WEPAD_DOCK_POS_3D.x,
+          WEPAD_DOCK_POS_3D.y,
+          WEPAD_DOCK_POS_3D.z
         )
         manualGroupRef.current.position.lerpVectors(
           _manualDeskPos,
@@ -3420,17 +3609,51 @@ export function InspectorDesk3D() {
           _manualHeldTargetQuat,
           smoothHold
         )
-        const targetHeldScale = THREE.MathUtils.lerp(
-          MANUAL_HELD_SCALE,
-          MANUAL_INSPECT_SCALE,
-          smoothInspect
-        )
+        const targetHeldScale =
+          THREE.MathUtils.lerp(
+            MANUAL_HELD_SCALE,
+            MANUAL_INSPECT_SCALE,
+            smoothInspect
+          ) / DESK_ROOT_SCALE
         const curScale = THREE.MathUtils.lerp(
-          MANUAL_SCALE,
+          WEPAD_DOCK_SCALE,
           targetHeldScale,
           smoothHold
         )
         manualGroupRef.current.scale.setScalar(curScale)
+      }
+    }
+
+    if (manualScreenMeshRef.current) {
+      manualScreenMeshRef.current.position.y = THREE.MathUtils.lerp(
+        0.0155,
+        0.06,
+        smoothHold
+      )
+      manualScreenMeshRef.current.renderOrder = smoothHold < 0.12 ? 4 : 9999
+    }
+    if (manualMatRef.current) {
+      const shouldDepthTest = smoothHold < 0.12
+      if (manualMatRef.current.depthTest !== shouldDepthTest) {
+        manualMatRef.current.depthTest = shouldDepthTest
+        manualMatRef.current.depthWrite = shouldDepthTest
+        manualMatRef.current.needsUpdate = true
+      }
+    }
+    if (wePadDockLedMatRef.current) {
+      if (gsNow.isBlackout) {
+        wePadDockLedMatRef.current.color.set('#141816')
+        wePadDockLedMatRef.current.emissive.set('#000000')
+        wePadDockLedMatRef.current.emissiveIntensity = 0
+      } else if (!gsNow.wePadHeld) {
+        wePadDockLedMatRef.current.color.set('#33ff66')
+        wePadDockLedMatRef.current.emissive.set('#33ff66')
+        wePadDockLedMatRef.current.emissiveIntensity = 1.15
+      } else {
+        wePadDockLedMatRef.current.color.set('#ffb000')
+        wePadDockLedMatRef.current.emissive.set('#ff8800')
+        wePadDockLedMatRef.current.emissiveIntensity =
+          0.85 + Math.sin(t * 4.5) * 0.35
       }
     }
 
@@ -3460,19 +3683,29 @@ export function InspectorDesk3D() {
       )
     }
 
-    const hasDeskDoc = deskState.documents.some((d) => d.status === 'desk')
+    const returnFactor = 1 - Math.exp(-14 * dt)
+
     const stApp = stampStateRef.current.APPROVED
     if (stApp.pointerDown) {
       stApp.holdElapsedMs += dt * 1000
-    } else if (!stApp.draggingBody && !hasDeskDoc) {
-      stApp.targetX = stApp.homeX
-      stApp.targetZ = stApp.homeZ
     }
-    const appLerpFactor = stApp.draggingBody ? Math.min(1, dt * 32) : 0.28
+    const appLerpFactor = stApp.draggingBody
+      ? Math.min(1, dt * 32)
+      : returnFactor
     stApp.x = THREE.MathUtils.lerp(stApp.x, stApp.targetX, appLerpFactor)
     stApp.z = THREE.MathUtils.lerp(stApp.z, stApp.targetZ, appLerpFactor)
     if (approveStampGroupRef.current) {
-      const targetAppY = stApp.draggingBody ? 0.958 : 0.935
+      const appReturningHome =
+        !stApp.draggingBody &&
+        stApp.plungerStep === 0 &&
+        stApp.targetX === stApp.homeX &&
+        stApp.targetZ === stApp.homeZ &&
+        Math.hypot(stApp.x - stApp.homeX, stApp.z - stApp.homeZ) > 0.025
+      const targetAppY = stApp.draggingBody
+        ? 0.958
+        : appReturningHome
+          ? 0.962
+          : 0.935
       const nextAppY = THREE.MathUtils.lerp(
         approveStampGroupRef.current.position.y || targetAppY,
         targetAppY,
@@ -3487,15 +3720,24 @@ export function InspectorDesk3D() {
     const stShr = stampStateRef.current.SHREDDED
     if (stShr.pointerDown) {
       stShr.holdElapsedMs += dt * 1000
-    } else if (!stShr.draggingBody && !hasDeskDoc) {
-      stShr.targetX = stShr.homeX
-      stShr.targetZ = stShr.homeZ
     }
-    const shrLerpFactor = stShr.draggingBody ? Math.min(1, dt * 32) : 0.28
+    const shrLerpFactor = stShr.draggingBody
+      ? Math.min(1, dt * 32)
+      : returnFactor
     stShr.x = THREE.MathUtils.lerp(stShr.x, stShr.targetX, shrLerpFactor)
     stShr.z = THREE.MathUtils.lerp(stShr.z, stShr.targetZ, shrLerpFactor)
     if (shredStampGroupRef.current) {
-      const targetShrY = stShr.draggingBody ? 0.958 : 0.935
+      const shrReturningHome =
+        !stShr.draggingBody &&
+        stShr.plungerStep === 0 &&
+        stShr.targetX === stShr.homeX &&
+        stShr.targetZ === stShr.homeZ &&
+        Math.hypot(stShr.x - stShr.homeX, stShr.z - stShr.homeZ) > 0.025
+      const targetShrY = stShr.draggingBody
+        ? 0.958
+        : shrReturningHome
+          ? 0.962
+          : 0.935
       const nextShrY = THREE.MathUtils.lerp(
         shredStampGroupRef.current.position.y || targetShrY,
         targetShrY,
@@ -3706,10 +3948,6 @@ export function InspectorDesk3D() {
       handleStampMoveInternal('SHREDDED', e)
       return
     }
-    if (manualPosRef.current.pointerDown) {
-      handleManualDragMove(e)
-      return
-    }
     if (activeDragDocId) {
       e.stopPropagation()
       const hit = getDeskLocalHitFromEvent(e, deskGroupRef.current)
@@ -3732,9 +3970,6 @@ export function InspectorDesk3D() {
     }
     if (stampStateRef.current.SHREDDED.pointerDown) {
       handleStampUpInternal('SHREDDED', e)
-    }
-    if (manualPosRef.current.pointerDown) {
-      handleManualDragUp(e)
     }
     if (activeDragDocId) {
       e.stopPropagation()
@@ -3814,113 +4049,28 @@ export function InspectorDesk3D() {
     scrollManual(e.deltaY > 0 ? 1 : -1)
   }
 
-  const handleManualDragDown = (e: ThreeEvent<PointerEvent>) => {
+  const handleWePadHolsterClick = (e: ThreeEvent<MouseEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return
     e.stopPropagation()
-    if (isManualHeldRef.current) return
-    const target = e.target as Element & {
-      setPointerCapture?: (id: number) => void
-      releasePointerCapture?: (id: number) => void
-    }
-    target?.setPointerCapture?.(e.pointerId)
-    const mp = manualPosRef.current
-    mp.pointerDown = true
-    mp.pointerId = e.pointerId
-    mp.downClientX = e.clientX
-    mp.downClientY = e.clientY
-    mp.downTimeMs = e.nativeEvent.timeStamp
-    mp.dragging = false
-    mp.suppressNextClick = false
-    const hit = getDeskLocalHitFromEvent(
-      e,
-      deskGroupRef.current,
-      BASE_MAT_Y + 0.012
-    )
-    if (hit) {
-      mp.dx = hit.x - mp.x
-      mp.dz = hit.z - mp.z
-    } else {
-      mp.dx = 0
-      mp.dz = 0
-    }
-    const handleWinUp = () => {
-      if (mp.pointerDown) {
-        const wasDragging = mp.dragging
-        mp.pointerDown = false
-        mp.pointerId = null
-        mp.dragging = false
-        if (wasDragging) {
-          mp.suppressNextClick = true
-          playPaperRustle(true)
-          lensDirtyRef.current = true
-          window.setTimeout(() => {
-            manualPosRef.current.suppressNextClick = false
-          }, 60)
-        }
-      }
-      window.removeEventListener('pointerup', handleWinUp)
-      window.removeEventListener('pointercancel', handleWinUp)
-    }
-    window.addEventListener('pointerup', handleWinUp)
-    window.addEventListener('pointercancel', handleWinUp)
+    toggleManualHeld()
   }
 
-  const handleManualDragMove = (e: ThreeEvent<PointerEvent>) => {
-    const mp = manualPosRef.current
-    if (!mp.pointerDown) return
-    if ((e.nativeEvent.buttons & 1) === 0) {
-      mp.pointerDown = false
-      mp.pointerId = null
-      mp.dragging = false
-      return
-    }
+  const handleWePadHolsterPointerOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
-    const moveDistPx = Math.hypot(
-      e.clientX - mp.downClientX,
-      e.clientY - mp.downClientY
-    )
-    const heldMs = e.nativeEvent.timeStamp - mp.downTimeMs
-    if (!mp.dragging && (moveDistPx > 5 || (heldMs > 160 && moveDistPx > 1.5))) {
-      mp.dragging = true
-      mp.suppressNextClick = true
-      playPaperRustle(false)
-    }
-    if (!mp.dragging) return
-    const hit = getDeskLocalHitFromEvent(
-      e,
-      deskGroupRef.current,
-      BASE_MAT_Y + 0.012
-    )
-    if (!hit) return
-    mp.x = Math.max(-0.88, Math.min(0.88, hit.x - mp.dx))
-    mp.z = Math.max(-0.28, Math.min(0.38, hit.z - mp.dz))
-    lensDirtyRef.current = true
+    const held = useGameStore.getState().wePadHeld
+    useGameStore
+      .getState()
+      .setHoveredControlHint(
+        held
+          ? '[CLICK / E]: STOW WE-PAD 84 IN CORNER DOCK'
+          : '[CLICK / E]: PICK UP WE-PAD 84 FROM DOCK'
+      )
   }
 
-  const handleManualDragUp = (e: ThreeEvent<PointerEvent>) => {
-    const mp = manualPosRef.current
-    if (!mp.pointerDown) return
-    e.stopPropagation()
-    const target = e.target as Element & {
-      releasePointerCapture?: (id: number) => void
-    }
-    target?.releasePointerCapture?.(e.pointerId)
-    const moveDistPx = Math.hypot(
-      e.clientX - mp.downClientX,
-      e.clientY - mp.downClientY
-    )
-    const heldMs = e.nativeEvent.timeStamp - mp.downTimeMs
-    const wasDragging = mp.dragging || moveDistPx > 5 || (heldMs >= 160 && moveDistPx > 1.5)
-    mp.pointerDown = false
-    mp.pointerId = null
-    mp.dragging = false
-    if (wasDragging) {
-      mp.suppressNextClick = true
-      playPaperRustle(true)
-      lensDirtyRef.current = true
-      window.setTimeout(() => {
-        manualPosRef.current.suppressNextClick = false
-      }, 60)
+  const handleWePadHolsterPointerOut = () => {
+    const cur = useGameStore.getState().hoveredControlHint
+    if (cur && cur.includes('WE-PAD 84')) {
+      useGameStore.getState().setHoveredControlHint(null)
     }
   }
 
@@ -3946,38 +4096,55 @@ export function InspectorDesk3D() {
     })
   }
 
-  // Magnetic Stamp Holder Snap: snaps stamp cleanly into its dedicated holder slot if released near the dock,
-  // colliding with the other stamp, or dropped off-paper so stamps never clutter the desk!
-  const snapStampToHolderIfNearOrCluttered = (type: StampType): boolean => {
+  // Keep stamps wherever the inspector places them; only seat directly into the ink-pad socket
+  // if released inside the pad itself, or gently separate if released right on top of the other stamp.
+  const resolveDroppedStampPosition = (type: StampType): boolean => {
     const st = stampStateRef.current[type]
     const otherType: StampType = type === 'APPROVED' ? 'SHREDDED' : 'APPROVED'
     const otherSt = stampStateRef.current[otherType]
 
-    const distToOwnHome = Math.hypot(
-      st.targetX - st.homeX,
-      st.targetZ - st.homeZ
-    )
-    const inDockZone =
-      st.targetX >= 0.02 &&
-      st.targetX <= 0.58 &&
-      st.targetZ >= -0.46 &&
-      st.targetZ <= 0.02
-    const collidingWithOtherStamp =
-      Math.hypot(st.targetX - otherSt.targetX, st.targetZ - otherSt.targetZ) <
-      0.16
-    const overPaper = isOverAnyDeskDoc(st.targetX, st.targetZ)
-
-    if (
-      distToOwnHome <= 0.28 ||
-      inDockZone ||
-      collidingWithOtherStamp ||
-      !overPaper
-    ) {
+    const inOwnInkSocket =
+      Math.abs(st.targetX - st.homeX) <= 0.05 &&
+      Math.abs(st.targetZ - st.homeZ) <= 0.04
+    if (inOwnInkSocket) {
       st.targetX = st.homeX
       st.targetZ = st.homeZ
       return true
     }
+
+    const dxOther = st.targetX - otherSt.targetX
+    const dzOther = st.targetZ - otherSt.targetZ
+    const distOther = Math.hypot(dxOther, dzOther)
+    if (distOther < 0.115) {
+      const pushX =
+        distOther > 0.001
+          ? dxOther / distOther
+          : type === 'APPROVED'
+            ? -1
+            : 1
+      const pushZ = distOther > 0.001 ? dzOther / distOther : 0
+      st.targetX = Math.max(
+        -1.02,
+        Math.min(1.02, otherSt.targetX + pushX * 0.12)
+      )
+      st.targetZ = Math.max(
+        -0.48,
+        Math.min(0.52, otherSt.targetZ + pushZ * 0.12)
+      )
+    }
     return false
+  }
+
+  const scheduleDockClickCooldown = (type: StampType) => {
+    const st = stampStateRef.current[type]
+    st.suppressDockClick = true
+    if (st.dockCooldownTimerId !== null) {
+      window.clearTimeout(st.dockCooldownTimerId)
+    }
+    st.dockCooldownTimerId = window.setTimeout(() => {
+      st.dockCooldownTimerId = null
+      st.suppressDockClick = false
+    }, 250)
   }
 
   const handleStampMoveInternal = (
@@ -3987,11 +4154,15 @@ export function InspectorDesk3D() {
     const st = stampStateRef.current[type]
     if (!st.pointerDown) return
     if ((e.nativeEvent.buttons & 1) === 0) {
+      const wasDragging = st.draggingBody
       st.pointerDown = false
       st.pointerId = null
       st.holdElapsedMs = 0
       st.draggingBody = false
-      snapStampToHolderIfNearOrCluttered(type)
+      if (wasDragging) {
+        scheduleDockClickCooldown(type)
+        resolveDroppedStampPosition(type)
+      }
       return
     }
     e.stopPropagation()
@@ -3999,27 +4170,15 @@ export function InspectorDesk3D() {
       e.clientX - st.downClientX,
       e.clientY - st.downClientY
     )
-    if (!st.draggingBody && moveDistPx > 4) {
+    if (!st.draggingBody && moveDistPx > 9) {
       st.draggingBody = true
       playDetentClick(1)
     }
     if (!st.draggingBody) return
     const hit = getDeskLocalHitFromEvent(e, deskGroupRef.current, 0.935)
     if (!hit) return
-    const nextX = Math.max(-1.02, Math.min(1.02, hit.x - st.dx))
-    const nextZ = Math.max(-0.48, Math.min(0.52, hit.z - st.dz))
-
-    // Live magnetic pull when hovering close to the stamp holder dock
-    const distToHome = Math.hypot(nextX - st.homeX, nextZ - st.homeZ)
-    const overDockTray =
-      nextX >= 0.08 && nextX <= 0.52 && nextZ >= -0.36 && nextZ <= -0.08
-    if (distToHome <= 0.14 || overDockTray) {
-      st.targetX = THREE.MathUtils.lerp(nextX, st.homeX, 0.65)
-      st.targetZ = THREE.MathUtils.lerp(nextZ, st.homeZ, 0.65)
-    } else {
-      st.targetX = nextX
-      st.targetZ = nextZ
-    }
+    st.targetX = Math.max(-1.02, Math.min(1.02, hit.x - st.dx))
+    st.targetZ = Math.max(-0.48, Math.min(0.52, hit.z - st.dz))
   }
 
   const handleStampUpInternal = (
@@ -4037,16 +4196,17 @@ export function InspectorDesk3D() {
       e.clientX - st.downClientX,
       e.clientY - st.downClientY
     )
-    const wasDrag = st.draggingBody || moveDistPx > 5
+    const wasDrag = st.draggingBody || moveDistPx > 9
     st.pointerDown = false
     st.pointerId = null
     st.holdElapsedMs = 0
     st.draggingBody = false
 
     if (wasDrag) {
-      // Hold & Drag Mode: if released near the holder (or off-paper / colliding), snap cleanly into its holder slot!
-      const snappedHome = snapStampToHolderIfNearOrCluttered(type)
-      if (snappedHome) {
+      // Hold & Drag Mode: leave the stamp resting wherever released on the desk or paper
+      scheduleDockClickCooldown(type)
+      const seatedHome = resolveDroppedStampPosition(type)
+      if (seatedHome) {
         playSwitchClank(false)
       } else {
         playDetentClick(0)
@@ -4054,10 +4214,10 @@ export function InspectorDesk3D() {
       return
     }
 
-    // Quick Click (< 5px movement):
-    // Bonus convenience: if the stamp is sitting away from any paper (e.g. in its ink cradle/dock) and there is a paper on the desk,
-    // automatically slide it onto the paper and stamp it (or bring it over the paper) so clicking in the dock never feels wasted!
-    if (!isOverAnyDeskDoc(st.x, st.z)) {
+    // Quick Click (< 9px movement):
+    // Convenience when still sitting in its ink cradle: slide onto top desk document before stamping
+    const inOwnDock = Math.hypot(st.x - st.homeX, st.z - st.homeZ) <= 0.07
+    if (inOwnDock && !isOverAnyDeskDoc(st.x, st.z)) {
       const deskDocs = useDeskStore
         .getState()
         .documents.filter((d) => d.status === 'desk')
@@ -4077,12 +4237,21 @@ export function InspectorDesk3D() {
       }
     }
 
-    // Fire the Stamp Plunger Animation (stampDown) & apply ink onto the directive paper!
+    // Fire the Stamp Plunger Animation, apply ink, then return smoothly to its ink-pad cradle
     st.plungerStep = 3
     execute3DStampImpact(type)
-    window.setTimeout(() => {
+    if (st.returnTimerId !== null) {
+      window.clearTimeout(st.returnTimerId)
+    }
+    st.returnTimerId = window.setTimeout(() => {
+      st.returnTimerId = null
       st.plungerStep = 0
-    }, 160)
+      if (!st.pointerDown) {
+        st.targetX = st.homeX
+        st.targetZ = st.homeZ
+        playSwitchClank(false)
+      }
+    }, 220)
   }
 
   const makeUnifiedStampHandlers = (type: StampType) => ({
@@ -4095,6 +4264,11 @@ export function InspectorDesk3D() {
       }
       target?.setPointerCapture?.(e.pointerId)
       const st = stampStateRef.current[type]
+      if (st.returnTimerId !== null) {
+        window.clearTimeout(st.returnTimerId)
+        st.returnTimerId = null
+        st.plungerStep = 0
+      }
       st.pointerDown = true
       st.pointerId = e.pointerId
       st.downClientX = e.clientX
@@ -4118,8 +4292,9 @@ export function InspectorDesk3D() {
           st.holdElapsedMs = 0
           st.draggingBody = false
           if (wasDrag) {
-            const snappedHome = snapStampToHolderIfNearOrCluttered(type)
-            if (snappedHome) {
+            scheduleDockClickCooldown(type)
+            const seatedHome = resolveDroppedStampPosition(type)
+            if (seatedHome) {
               playSwitchClank(false)
             } else {
               playDetentClick(0)
@@ -4266,15 +4441,27 @@ export function InspectorDesk3D() {
         }
       : null
 
-  // Positioned directly in front of and below the operator's seated position ([0/ESC] CHAIR)
-  // at full 1:1 scale (no downscaling on the tabletop or #1d2b26 green mat!)
+  // Positioned directly in front of the central swivel chair ([0, 1.36, 0])
+  // inside the 360-degree cockpit ring with uniform scale for distortion-free optics.
   return (
     <group
       ref={deskGroupRef}
-      position={[0, -0.164, 1.48]}
+      position={[0, 0.06, -0.96]}
       rotation={[0, 0, 0]}
-      scale={[1, 1, 1]}
+      scale={DESK_ROOT_SCALE}
     >
+      {/* Heavy Hammered-Iron Sub-Desk Plinth Anchored to Capsule Floor */}
+      <mesh position={[0, -0.042, 0]} castShadow receiveShadow>
+        <boxGeometry args={[3.04, 0.09, 1.3]} />
+        <meshStandardMaterial
+          color="#18211b"
+          metalness={0.68}
+          roughness={0.48}
+          bumpMap={ironTex.bumpMap}
+          bumpScale={0.008}
+          roughnessMap={ironTex.roughnessMap}
+        />
+      </mesh>
       {/* Guardrail 3: Invisible Horizontal Desk Drag-Plane for Continuous Raycast & Mid-Drag Tear Handoff */}
       <mesh
         position={[0, BASE_MAT_Y + 0.045, 0]}
@@ -4361,6 +4548,45 @@ export function InspectorDesk3D() {
           roughness={0.52}
         />
       </mesh>
+      {/* Solid Side Desk Wing Bolsters Extending Outward to Meet the Wraparound Soviet Console Collar */}
+      {([-1, 1] as const).map((side) => (
+        <group key={`desk-wing-bolster-${side}`}>
+          <mesh position={[side * 1.38, 0.44, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.42, 0.88, 1.24]} />
+            <meshStandardMaterial
+              color="#202c26"
+              roughness={0.46}
+              metalness={0.66}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+              roughnessMap={ironTex.roughnessMap}
+            />
+          </mesh>
+          <mesh position={[side * 1.415, 0.89, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.35, 0.055, 1.34]} />
+            <meshStandardMaterial
+              color="#3a281d"
+              map={mahoganyTex.map}
+              bumpMap={mahoganyTex.bumpMap}
+              bumpScale={0.005}
+              roughnessMap={mahoganyTex.roughnessMap}
+              roughness={0.54}
+              metalness={0.18}
+            />
+          </mesh>
+          <mesh position={[side * 1.595, 0.46, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.03, 0.92, 1.28]} />
+            <meshStandardMaterial
+              color="#18211b"
+              roughness={0.48}
+              metalness={0.68}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.007}
+              roughnessMap={ironTex.roughnessMap}
+            />
+          </mesh>
+        </group>
+      ))}
 
       {/* Worn Soviet Inspection Mat (#16241f with cross-grain leather, coffee-mug rings & scuffs) */}
       <mesh position={[0, 0.92, 0.02]} receiveShadow>
@@ -4595,7 +4821,6 @@ export function InspectorDesk3D() {
       </group>
 
       {/* Classic NKVD / Banker's Green-Glass Goose-Neck Desk Lamp (Far-Left Rear Corner behind ПРАВДА-84, away from ПУНКТ №4 ticker) */}
-      <object3D ref={bankersLampTargetRef} position={[-0.58, 0.92, -0.04]} />
       <group position={[-0.98, 0.926, -0.46]} rotation={[0, 0.36, 0]}>
         {deskPropNodes.bankersLamp && (
           <primitive object={deskPropNodes.bankersLamp} />
@@ -4678,16 +4903,6 @@ export function InspectorDesk3D() {
               emissiveIntensity={1.8}
             />
           </mesh>
-          <spotLight
-            ref={bankersLampSpotRef}
-            position={[0, -0.03, 0.03]}
-            color="#68ff8a"
-            intensity={2.4}
-            distance={1.8}
-            angle={0.75}
-            penumbra={0.8}
-            decay={1.3}
-          />
         </group>
       </group>
 
@@ -5700,14 +5915,6 @@ export function InspectorDesk3D() {
               />
             </mesh>
           ))}
-          <pointLight
-            ref={pneumaticStatusLightRef}
-            position={[0, 0.035, 0]}
-            color="#33ff66"
-            intensity={0.05}
-            distance={0.5}
-            decay={2}
-          />
         </group>
 
         {/* Left-Flank Brass Vacuum Manometer Gauge (`ВАКУУМ // КГС/СМ²`) */}
@@ -5962,16 +6169,16 @@ export function InspectorDesk3D() {
                   bumpScale={0.005}
                 />
               </mesh>
-              {/* Steel Ceiling Hanger Rod & Mounting Plate */}
-              <mesh position={[0, 0.11, 0]} castShadow>
-                <cylinderGeometry args={[0.01, 0.01, 0.18, 8]} />
+              {/* Steel Ceiling Hanger Rod & Mounting Plate reaching hall ceiling */}
+              <mesh position={[0, 0.47, 0]}>
+                <cylinderGeometry args={[0.01, 0.01, 0.94, 8]} />
                 <meshStandardMaterial
                   color="#222d26"
                   metalness={0.7}
                   roughness={0.42}
                 />
               </mesh>
-              <mesh position={[0, 0.2, 0]}>
+              <mesh position={[0, 0.93, 0]}>
                 <boxGeometry args={[0.08, 0.016, 0.08]} />
                 <meshStandardMaterial
                   color="#18211b"
@@ -6115,22 +6322,320 @@ export function InspectorDesk3D() {
       </group>
 
       {/* ============================================================
+          3B. FRONT-RIGHT CORNER WE-PAD 84 HOLSTER / CHARGING DOCK (`МЫ-ПАД 84`)
+              Bolted steel/brass C-clamp cradle on the front-right mahogany desk edge,
+              keeping the green inspection mat 100% clear for documents & tools.
+         ============================================================ */}
+      <group
+        onClick={handleWePadHolsterClick}
+        onPointerOver={handleWePadHolsterPointerOver}
+        onPointerOut={handleWePadHolsterPointerOut}
+      >
+        {/* A. Solid Bolted Base Flange & Sloped Pedestal Support Wedge on Right Desk Wing Bolster */}
+        <group
+          position={[
+            WEPAD_DOCK_POS_3D.x,
+            0.922,
+            WEPAD_DOCK_POS_3D.z + 0.01,
+          ]}
+          rotation={[0, WEPAD_DOCK_YAW_Y, 0]}
+        >
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={[0.26, 0.016, 0.28]} />
+            <meshStandardMaterial
+              color="#18211b"
+              roughness={0.46}
+              metalness={0.68}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+              roughnessMap={ironTex.roughnessMap}
+            />
+          </mesh>
+          <mesh position={[0, 0.026, -0.008]} castShadow receiveShadow>
+            <boxGeometry args={[0.17, 0.044, 0.2]} />
+            <meshStandardMaterial
+              color="#1e2923"
+              roughness={0.48}
+              metalness={0.66}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.007}
+              roughnessMap={ironTex.roughnessMap}
+            />
+          </mesh>
+          {([-0.088, 0.088] as const).map((gx, gIdx) => (
+            <mesh
+              key={`dock-rib-${gIdx}`}
+              position={[gx, 0.022, -0.006]}
+              castShadow
+              receiveShadow
+            >
+              <boxGeometry args={[0.016, 0.036, 0.23]} />
+              <meshStandardMaterial
+                color="#141a17"
+                roughness={0.5}
+                metalness={0.64}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.006}
+              />
+            </mesh>
+          ))}
+          {(
+            [
+              [-0.105, 0.011, -0.115],
+              [0.105, 0.011, -0.115],
+              [-0.105, 0.011, 0.115],
+              [0.105, 0.011, 0.115],
+            ] as const
+          ).map(([bx, by, bz], bIdx) => (
+            <mesh key={`dock-bolt-${bIdx}`} position={[bx, by, bz]} castShadow>
+              <cylinderGeometry args={[0.006, 0.006, 0.007, 6]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.88}
+                roughness={0.26}
+                bumpMap={brassTex.bumpMap}
+                bumpScale={0.004}
+              />
+            </mesh>
+          ))}
+          <mesh
+            position={[-0.06, 0.014, -0.14]}
+            rotation={[Math.PI / 2, 0, -0.25]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.006, 0.006, 0.09, 8]} />
+            <meshStandardMaterial
+              color="#151917"
+              roughness={0.72}
+              metalness={0.22}
+            />
+          </mesh>
+        </group>
+
+        {/* B. Angled Holster Cradle (`19.5°` yaw toward player, `29.8°` upright pitch) */}
+        <group
+          position={[
+            WEPAD_DOCK_POS_3D.x,
+            WEPAD_DOCK_POS_3D.y,
+            WEPAD_DOCK_POS_3D.z,
+          ]}
+          rotation={_manualDeskEuler}
+        >
+          {/* Active Hitbox When Holster Is Empty (visible={isManualHeld} for Pointer Lock raycasts) */}
+          <mesh visible={isManualHeld} position={[0, 0.008, 0.012]}>
+            <boxGeometry args={[0.28, 0.036, 0.305]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+
+          {/* Hammered-Iron Cradle Backplate Bed */}
+          <mesh position={[0, -0.0095, 0.012]} castShadow receiveShadow>
+            <boxGeometry args={[0.264, 0.007, 0.276]} />
+            <meshStandardMaterial
+              color="#18211b"
+              roughness={0.46}
+              metalness={0.66}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+              roughnessMap={ironTex.roughnessMap}
+            />
+          </mesh>
+
+          {/* 2 Vertical Dark Rubber Anti-Slip Cushion Strips */}
+          {([-0.068, 0.068] as const).map((rx, rIdx) => (
+            <mesh key={rIdx} position={[rx, -0.0056, 0.012]} receiveShadow>
+              <boxGeometry args={[0.022, 0.0012, 0.22]} />
+              <meshStandardMaterial color="#101311" roughness={0.92} />
+            </mesh>
+          ))}
+
+          {/* Factory Serial Plate Inside Cradle Bed (Visible When WE-PAD 84 Is Held) */}
+          <mesh position={[0, -0.0054, -0.02]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.095, 0.028]} />
+            <meshStandardMaterial
+              map={serialPlateTex}
+              roughness={0.42}
+              metalness={0.75}
+            />
+          </mesh>
+
+          {/* Lower Hammered-Iron U-Channel Lip Bracket & Front Retaining Lip */}
+          <mesh position={[0, 0.001, 0.149]} castShadow receiveShadow>
+            <boxGeometry args={[0.268, 0.026, 0.013]} />
+            <meshStandardMaterial
+              color="#1e2822"
+              roughness={0.45}
+              metalness={0.68}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+              roughnessMap={ironTex.roughnessMap}
+            />
+          </mesh>
+          <mesh position={[0, 0.002, 0.158]} castShadow receiveShadow>
+            <boxGeometry args={[0.268, 0.028, 0.009]} />
+            <meshStandardMaterial
+              color="#18211b"
+              roughness={0.45}
+              metalness={0.68}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+              roughnessMap={ironTex.roughnessMap}
+            />
+          </mesh>
+          <mesh position={[0, 0.0168, 0.158]} castShadow>
+            <boxGeometry args={[0.268, 0.0025, 0.0095]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+
+          {/* Left & Right Hammered-Iron Guide Channels */}
+          {([-0.1255, 0.1255] as const).map((gx, gIdx) => (
+            <mesh key={gIdx} position={[gx, -0.001, 0.022]} castShadow receiveShadow>
+              <boxGeometry args={[0.011, 0.022, 0.256]} />
+              <meshStandardMaterial
+                color="#1f2923"
+                roughness={0.46}
+                metalness={0.66}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.006}
+                roughnessMap={ironTex.roughnessMap}
+              />
+            </mesh>
+          ))}
+
+          {/* 4 Brushed-Brass Spring Guide Clips with Brass Rivets */}
+          {(
+            [
+              [-0.122, -0.045],
+              [0.122, -0.045],
+              [-0.122, 0.082],
+              [0.122, 0.082],
+            ] as const
+          ).map(([cx, cz], cIdx) => (
+            <group key={cIdx} position={[cx, 0.0095, cz]}>
+              <mesh castShadow>
+                <boxGeometry args={[0.013, 0.0045, 0.036]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.88}
+                  roughness={0.24}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.004}
+                />
+              </mesh>
+              <mesh position={[0, 0.003, 0]} castShadow>
+                <cylinderGeometry args={[0.0028, 0.0028, 0.003, 8]} />
+                <meshStandardMaterial
+                  color="#d4be7f"
+                  metalness={0.92}
+                  roughness={0.2}
+                />
+              </mesh>
+            </group>
+          ))}
+
+          {/* 5 Brass Spring-Loaded Pogo Charging & Telemetry Pins */}
+          {([-0.044, -0.022, 0, 0.022, 0.044] as const).map((px, pIdx) => (
+            <group
+              key={pIdx}
+              position={[px, 0.001, 0.138]}
+              rotation={[Math.PI / 2, 0, 0]}
+            >
+              <mesh>
+                <cylinderGeometry args={[0.0038, 0.0042, 0.006, 8]} />
+                <meshStandardMaterial
+                  color="#8c7a4b"
+                  metalness={0.86}
+                  roughness={0.28}
+                />
+              </mesh>
+              <mesh position={[0, -0.005, 0]}>
+                <cylinderGeometry args={[0.0022, 0.0024, 0.012, 8]} />
+                <meshStandardMaterial
+                  color="#e0c679"
+                  metalness={0.94}
+                  roughness={0.18}
+                />
+              </mesh>
+            </group>
+          ))}
+
+          {/* Dock Status Pilot Jewel (Emerald When Docked, Pulsing Amber When Empty) */}
+          <group position={[-0.108, 0.006, 0.1635]}>
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.0065, 0.007, 0.004, 10]} />
+              <meshStandardMaterial
+                color="#8c7a4b"
+                metalness={0.86}
+                roughness={0.28}
+              />
+            </mesh>
+            <mesh position={[0, 0, 0.0025]}>
+              <sphereGeometry args={[0.0045, 8, 8]} />
+              <meshStandardMaterial
+                ref={wePadDockLedMatRef}
+                color="#33ff66"
+                emissive="#33ff66"
+                emissiveIntensity={1.15}
+                roughness={0.25}
+              />
+            </mesh>
+          </group>
+
+          {/* Stamped Brass & Enamel Plaque (`МЫ-ПАД 84 // ДОК-ГНЕЗДО БЛ-84`) */}
+          <group position={[0.01, 0.009, 0.1645]} rotation={[-0.75, 0, 0]}>
+            <mesh castShadow>
+              <boxGeometry args={[0.15, 0.025, 0.002]} />
+              <meshStandardMaterial
+                color="#8c7a4b"
+                metalness={0.85}
+                roughness={0.28}
+                bumpMap={brassTex.bumpMap}
+                bumpScale={0.004}
+              />
+            </mesh>
+            <mesh position={[0, 0, 0.0014]}>
+              <planeGeometry args={[0.146, 0.022]} />
+              <meshBasicMaterial map={wePadDockPlaqueTex} toneMapped={false} />
+            </mesh>
+          </group>
+        </group>
+      </group>
+
+      {/* ============================================================
           4. WE-PAD 84 (`ЭЛЕКТРОНИКА МЫ-ПАД 84`) — CLEAN 3D ATOMPUNK TABLET
              ONLY:
              1) Main Backing Chassis (`y = 0`, `renderOrder = 1`)
              2) 4 Outer Bezel Rails along the outer perimeter (`renderOrder = 2`, zero meshes near screen center!)
-             3) Front Screen Mesh (`y = 0.025`, `renderOrder = 9999`, `depthTest = false`, `depthWrite = false`)
+             3) Front Screen Mesh (docked `depthTest = true` inside bezel -> held HUD `renderOrder = 9999`, `depthTest = false`)
          ============================================================ */}
       <group
         ref={manualGroupRef}
-        position={[MANUAL_BOUNDS_3D.x, BASE_MAT_Y + 0.012, MANUAL_BOUNDS_3D.z]}
-        rotation={[0, 0, 0]}
-        scale={MANUAL_SCALE}
+        position={[
+          WEPAD_DOCK_POS_3D.x,
+          WEPAD_DOCK_POS_3D.y,
+          WEPAD_DOCK_POS_3D.z,
+        ]}
+        rotation={_manualDeskEuler}
+        scale={WEPAD_DOCK_SCALE}
         onWheel={handleManualWheel}
-        onPointerDown={handleManualDragDown}
-        onPointerMove={handleManualDragMove}
-        onPointerUp={handleManualDragUp}
-        onPointerCancel={handleManualDragUp}
+        onClick={(e) => {
+          if (useGameStore.getState().wePadHeld) return
+          e.stopPropagation()
+          toggleManualHeld()
+        }}
+        onPointerOver={(e) => {
+          if (useGameStore.getState().wePadHeld) return
+          handleWePadHolsterPointerOver(e)
+        }}
+        onPointerOut={() => {
+          if (useGameStore.getState().wePadHeld) return
+          handleWePadHolsterPointerOut()
+        }}
       >
         {/* 1. MAIN CHASSIS: Heavy Beveled Cast-Iron & Brushed-Steel Cabinet (#2a3028) */}
         <mesh
@@ -6194,26 +6699,21 @@ export function InspectorDesk3D() {
           position={[0, 0.0155, -MANUAL_BASE_H / 2 - 0.009]}
           rotation={[-Math.PI / 2, 0, 0]}
           renderOrder={3}
-          onDoubleClick={(e) => {
-            e.stopPropagation()
-            if (manualPosRef.current.suppressNextClick) return
-            toggleManualHeld()
-          }}
         >
           <planeGeometry args={[0.185, 0.016]} />
           <meshBasicMaterial map={folderCrestTex} toneMapped={false} />
         </mesh>
 
-        {/* 3. SCREEN MESH (`renderOrder = 9999`, `depthTest = false`, well in front of backing chassis!) */}
+        {/* 3. SCREEN MESH (flush in bezel with depthTest when docked; foreground HUD when held!) */}
         <mesh
-          position={[0, 0.06, 0]}
+          ref={manualScreenMeshRef}
+          position={[0, 0.0155, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
-          renderOrder={9999}
+          renderOrder={4}
           onWheel={handleManualWheel}
           onClick={(e) => {
             e.stopPropagation()
-            if (manualPosRef.current.suppressNextClick) return
-            // When WE-PAD 84 is resting on the desk, clicking it picks it up into hand!
+            // When WE-PAD 84 is docked in the corner holster, clicking it picks it up into hand!
             if (!useGameStore.getState().wePadHeld) {
               toggleManualHeld()
               return
@@ -6263,8 +6763,8 @@ export function InspectorDesk3D() {
             ref={manualMatRef}
             map={manualTex}
             toneMapped={false}
-            depthTest={false}
-            depthWrite={false}
+            depthTest={true}
+            depthWrite={true}
           />
         </mesh>
       </group>
@@ -6301,6 +6801,9 @@ export function InspectorDesk3D() {
         onClick={(e) => {
           e.stopPropagation()
           const st = stampStateRef.current.APPROVED
+          if (st.pointerDown || st.suppressDockClick) {
+            return
+          }
           st.targetX = st.homeX
           st.targetZ = st.homeZ
           playSwitchClank(false)
@@ -6374,6 +6877,9 @@ export function InspectorDesk3D() {
         onClick={(e) => {
           e.stopPropagation()
           const st = stampStateRef.current.SHREDDED
+          if (st.pointerDown || st.suppressDockClick) {
+            return
+          }
           st.targetX = st.homeX
           st.targetZ = st.homeZ
           playSwitchClank(false)
@@ -6906,7 +7412,8 @@ export function InspectorDesk3D() {
       </group>
 
       {/* ============================================================
-          8. DRAGGABLE 2x STRAIGHT OPTICAL MAGNIFYING GLASS (STEPPED BRASS BEZEL & CHAMFERED GRIP)
+          8. DRAGGABLE 2x STRAIGHT OPTICAL MAGNIFYING GLASS
+             (MACHINED 1984 SOVIET AGED-BRASS LOUPE & TURNED WALNUT GRIP)
          ============================================================ */}
       <group
         ref={magnifierGroupRef}
@@ -6917,38 +7424,122 @@ export function InspectorDesk3D() {
         onPointerUp={handleLensPointerUp}
         onPointerCancel={handleLensPointerUp}
       >
-        {deskPropNodes.magnifierFrame && (
-          <primitive object={deskPropNodes.magnifierFrame} />
-        )}
-        {/* Outer & Inner Stepped Brass Optical Bezels */}
-        <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
-          <torusGeometry args={[0.155, 0.018, 12, 28]} />
+        {/* 1. Stepped Machined Aged-Brass Outer Bezel & Gunmetal Retaining Lip */}
+        <mesh geometry={magnifierGeometries.bezelLathe} castShadow receiveShadow>
           <meshStandardMaterial
-            color="#b8a46b"
-            roughness={0.28}
-            metalness={0.85}
+            color="#a89055"
+            roughness={0.3}
+            metalness={0.86}
             bumpMap={brassTex.bumpMap}
             bumpScale={0.005}
             roughnessMap={brassTex.roughnessMap}
           />
         </mesh>
-        <mesh
-          position={[0, 0.006, 0]}
-          rotation={[Math.PI / 2, 0, 0]}
-          castShadow
+        <mesh geometry={magnifierGeometries.retainerLathe} receiveShadow>
+          <meshStandardMaterial
+            color="#232a27"
+            roughness={0.36}
+            metalness={0.76}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.004}
+            roughnessMap={ironTex.roughnessMap}
+          />
+        </mesh>
+        {([0, Math.PI / 2, Math.PI, Math.PI * 1.5] as const).map((a, idx) => (
+          <mesh
+            key={`spanner-${idx}`}
+            position={[Math.cos(a) * 0.1482, 0.0146, Math.sin(a) * 0.1482]}
+            rotation={[0, -a, 0]}
+          >
+            <boxGeometry args={[0.005, 0.0018, 0.008]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              roughness={0.32}
+              metalness={0.84}
+            />
+          </mesh>
+        ))}
+        {([-2.85, -1.65, -0.65, 0.15, 1.42, 2.35] as const).map((a, idx) => (
+          <mesh
+            key={`rim-screw-${idx}`}
+            position={[Math.cos(a) * 0.163, 0.018, Math.sin(a) * 0.163]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.0038, 0.0038, 0.0026, 8]} />
+            <meshStandardMaterial
+              color="#d4be7f"
+              roughness={0.24}
+              metalness={0.9}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+        ))}
+
+        {/* 2. Side Split-Clamp Tension Lug (ГОСТ Optical Rim Clamp at clampAng = -2.26 rad) */}
+        <group
+          position={[Math.cos(-2.26) * 0.178, 0.002, Math.sin(-2.26) * 0.178]}
+          rotation={[0, 2.26, 0]}
         >
-          <torusGeometry args={[0.146, 0.008, 10, 28]} />
-          <meshStandardMaterial
-            color="#8c7a4b"
-            roughness={0.28}
-            metalness={0.85}
-            bumpMap={brassTex.bumpMap}
-            bumpScale={0.005}
-            roughnessMap={brassTex.roughnessMap}
-          />
-        </mesh>
+          <mesh position={[0, 0.0062, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.022, 0.008, 0.022]} />
+            <meshStandardMaterial
+              color="#9e874e"
+              roughness={0.3}
+              metalness={0.86}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+          <mesh position={[0, -0.0062, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.022, 0.008, 0.022]} />
+            <meshStandardMaterial
+              color="#9e874e"
+              roughness={0.3}
+              metalness={0.86}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.0034, 0.0034, 0.028, 10]} />
+            <meshStandardMaterial
+              color="#7d6a3c"
+              roughness={0.35}
+              metalness={0.84}
+            />
+          </mesh>
+          <mesh
+            position={[0, 0, 0.0135]}
+            rotation={[Math.PI / 2, 0, 0]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.0068, 0.0068, 0.005, 12]} />
+            <meshStandardMaterial
+              color="#d4be7f"
+              roughness={0.24}
+              metalness={0.9}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+          <mesh position={[0, 0, 0.0162]}>
+            <boxGeometry args={[0.0115, 0.002, 0.0018]} />
+            <meshStandardMaterial color="#111513" roughness={0.7} />
+          </mesh>
+          <mesh position={[0, 0, -0.0135]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.0058, 0.0058, 0.0042, 6]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              roughness={0.32}
+              metalness={0.85}
+            />
+          </mesh>
+        </group>
+
+        {/* 3. Unobstructed 2x Optical Lens + Razor-Thin Peripheral Glass Edge Chamfer Glint */}
         <mesh position={[0, 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[0.145, 28]} />
+          <circleGeometry args={[0.145, 48]} />
           <meshBasicMaterial
             ref={lensMatRef}
             map={lensTex}
@@ -6959,52 +7550,143 @@ export function InspectorDesk3D() {
             polygonOffsetUnits={-4}
           />
         </mesh>
-        {/* Decorative Brass Neck Collar */}
-        <mesh
-          position={[0.095, -0.004, 0.095]}
-          rotation={[Math.PI / 2, 0, -Math.PI / 4]}
-          castShadow
-        >
-          <cylinderGeometry args={[0.022, 0.022, 0.032, 12]} />
-          <meshStandardMaterial
-            color="#b8a46b"
-            roughness={0.28}
-            metalness={0.85}
-            bumpMap={brassTex.bumpMap}
-            bumpScale={0.005}
+        <mesh position={[0, 0.0086, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.1398, 0.1445, 48]} />
+          <meshBasicMaterial
+            color="#7ef5d8"
+            transparent
+            opacity={0.18}
+            depthWrite={false}
+            toneMapped={false}
           />
         </mesh>
-        {/* Chamfered Turned-Mahogany Grip & Brass Pommel Cap */}
-        <mesh
-          position={[0.148, -0.005, 0.148]}
-          rotation={[Math.PI / 2, 0, -Math.PI / 4]}
-          castShadow
-        >
-          <cylinderGeometry args={[0.018, 0.025, 0.175, 10]} />
-          <meshStandardMaterial
-            color="#5c3422"
-            map={mahoganyTex.map}
-            bumpMap={mahoganyTex.bumpMap}
-            bumpScale={0.005}
-            roughnessMap={mahoganyTex.roughnessMap}
-            roughness={0.52}
-            metalness={0.12}
+        <mesh position={[0, 0.0088, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry
+            args={[0.1408, 0.1438, 24, 1, Math.PI * 0.62, Math.PI * 0.52]}
+          />
+          <meshBasicMaterial
+            color="#dcfff5"
+            transparent
+            opacity={0.32}
+            depthWrite={false}
+            toneMapped={false}
           />
         </mesh>
-        <mesh
-          position={[0.214, -0.005, 0.214]}
+
+        {/* 4. Outer-Wall Brass Mounting Boss, Stepped Ferrule, Lathe Walnut Grip & Pommel Bolster */}
+        <group
+          position={[0.12021, 0.001, 0.12021]}
           rotation={[Math.PI / 2, 0, -Math.PI / 4]}
-          castShadow
         >
-          <sphereGeometry args={[0.024, 10, 10]} />
-          <meshStandardMaterial
-            color="#b8a46b"
-            roughness={0.28}
-            metalness={0.85}
-            bumpMap={brassTex.bumpMap}
-            bumpScale={0.005}
-          />
-        </mesh>
+          {/* Bezel Saddle Flange & 6-Sided Hexagonal Mounting Boss */}
+          <mesh position={[0, 0.001, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.017, 0.0205, 0.007, 12]} />
+            <meshStandardMaterial
+              color="#9e874e"
+              roughness={0.3}
+              metalness={0.86}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+              roughnessMap={brassTex.roughnessMap}
+            />
+          </mesh>
+          <mesh position={[0, 0.0095, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.0152, 0.0162, 0.011, 6]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              roughness={0.28}
+              metalness={0.86}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+              roughnessMap={brassTex.roughnessMap}
+            />
+          </mesh>
+
+          {/* Stepped Brass Ferrule Collar & Dark Knurled Collar Band */}
+          <mesh geometry={magnifierGeometries.ferruleLathe} castShadow receiveShadow>
+            <meshStandardMaterial
+              color="#b8a46b"
+              roughness={0.28}
+              metalness={0.86}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+              roughnessMap={brassTex.roughnessMap}
+            />
+          </mesh>
+          <mesh position={[0, 0.03, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.0176, 0.0176, 0.0048, 20]} />
+            <meshStandardMaterial
+              color="#7d6a3c"
+              roughness={0.38}
+              metalness={0.82}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.006}
+            />
+          </mesh>
+
+          {/* Contoured Lathe-Turned Walnut Handle & Inlaid Brass Neck Accent Ring */}
+          <mesh geometry={magnifierGeometries.handleLathe} castShadow receiveShadow>
+            <meshStandardMaterial
+              color="#663922"
+              map={mahoganyTex.map}
+              bumpMap={mahoganyTex.bumpMap}
+              bumpScale={0.005}
+              roughnessMap={mahoganyTex.roughnessMap}
+              roughness={0.46}
+              metalness={0.1}
+            />
+          </mesh>
+          <mesh position={[0, 0.066, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.0178, 0.001, 8, 24]} />
+            <meshStandardMaterial
+              color="#d4be7f"
+              roughness={0.24}
+              metalness={0.9}
+            />
+          </mesh>
+
+          {/* Knurled Brass Pommel Trim Ring, Turned End-Cap Bolster & Lanyard Eyelet */}
+          <mesh position={[0, 0.157, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.021, 0.021, 0.0045, 24]} />
+            <meshStandardMaterial
+              color="#8c7a4b"
+              roughness={0.34}
+              metalness={0.85}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.006}
+            />
+          </mesh>
+          <mesh geometry={magnifierGeometries.pommelLathe} castShadow receiveShadow>
+            <meshStandardMaterial
+              color="#b8a46b"
+              roughness={0.28}
+              metalness={0.86}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+              roughnessMap={brassTex.roughnessMap}
+            />
+          </mesh>
+          <mesh position={[0, 0.1815, 0]} castShadow>
+            <cylinderGeometry args={[0.0048, 0.0062, 0.006, 10]} />
+            <meshStandardMaterial
+              color="#9e874e"
+              roughness={0.3}
+              metalness={0.86}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+          <mesh position={[0, 0.19, 0]} rotation={[0.22, 0, 0]} castShadow>
+            <torusGeometry args={[0.0092, 0.0023, 8, 18]} />
+            <meshStandardMaterial
+              color="#d4be7f"
+              roughness={0.24}
+              metalness={0.9}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+        </group>
       </group>
     </group>
   )

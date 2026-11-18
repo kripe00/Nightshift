@@ -25,7 +25,6 @@ export interface ReactorState {
   // --- Direct Operator Controls across UNIT B, UNIT A-2, UNIT A & UNIT C ---
   rodTargetRate: number;      // -1 (insert), 0 (hold), +1 (withdraw)
   az5Active: boolean;         // AZ-5 Emergency Scram latched
-  autoRodEnabled: boolean;    // Automatic Regulator (АР micro-trimmer)
   mcpActive: boolean[];       // 4 Main Circulation Pumps ГЦН 1-4 [Loop A: 0,1 | Loop B: 2,3]
   pumpThrottle: [number, number]; // [Pump A %, Pump B %] continuous flow throttle levers on UNIT A (0-100%)
   oilCoolerValve: number;     // 0 to 100% Bearing Oil Cooler handwheels on UNIT A / UNIT A-2
@@ -141,7 +140,6 @@ export function createColdStartState(): ReactorState {
   return {
     rodTargetRate: 0,
     az5Active: false,
-    autoRodEnabled: false,
     mcpActive: [false, false, false, false],
     pumpThrottle: [60, 60],
     oilCoolerValve: 45,
@@ -324,7 +322,6 @@ export function stepReactorSimulation(
   const prevRods = state.controlRods;
 
   if (state.az5Active) {
-    state.autoRodEnabled = false;
     state.az5Timer += delta;
     state.controlRods = Math.max(0, state.controlRods - AZ5_SPEED * delta);
 
@@ -341,14 +338,11 @@ export function stepReactorSimulation(
     );
   }
 
-  // Moving control rods or active АР servo regulation consumes hydraulic boron accumulator pressure;
+  // Moving control rods consumes hydraulic boron accumulator pressure;
   // passive reserve replenishment keeps hydraulic pressure healthy during normal operation.
   const rodTravel = Math.abs(state.controlRods - prevRods);
   if (rodTravel > 0.0001 && !state.az5Active) {
     state.boronTankLevel = Math.max(0, state.boronTankLevel - rodTravel * 18.0);
-  }
-  if (state.autoRodEnabled && state.thermalPower > 300) {
-    state.boronTankLevel = Math.max(0, state.boronTankLevel - 0.14 * delta);
   }
   if (!state.az5Active && state.boronTankLevel < 75 && state.boronReservePool > 0) {
     const trickle = Math.min(0.18 * delta, state.boronReservePool);
@@ -685,12 +679,6 @@ export function stepReactorSimulation(
   const boronDampingPenalty = state.boronDampingTimer > 0 ? 520 : 0;
   const az5SpikeMW = az5TipReactivityBonus > 0 ? az5TipReactivityBonus * 25000 : 0;
 
-  // Auto Regulator (АР) stays latched unless AZ-5 emergency scram is active
-  const apMicroTrimMWt =
-    state.autoRodEnabled && !state.az5Active && effectiveRodPosition > 0.10 && state.boronTankLevel > 8
-      ? clamp(-(voidPowerBonus - xenonPowerPenalty), -45, 45)
-      : 0;
-
   const targetThermalMW =
     effectiveRodPosition <= 0.10 && az5SpikeMW === 0
       ? 0
@@ -700,7 +688,6 @@ export function stepReactorSimulation(
             voidPowerBonus -
             xenonPowerPenalty -
             boronDampingPenalty +
-            apMicroTrimMWt +
             az5SpikeMW,
           0,
           4800
@@ -1032,16 +1019,16 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
     }
 
     case 'STEP_2_PULL_RODS': {
-      if (state.autoRodEnabled && state.controlRods >= 0.50 && state.thermalPower >= 200) {
+      if (state.controlRods >= 0.50 && state.thermalPower >= 200) {
         return evaluateTutorial(state, 'STEP_3_BUILD_STEAM');
       }
       return {
         phase: 'STEP_2_PULL_RODS',
         header: '>> STEP 2/7 [KEY 3 -> UNIT A-2 // BORON RODS]:',
-        body: 'ACTION: ON [UNIT A-2] LEFT BAY, CLICK THE PULSING [AUTO RODS] BUTTON ABOVE THE WHEEL AND RAISE RODS TO 55%.',
+        body: 'ACTION: ON [UNIT A-2] LEFT BAY, SCROLL OR DRAG THE [CONTROL ROD DRIVE] WHEEL TO RAISE BORON RODS TO 55%.',
         hint: 'WHY: Boron control rods act as neutron sponges. Pulling them UP raises REACTIVITY and heats core water (~1920 MWt).',
         panelKey: 'GO TO: [KEY 3] UNIT A-2 (MID-LEFT)',
-        actionLine: 'CLICK [AUTO RODS] (ABOVE WHEEL) & RODS 55%',
+        actionLine: 'TURN [CONTROL ROD DRIVE] WHEEL TO 55%',
         whyLines: [
           'Boron rods act as neutron sponges inside the core.',
           'Pulling them UP raises REACTIVITY & THERMAL MWt gauge.'

@@ -5,10 +5,10 @@ import * as THREE from "three";
 import * as InspectorModule from "../modules/inspector";
 import {
   getSkalaDiagFeedElement,
-  getSkalaDiagFeedFrameSeq,
   getSkalaDiagFeedStartMs,
   isSkalaDiagFeedSyncing,
   playRheostatDetentClick,
+  playSteamVentHiss,
   updateTurbinePitchHum,
 } from "../modules/inspector/audio";
 import { useDeskStore } from "../modules/inspector/useDeskStore";
@@ -19,8 +19,10 @@ import {
 import { TerminalStation3D } from "../modules/terminal";
 import { BuckshotDitherPass } from "./BuckshotDitherPass";
 import { CameraController, useCameraLookStore } from "./CameraController";
+import { ExteriorDioramas3D, NOOP_RAYCAST } from "./ExteriorDioramas3D";
 import {
   CagedSovietJewelLamp3D,
+  HighDetailKnifeBreaker3D,
   HighDetailManometer3D,
   HighDetailReactorPanel3D,
   LeftRearWrapAroundPanel3D,
@@ -29,9 +31,15 @@ import {
   makePlaqueTex,
   SovietBacklitIndicatorBlock3D,
   SovietCRTMonitorBay3D,
-  SovietDvk84KeyboardConsole3D,
   SovietModularSteelCabinet3D,
 } from "./MechanicalPanels3D";
+
+const TERMINAL_ROOT_POS: [number, number, number] = [0, 0.18, -3.96];
+const TERMINAL_TILT_X = 0.122;
+const TERMINAL_SCALE = 1.42;
+const HALL_HALF_W = 6.0;
+const HALL_HALF_D = 4.5;
+const HALL_CEILING_Y = 4.2;
 import {
   applySovietPBRToHierarchy,
   getBrushedBrassTextures,
@@ -63,12 +71,44 @@ function createCrispPanelTexture(
   const tex = new THREE.CanvasTexture(canvas);
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearFilter;
-  tex.anisotropy = 8;
+  tex.anisotropy = 1;
   tex.generateMipmaps = false;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
   return tex;
 }
+
+const SCENE_COLOR_BLACK = new THREE.Color("#000000");
+const SCENE_COLOR_RED = new THREE.Color("#ff2a2a");
+const SCENE_COLOR_GREEN = new THREE.Color("#33ff66");
+const SCENE_COLOR_AMBER = new THREE.Color("#ffb000");
+const SCENE_COLOR_ORANGE = new THREE.Color("#ff941a");
+const SCENE_COLOR_OFF_DARK = new THREE.Color("#121a16");
+const SCENE_COLOR_CLOCK_BLACKOUT = new THREE.Color("#2a1212");
+const SCENE_COLOR_CLOCK_NORM = new THREE.Color("#ff3b24");
+const SCENE_COLOR_LAMP_DARK = new THREE.Color("#1c2621");
+const SCENE_COLOR_LAMP_AMBER_OFF = new THREE.Color("#ffaa22");
+const SCENE_COLOR_LAMP_AMBER_EMISSIVE = new THREE.Color("#ff8800");
+const SCENE_COLOR_SCONCE_BLACKOUT = new THREE.Color("#221210");
+const SCENE_COLOR_SCONCE_BLACKOUT_EMISSIVE = new THREE.Color("#3a0b06");
+const SCENE_COLOR_SCONCE_ALARM = new THREE.Color("#ff5c38");
+const SCENE_COLOR_SCONCE_ALARM_EMISSIVE = new THREE.Color("#ff3018");
+const SCENE_COLOR_SCONCE_NORM = new THREE.Color("#ffba52");
+const SCENE_COLOR_SCONCE_NORM_EMISSIVE = new THREE.Color("#ff9922");
+const SCENE_COLOR_BAT_DISCHARGE_OFF = new THREE.Color("#302210");
+const SCENE_COLOR_BAT_DISCHARGE_IDLE = new THREE.Color("#3b2a14");
+const SCENE_COLOR_BAT_DISCHARGE_IDLE_EM = new THREE.Color("#442808");
+const SCENE_COLOR_BAT_SYNC_OFF = new THREE.Color("#122418");
+const SCENE_COLOR_BAT_SYNC_IDLE = new THREE.Color("#183824");
+const SCENE_COLOR_BAT_SYNC_IDLE_EM = new THREE.Color("#124422");
+const SCENE_COLOR_MAIN_LIGHT_NORM = new THREE.Color("#ffe2ba");
+const SCENE_COLOR_MAIN_LIGHT_BLACKOUT = new THREE.Color("#222422");
+const SCENE_COLOR_TUBE_BLACKOUT = new THREE.Color("#1a1816");
+const SCENE_COLOR_TUBE_ALARM = new THREE.Color("#ffd6b0");
+const SCENE_COLOR_TUBE_NORM = new THREE.Color("#fff1d6");
+const SCENE_COLOR_TUBE_DIM_BLACKOUT = new THREE.Color("#14100d");
+const SCENE_COLOR_TUBE_DIM = new THREE.Color("#e2a24c");
+const SCENE_COLOR_TUBE_FLICKER_BLACKOUT = new THREE.Color("#141210");
 
 interface UnitCMasterDashboardData {
   energyCreatedMW: number;
@@ -256,7 +296,7 @@ function paintUnitCMasterDashboardCRT(
   ctx.textAlign = "right";
   ctx.fillStyle = "#ffb000";
   ctx.font = 'bold 20px "VT323", monospace';
-  ctx.fillText(`WHEEL ${d.wheelPct}%`, col3X + col3W - 12, colY + 25);
+  ctx.fillText(`AUTO ${d.wheelPct}%`, col3X + col3W - 12, colY + 25);
 
   ctx.textAlign = "left";
   ctx.fillStyle = balanceColor;
@@ -297,10 +337,10 @@ function paintUnitCMasterDashboardCRT(
       "> BATTERY CHARGE CRITICAL (<10%): WITHDRAW RODS [A-2] & MATCH FEEDWATER [B] TO RECHARGE";
     advisorCol = "#ff3b3b";
   } else if (deltaDemand < -30) {
-    advisorText = `> TURN [BATTERY -> GRID] WHEEL UP TO SUPPLY ${Math.round(d.energyDemandMW)} MW DEMAND`;
+    advisorText = `> DEMAND SHORTFALL: RAISE [A-2] RODS SO UNIT C CAN AUTO-SUPPLY ${Math.round(d.energyDemandMW)} MW`;
     advisorCol = !isStartup && absDelta > 90 ? "#ff4d4d" : "#ffb000";
   } else if (deltaDemand > 35) {
-    advisorText = `> +${deltaDemand} MW OVER-DISPATCH: TURN [BATTERY -> GRID] WHEEL DOWN TO SAVE CHARGE`;
+    advisorText = `> +${deltaDemand} MW OVER-DISPATCH: LOWER [A] SECTOR LEVERS TO SAVE BATTERY CHARGE`;
     advisorCol = !isStartup && deltaDemand > 90 ? "#ff4d4d" : "#ffb000";
   } else if (d.steamBar >= 79) {
     advisorText = `> STEAM PRESSURE HIGH (${Math.round(d.steamBar)} BAR): INSERT [RODS] SLIGHTLY OR OPEN [STEAM DUMP]`;
@@ -689,9 +729,9 @@ const InspectorDesk3DPlaceholder: React.FC = () => {
   });
 
   return (
-    <group position={[2.12, 0, -1.04]} rotation={[0, -0.42, 0]}>
+    <group position={[0, 0.06, -0.96]} rotation={[0, 0, 0]} scale={0.72}>
       {/* 3D Soviet Bureaucratic Operator Desk */}
-      <mesh position={[0, 0.44, 0]}>
+      <mesh position={[0, 0.44, 0]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[1.64, 0.88, 0.96]} />
         <meshStandardMaterial
           color="#23312b"
@@ -699,7 +739,7 @@ const InspectorDesk3DPlaceholder: React.FC = () => {
           metalness={0.35}
         />
       </mesh>
-      <mesh position={[0, 0.89, 0]}>
+      <mesh position={[0, 0.89, 0]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[1.72, 0.05, 1.04]} />
         <meshStandardMaterial
           color="#3b2b1e"
@@ -903,9 +943,9 @@ const InspectorDesk3DPlaceholder: React.FC = () => {
 };
 
 /**
- * Heavy Physical 3D Soviet Digital Shift Clock (`ЧАСЫ СМЕНЫ // ЭЛЕКТРОНИКА-7`)
- * Mounted directly centered on top of the `K.O.M.R.A.D.-84` terminal cabinet bezel,
- * angled ~8° downward toward the operator chair.
+ * Heavy Physical 3D Soviet Digital Shift Clock (`ЧАСЫ БЩУ // ЭЛЕКТРОНИКА-7`)
+ * Mounted cleanly at the crown above the monumental `K.O.M.R.A.D.-84` master CRT bay,
+ * glowing with authentic crimson-red 7-segment digits inside a dark ruby filter cavity.
  */
 const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
@@ -919,15 +959,15 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
   const gostNameplateTex = useMemo(
     () =>
       createCrispPanelTexture(512, 64, (ctx, w, h) => {
-        ctx.fillStyle = "#1a1812";
+        ctx.fillStyle = "#180b0b";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#b8a46b";
         ctx.lineWidth = 4;
         ctx.strokeRect(3, 3, w - 6, h - 6);
-        ctx.fillStyle = "#ffcc44";
+        ctx.fillStyle = "#ff4433";
         ctx.font = 'bold 21px "Kremlin", "Consolas", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("SHIFT CLOCK 00:00 - 06:00 // KOMRAD-7", w / 2, 40, w - 24);
+        ctx.fillText("ЧАСЫ БЩУ 00:00 - 06:00 // ЭЛЕКТРОНИКА-7", w / 2, 40, w - 24);
       }),
     [],
   );
@@ -957,21 +997,23 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
     // Update physical status indicator lamp on clock bezel
     if (statusLampMatRef.current) {
       if (s.isBlackout) {
-        statusLampMatRef.current.color.set("#2a1212");
-        statusLampMatRef.current.emissive.set("#ff2a2a");
+        statusLampMatRef.current.color.copy(SCENE_COLOR_CLOCK_BLACKOUT);
+        statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
         statusLampMatRef.current.emissiveIntensity =
           halfSecBucket % 2 === 0 ? 0.85 : 0.12;
       } else if (isEmergency || isFinalHour) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 10.0);
-        statusLampMatRef.current.color.set("#ff2a2a");
-        statusLampMatRef.current.emissive.set("#ff2a2a");
-        statusLampMatRef.current.emissiveIntensity = 1.1 + pulse * 1.4;
+        statusLampMatRef.current.color.copy(SCENE_COLOR_RED);
+        statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
+        statusLampMatRef.current.emissiveIntensity = 1.15 + pulse * 1.45;
       } else {
-        statusLampMatRef.current.color.set("#33ff66");
-        statusLampMatRef.current.emissive.set("#33ff66");
-        statusLampMatRef.current.emissiveIntensity = 1.25;
+        statusLampMatRef.current.color.copy(SCENE_COLOR_CLOCK_NORM);
+        statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
+        statusLampMatRef.current.emissiveIntensity = 1.1;
       }
     }
+
+    if (s.diagFeedActive) return;
 
     const colonOn = halfSecBucket % 2 === 0;
     const sig = `${hh}:${mm}|${colonOn}|${s.isBlackout}|${isEmergency}|${isFinalHour}|${s.shiftNumber}`;
@@ -987,12 +1029,12 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
     const w = canvas.width;
     const h = canvas.height;
 
-    // 1. Deep Recessed Dark VFD / Nixie Cavity Background
-    ctx.fillStyle = s.isBlackout ? "#050404" : "#0b0d0c";
+    // 1. Deep Recessed Ruby-Tinted 7-Segment Cavity Background (`#120505`)
+    ctx.fillStyle = s.isBlackout ? "#070202" : "#120505";
     ctx.fillRect(0, 0, w, h);
 
-    // Subtle hexagonal/grid mesh lines inside vacuum fluorescent tube cavity
-    ctx.strokeStyle = "rgba(255, 170, 60, 0.06)";
+    // Subtle filter grid inside 7-segment optical hood
+    ctx.strokeStyle = "rgba(255, 58, 42, 0.08)";
     ctx.lineWidth = 1;
     for (let gx = 16; gx < w; gx += 16) {
       ctx.beginPath();
@@ -1011,28 +1053,28 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
     ctx.strokeStyle = isEmergency
       ? "#ff2a2a"
       : isFinalHour
-        ? "#ffaa00"
-        : "#3d4845";
+        ? "#ff6622"
+        : "#6e221e";
     ctx.lineWidth = 4;
     ctx.strokeRect(4, 4, w - 8, h - 8);
 
     // Top micro-telemetry strip inside the clock glass
-    ctx.fillStyle = "rgba(20, 26, 24, 0.92)";
+    ctx.fillStyle = "rgba(32, 10, 10, 0.92)";
     ctx.fillRect(8, 8, w - 16, 32);
     ctx.font = '700 18px "Kremlin", "Consolas", "Lucida Console", monospace';
     ctx.textAlign = "left";
-    ctx.fillStyle = "#b8c4be";
+    ctx.fillStyle = "#e8c4be";
     ctx.fillText(
-      `SHIFT NO. ${s.shiftNumber} // CURRENT SHIFT TIME`,
+      `ЧАСЫ БЩУ // SHIFT NO. ${s.shiftNumber}`,
       18,
       30,
     );
     ctx.textAlign = "right";
     ctx.fillStyle = isEmergency
-      ? "#ff4444"
+      ? "#ff3b24"
       : isFinalHour
-        ? "#ffcc00"
-        : "#39ff14";
+        ? "#ff9933"
+        : "#ff5544";
     ctx.fillText(
       s.isBlackout
         ? "POWER FAILURE"
@@ -1040,31 +1082,31 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
           ? "UNIT 4 ALERT"
           : isFinalHour
             ? "FINAL HOUR"
-            : "NORMAL MODE",
+            : "06:00 QUOTA",
       w - 18,
       30,
     );
 
-    // Dim unlit 88:88 / 88:88 ghost segments behind active digits
+    // Dim unlit 88:88 / 88:88 ghost red segments behind active digits
     ctx.textAlign = "center";
     ctx.font = '900 108px "VT323", "Consolas", monospace';
-    ctx.fillStyle = "rgba(255, 120, 30, 0.075)";
+    ctx.fillStyle = "rgba(255, 42, 42, 0.11)";
     ctx.fillText("88:88 / 88:88", w / 2 - 24, 146);
 
-    // Glowing Primary 7-Segment Style Shift Clock Numerals (`00:00 / 06:00`)
+    // Glowing Crimson-Red 7-Segment Soviet Shift Clock Numerals (`00:00 / 06:00`)
     const mainDigitCol = s.isBlackout
-      ? "#6e2218"
+      ? "#4f1414"
       : isEmergency
-        ? "#ff3b1f"
+        ? "#ff2a2a"
         : isFinalHour
-          ? "#ffaa00"
-          : "#ff6a1a";
-    const targetCol = s.isBlackout ? "#284430" : "#39ff14";
+          ? "#ff6a22"
+          : "#ff3b24";
+    const targetCol = s.isBlackout ? "#381212" : "#ff8844";
     const sep = colonOn || s.isBlackout ? ":" : " ";
 
     ctx.save();
     ctx.shadowColor = mainDigitCol;
-    ctx.shadowBlur = s.isBlackout ? 2 : 12;
+    ctx.shadowBlur = s.isBlackout ? 2 : 14;
     ctx.fillStyle = mainDigitCol;
     ctx.textAlign = "right";
     ctx.fillText(`${hh}${sep}${mm}`, w / 2 + 10, 146);
@@ -1073,7 +1115,7 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
     ctx.save();
     ctx.font = '900 88px "VT323", "Consolas", monospace';
     ctx.shadowColor = targetCol;
-    ctx.shadowBlur = s.isBlackout ? 0 : 8;
+    ctx.shadowBlur = s.isBlackout ? 0 : 9;
     ctx.fillStyle = targetCol;
     ctx.textAlign = "left";
     ctx.fillText(" / 06:00", w / 2 + 18, 142);
@@ -1084,9 +1126,9 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
     const barY = h - 22;
     const barW = w - 36;
     const barH = 10;
-    ctx.fillStyle = "#141a18";
+    ctx.fillStyle = "#1c0a0a";
     ctx.fillRect(barX, barY, barW, barH);
-    ctx.strokeStyle = "#36443e";
+    ctx.strokeStyle = "#5c201e";
     ctx.lineWidth = 1.5;
     ctx.strokeRect(barX, barY, barW, barH);
     const progRatio = Math.max(0, Math.min(1, totalMins / 360));
@@ -1094,18 +1136,18 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
       ? "#ff2a2a"
       : isFinalHour
         ? "#ffaa00"
-        : "#39ff14";
+        : "#ff3b24";
     ctx.fillRect(barX + 2, barY + 2, (barW - 4) * progRatio, barH - 4);
 
     tex.needsUpdate = true;
   });
 
   return (
-    <group position={[0, 2.66, 0.18]} rotation={[0.14, 0, 0]}>
-      {/* 1. Twin Heavy Bolted Steel Mounting Stanchions Anchoring Clock to Top of K.O.M.R.A.D.-84 */}
+    <group position={[1.08, 3.77, -3.36]} rotation={[0.12, 0, 0]} scale={0.82}>
+      {/* 1. Twin Heavy Bolted Steel Mounting Stanchions Anchoring Clock to Top Projection Hood */}
       {[-0.44, 0.44].map((sx, idx) => (
         <group key={`clk-stanchion-${idx}`} position={[sx, -0.145, -0.02]}>
-          <mesh castShadow receiveShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.14, 0.06, 0.14]} />
             <meshStandardMaterial
               color="#1e2422"
@@ -1116,7 +1158,7 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
             />
           </mesh>
           {[-0.048, 0.048].map((bx, bIdx) => (
-            <mesh key={bIdx} position={[bx, 0.032, 0.048]}>
+            <mesh key={bIdx} position={[bx, 0.032, 0.048]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.008, 0.008, 0.01, 6]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -1128,11 +1170,11 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
         </group>
       ))}
 
-      {/* 2. Main Soviet Enamelled Blue-Grey Steel & Bakelite Clock Casing (`1.15m x 0.28m x 0.18m`) */}
-      <mesh castShadow receiveShadow>
+      {/* 2. Main Soviet Enamelled Sage-Steel & Bakelite Clock Casing (`1.15m x 0.28m x 0.18m`) */}
+      <mesh raycast={NOOP_RAYCAST}>
         <boxGeometry args={[1.15, 0.28, 0.18]} />
         <meshStandardMaterial
-          color="#3d4845"
+          color="#2f443e"
           metalness={0.48}
           roughness={0.52}
           bumpMap={ironTex.bumpMap}
@@ -1141,21 +1183,21 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
         />
       </mesh>
 
-      {/* Outer Dark Structural Frame & Recessed Front Viewport Cavity (`#141817`) */}
-      <mesh position={[0, 0, 0.084]} castShadow receiveShadow>
+      {/* Outer Dark Structural Frame & Recessed Ruby Viewport Cavity (`#120505`) */}
+      <mesh position={[0, 0, 0.084]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[1.11, 0.245, 0.022]} />
         <meshStandardMaterial
-          color="#181e1c"
+          color="#1a1212"
           metalness={0.62}
           roughness={0.44}
         />
       </mesh>
 
       {/* Top Overhanging Glare-Shield Hood Lip on Clock Bezel */}
-      <mesh position={[0, 0.132, 0.105]} castShadow>
+      <mesh position={[0, 0.132, 0.105]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[1.16, 0.018, 0.055]} />
         <meshStandardMaterial
-          color="#262f2c"
+          color="#222c28"
           metalness={0.6}
           roughness={0.45}
         />
@@ -1171,7 +1213,7 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
         ] as const
       ).map(([cx, cy], cIdx) => (
         <group key={`clk-corner-${cIdx}`} position={[cx, cy, 0.088]}>
-          <mesh castShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.068, 0.058, 0.018]} />
             <meshStandardMaterial
               color="#8a929a"
@@ -1186,6 +1228,7 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
               key={bIdx}
               position={[bx, 0, 0.011]}
               rotation={[Math.PI / 2, 0, 0]}
+              raycast={NOOP_RAYCAST}
             >
               <cylinderGeometry args={[0.006, 0.006, 0.008, 6]} />
               <meshStandardMaterial
@@ -1200,8 +1243,8 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
         </group>
       ))}
 
-      {/* 3. High-Contrast Digital Shift Readout Screen (`00:00 / 06:00`) */}
-      <mesh position={[-0.055, 0.008, 0.096]}>
+      {/* 3. High-Contrast Red 7-Segment Digital Shift Readout Screen (`00:00 / 06:00`) */}
+      <mesh position={[-0.055, 0.008, 0.096]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[0.94, 0.205]} />
         <meshStandardMaterial
           ref={screenMatRef}
@@ -1209,19 +1252,19 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
           color="#ffffff"
           emissive="#ffffff"
           emissiveMap={clockDisplayTex}
-          emissiveIntensity={0.95}
+          emissiveIntensity={1.08}
           roughness={0.22}
           metalness={0.1}
         />
       </mesh>
 
-      {/* Thick Protective Tinted Glass Viewport Pane Over Digits */}
-      <mesh position={[-0.055, 0.008, 0.099]}>
+      {/* Protective Ruby-Tinted Glass Viewport Pane Over Digits */}
+      <mesh position={[-0.055, 0.008, 0.099]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[0.945, 0.21]} />
         <meshStandardMaterial
-          color="#16221c"
+          color="#2a0808"
           transparent
-          opacity={0.16}
+          opacity={0.14}
           roughness={0.12}
           metalness={0.35}
         />
@@ -1230,27 +1273,27 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
       {/* 4. Right Bezel Status Indicator Lamp (`CagedSovietJewelLamp3D`) */}
       <CagedSovietJewelLamp3D
         position={[0.475, 0.025, 0.096]}
-        defaultColor="#33ff66"
+        defaultColor="#ff2a2a"
         lampMatRef={statusLampMatRef}
         scale={1.08}
       />
 
-      {/* 5. Bottom Brass GOST Nameplate (`ЧАСЫ СМЕНЫ 00:00 - 06:00`) */}
-      <mesh position={[0, -0.118, 0.098]}>
-        <boxGeometry args={[0.48, 0.036, 0.006]} />
+      {/* 5. Bottom Brass GOST Nameplate (`ЧАСЫ БЩУ 00:00 - 06:00`) */}
+      <mesh position={[0, -0.118, 0.098]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.52, 0.036, 0.006]} />
         <meshStandardMaterial
           color="#b8a46b"
           metalness={0.86}
           roughness={0.26}
         />
       </mesh>
-      <mesh position={[0, -0.118, 0.102]}>
-        <planeGeometry args={[0.468, 0.031]} />
+      <mesh position={[0, -0.118, 0.102]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[0.506, 0.031]} />
         <meshStandardMaterial
           map={gostNameplateTex}
           emissive="#ffffff"
           emissiveMap={gostNameplateTex}
-          emissiveIntensity={0.32}
+          emissiveIntensity={0.42}
           roughness={0.5}
         />
       </mesh>
@@ -1258,402 +1301,1372 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
   );
 });
 
+function createHazardStripeTexture(
+  width = 256,
+  height = 64,
+  stripeWidth = 24,
+  primaryHex = "#ffb000",
+  secondaryHex = "#141414",
+): THREE.CanvasTexture {
+  const tex = createNearestCanvasTexture(width, height, (ctx, w, h) => {
+    ctx.fillStyle = secondaryHex;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = primaryHex;
+    for (let x = -h; x < w + h; x += stripeWidth * 2) {
+      ctx.beginPath();
+      ctx.moveTo(x, h);
+      ctx.lineTo(x + stripeWidth, h);
+      ctx.lineTo(x + stripeWidth + h, 0);
+      ctx.lineTo(x + h, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.strokeStyle = "#0e100f";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(1.5, 1.5, w - 3, h - 3);
+  });
+  return tex;
+}
+
 /**
- * Seamless 3-Tier Trapezoidal Corner Console Bridge (`УГЛОВАЯ СЕКЦИЯ ПУЛЬТА БЩУ`)
- * Anchored at the exact front desk lip hinge point `J` (`z_local = +0.505m`) where adjacent panels
- * touch point-to-point with ZERO overlap. Fills the rearward V-wedge (`z_B: 0 -> -0.62m`) with
- * mathematically fitted trapezoidal geometry across all 3 tiers (pedestal base + `#82988c` sloped
- * desk + `#c8d2ce` chrome front rail + `#8ea296` mid-riser + `#2c4a63` synoptic wall + `#7e9087` canopy)
- * so `UNIT B + UNIT A-2 + UNIT A` fuse into ONE single unbroken horseshoe console!
+ * Two-Wing Split Soviet RBMK-1000 Operator Console Plinth (`Левое и Правое Крыло Пульта БЩУ`)
+ * Deliberately split into capped Left (`x=-3.22, z=-1.16, +15°`) and Right (`x=+3.22, z=-1.16, -15°`)
+ * wings with solid dark-steel end-plates and an open center aisle facing `K.O.M.R.A.D.-84`.
  */
-const SovietConsoleCornerWedge3D: React.FC<{
-  position: [number, number, number];
-  rotationY: number;
-  hingeAngle?: number;
-}> = React.memo(({ position, rotationY, hingeAngle = 0.72 }) => {
+const SovietRbmkOperatorConsolePlinth3D: React.FC = React.memo(() => {
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
-  const halfAngle = hingeAngle / 2;
-  const sinA = Math.sin(halfAngle);
-  const cosA = Math.cos(halfAngle);
+  const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
-  // Exact Trapezoidal Sloped Sage-Green Desk Geometry (tapers from 0.036m at front hinge to 0.36m at riser)
-  const { slopedDeskGeo, pedestalWedgeGeo, toeKickWedgeGeo } = useMemo(() => {
-    const deskShape = new THREE.Shape();
-    const frontHalfW = 0.018;
-    const rearHalfW = 0.46 * sinA + 0.022;
-    const slopeLen = 1.084;
-    deskShape.moveTo(-frontHalfW, -slopeLen / 2);
-    deskShape.lineTo(frontHalfW, -slopeLen / 2);
-    deskShape.lineTo(rearHalfW, slopeLen / 2);
-    deskShape.lineTo(-rearHalfW, slopeLen / 2);
-    deskShape.closePath();
-    const dGeo = new THREE.ExtrudeGeometry(deskShape, {
-      depth: 0.034,
-      bevelEnabled: false,
+  const kickGrateTex = useMemo(() => {
+    const tex = createNearestCanvasTexture(256, 64, (ctx, w, h) => {
+      ctx.fillStyle = "#171d1b";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#2b3531";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(2, 2, w - 4, h - 4);
+      ctx.fillStyle = "#0b0e0d";
+      for (let gx = 12; gx < w - 12; gx += 16) {
+        ctx.fillRect(gx, 12, 8, h - 24);
+      }
+      ctx.fillStyle = "#8a928e";
+      for (const bx of [8, w - 8]) {
+        ctx.fillRect(bx - 2, 8, 4, 4);
+        ctx.fillRect(bx - 2, h - 12, 4, 4);
+      }
     });
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.repeat.set(3, 1);
+    return tex;
+  }, []);
 
-    const pedShape = new THREE.Shape();
-    const pedFrontHalfW = 0.02;
-    const pedRearHalfW = 0.62 * sinA + 0.03;
-    pedShape.moveTo(-pedFrontHalfW, 0);
-    pedShape.lineTo(pedFrontHalfW, 0);
-    pedShape.lineTo(pedRearHalfW, 0.58);
-    pedShape.lineTo(-pedRearHalfW, 0.58);
-    pedShape.closePath();
-    const pGeo = new THREE.ExtrudeGeometry(pedShape, {
-      depth: 0.78,
-      bevelEnabled: false,
-    });
-
-    const kickGeo = new THREE.ExtrudeGeometry(pedShape, {
-      depth: 0.085,
-      bevelEnabled: false,
-    });
-
-    return {
-      slopedDeskGeo: dGeo,
-      pedestalWedgeGeo: pGeo,
-      toeKickWedgeGeo: kickGeo,
-    };
-  }, [sinA]);
-
-  // Exact bisector depths behind the front hinge point `J` (`z_local = +0.505m`)
-  const riserZ = -(0.505 - 0.032) * cosA; // ~ -0.443m
-  const riserW = 2 * (0.505 - 0.032) * sinA + 0.036; // ~ 0.369m
-  const wallZ = -(0.505 - 0.014) * cosA; // ~ -0.460m
-  const wallW = 2 * (0.505 - 0.014) * sinA + 0.042; // ~ 0.388m
-  const canopyZ = -(0.505 - 0.062) * cosA; // ~ -0.415m
-  const canopyW = 2 * (0.505 - 0.062) * sinA + 0.038; // ~ 0.350m
+  const deskBays = [
+    { key: "left", pos: [-3.22, 0, -1.16] as const, rotY: (15 * Math.PI) / 180, width: 3.34 },
+    { key: "right", pos: [3.22, 0, -1.16] as const, rotY: -(15 * Math.PI) / 180, width: 3.34 },
+  ] as const;
 
   return (
-    <group
-      position={position}
-      rotation={[0, rotationY, 0]}
-      scale={[1.04, 1.05, 1.04]}
-    >
-      {/* 1. Deep Structural Back-Box & Tier-3 Synoptic Slate-Blue Upper Wall Bridge (`#2c4a63` & `#7e9087`) */}
-      <mesh position={[0, 1.22, wallZ - 0.16]} castShadow receiveShadow>
-        <boxGeometry args={[wallW + 0.08, 2.44, 0.32]} />
-        <meshStandardMaterial
-          color="#4a5852"
-          roughness={0.48}
-          metalness={0.38}
-          bumpMap={ironTex.bumpMap}
-          bumpScale={0.005}
-        />
-      </mesh>
-      <mesh position={[0, 1.96, wallZ - 0.018]} castShadow receiveShadow>
-        <boxGeometry args={[wallW + 0.02, 0.68, 0.034]} />
-        <meshStandardMaterial
-          color="#7e9087"
-          roughness={0.42}
-          metalness={0.3}
-          bumpMap={ironTex.bumpMap}
-          bumpScale={0.004}
-        />
-      </mesh>
-      <mesh position={[0, 1.94, wallZ]} castShadow receiveShadow>
-        <boxGeometry args={[wallW, 0.60, 0.016]} />
-        <meshStandardMaterial
-          color="#2c4a63"
-          roughness={0.44}
-          metalness={0.24}
-          bumpMap={ironTex.bumpMap}
-          bumpScale={0.004}
-        />
-      </mesh>
-      {/* Synoptic Mimic Continuity Lines Across Upper Wall Joint */}
-      {[1.78, 2.015].map((ly, lIdx) => (
-        <mesh key={`w-line-${lIdx}`} position={[0, ly, wallZ + 0.01]}>
-          <boxGeometry args={[wallW + 0.02, 0.015, 0.004]} />
-          <meshStandardMaterial
-            color={lIdx === 0 ? "#388898" : "#c8a838"}
-            emissive={lIdx === 0 ? "#388898" : "#c8a838"}
-            emissiveIntensity={0.2}
-            roughness={0.35}
-          />
-        </mesh>
-      ))}
+    <group>
+      {/* 1. Two-Wing Split Soviet Sage-Green Console Desk Bays */}
+      {deskBays.map((bay) => (
+        <group key={bay.key} position={[bay.pos[0], bay.pos[1], bay.pos[2]]} rotation={[0, bay.rotY, 0]}>
+          {/* Recessed Steel Kickplate & Bolted Cable-Trench Grate (`y = 0..0.15m`) */}
+          <mesh position={[0, 0.075, -0.22]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[bay.width - 0.04, 0.15, 0.96]} />
+            <meshStandardMaterial color="#141917" metalness={0.64} roughness={0.56} />
+          </mesh>
+          <mesh position={[0, 0.075, 0.264]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[bay.width - 0.16, 0.12]} />
+            <meshStandardMaterial map={kickGrateTex} metalness={0.55} roughness={0.5} />
+          </mesh>
 
-      {/* Upper Canopy Overhang Miter Bridge (`#7e9087`) */}
-      <group position={[0, 2.305, canopyZ]} rotation={[0.18, 0, 0]}>
-        <mesh castShadow receiveShadow>
-          <boxGeometry args={[canopyW, 0.16, 0.13]} />
-          <meshStandardMaterial
-            color="#7e9087"
-            roughness={0.42}
-            metalness={0.32}
-          />
-        </mesh>
-        {[0.07, -0.07].map((cy, cIdx) => (
-          <mesh key={`c-trim-${cIdx}`} position={[0, cy, 0.064]} castShadow>
-            <boxGeometry args={[canopyW + 0.02, 0.016, 0.018]} />
+          {/* Soviet Sage-Green Lower Cabinet Pedestal (`y = 0.15..0.54m`) */}
+          <mesh position={[0, 0.345, -0.24]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[bay.width, 0.39, 1.02]} />
             <meshStandardMaterial
-              color="#4a5852"
+              color="#2f443e"
+              metalness={0.44}
+              roughness={0.54}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+            />
+          </mesh>
+
+          {/* Sloped Steel Under-Shelf Knee Apron (`y = 0.50..0.57m`) */}
+          <mesh position={[0, 0.548, -0.21]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[bay.width + 0.04, 0.044, 1.12]} />
+            <meshStandardMaterial
+              color="#22302b"
               metalness={0.62}
-              roughness={0.36}
+              roughness={0.44}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.005}
             />
           </mesh>
-        ))}
-        <mesh position={[0, -0.004, 0.065]}>
-          <boxGeometry args={[canopyW - 0.06, 0.078, 0.008]} />
-          <meshStandardMaterial
-            color="#ffcc44"
-            emissive="#ffaa00"
-            emissiveIntensity={0.65}
-            roughness={0.3}
-          />
-        </mesh>
-      </group>
 
-      {/* 2. Tier-2 Angled Mid-Riser Corner Bridge (`#8ea296`) + Cream-White `М381` Strip Meter Stack */}
-      <group position={[0, 1.465, riserZ]} rotation={[-0.08, 0, 0]}>
-        <mesh position={[0, 0, -0.018]} castShadow receiveShadow>
-          <boxGeometry args={[riserW, 0.36, 0.044]} />
-          <meshStandardMaterial
-            color="#8ea296"
-            roughness={0.4}
-            metalness={0.28}
-          />
-        </mesh>
-        {[-0.096, -0.032, 0.032, 0.096].map((my, idx) => (
-          <mesh key={idx} position={[0, my, 0.012]} castShadow>
-            <boxGeometry args={[riserW - 0.10, 0.052, 0.012]} />
+          {/* Continuous Dark Bakelite / Black Rubber Padded Wrist Bolster Along Front Lip */}
+          <mesh position={[0, 0.574, 0.345]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[bay.width + 0.06, 0.038, 0.072]} />
+            <meshStandardMaterial color="#141313" roughness={0.78} metalness={0.14} />
+          </mesh>
+          <mesh position={[0, 0.572, 0.376]} rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.019, 0.019, bay.width + 0.06, 12]} />
+            <meshStandardMaterial color="#181616" roughness={0.74} metalness={0.16} />
+          </mesh>
+
+          {/* Brushed Steel Trim Bezel Behind Wrist Bolster */}
+          <mesh position={[0, 0.573, 0.305]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[bay.width + 0.02, 0.014, 0.018]} />
+            <meshStandardMaterial color="#7b8680" metalness={0.78} roughness={0.34} />
+          </mesh>
+
+          {/* Full-Width Rear Instrument Cabinet Spine (`y = 0.55..1.70m`, behind tilted panels) */}
+          <mesh position={[0, 1.12, -0.84]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[bay.width, 1.14, 0.22]} />
             <meshStandardMaterial
-              color="#ece8d8"
-              emissive="#fff6d6"
-              emissiveIntensity={0.22}
-              roughness={0.34}
+              color="#2a3c36"
+              metalness={0.48}
+              roughness={0.54}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.007}
             />
           </mesh>
-        ))}
-      </group>
 
-      {/* Horizontal Brushed-Steel Transition Trims Bridging the Joint */}
-      {[
-        { y: 1.638, z: -(0.505 - 0.028) * cosA, w: wallW },
-        { y: 1.298, z: -(0.505 - 0.056) * cosA, w: riserW - 0.02 },
-      ].map((tr, tIdx) => (
-        <group key={`j-trim-${tIdx}`} position={[0, tr.y, tr.z]}>
-          <mesh castShadow>
-            <boxGeometry args={[tr.w, 0.02, 0.028]} />
-            <meshStandardMaterial
-              color="#5a6b63"
-              metalness={0.52}
-              roughness={0.36}
-            />
-          </mesh>
-          <mesh position={[0, 0.006, 0.012]}>
-            <boxGeometry args={[tr.w, 0.006, 0.008]} />
-            <meshStandardMaterial
-              color="#c8d2ce"
-              metalness={0.85}
-              roughness={0.22}
-            />
-          </mesh>
-        </group>
-      ))}
-
-      {/* 3. Tier-1 Trapezoidal Lower Pedestal Base (`#5a6b63`) & Recessed Toe-Kick (`#161b19`) */}
-      <mesh
-        geometry={toeKickWedgeGeo}
-        position={[0, 0.0, -0.02]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial color="#161b19" roughness={0.75} />
-      </mesh>
-      <mesh
-        geometry={pedestalWedgeGeo}
-        position={[0, 0.085, -0.01]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        castShadow
-        receiveShadow
-      >
-        <meshStandardMaterial
-          color="#5a6b63"
-          roughness={0.46}
-          metalness={0.34}
-          bumpMap={ironTex.bumpMap}
-          bumpScale={0.005}
-        />
-      </mesh>
-
-      {/* 4. Mathematically Fitted Trapezoidal Sloped Sage-Green Desk Wedge (`#82988c`) */}
-      <group position={[0, 0.78, -0.22]} rotation={[-0.381, 0, 0]}>
-        <mesh
-          geometry={slopedDeskGeo}
-          position={[0, 0, -0.036]}
-          castShadow
-          receiveShadow
-        >
-          <meshStandardMaterial
-            color="#82988c"
-            roughness={0.4}
-            metalness={0.28}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.004}
-          />
-        </mesh>
-        {/* Recessed Soviet Backlit Push-Button Cluster on Upper Half of Trapezoidal Desk Wedge */}
-        <mesh position={[0, 0.24, 0.002]}>
-          <boxGeometry args={[0.16, 0.24, 0.008]} />
-          <meshStandardMaterial color="#222a27" roughness={0.5} />
-        </mesh>
-        {[-0.07, 0.0, 0.07].map((ky, kIdx) => (
-          <group key={kIdx} position={[0, 0.24 + ky, 0.008]}>
-            {[-0.036, 0.036].map((kx, colIdx) => {
-              const tone =
-                (kIdx + colIdx) % 3 === 0
-                  ? "#ffcc44"
-                  : colIdx === 1
-                    ? "#55bbaa"
-                    : "#f4f0e0";
-              return (
-                <mesh key={colIdx} position={[kx, 0, 0]} castShadow>
-                  <boxGeometry args={[0.048, 0.036, 0.01]} />
+          {/* Solid Dark-Steel End-Plates Capping Both Inner (Aisle-Facing) & Outer Wing Ends */}
+          {([-1, 1] as const).map((endSign) => {
+            const endX = endSign * (bay.width / 2 + 0.028);
+            return (
+              <group key={`${bay.key}-endplate-${endSign}`}>
+                {/* Lower vertical dark-steel pedestal end-plate */}
+                <mesh position={[endX, 0.3, -0.288]} raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[0.056, 0.59, 1.35]} />
                   <meshStandardMaterial
-                    color={tone}
-                    emissive={tone}
-                    emissiveIntensity={0.46}
-                    roughness={0.26}
+                    color="#1c2622"
+                    metalness={0.62}
+                    roughness={0.46}
+                    bumpMap={ironTex.bumpMap}
+                    bumpScale={0.006}
                   />
                 </mesh>
-              );
-            })}
+                {/* Upper rear vertical spine end-plate */}
+                <mesh position={[endX, 1.14, -0.82]} raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[0.056, 1.12, 0.28]} />
+                  <meshStandardMaterial
+                    color="#1c2622"
+                    metalness={0.62}
+                    roughness={0.46}
+                    bumpMap={ironTex.bumpMap}
+                    bumpScale={0.006}
+                  />
+                </mesh>
+                {/* Sloped upper console cheek end-plate (-0.51 rad tilt) */}
+                <mesh
+                  position={[endX, 1.06, -0.36]}
+                  rotation={[-0.51, 0, 0]}
+                  raycast={NOOP_RAYCAST}
+                >
+                  <boxGeometry args={[0.056, 1.24, 0.36]} />
+                  <meshStandardMaterial
+                    color="#202c28"
+                    metalness={0.58}
+                    roughness={0.48}
+                    bumpMap={ironTex.bumpMap}
+                    bumpScale={0.006}
+                  />
+                </mesh>
+                {/* Front edge flange strip & 4 brass hex fasteners */}
+                <mesh
+                  position={[endX + endSign * 0.03, 0.3, 0.365]}
+                  raycast={NOOP_RAYCAST}
+                >
+                  <boxGeometry args={[0.012, 0.58, 0.04]} />
+                  <meshStandardMaterial color="#141917" metalness={0.7} roughness={0.4} />
+                </mesh>
+                {([0.14, 0.46] as const).map((by) =>
+                  ([0.22, -0.78] as const).map((bz) => (
+                    <mesh
+                      key={`${bay.key}-bolt-${endSign}-${by}-${bz}`}
+                      position={[endX + endSign * 0.032, by, bz]}
+                      rotation={[0, 0, Math.PI / 2]}
+                      raycast={NOOP_RAYCAST}
+                    >
+                      <cylinderGeometry args={[0.009, 0.009, 0.01, 6]} />
+                      <meshStandardMaterial color="#b8a46b" metalness={0.86} roughness={0.28} />
+                    </mesh>
+                  )),
+                )}
+              </group>
+            );
+          })}
+
+          {/* Front Access Hatch Doors Under Console with Brass Latches */}
+          {[-bay.width * 0.31, 0, bay.width * 0.31].map((dx, dIdx) => (
+            <group key={`${bay.key}-hatch-${dIdx}`} position={[dx, 0.345, 0.275]}>
+              <mesh raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[bay.width * 0.27, 0.3, 0.016]} />
+                <meshStandardMaterial color="#253630" metalness={0.52} roughness={0.52} />
+              </mesh>
+              <mesh position={[bay.width * 0.1, 0, 0.012]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.024, 0.085, 0.016]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.86}
+                  roughness={0.28}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.004}
+                />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      ))}
+    </group>
+  );
+});
+
+/**
+ * Front Curved 3-Part RBMK-1000 Synoptic Wall (`Мнемосхема`, around `z = -3.86`, `x = -5.7..+5.7`):
+ * - Center Upper Wall: Seafoam/sage-green cabinet framing the monumental `K.O.M.R.A.D.-84` master CRT bay,
+ *   crowned by a glowing red Cyrillic header banner & red 7-segment `ЧАСЫ БЩУ` clock.
+ * - Left Angled Wing (`x = -3.90, z = -3.62`): `1.70m` diameter circular green RBMK core channel mosaic
+ *   (`Плато СФКРЭ`), 3 hood-illuminated `КСП-4` strip-chart recorders, and glowing `ТАБЛО СИГНАЛИЗАЦИИ`.
+ * - Right Angled Wing (`x = +3.90, z = -3.62`): Symmetrical `1.70m × 1.64m` backlit Drum/Turbine Mimic Diagram,
+ *   3 hood-illuminated `КСП-4` strip-chart recorders, and glowing `ТАБЛО АВАРИЙНОЙ ЗАЩИТЫ`.
+ */
+const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+  const brassTex = useMemo(() => getBrushedBrassTextures(), []);
+  const alarmTileLeftMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const alarmTileRightMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const coreMosaicMatRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  const mainRedBannerTex = useMemo(
+    () =>
+      createNearestCanvasTexture(1024, 128, (ctx, w, h) => {
+        ctx.fillStyle = "#5c0e0e";
+        ctx.fillRect(0, 0, w, h);
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, "#8c1414");
+        grad.addColorStop(0.5, "#6b0f0f");
+        grad.addColorStop(1, "#4a0a0a");
+        ctx.fillStyle = grad;
+        ctx.fillRect(6, 6, w - 12, h - 12);
+        ctx.strokeStyle = "#b8a46b";
+        ctx.lineWidth = 6;
+        ctx.strokeRect(4, 4, w - 8, h - 8);
+        ctx.fillStyle = "#ffefe6";
+        ctx.font = 'bold 38px "Kremlin", "Courier Prime", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText(
+          "БЩУ БЛОКА №4 РБМК-1000 // СИСТЕМА «СКАЛА»",
+          w / 2,
+          58,
+          w - 48,
+        );
+        ctx.fillStyle = "#ffd166";
+        ctx.font = 'bold 26px "VT323", monospace';
+        ctx.fillText(
+          "SECTOR 84 • PEOPLE'S AUTOMATED NUCLEAR POWER PLANT NO. 4",
+          w / 2,
+          102,
+          w - 48,
+        );
+      }),
+    [],
+  );
+
+  const coreMosaicTex = useMemo(
+    () =>
+      createNearestCanvasTexture(512, 512, (ctx, w, h) => {
+        const cx = w / 2;
+        const cy = h / 2;
+        ctx.fillStyle = "#102119";
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = "#5d7469";
+        ctx.lineWidth = 14;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 236, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = "#b8a46b";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 218, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 19x19 circular RBMK technological channel mosaic grid (`Плато СФКРЭ`)
+        const step = 20;
+        for (let gy = -9; gy <= 9; gy++) {
+          for (let gx = -9; gx <= 9; gx++) {
+            const dist = Math.hypot(gx, gy);
+            if (dist > 9.3) continue;
+            const px = cx + gx * step - 7;
+            const py = cy + gy * step - 7;
+            const hash = Math.abs(gx * 31 + gy * 17) % 19;
+            ctx.fillStyle =
+              hash === 0
+                ? "#ff3b24"
+                : hash < 4
+                  ? "#ffb000"
+                  : hash < 10
+                    ? "#33ff66"
+                    : "#207840";
+            ctx.fillRect(px, py, 14, 14);
+            ctx.strokeStyle = "#0a1610";
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(px, py, 14, 14);
+          }
+        }
+
+        ctx.fillStyle = "#0b1410";
+        ctx.fillRect(cx - 144, h - 46, 288, 34);
+        ctx.strokeStyle = "#5c7568";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(cx - 144, h - 46, 288, 34);
+        ctx.fillStyle = "#e6dec3";
+        ctx.font = 'bold 22px "VT323", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("ПЛАТО СФКРЭ // 1661 КАНАЛ", cx, h - 22);
+      }),
+    [],
+  );
+
+  const turbineMimicTex = useMemo(
+    () =>
+      createNearestCanvasTexture(512, 512, (ctx, w, h) => {
+        ctx.fillStyle = "#182822";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#5c7568";
+        ctx.lineWidth = 8;
+        ctx.strokeRect(6, 6, w - 12, h - 12);
+
+        ctx.fillStyle = "#22362e";
+        ctx.fillRect(14, 14, w - 28, 46);
+        ctx.fillStyle = "#e6dec3";
+        ctx.font = 'bold 28px "VT323", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("МНЕМОСХЕМА МПЦ & ТГ-7 / ТГ-8", w / 2, 46);
+
+        // Twin Drum Separator Cylinders
+        ctx.strokeStyle = "#48c2d6";
+        ctx.lineWidth = 5;
+        ctx.strokeRect(42, 92, 152, 62);
+        ctx.strokeRect(318, 92, 152, 62);
+        ctx.fillStyle = "#143c44";
+        ctx.fillRect(46, 96, 144, 54);
+        ctx.fillRect(322, 96, 144, 54);
+        ctx.fillStyle = "#b8f4ff";
+        ctx.font = 'bold 24px "VT323", monospace';
+        ctx.fillText("БС-1 // 70 БАР", 118, 130);
+        ctx.fillText("БС-2 // 70 БАР", 394, 130);
+
+        // Steam Mains (`#e04a3e`) -> Twin Turbines
+        ctx.strokeStyle = "#e04a3e";
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.moveTo(118, 154);
+        ctx.lineTo(118, 224);
+        ctx.lineTo(394, 224);
+        ctx.moveTo(394, 154);
+        ctx.lineTo(394, 224);
+        ctx.moveTo(w / 2, 224);
+        ctx.lineTo(w / 2, 266);
+        ctx.stroke();
+
+        // TG-7 & TG-8 Generator Blocks
+        [
+          { y: 268, lbl: "ТГ-7 // 500 МВт" },
+          { y: 356, lbl: "ТГ-8 // 500 МВт" },
+        ].forEach((tg) => {
+          ctx.fillStyle = "#193625";
+          ctx.fillRect(80, tg.y, 352, 62);
+          ctx.strokeStyle = "#e0b844";
+          ctx.lineWidth = 4;
+          ctx.strokeRect(80, tg.y, 352, 62);
+          ctx.fillStyle = "#33ff66";
+          ctx.font = 'bold 28px "VT323", monospace';
+          ctx.fillText(tg.lbl, w / 2, tg.y + 39);
+        });
+
+        // Bottom 330kV Grid Bus
+        ctx.strokeStyle = "#ffb000";
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(40, 448);
+        ctx.lineTo(472, 448);
+        ctx.stroke();
+        ctx.fillStyle = "#ffb000";
+        ctx.font = 'bold 24px "VT323", monospace';
+        ctx.fillText("ОРУ-330 кВ // СЕКТОР 84", w / 2, 484);
+      }),
+    [],
+  );
+
+  const tabloMatrixTex = useMemo(
+    () =>
+      createNearestCanvasTexture(640, 160, (ctx, w, h) => {
+        ctx.fillStyle = "#101714";
+        ctx.fillRect(0, 0, w, h);
+        const cols = 6;
+        const rows = 3;
+        const cw = (w - 20) / cols;
+        const ch = (h - 20) / rows;
+        const labels = [
+          "АЗ-1", "УРОВЕНЬ БС", "ДАВЛ. ПАРА", "ГЦН СТОП", "СФКРЭ", "ПЕЧАТЬ",
+          "ПЭН РЕЗ", "ПЕРЕГРЕВ", "СБРОС БРУ", "ТЕПЛО СБ", "ГЕРМОЗОНА", "РАД. ФОН",
+          "50.0 ГЦ", "СЕТЬ 330", "ПОЖАР", "КГБ КАНАЛ", "ВАК. ЛЮК", "БЩУ НОРМА",
+        ];
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const idx = r * cols + c;
+            const x = 10 + c * cw + 3;
+            const y = 10 + r * ch + 3;
+            const bw = cw - 6;
+            const bh = ch - 6;
+            const isRed = idx === 0 || idx === 7 || idx === 14;
+            const isAmber = idx === 3 || idx === 8 || idx === 11;
+            ctx.fillStyle = isRed ? "#7d1818" : isAmber ? "#754e12" : "#1f5430";
+            ctx.fillRect(x, y, bw, bh);
+            ctx.strokeStyle = "#080b0a";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, bw, bh);
+            ctx.fillStyle = isRed ? "#ffb4a8" : isAmber ? "#ffe799" : "#b8ffd0";
+            ctx.font = 'bold 16px "VT323", monospace';
+            ctx.textAlign = "center";
+            ctx.fillText(labels[idx] ?? "СИГНАЛ", x + bw / 2, y + bh / 2 + 5);
+          }
+        }
+      }),
+    [],
+  );
+
+  const stripRecorderTex = useMemo(
+    () =>
+      createNearestCanvasTexture(128, 192, (ctx, w, h) => {
+        ctx.fillStyle = "#f4eedc";
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = "#24302b";
+        ctx.fillRect(0, 0, w, 28);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = 'bold 16px "VT323", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("КСП-4", w / 2, 19);
+
+        ctx.strokeStyle = "rgba(45, 130, 118, 0.38)";
+        ctx.lineWidth = 1;
+        for (let x = 16; x < w; x += 16) {
+          ctx.beginPath();
+          ctx.moveTo(x, 28);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
+        for (let y = 36; y < h; y += 16) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+        // Pen traces
+        ctx.strokeStyle = "#c8241e";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let y = 30; y < h - 8; y += 10) {
+          const px = 64 + Math.sin(y * 0.14) * 28;
+          if (y === 30) ctx.moveTo(px, y);
+          else ctx.lineTo(px, y);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = "#1f5aa6";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        for (let y = 30; y < h - 8; y += 10) {
+          const px = 56 + Math.cos(y * 0.11) * 20;
+          if (y === 30) ctx.moveTo(px, y);
+          else ctx.lineTo(px, y);
+        }
+        ctx.stroke();
+      }),
+    [],
+  );
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    const s = useGameStore.getState();
+    const isAlarm =
+      s.coreTemp >= 700 ||
+      s.powerAllocation.cooling + s.powerAllocation.defense + s.powerAllocation.facility >
+        s.maxSafePower;
+    const tileIntensity = s.isBlackout
+      ? 0.05
+      : isAlarm
+        ? 0.85 + 0.45 * Math.sin(t * 9.0)
+        : 0.56;
+    if (alarmTileLeftMatRef.current) {
+      alarmTileLeftMatRef.current.emissiveIntensity = tileIntensity;
+    }
+    if (alarmTileRightMatRef.current) {
+      alarmTileRightMatRef.current.emissiveIntensity = tileIntensity;
+    }
+    if (coreMosaicMatRef.current) {
+      coreMosaicMatRef.current.emissiveIntensity = s.isBlackout ? 0.06 : 0.62;
+    }
+  });
+
+  return (
+    <group>
+      {/* 1. CENTER SYNOPTIC WALL BACKING & CROWN BANNER (`z = -3.96`, `x = -2.04..+2.04`) */}
+      <group position={[0, 0, -3.96]}>
+        {/* Lower Soviet Seafoam / Sage-Green Relay Cabinets (`y = 0..1.42m`) */}
+        <mesh position={[0, 0.71, -0.06]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[4.08, 1.42, 0.34]} />
+          <meshStandardMaterial
+            color="#2f443e"
+            metalness={0.42}
+            roughness={0.58}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
+          />
+        </mesh>
+        {/* Upper Seafoam/Sage Backing Wall (`y = 1.42..3.88m`) */}
+        <mesh position={[0, 2.65, -0.14]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[4.08, 2.46, 0.2]} />
+          <meshStandardMaterial
+            color="#354b44"
+            metalness={0.34}
+            roughness={0.62}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.005}
+          />
+        </mesh>
+        {/* Top Overhanging Synoptic Cornice Hood (`y = 3.97..4.17m`) */}
+        <mesh position={[0, 4.07, 0.14]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[4.18, 0.2, 0.56]} />
+          <meshStandardMaterial color="#23312c" metalness={0.58} roughness={0.48} />
+        </mesh>
+
+        {/* Vertical Steel Pilasters Bridging Center CRT Bay to Angled Synoptic Wings */}
+        {([-2.0, 2.0] as const).map((px, pIdx) => (
+          <mesh key={`syn-pilaster-${pIdx}`} position={[px, 2.08, 0.06]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.14, 4.16, 0.24]} />
+            <meshStandardMaterial color="#1f2925" metalness={0.64} roughness={0.44} />
+          </mesh>
+        ))}
+
+        {/* Lower Relay Cabinet Doors Under Monumental CRT */}
+        {[-1.5, -0.75, 0, 0.75, 1.5].map((dx, dIdx) => (
+          <group key={`center-door-${dIdx}`} position={[dx, 0.71, 0.118]}>
+            <mesh raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.66, 1.16, 0.022]} />
+              <meshStandardMaterial color="#253630" metalness={0.48} roughness={0.54} />
+            </mesh>
+            <mesh position={[0.25, 0, 0.014]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.024, 0.12, 0.014]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.86}
+                roughness={0.28}
+                bumpMap={brassTex.bumpMap}
+                bumpScale={0.004}
+              />
+            </mesh>
           </group>
         ))}
       </group>
 
-      {/* 5. Rounded Brushed Stainless/Chrome Front Armrest Corner Joint at Exact Hinge Point `[0, 0.275, 0]` */}
-      <group position={[0, 0.275, -0.004]}>
-        <mesh castShadow>
-          <cylinderGeometry args={[0.022, 0.024, 0.042, 16]} />
+      {/* Backlit Red Cyrillic Header Banner Above Left-Center of K.O.M.R.A.D.-84 */}
+      <group position={[-0.78, 3.77, -3.36]} rotation={[0.12, 0, 0]}>
+        <mesh raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[2.12, 0.21, 0.12]} />
+          <meshStandardMaterial color="#1d2421" metalness={0.64} roughness={0.44} />
+        </mesh>
+        <mesh position={[0, 0, 0.064]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[2.04, 0.18]} />
           <meshStandardMaterial
-            color="#5a6b63"
+            map={mainRedBannerTex}
+            emissive="#ff4433"
+            emissiveMap={mainRedBannerTex}
+            emissiveIntensity={0.68}
             roughness={0.42}
-            metalness={0.45}
           />
         </mesh>
-        <mesh position={[0, -0.004, 0.01]} castShadow>
-          <sphereGeometry args={[0.02, 14, 14]} />
+      </group>
+
+      {/* Red 7-Segment Soviet Wall Clock (`ЧАСЫ БЩУ`) Above Right-Center of K.O.M.R.A.D.-84 */}
+      <SovietDigitalShiftClock3D />
+
+      {/* 2. LEFT & RIGHT ANGLED SYNOPTIC WINGS (`x = ±3.90, z = -3.62`, width `3.76m`) */}
+      {([-1, 1] as const).map((side) => {
+        const isLeft = side === -1;
+        const mosaicX = isLeft ? 0.82 : -0.82;
+        const recorderXs = isLeft ? [-1.42, -0.92, -0.42] : [0.42, 0.92, 1.42];
+        return (
+          <group
+            key={`syn-wing-${side}`}
+            position={[side * 3.9, 0, -3.62]}
+            rotation={[0, -side * 0.21, 0]}
+          >
+            {/* Tall Soviet Seafoam/Sage-Green Vertical Instrument Cabinet (`3.76m × 4.02m × 0.44m`) */}
+            <mesh position={[0, 2.01, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[3.76, 4.02, 0.44]} />
+              <meshStandardMaterial
+                color="#2f443e"
+                metalness={0.38}
+                roughness={0.58}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.006}
+              />
+            </mesh>
+            {/* Raised Steel Panel Trim Frame */}
+            <mesh position={[0, 2.34, 0.224]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[3.6, 1.88, 0.016]} />
+              <meshStandardMaterial color="#3c524b" metalness={0.46} roughness={0.52} />
+            </mesh>
+            {/* Top Overhang Canopy */}
+            <mesh position={[0, 3.95, 0.08]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[3.84, 0.22, 0.56]} />
+              <meshStandardMaterial color="#202b27" metalness={0.58} roughness={0.48} />
+            </mesh>
+
+            {/* Upper Backlit Annunciator Tile Matrix (`ТАБЛО СИГНАЛИЗАЦИИ`) */}
+            <mesh position={[0, 3.5, 0.222]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[3.5, 0.52, 0.028]} />
+              <meshStandardMaterial color="#18201d" metalness={0.62} roughness={0.44} />
+            </mesh>
+            <mesh position={[0, 3.5, 0.238]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[3.4, 0.45]} />
+              <meshStandardMaterial
+                ref={isLeft ? alarmTileLeftMatRef : alarmTileRightMatRef}
+                map={tabloMatrixTex}
+                emissive="#ffffff"
+                emissiveMap={tabloMatrixTex}
+                emissiveIntensity={0.56}
+                roughness={0.42}
+              />
+            </mesh>
+
+            {/* Inner Half Centerpiece: Left Wing = 1.70m RBMK Core Mosaic, Right Wing = 1.70m Mimic Diagram */}
+            {isLeft ? (
+              <group position={[mosaicX, 2.24, 0.232]}>
+                <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+                  <cylinderGeometry args={[0.85, 0.87, 0.09, 36]} />
+                  <meshStandardMaterial color="#1a2420" metalness={0.66} roughness={0.42} />
+                </mesh>
+                <mesh position={[0, 0, 0.048]} raycast={NOOP_RAYCAST}>
+                  <circleGeometry args={[0.78, 36]} />
+                  <meshStandardMaterial
+                    ref={coreMosaicMatRef}
+                    map={coreMosaicTex}
+                    emissive="#ffffff"
+                    emissiveMap={coreMosaicTex}
+                    emissiveIntensity={0.62}
+                    roughness={0.44}
+                  />
+                </mesh>
+              </group>
+            ) : (
+              <group position={[mosaicX, 2.39, 0.232]}>
+                <mesh raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[1.7, 1.56, 0.085]} />
+                  <meshStandardMaterial color="#1a2420" metalness={0.66} roughness={0.42} />
+                </mesh>
+                <mesh position={[0, 0, 0.046]} raycast={NOOP_RAYCAST}>
+                  <planeGeometry args={[1.56, 1.44]} />
+                  <meshStandardMaterial
+                    map={turbineMimicTex}
+                    emissive="#ffffff"
+                    emissiveMap={turbineMimicTex}
+                    emissiveIntensity={0.54}
+                    roughness={0.44}
+                  />
+                </mesh>
+              </group>
+            )}
+
+            {/* Outer Half: 3 `КСП-4` Strip-Chart Recorders With Illuminated Warm Steel Hoods */}
+            {recorderXs.map((rx, rIdx) => (
+              <group key={`ksp4-${side}-${rIdx}`} position={[rx, 2.16, 0.235]}>
+                <mesh raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[0.42, 0.72, 0.045]} />
+                  <meshStandardMaterial color="#1b2420" metalness={0.65} roughness={0.44} />
+                </mesh>
+                <mesh position={[0, -0.02, 0.025]} raycast={NOOP_RAYCAST}>
+                  <planeGeometry args={[0.34, 0.56]} />
+                  <meshStandardMaterial
+                    map={stripRecorderTex}
+                    emissive="#fff3d1"
+                    emissiveMap={stripRecorderTex}
+                    emissiveIntensity={0.42}
+                    roughness={0.62}
+                  />
+                </mesh>
+                {/* Overhanging Steel Recorder Light Hood + Warm Emissive Tube */}
+                <mesh position={[0, 0.36, 0.055]} rotation={[0.25, 0, 0]} raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[0.44, 0.055, 0.12]} />
+                  <meshStandardMaterial color="#25322d" metalness={0.62} roughness={0.46} />
+                </mesh>
+                <mesh position={[0, 0.33, 0.068]} raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[0.36, 0.022, 0.028]} />
+                  <meshStandardMaterial
+                    color="#fff4d6"
+                    emissive="#ffe2a8"
+                    emissiveIntensity={1.6}
+                  />
+                </mesh>
+              </group>
+            ))}
+
+            {/* Raised 3D Mimic Busbar Piping Across Wing Face */}
+            <mesh position={[isLeft ? -0.92 : 0.92, 1.62, 0.236]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[1.56, 0.032, 0.028]} />
+              <meshStandardMaterial color={isLeft ? "#388898" : "#c8a838"} metalness={0.54} roughness={0.42} />
+            </mesh>
+
+            {/* Lower Relay Cabinet Doors & Base Toe-Kick */}
+            {[-1.18, 0, 1.18].map((lx, lIdx) => (
+              <group key={`wing-door-${side}-${lIdx}`} position={[lx, 0.74, 0.228]}>
+                <mesh raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[1.06, 1.18, 0.022]} />
+                  <meshStandardMaterial color="#24352f" metalness={0.48} roughness={0.56} />
+                </mesh>
+                <mesh position={[0.42, 0, 0.015]} raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[0.026, 0.14, 0.016]} />
+                  <meshStandardMaterial color="#b8a46b" metalness={0.86} roughness={0.28} />
+                </mesh>
+              </group>
+            ))}
+            <mesh position={[0, 0.075, 0.04]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[3.78, 0.15, 0.48]} />
+              <meshStandardMaterial color="#141917" metalness={0.62} roughness={0.55} />
+            </mesh>
+          </group>
+        );
+      })}
+    </group>
+  );
+});
+
+/**
+ * Shift Supervisor Desk Surround (`Стол НСБ` around `[0, 0, +1.80]`) + Ergonomic Swivel Chair (`Кресло НСБ`).
+ * Supports `InspectorDesk3D`'s right-corner `WE-PAD 84` dock solidly from floor to desktop underside (`y = 0.70m`)
+ * without clipping above `InspectorDesk3D`'s `y = 0.725m` desktop surface.
+ */
+const SovietSupervisorDeskSurroundAndChair3D: React.FC = React.memo(() => {
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+  const brassTex = useMemo(() => getBrushedBrassTextures(), []);
+  const legAngles = [0, 1, 2, 3, 4].map((i) => (i * Math.PI * 2) / 5);
+
+  return (
+    <group>
+      {/* 1. Wraparound Supervisor Desk Base Collar & Right-Wing `WE-PAD 84` Support Pedestal (`[0, 0, +1.80]`) */}
+      <group position={[0, 0, 1.8]}>
+        {/* Heavy Stepped Steel Floor Plinth Under Supervisor Desk (`y = 0..0.055m`) */}
+        <mesh position={[0, 0.028, 0]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[2.56, 0.056, 1.12]} />
           <meshStandardMaterial
-            color="#c8d2ce"
-            metalness={0.88}
-            roughness={0.18}
+            color="#151b18"
+            metalness={0.64}
+            roughness={0.54}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
           />
         </mesh>
+
+        {/* Solid Right-Corner Pedestal Extension Supporting `WE-PAD 84` Dock (`x = +0.76..+1.34`, `y = 0..0.695m`) */}
+        <mesh position={[1.02, 0.348, 0.02]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.56, 0.696, 0.96]} />
+          <meshStandardMaterial
+            color="#24302b"
+            metalness={0.56}
+            roughness={0.5}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.007}
+          />
+        </mesh>
+
+        {/* Left Side Steel Drawer Pedestal Balancing Supervisor Desk (`x = -1.02`) */}
+        <mesh position={[-1.02, 0.348, 0.02]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.56, 0.696, 0.96]} />
+          <meshStandardMaterial
+            color="#24302b"
+            metalness={0.56}
+            roughness={0.5}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.007}
+          />
+        </mesh>
+
+        {/* Modesty Front Screen Facing Operator Row (`z = -0.46`) */}
+        <mesh position={[0, 0.34, -0.46]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[1.64, 0.68, 0.04]} />
+          <meshStandardMaterial color="#1d2622" metalness={0.54} roughness={0.52} />
+        </mesh>
+      </group>
+
+      {/* 2. Authentic Soviet Supervisor Swivel Chair (`Кресло НСБ` behind desk at `x = -0.28, z = +2.74`) */}
+      <group position={[-0.28, 0.005, 2.74]} rotation={[0, 0.24, 0]}>
+        <mesh position={[0, 0.045, 0]} raycast={NOOP_RAYCAST}>
+          <cylinderGeometry args={[0.075, 0.095, 0.08, 16]} />
+          <meshStandardMaterial
+            color="#1a211e"
+            metalness={0.72}
+            roughness={0.44}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
+          />
+        </mesh>
+        <mesh position={[0, 0.22, 0]} raycast={NOOP_RAYCAST}>
+          <cylinderGeometry args={[0.034, 0.042, 0.36, 14]} />
+          <meshStandardMaterial color="#7f8a92" metalness={0.86} roughness={0.28} />
+        </mesh>
+        <mesh position={[0, 0.14, 0]} raycast={NOOP_RAYCAST}>
+          <torusGeometry args={[0.17, 0.011, 8, 20]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            metalness={0.85}
+            roughness={0.3}
+            bumpMap={brassTex.bumpMap}
+            bumpScale={0.004}
+          />
+        </mesh>
+        {legAngles.map((ang, idx) => (
+          <group key={`leg-${idx}`} rotation={[0, ang, 0]}>
+            <mesh position={[0, 0.036, 0.165]} rotation={[0.08, 0, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.042, 0.034, 0.29]} />
+              <meshStandardMaterial color="#1b221f" metalness={0.68} roughness={0.46} />
+            </mesh>
+            <mesh position={[0, 0.018, 0.29]} rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST}>
+              <cylinderGeometry args={[0.022, 0.022, 0.026, 12]} />
+              <meshStandardMaterial color="#101211" roughness={0.82} />
+            </mesh>
+          </group>
+        ))}
+        {/* Padded Oxblood/Charcoal Leatherette Seat Cushion (`y = 0.42m`) */}
+        <mesh position={[0, 0.42, 0]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.48, 0.075, 0.46]} />
+          <meshStandardMaterial color="#3b1b18" roughness={0.66} metalness={0.1} />
+        </mesh>
+        {/* Steel Backrest Spine & Padded Backrest */}
+        <mesh position={[0, 0.62, 0.24]} rotation={[0.1, 0, 0]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.08, 0.42, 0.03]} />
+          <meshStandardMaterial color="#1e2623" metalness={0.68} roughness={0.44} />
+        </mesh>
+        <mesh position={[0, 0.78, 0.22]} rotation={[0.08, 0, 0]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.44, 0.38, 0.065]} />
+          <meshStandardMaterial color="#3b1b18" roughness={0.66} metalness={0.1} />
+        </mesh>
+        {/* Tubular Armrests */}
+        {([-0.25, 0.25] as const).map((ax, aIdx) => (
+          <mesh key={`arm-${aIdx}`} position={[ax, 0.56, 0.01]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.045, 0.032, 0.34]} />
+            <meshStandardMaterial color="#1a1817" roughness={0.58} metalness={0.25} />
+          </mesh>
+        ))}
       </group>
     </group>
   );
 });
 
 /**
- * 3D Overhead Bulkhead Telemetry Board & 3D Camera Station Selector Rail
+ * Heavy Floor-to-Ceiling High-Voltage Switchgear Enclosure Framing `1.25x` `UNIT D` at `x = -4.6, z = +1.35`, facing `+X`.
  */
-const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
-  const lastRightDrawRef = useRef(0);
-  const rheostatRingMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const rheostatPointerMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const batteryCellBarMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+const SovietLeftWallSwitchgearAlcove3D: React.FC = React.memo(() => {
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+  const hvHazardTex = useMemo(() => createHazardStripeTexture(256, 64, 22), []);
+  const hvPlaqueTex = useMemo(
+    () =>
+      createNearestCanvasTexture(512, 256, (ctx, w, h) => {
+        ctx.fillStyle = "#e6dec3";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#141414";
+        ctx.lineWidth = 10;
+        ctx.strokeRect(6, 6, w - 12, h - 12);
+        ctx.fillStyle = "#ffb000";
+        ctx.fillRect(18, 18, w - 36, 62);
+        ctx.fillStyle = "#141414";
+        ctx.font = 'bold 38px "Kremlin", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("РУСН-6 кВ // РЗА", w / 2, 62, w - 52);
+        ctx.fillStyle = "#c81919";
+        ctx.font = 'bold 36px "VT323", monospace';
+        ctx.fillText("ОПАСНО! ВЫСОКОЕ НАПРЯЖЕНИЕ", w / 2, 150, w - 44);
+        ctx.fillStyle = "#141414";
+        ctx.fillText("ШКАФ ПРЕДОХРАНИТЕЛЕЙ UNIT D", w / 2, 212, w - 44);
+      }),
+    [],
+  );
+
+  return (
+    <group position={[-5.25, 0, 1.35]} rotation={[0, Math.PI / 2, 0]}>
+      {/* Rear Floor-to-Ceiling Main Steel Switchgear Housing Behind `UNIT D` (`y = 0..4.2m`) */}
+      <mesh position={[0, 2.1, 0.14]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[3.78, 4.2, 0.92]} />
+        <meshStandardMaterial
+          color="#24352e"
+          metalness={0.58}
+          roughness={0.52}
+          bumpMap={ironTex.bumpMap}
+          bumpScale={0.008}
+        />
+      </mesh>
+      {/* Stepped Steel Plinth Under 1.25x `UNIT D` (`y = 0..0.14m`) with Hazard Striping */}
+      <mesh position={[0, 0.07, 0.62]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[2.06, 0.14, 0.64]} />
+        <meshStandardMaterial color="#161d1a" metalness={0.66} roughness={0.48} />
+      </mesh>
+      <mesh position={[0, 0.075, 0.945]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[2.02, 0.11]} />
+        <meshStandardMaterial map={hvHazardTex} roughness={0.55} />
+      </mesh>
+      {/* Upper Header Soffit Above 1.25x `UNIT D` (`y = 2.71..4.20m`) with HV Insulators & Hazard Trim */}
+      <mesh position={[0, 3.455, 0.6]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[2.1, 1.49, 0.46]} />
+        <meshStandardMaterial color="#1d2722" metalness={0.62} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 2.8, 0.835]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[2.02, 0.14]} />
+        <meshStandardMaterial map={hvHazardTex} roughness={0.5} />
+      </mesh>
+      {/* Porcelain HV Busbar Insulators & Red HV Live Beacons on Upper Soffit */}
+      {([-0.68, 0, 0.68] as const).map((ix, idx) => (
+        <group key={`hv-bus-${idx}`} position={[ix, 3.24, 0.84]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.042, 0.048, 0.12, 12]} />
+            <meshStandardMaterial color="#b86b3a" roughness={0.34} metalness={0.18} />
+          </mesh>
+          <mesh position={[0, 0.28, 0]} raycast={NOOP_RAYCAST}>
+            <sphereGeometry args={[0.032, 10, 10]} />
+            <meshStandardMaterial
+              color="#ff2a2a"
+              emissive="#ff2a2a"
+              emissiveIntensity={1.35}
+            />
+          </mesh>
+        </group>
+      ))}
+      {/* Flanking High-Voltage Breaker Lockers (`lx = ±1.44m` along wall) with Vertical Hazard Striping */}
+      {([-1.44, 1.44] as const).map((lx, idx) => (
+        <group key={`hv-locker-${idx}`} position={[lx, 0, 0.6]}>
+          <mesh position={[0, 2.1, 0]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.86, 4.2, 0.48]} />
+            <meshStandardMaterial color="#2b3d36" metalness={0.54} roughness={0.54} />
+          </mesh>
+          <mesh position={[0, 1.32, 0.245]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.7, 2.24, 0.018]} />
+            <meshStandardMaterial color="#1f2c26" metalness={0.58} roughness={0.5} />
+          </mesh>
+          {/* Inner Vertical Yellow-Black HV Hazard Strip Flanking `UNIT D` */}
+          <mesh
+            position={[idx === 0 ? 0.39 : -0.39, 1.35, 0.248]}
+            rotation={[0, 0, Math.PI / 2]}
+            raycast={NOOP_RAYCAST}
+          >
+            <planeGeometry args={[2.56, 0.095]} />
+            <meshStandardMaterial map={hvHazardTex} roughness={0.5} />
+          </mesh>
+          <group position={[idx === 0 ? -0.04 : 0.04, 2.02, 0.288]}>
+            <mesh position={[0, 0, -0.007]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.52, 0.26, 0.012]} />
+              <meshStandardMaterial color="#18211d" metalness={0.62} roughness={0.48} />
+            </mesh>
+            <mesh raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.5, 0.25]} />
+              <meshStandardMaterial map={hvPlaqueTex} roughness={0.45} />
+            </mesh>
+          </group>
+          <mesh position={[0.24, 1.24, 0.262]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.032, 0.18, 0.025]} />
+            <meshStandardMaterial color="#b8a46b" metalness={0.86} roughness={0.28} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+});
+
+/**
+ * Rear Control Room Wall (`z = +4.44m`, facing `-Z`) with Institutional Double Steel Entry Doors,
+ * Frosted Wired-Glass Panes, Transom Signboard, Ventilation Louvers & Radiation Plaque (No Airlock Wheel Door).
+ */
+const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+
+  const wiredGlassTex = useMemo(
+    () =>
+      createNearestCanvasTexture(128, 256, (ctx, w, h) => {
+        ctx.fillStyle = "#5a6b62";
+        ctx.fillRect(0, 0, w, h);
+        // Frosted institutional light gradient
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, "rgba(186, 206, 194, 0.45)");
+        grad.addColorStop(1, "rgba(62, 82, 72, 0.35)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        // Diagonal wired safety mesh
+        ctx.strokeStyle = "rgba(28, 34, 31, 0.65)";
+        ctx.lineWidth = 2;
+        for (let d = -h; d < w + h; d += 22) {
+          ctx.beginPath();
+          ctx.moveTo(d, 0);
+          ctx.lineTo(d + h, h);
+          ctx.moveTo(d + h, 0);
+          ctx.lineTo(d, h);
+          ctx.stroke();
+        }
+      }),
+    [],
+  );
+
+  const transomTex = useMemo(
+    () =>
+      createNearestCanvasTexture(512, 96, (ctx, w, h) => {
+        ctx.fillStyle = "#18211d";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#b8a46b";
+        ctx.lineWidth = 5;
+        ctx.strokeRect(3, 3, w - 6, h - 6);
+        ctx.fillStyle = "#33ff66";
+        ctx.font = 'bold 26px "Kremlin", "Courier Prime", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("БЩУ БЛОКА №4 // ВЫХОД", w / 2, 46);
+        ctx.fillStyle = "#e6dec3";
+        ctx.font = 'bold 18px "VT323", monospace';
+        ctx.fillText("ВХОД ТОЛЬКО ПО СПЕЦПРОПУСКАМ СЕКТОРА 84", w / 2, 78);
+      }),
+    [],
+  );
+
+  const warningPlaqueTex = useMemo(
+    () =>
+      createNearestCanvasTexture(256, 128, (ctx, w, h) => {
+        ctx.fillStyle = "#e6dec3";
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = "#ffb000";
+        ctx.fillRect(6, 6, w - 12, 22);
+        ctx.fillStyle = "#141414";
+        ctx.fillRect(0, 0, w, 6);
+        ctx.fillRect(0, h - 6, w, 6);
+        ctx.fillRect(0, 0, 6, h);
+        ctx.fillRect(w - 6, 0, 6, h);
+        for (let sx = 10; sx < w - 18; sx += 26) {
+          ctx.fillRect(sx, 6, 12, 22);
+        }
+        ctx.fillStyle = "#ff2a2a";
+        ctx.font = 'bold 20px "Kremlin", "Courier Prime", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("СЕКТОР 84 // ЗАЛ БЩУ-4", w / 2, 58);
+        ctx.fillStyle = "#141414";
+        ctx.font = 'bold 16px "Courier Prime", monospace';
+        ctx.fillText("ВХОД ПОСТОРОННИМ ВОСПРЕЩЕН", w / 2, 86);
+        ctx.fillText("РАДИАЦИОННЫЙ КОНТРОЛЬ", w / 2, 110);
+      }),
+    [],
+  );
+
+  return (
+    <group position={[0, 0, 4.44]} rotation={[0, Math.PI, 0]}>
+      {/* Heavy Steel Double Door Frame (`2.26m × 2.52m`) */}
+      <mesh position={[0, 2.46, 0.04]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[2.28, 0.14, 0.18]} />
+        <meshStandardMaterial color="#18201d" metalness={0.66} roughness={0.48} />
+      </mesh>
+      {([-1.07, 1.07] as const).map((fx, fIdx) => (
+        <mesh key={`door-jamb-${fIdx}`} position={[fx, 1.2, 0.04]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.14, 2.4, 0.18]} />
+          <meshStandardMaterial color="#18201d" metalness={0.66} roughness={0.48} />
+        </mesh>
+      ))}
+
+      {/* Twin Steel Entry Door Leaves with Frosted Wired-Glass Windows */}
+      {([-0.49, 0.49] as const).map((dx, dIdx) => (
+        <group key={`entry-leaf-${dIdx}`} position={[dx, 1.18, 0.03]}>
+          <mesh raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.96, 2.34, 0.07]} />
+            <meshStandardMaterial
+              color="#2d3a34"
+              metalness={0.52}
+              roughness={0.54}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.006}
+            />
+          </mesh>
+          {/* Upper Frosted Wired-Glass Observation Pane */}
+          <mesh position={[0, 0.46, 0.04]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[0.48, 0.84]} />
+            <meshStandardMaterial
+              map={wiredGlassTex}
+              emissive="#8fa89b"
+              emissiveMap={wiredGlassTex}
+              emissiveIntensity={0.22}
+              roughness={0.35}
+            />
+          </mesh>
+          <mesh position={[0, 0.46, 0.036]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.54, 0.9, 0.014]} />
+            <meshStandardMaterial color="#161d1a" metalness={0.64} roughness={0.46} />
+          </mesh>
+          {/* Brushed Steel Vertical Pull Handle */}
+          <mesh position={[dIdx === 0 ? 0.36 : -0.36, -0.08, 0.065]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.015, 0.015, 0.36, 10]} />
+            <meshStandardMaterial color="#96a0a6" metalness={0.86} roughness={0.28} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Illuminated Transom Sign Above Double Doors */}
+      <mesh position={[0, 2.74, 0.05]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[1.64, 0.34, 0.06]} />
+        <meshStandardMaterial color="#141816" metalness={0.62} roughness={0.48} />
+      </mesh>
+      <mesh position={[0, 2.74, 0.082]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[1.54, 0.28]} />
+        <meshStandardMaterial
+          map={transomTex}
+          emissive="#ffffff"
+          emissiveMap={transomTex}
+          emissiveIntensity={0.35}
+          roughness={0.45}
+        />
+      </mesh>
+
+      {/* Left-Side Rear Ventilation Louver Frame (Right-Side Cleared for Window 2) */}
+      {([2.85] as const).map((vx, vIdx) => (
+        <group key={`rear-vent-${vIdx}`} position={[vx, 2.45, 0.08]}>
+          <mesh raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[1.28, 0.84, 0.14]} />
+            <meshStandardMaterial color="#1b2320" metalness={0.62} roughness={0.5} />
+          </mesh>
+          {[-0.26, -0.13, 0, 0.13, 0.26].map((vy, lIdx) => (
+            <mesh key={`vent-slat-${lIdx}`} position={[0, vy, 0.075]} rotation={[0.35, 0, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[1.12, 0.048, 0.025]} />
+              <meshStandardMaterial color="#0e1311" metalness={0.55} roughness={0.6} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* Enamel Radiation Control Signboard Beside Entry Doors */}
+      <mesh position={[1.76, 1.65, 0.04]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.98, 0.5, 0.028]} />
+        <meshStandardMaterial color="#141414" metalness={0.6} roughness={0.5} />
+      </mesh>
+      <mesh position={[1.76, 1.65, 0.056]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[0.92, 0.45]} />
+        <meshStandardMaterial map={warningPlaqueTex} roughness={0.42} metalness={0.18} />
+      </mesh>
+    </group>
+  );
+});
+
+/**
+ * Heavy Industrial Caged Tungsten Wall Work-Light (`Плафон ВЗГ-200`) mounted along the
+ * `12m × 9m` RBMK-1000 БЩУ perimeter columns & walls.
+ */
+const SovietWallPillarLamp3D: React.FC<{
+  position: [number, number, number];
+  rotY: number;
+}> = React.memo(({ position, rotY }) => {
+  const glassMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const bulbMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
   useFrame(({ clock }) => {
-    const s = useGameStore.getState();
-    const now = clock.getElapsedTime();
+    const t = clock.getElapsedTime();
+    const gs = useGameStore.getState();
+    const isAlarm =
+      gs.coreTemp >= 750 ||
+      gs.powerAllocation.cooling +
+        gs.powerAllocation.defense +
+        gs.powerAllocation.facility >
+        gs.maxSafePower;
+    const hzSag = Math.max(0, 49.7 - gs.gridHz) * 0.45;
+    const dip = Math.min(1, gs.voltageDipIntensity + hzSag);
+    const flicker =
+      dip > 0.02 ? 1 - dip * (0.3 + 0.14 * Math.sin(t * 62.8)) : 1;
 
-    // Pulse single BATTERY -> GRID wheel ONLY during Tutorial Step 4
-    const highlightRheo = s.tutorialPhase === "STEP_4_SPIN_TURBINE";
-    if (rheostatRingMatRef.current) {
-      if (highlightRheo) {
-        const pulse = (Math.sin(now * 6.0) + 1) * 0.5;
-        const hex = pulse > 0.5 ? "#33ff66" : "#ffb000";
-        rheostatRingMatRef.current.color.set(hex);
-        rheostatRingMatRef.current.emissive.set(hex);
-        rheostatRingMatRef.current.emissiveIntensity = 1.2 + pulse * 1.1;
+    if (glassMatRef.current) {
+      if (gs.isBlackout) {
+        glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_BLACKOUT);
+        glassMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_BLACKOUT_EMISSIVE);
+        glassMatRef.current.emissiveIntensity = 0.08;
+      } else if (isAlarm) {
+        glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_ALARM);
+        glassMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_ALARM_EMISSIVE);
+        glassMatRef.current.emissiveIntensity =
+          (0.65 + 0.3 * Math.sin(t * 9.0)) * flicker;
       } else {
-        rheostatRingMatRef.current.color.set("#b8a46b");
-        rheostatRingMatRef.current.emissive.set("#000000");
-        rheostatRingMatRef.current.emissiveIntensity = 0;
+        glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_NORM);
+        glassMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_NORM_EMISSIVE);
+        glassMatRef.current.emissiveIntensity = 0.65 * flicker;
       }
     }
-    if (rheostatPointerMatRef.current) {
-      if (highlightRheo) {
-        const pulse = (Math.sin(now * 6.0) + 1) * 0.5;
-        const hex = pulse > 0.5 ? "#33ff66" : "#ffb000";
-        rheostatPointerMatRef.current.color.set(hex);
-        rheostatPointerMatRef.current.emissive.set(hex);
-        rheostatPointerMatRef.current.emissiveIntensity = 1.4 + pulse * 1.2;
-      } else {
-        rheostatPointerMatRef.current.color.set("#efe8d2");
-        rheostatPointerMatRef.current.emissive.set("#ffb000");
-        rheostatPointerMatRef.current.emissiveIntensity = 0.35;
-      }
+    if (bulbMatRef.current) {
+      bulbMatRef.current.emissiveIntensity = gs.isBlackout
+        ? 0.06
+        : (isAlarm ? 1.5 : 1.35) * flicker;
     }
   });
 
+  return (
+    <group position={position} rotation={[0, rotY, 0]}>
+      <mesh position={[0, 0.02, -0.06]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.16, 0.12, 0.04]} />
+        <meshStandardMaterial color="#18211b" metalness={0.75} roughness={0.4} />
+      </mesh>
+      <mesh
+        position={[0, 0.03, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+        raycast={NOOP_RAYCAST}
+      >
+        <cylinderGeometry args={[0.02, 0.024, 0.1, 10]} />
+        <meshStandardMaterial color="#222b25" metalness={0.75} roughness={0.38} />
+      </mesh>
+      <mesh position={[0, 0.01, 0.05]} raycast={NOOP_RAYCAST}>
+        <cylinderGeometry args={[0.058, 0.074, 0.048, 12]} />
+        <meshStandardMaterial color="#23312b" metalness={0.72} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, -0.05, 0.05]} raycast={NOOP_RAYCAST}>
+        <cylinderGeometry args={[0.054, 0.048, 0.095, 12]} />
+        <meshStandardMaterial
+          ref={glassMatRef}
+          color="#ffba52"
+          emissive="#ff9922"
+          emissiveIntensity={0.65}
+          transparent
+          opacity={0.86}
+          roughness={0.22}
+          metalness={0.1}
+        />
+      </mesh>
+      <mesh position={[0, -0.045, 0.05]} raycast={NOOP_RAYCAST}>
+        <sphereGeometry args={[0.03, 8, 8]} />
+        <meshStandardMaterial
+          ref={bulbMatRef}
+          color="#ffcf75"
+          emissive="#ffaa33"
+          emissiveIntensity={1.35}
+        />
+      </mesh>
+      <mesh
+        position={[0, -0.02, 0.05]}
+        rotation={[Math.PI / 2, 0, 0]}
+        raycast={NOOP_RAYCAST}
+      >
+        <torusGeometry args={[0.064, 0.005, 6, 14]} />
+        <meshStandardMaterial color="#b8a46b" metalness={0.86} roughness={0.28} />
+      </mesh>
+      <mesh
+        position={[0, -0.085, 0.05]}
+        rotation={[Math.PI / 2, 0, 0]}
+        raycast={NOOP_RAYCAST}
+      >
+        <torusGeometry args={[0.056, 0.0045, 6, 14]} />
+        <meshStandardMaterial color="#b8a46b" metalness={0.86} roughness={0.28} />
+      </mesh>
+    </group>
+  );
+});
+
+/**
+ * Rear 180° Cockpit Bay (`UNIT D // AUXILIARY, FUSES & MAIN BREAKER`) recessed into Left Wall Switchgear.
+ * Houses the heavy `HighDetailKnifeBreaker3D` (Main Breaker), Steam Relief Pull-Lever (`СБРОС ПАРА`),
+ * Rotary 50Hz Turbine Valve Rheostat, Ceramic Cartridge Fuse Bank (`ПН-2 250А`),
+ * 3 Turbine/Synchroscope/Grid Manometers, and 4 Guarded Auxiliary Toggle Switches.
+ */
+const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+  const brassTex = useMemo(() => getBrushedBrassTextures(), []);
+
+  const breakerArmRef = useRef<THREE.Group | null>(null);
+  const breakerDragRef = useRef({ active: false, startY: 0, progress: 0 });
+  const steamLeverArmRef = useRef<THREE.Group>(null);
+  const steamDragRef = useRef({
+    active: false,
+    startY: 0,
+    progress: 0,
+    lastHissTime: 0,
+  });
   const rheostatWheelRef = useRef<THREE.Group>(null);
-  const rightStatusMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const throttleLedMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
-  const throttleReadoutMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const lastThrottleMwRef = useRef(-1);
-  const prevXenonRef = useRef(0);
-  const xenonBurningRef = useRef(false);
+  const toggleDragIdxRef = useRef<number | null>(null);
 
-  const throttleReadoutTex = useMemo(
+  const fuseLamp0 = useRef<THREE.MeshStandardMaterial | null>(null);
+  const fuseLamp1 = useRef<THREE.MeshStandardMaterial | null>(null);
+  const fuseLamp2 = useRef<THREE.MeshStandardMaterial | null>(null);
+  const fuseLamp3 = useRef<THREE.MeshStandardMaterial | null>(null);
+  const fuseLamp4 = useRef<THREE.MeshStandardMaterial | null>(null);
+  const fuseLamp5 = useRef<THREE.MeshStandardMaterial | null>(null);
+
+  const toggleLamp0 = useRef<THREE.MeshStandardMaterial | null>(null);
+  const toggleLamp1 = useRef<THREE.MeshStandardMaterial | null>(null);
+  const toggleLamp2 = useRef<THREE.MeshStandardMaterial | null>(null);
+  const toggleLamp3 = useRef<THREE.MeshStandardMaterial | null>(null);
+
+  const toggleBat0 = useRef<THREE.Group | null>(null);
+  const toggleBat1 = useRef<THREE.Group | null>(null);
+  const toggleBat2 = useRef<THREE.Group | null>(null);
+  const toggleBat3 = useRef<THREE.Group | null>(null);
+
+  const headerPlateTex = useMemo(
     () =>
-      createNearestCanvasTexture(160, 56, (ctx, w, h) => {
-        ctx.fillStyle = "#08120c";
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = "#b8a46b";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(2, 2, w - 4, h - 4);
-        ctx.fillStyle = "#33ff66";
-        ctx.font = 'bold 34px "VT323", monospace';
-        ctx.textAlign = "center";
-        ctx.fillText("0 MW", w / 2, 39);
-      }),
+      makePlaqueTex(
+        "UNIT D // AUXILIARY, FUSES & MAIN BREAKER",
+        "TURBINE RPM • 50HZ SYNC • STEAM VENT • KNIFE BREAKER",
+        {
+          width: 768,
+          height: 112,
+          titleSize: 27,
+          subSize: 22,
+          titleColor: "#ffcc00",
+          titleStroke: "#ffcc00",
+          subColor: "#44ff77",
+          subStroke: "#44ff77",
+          borderColor: "#b8a46b",
+        },
+      ),
     [],
   );
 
-  const bankAPlateTex = useMemo(
+  const fuseBayPlateTex = useMemo(
     () =>
-      makePlaqueTex("ACCUMULATOR BANK A", "500 MWH CELL ARRAY", {
-        width: 384,
-        height: 104,
-        titleSize: 27,
-        subSize: 20,
-        titleColor: "#33ff66",
-        titleStroke: "#33ff66",
-        subColor: "#e6dec3",
-        subStroke: "#e6dec3",
-        borderColor: "#b8a46b",
-      }),
+      makePlaqueTex(
+        "HV CERAMIC FUSE CARTRIDGE BANK (ПН-2 // 250А)",
+        "BUS A1 • BUS A2 • PUMP G1 • DVK CRT • KGB RELAY • EXCITER",
+        {
+          width: 768,
+          height: 88,
+          titleSize: 24,
+          subSize: 18,
+          titleColor: "#e6dec3",
+          titleStroke: "#e6dec3",
+          subColor: "#33ff66",
+          subStroke: "#33ff66",
+          borderColor: "#8c7a4b",
+        },
+      ),
     [],
   );
 
-  const bankBPlateTex = useMemo(
+  const steamPlateTex = useMemo(
     () =>
-      makePlaqueTex("ACCUMULATOR BANK B", "500 MWH CELL ARRAY", {
+      makePlaqueTex("STEAM VENT (БРУ-К)", "PULL OPEN (-3 BAR/S)", {
         width: 384,
         height: 104,
-        titleSize: 27,
+        titleSize: 28,
         subSize: 20,
-        titleColor: "#33ff66",
-        titleStroke: "#33ff66",
-        subColor: "#e6dec3",
-        subStroke: "#e6dec3",
-        borderColor: "#b8a46b",
+        titleColor: "#ff4444",
+        titleStroke: "#ff4444",
+        subColor: "#ffcc00",
+        subStroke: "#ffcc00",
+        borderColor: "#ff2a2a",
       }),
     [],
   );
 
   const rheostatPlateTex = useMemo(
     () =>
-      makePlaqueTex("BATTERY -> GRID", "TURN WHEEL TO DISPATCH MW", {
-        width: 420,
+      makePlaqueTex("TURBINE STEAM VALVE", "VALVE 0-100% (15%=3000RPM)", {
+        width: 384,
         height: 104,
-        titleSize: 30,
+        titleSize: 28,
         subSize: 20,
         titleColor: "#44ff77",
         titleStroke: "#44ff77",
@@ -1664,6 +2677,1028 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
     [],
   );
 
+  const breakerPlateTex = useMemo(
+    () =>
+      makePlaqueTex(
+        "MAIN BREAKER (ГЛАВНЫЙ РУБИЛЬНИК)",
+        "CLICK / DRAG / WHEEL / [SPACE]",
+        {
+          width: 420,
+          height: 104,
+          titleSize: 26,
+          subSize: 19,
+          titleColor: "#ffcc00",
+          titleStroke: "#ffcc00",
+          subColor: "#ff6655",
+          subStroke: "#ff6655",
+          borderColor: "#b8a46b",
+        },
+      ),
+    [],
+  );
+
+  const rheostatScaleTex = useMemo(
+    () =>
+      createCrispPanelTexture(256, 256, (ctx, w, h) => {
+        const cx = w / 2;
+        const cy = h / 2;
+        ctx.fillStyle = "#e6dec3";
+        ctx.beginPath();
+        ctx.arc(cx, cy, 120, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#141414";
+        ctx.lineWidth = 6;
+        ctx.stroke();
+
+        for (let i = -20; i <= 20; i++) {
+          const ratio = (i + 20) / 40;
+          const ang = -Math.PI * 0.5 - Math.PI * 0.8 + ratio * Math.PI * 1.6;
+          const isMajor = i % 4 === 0;
+          const rOut = 114;
+          const rIn = isMajor ? 92 : 102;
+          ctx.strokeStyle = Math.abs(i) >= 16 ? "#c81e1e" : "#141414";
+          ctx.lineWidth = isMajor ? 4 : 2;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ang) * rIn, cy + Math.sin(ang) * rIn);
+          ctx.lineTo(cx + Math.cos(ang) * rOut, cy + Math.sin(ang) * rOut);
+          ctx.stroke();
+        }
+        ctx.fillStyle = "#1e7a3b";
+        ctx.font = '900 28px "VT323", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("50.0 HZ", cx, 46);
+      }),
+    [],
+  );
+
+  const toggleSpecs = useMemo(() => {
+    const items = [
+      { id: 0, label: "VENTILATION", sub: "-1.2 R/H (+10MW)", color: "#44ff77" },
+      { id: 1, label: "AUDIO [M]", sub: "BUNKER SOUND", color: "#ffcc00" },
+      { id: 2, label: "KGB LINE", sub: "DECODE ORDERS", color: "#44ff77" },
+      { id: 3, label: "TRIP RESET", sub: "RESET TURBINE TRIP", color: "#ffcc00" },
+    ];
+    return items.map((item) => ({
+      ...item,
+      texture: makePlaqueTex(item.label, item.sub, {
+        width: 352,
+        height: 104,
+        titleSize: 29,
+        subSize: 21,
+        titleColor: item.color,
+        titleStroke: item.color,
+        subColor: "#ffffff",
+        subStroke: "#ffffff",
+        borderColor: "#b8a46b",
+      }),
+    }));
+  }, []);
+
+  const unitDMimicSegments = useMemo<readonly MimicSegmentSpec[]>(
+    () => [
+      { x: -0.71, y: 1.04, w: 0.22, h: 0.015, color: "#a83830" },
+      { x: -0.82, y: 1.41, w: 0.016, h: 0.74, color: "#a83830" },
+      { x: -0.70, y: 1.79, w: 0.24, h: 0.015, color: "#a83830" },
+      { x: -0.29, y: 1.79, w: 0.58, h: 0.015, color: "#a83830" },
+      { x: -0.30, y: 1.04, w: 0.56, h: 0.015, color: "#c8a838" },
+      { x: 0.27, y: 1.04, w: 0.58, h: 0.015, color: "#c8a838" },
+      { x: 0.69, y: 1.04, w: 0.26, h: 0.015, color: "#c8a838" },
+      { x: 0.82, y: 1.41, w: 0.016, h: 0.74, color: "#c8a838" },
+      { x: 0.70, y: 1.79, w: 0.24, h: 0.015, color: "#c8a838" },
+      { x: 0.29, y: 1.79, w: 0.58, h: 0.015, color: "#c8a838" },
+      { x: 0.0, y: 0.775, w: 1.62, h: 0.016, color: "#388898" },
+    ],
+    [],
+  );
+
+  const unitDMimicNodes = useMemo<readonly MimicNodeSpec[]>(
+    () => [
+      { x: -0.82, y: 1.79, color: "#a83830" },
+      { x: -0.82, y: 1.04, color: "#a83830" },
+      { x: -0.29, y: 1.79, color: "#a83830" },
+      { x: 0.29, y: 1.79, color: "#c8a838" },
+      { x: 0.82, y: 1.79, color: "#c8a838" },
+      { x: 0.82, y: 1.04, color: "#c8a838" },
+    ],
+    [],
+  );
+
+  const unitDRecessedWells = useMemo(
+    () => [{ x: 0, y: 0.56, w: 1.78, h: 0.34 }],
+    [],
+  );
+
+  useFrame(({ clock }, delta) => {
+    const dt = Math.min(0.1, delta);
+    const t = clock.getElapsedTime();
+    const s = useGameStore.getState();
+    const t0 = s.turbines[0];
+
+    // 1. Animate Copper Knife-Switch MAIN BREAKER arm (`ГЛАВНЫЙ РУБИЛЬНИК`)
+    if (breakerArmRef.current) {
+      const closedState =
+        s.phase === "playing" && !s.isBlackout && Boolean(t0?.gridConnected);
+      const prog = breakerDragRef.current.active
+        ? breakerDragRef.current.progress
+        : closedState
+          ? 1
+          : 0;
+      const targetRotX = THREE.MathUtils.lerp(0.62, -0.58, prog);
+      breakerArmRef.current.rotation.x = THREE.MathUtils.lerp(
+        breakerArmRef.current.rotation.x,
+        targetRotX,
+        breakerDragRef.current.active ? 0.36 : 0.24,
+      );
+    }
+
+    // 2. Animate Steam Relief Lever (`СБРОС ПАРА`)
+    if (steamLeverArmRef.current) {
+      const targetProg = steamDragRef.current.active
+        ? steamDragRef.current.progress
+        : s.steamDumpValve
+          ? 1.0
+          : 0;
+      const shake =
+        s.steamDumpValve && targetProg > 0.35 ? Math.sin(t * 52) * 0.035 : 0;
+      const targetAngleX = -0.52 + targetProg * 1.12 + shake;
+      steamLeverArmRef.current.rotation.x = THREE.MathUtils.lerp(
+        steamLeverArmRef.current.rotation.x,
+        targetAngleX,
+        steamDragRef.current.active ? 0.32 : 0.22,
+      );
+      if (s.steamDumpValve && t - steamDragRef.current.lastHissTime > 0.16) {
+        steamDragRef.current.lastHissTime = t;
+        playSteamVentHiss(Math.max(0.5, targetProg));
+      }
+    }
+
+    // 3. Animate Rotary Turbine Steam / 50Hz Rheostat Wheel
+    if (rheostatWheelRef.current) {
+      const valveRatio = t0?.valve ?? 0;
+      const targetRotZ = -(valveRatio - 0.5) * 2 * (Math.PI * 0.85);
+      rheostatWheelRef.current.rotation.z = THREE.MathUtils.lerp(
+        rheostatWheelRef.current.rotation.z,
+        targetRotZ,
+        Math.min(1, dt * 28),
+      );
+    }
+
+    // 4. Animate 4 Guarded Auxiliary Toggles & Jewel Lamps (Zero per-frame allocations)
+    for (let i = 0; i < 4; i++) {
+      const bat =
+        i === 0
+          ? toggleBat0.current
+          : i === 1
+            ? toggleBat1.current
+            : i === 2
+              ? toggleBat2.current
+              : toggleBat3.current;
+      const isOn =
+        i === 0
+          ? s.ventilationActive
+          : i === 1
+            ? !s.isMusicMuted
+            : i === 2
+              ? s.kgbLineActive
+              : !t0?.tripped;
+      if (bat) {
+        bat.rotation.x = THREE.MathUtils.lerp(
+          bat.rotation.x,
+          isOn ? -0.61 : 0.61,
+          0.28,
+        );
+      }
+      const lamp =
+        i === 0
+          ? toggleLamp0.current
+          : i === 1
+            ? toggleLamp1.current
+            : i === 2
+              ? toggleLamp2.current
+              : toggleLamp3.current;
+      if (lamp) {
+        const activeCol =
+          i === 3
+            ? t0?.tripped
+              ? SCENE_COLOR_RED
+              : SCENE_COLOR_GREEN
+            : i === 1
+              ? SCENE_COLOR_AMBER
+              : SCENE_COLOR_GREEN;
+        const lit = i === 3 ? true : isOn;
+        lamp.color.copy(lit ? activeCol : SCENE_COLOR_LAMP_DARK);
+        lamp.emissive.copy(lit ? activeCol : SCENE_COLOR_BLACK);
+        lamp.emissiveIntensity = lit ? 1.4 : 0.05;
+      }
+    }
+
+    // 5. Update 6 HV Ceramic Fuse Cartridge Continuity Lamps
+    for (let i = 0; i < 6; i++) {
+      const mat =
+        i === 0
+          ? fuseLamp0.current
+          : i === 1
+            ? fuseLamp1.current
+            : i === 2
+              ? fuseLamp2.current
+              : i === 3
+                ? fuseLamp3.current
+                : i === 4
+                  ? fuseLamp4.current
+                  : fuseLamp5.current;
+      if (!mat) continue;
+      const live =
+        !s.isBlackout &&
+        (i === 0
+          ? true
+          : i === 1
+            ? Boolean(t0?.gridConnected)
+            : i === 2
+              ? s.powerAllocation.cooling > 0
+              : i === 3
+                ? s.powerAllocation.defense > 0
+                : i === 4
+                  ? s.kgbLineActive
+                  : !t0?.tripped);
+      if (s.isBlackout) {
+        mat.color.copy(SCENE_COLOR_RED);
+        mat.emissive.copy(SCENE_COLOR_RED);
+        mat.emissiveIntensity = 0.55 + Math.sin(t * 7 + i) * 0.35;
+      } else if (live) {
+        mat.color.copy(SCENE_COLOR_GREEN);
+        mat.emissive.copy(SCENE_COLOR_GREEN);
+        mat.emissiveIntensity = 1.2;
+      } else {
+        mat.color.copy(SCENE_COLOR_LAMP_AMBER_OFF);
+        mat.emissive.copy(SCENE_COLOR_LAMP_AMBER_EMISSIVE);
+        mat.emissiveIntensity = 0.6;
+      }
+    }
+  });
+
+  const fuseLampRefs = [
+    fuseLamp0,
+    fuseLamp1,
+    fuseLamp2,
+    fuseLamp3,
+    fuseLamp4,
+    fuseLamp5,
+  ];
+  const toggleLampRefs = [toggleLamp0, toggleLamp1, toggleLamp2, toggleLamp3];
+  const toggleBatRefs = [toggleBat0, toggleBat1, toggleBat2, toggleBat3];
+
+  return (
+    <group position={[-4.6, 0.14, 1.35]} rotation={[0, Math.PI / 2, 0]} scale={1.025}>
+      <SovietModularSteelCabinet3D
+        width={1.92}
+        unitCode="D"
+        annunciatorLabels={[
+          "TURBINE RPM",
+          "SYNC 50HZ",
+          "MAIN BREAKER",
+          "STEAM VENT",
+          "FUSE BANK",
+          "AUX POWER",
+        ]}
+        mimicSegments={unitDMimicSegments}
+        mimicNodes={unitDMimicNodes}
+        recessedWells={unitDRecessedWells}
+        dividerY={1.305}
+        lowerLedgeY={0.775}
+        hideChartRecorders={true}
+        hideStripMeters={true}
+      />
+
+      {/* Top Riveted Header Plaque */}
+      <mesh position={[0, 2.095, 0.044]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[1.56, 0.138]} />
+        <meshStandardMaterial
+          map={headerPlateTex}
+          emissive="#ffffff"
+          emissiveMap={headerPlateTex}
+          emissiveIntensity={0.35}
+          roughness={0.75}
+        />
+      </mesh>
+
+      {/* Upper Synoptic Bay: 3 Manometers (Turbine RPM / Synchroscope 50Hz / Grid Load MW) */}
+      <group position={[0, 1.79, 0.03]}>
+        <HighDetailManometer3D
+          position={[-0.58, 0, 0]}
+          title="TURBINE RPM"
+          cyrillicSub="ТУРБИНА №1"
+          unit="0-3500 RPM"
+          serial="№ 84-ТБ1"
+          min={0}
+          max={3500}
+          nominalMark={3000}
+          dangerThreshold={3300}
+          getValue={() => useGameStore.getState().turbines[0]?.rpm ?? 0}
+          getAlertLevel={(s) => {
+            const rpm = s.turbines[0]?.rpm ?? 0;
+            return rpm < 2850 || rpm > 3150
+              ? "critical"
+              : rpm < 2950 || rpm > 3050
+                ? "warn"
+                : "normal";
+          }}
+        />
+        <HighDetailManometer3D
+          position={[0, 0, 0]}
+          title="SYNCHROSCOPE 50HZ"
+          cyrillicSub="СИНХРОНОСКОП 0°"
+          unit="-180..+180° (12H)"
+          serial="№ 84-СХ2"
+          min={-180}
+          max={180}
+          dangerThreshold={180}
+          synchroscopeMode={true}
+          getValue={() => useGameStore.getState().turbines[0]?.syncPhase ?? 0}
+          getAlertLevel={(s) =>
+            s.gridHz < 49.0 || s.gridHz > 51.0
+              ? "critical"
+              : s.gridHz < 49.4 || s.gridHz > 50.6
+                ? "warn"
+                : "normal"
+          }
+        />
+        <HighDetailManometer3D
+          position={[0.58, 0, 0]}
+          title="MW LOAD"
+          cyrillicSub="МОЩНОСТЬ МВТ"
+          unit="0-1000 MWe"
+          serial="№ 84-ЭЛ3"
+          min={0}
+          max={1000}
+          dangerThreshold={950}
+          getValue={() => useGameStore.getState().totalElectricalMW}
+          getAlertLevel={(s) =>
+            s.isBlackout ||
+            !s.turbines[0]?.gridConnected ||
+            s.turbines[0]?.tripped
+              ? "critical"
+              : "normal"
+          }
+        />
+      </group>
+
+      {/* Tier-2 Riser: Ceramic Cartridge High-Voltage Fuse Bank (`БЛОК ПРЕДОХРАНИТЕЛЕЙ ПН-2`) */}
+      <group position={[0, 1.465, 0.04]} rotation={[-0.08, 0, 0]}>
+        <mesh position={[0, 0, -0.008]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[1.66, 0.24, 0.032]} />
+          <meshStandardMaterial
+            color="#19211d"
+            metalness={0.62}
+            roughness={0.46}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
+          />
+        </mesh>
+        <mesh position={[0, 0.09, 0.012]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[1.48, 0.068]} />
+          <meshStandardMaterial
+            map={fuseBayPlateTex}
+            emissive="#ffffff"
+            emissiveMap={fuseBayPlateTex}
+            emissiveIntensity={0.3}
+            roughness={0.6}
+          />
+        </mesh>
+        {[-0.6, -0.36, -0.12, 0.12, 0.36, 0.6].map((fx, idx) => (
+          <group key={`fuse-${idx}`} position={[fx, -0.025, 0.02]}>
+            {/* Upper & Lower Copper Busbar Clips */}
+            {[-0.052, 0.052].map((cy, cIdx) => (
+              <mesh key={`clip-${cIdx}`} position={[0, cy, 0]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.044, 0.022, 0.036]} />
+                <meshStandardMaterial
+                  color="#c87d46"
+                  metalness={0.88}
+                  roughness={0.25}
+                />
+              </mesh>
+            ))}
+            {/* Ribbed White Porcelain Cartridge Fuse Body */}
+            <mesh raycast={NOOP_RAYCAST}>
+              <cylinderGeometry args={[0.02, 0.02, 0.088, 12]} />
+              <meshStandardMaterial
+                color="#dfd7c2"
+                roughness={0.34}
+                metalness={0.08}
+              />
+            </mesh>
+            {/* Brass End Ferrule Caps */}
+            {[-0.042, 0.042].map((ey, eIdx) => (
+              <mesh key={`cap-${eIdx}`} position={[0, ey, 0]} raycast={NOOP_RAYCAST}>
+                <cylinderGeometry args={[0.022, 0.022, 0.016, 12]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.86}
+                  roughness={0.26}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.004}
+                />
+              </mesh>
+            ))}
+            <CagedSovietJewelLamp3D
+              position={[0.055, 0, 0.002]}
+              lampMatRef={fuseLampRefs[idx]}
+              scale={0.62}
+            />
+          </group>
+        ))}
+      </group>
+
+      {/* Upper Sloped Deck: Steam Vent Pull-Lever + 50Hz Turbine Valve Rheostat + Main Knife Breaker */}
+      <group position={[0, 1.035, 0.165]} rotation={[-0.406, 0, 0]}>
+        {/* 1. Spring-Loaded Steam Relief Lever (`СБРОС ПАРА / БРУ-К`) */}
+        <group
+          position={[-0.58, 0, 0.015]}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            useGameStore
+              .getState()
+              .setHoveredControlHint(
+                "STEAM VENT (БРУ-К): Click/Drag or Scroll Up = OPEN (-3 BAR/s)",
+              );
+          }}
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            useGameStore.getState().setHoveredControlHint(null);
+          }}
+          onWheel={(e: ThreeEvent<WheelEvent>) => {
+            if (useCameraLookStore.getState().isFreeLookMode) return;
+            e.stopPropagation();
+            e.nativeEvent?.stopImmediatePropagation?.();
+            const wantOpen = e.deltaY < 0;
+            const s = useGameStore.getState();
+            if (s.steamDumpValve !== wantOpen) {
+              s.setSteamDumpValve(wantOpen);
+              steamDragRef.current.progress = wantOpen ? 1.0 : 0;
+              playSwitchClank(true);
+              if (wantOpen) playSteamVentHiss(0.6);
+            }
+          }}
+          onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+            if (useCameraLookStore.getState().isFreeLookMode) return;
+            e.stopPropagation();
+            const wasOpen = useGameStore.getState().steamDumpValve;
+            let dragged = false;
+            steamDragRef.current = {
+              active: true,
+              startY: e.nativeEvent.clientY,
+              progress: wasOpen ? 1.0 : 0.35,
+              lastHissTime: 0,
+            };
+            playSwitchClank(true);
+            playSteamVentHiss(0.6);
+            useGameStore.getState().setSteamDumpValve(!wasOpen);
+            const r3fTarget = e.target as unknown as {
+              setPointerCapture?: (id: number) => void;
+              releasePointerCapture?: (id: number) => void;
+            };
+            r3fTarget?.setPointerCapture?.(e.pointerId);
+            const startY = e.nativeEvent.clientY;
+            const onMove = (ev: PointerEvent) => {
+              const dy = ev.clientY - startY;
+              if (Math.abs(dy) > 6) dragged = true;
+              const p = THREE.MathUtils.clamp(
+                (wasOpen ? 1.0 - -dy / 70 : dy / 70) || 0,
+                0,
+                1,
+              );
+              steamDragRef.current.progress = p;
+              const wantOpen = p > 0.45;
+              if (useGameStore.getState().steamDumpValve !== wantOpen) {
+                useGameStore.getState().setSteamDumpValve(wantOpen);
+                playSwitchClank(wantOpen);
+              }
+            };
+            const onUp = () => {
+              steamDragRef.current.active = false;
+              r3fTarget?.releasePointerCapture?.(e.pointerId);
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+              window.removeEventListener("pointercancel", onUp);
+              if (dragged) {
+                playSwitchClank(useGameStore.getState().steamDumpValve);
+              }
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+            window.addEventListener("pointercancel", onUp);
+          }}
+        >
+          <mesh position={[0, 0.24, 0.006]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.42, 0.105, 0.01]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.85}
+              roughness={0.28}
+            />
+          </mesh>
+          <mesh position={[0, 0.24, 0.012]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[0.406, 0.096]} />
+            <meshStandardMaterial
+              map={steamPlateTex}
+              emissive="#ffffff"
+              emissiveMap={steamPlateTex}
+              emissiveIntensity={0.38}
+              roughness={0.55}
+            />
+          </mesh>
+          <mesh>
+            <boxGeometry args={[0.26, 0.3, 0.044]} />
+            <meshStandardMaterial
+              color="#141816"
+              metalness={0.68}
+              roughness={0.44}
+            />
+          </mesh>
+          <mesh position={[0, 0, 0.024]}>
+            <boxGeometry args={[0.14, 0.23, 0.016]} />
+            <meshStandardMaterial color="#090c0a" roughness={0.85} />
+          </mesh>
+          <group ref={steamLeverArmRef} position={[0, -0.02, 0.025]}>
+            {[-0.045, 0.045].map((lx, idx) => (
+              <mesh
+                key={idx}
+                position={[lx, 0, 0.085]}
+                rotation={[Math.PI / 2, 0, 0]}
+              >
+                <cylinderGeometry args={[0.011, 0.013, 0.17, 10]} />
+                <meshStandardMaterial
+                  color="#d0dad4"
+                  metalness={0.9}
+                  roughness={0.2}
+                />
+              </mesh>
+            ))}
+            <mesh
+              position={[0, 0, 0.17]}
+              rotation={[0, 0, Math.PI / 2]}
+            >
+              <cylinderGeometry args={[0.028, 0.028, 0.18, 14]} />
+              <meshStandardMaterial
+                color="#ff2a2a"
+                emissive="#ff2a2a"
+                emissiveIntensity={0.35}
+                roughness={0.35}
+              />
+            </mesh>
+            {[-0.045, 0, 0.045].map((hx, idx) => (
+              <mesh
+                key={idx}
+                position={[hx, 0, 0.17]}
+                rotation={[0, 0, Math.PI / 2]}
+              >
+                <cylinderGeometry args={[0.03, 0.03, 0.022, 14]} />
+                <meshStandardMaterial color="#ffb000" roughness={0.35} />
+              </mesh>
+            ))}
+          </group>
+        </group>
+
+        {/* 2. Rotary Generator Turbine Valve / 50Hz Rheostat Handwheel */}
+        <group
+          position={[-0.02, 0, 0.015]}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            const g = useGameStore.getState();
+            g.setHoveredDiagnosticId("grid");
+            g.setHoveredControlHint(
+              "TURBINE STEAM VALVE: Scroll Wheel (+/-5% | Shift +/-1%) or Click/Drag (0-100%)",
+            );
+          }}
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            const g = useGameStore.getState();
+            if (g.hoveredDiagnosticId === "grid") g.setHoveredDiagnosticId(null);
+            g.setHoveredControlHint(null);
+          }}
+          onWheel={(e: ThreeEvent<WheelEvent>) => {
+            if (useCameraLookStore.getState().isFreeLookMode) return;
+            e.stopPropagation();
+            e.nativeEvent?.stopImmediatePropagation?.();
+            const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
+            const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 0.01 : 0.05);
+            const s = useGameStore.getState();
+            const curValve = s.turbines[0]?.valve ?? 0;
+            const nextValve = THREE.MathUtils.clamp(
+              Math.round((curValve + step) * 100) / 100,
+              0,
+              1,
+            );
+            if (Math.abs(nextValve - curValve) >= 0.001) {
+              playRheostatDetentClick(Math.round(nextValve * 100));
+              s.setTurbineSteamValve(nextValve);
+            }
+          }}
+          onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+            if (useCameraLookStore.getState().isFreeLookMode) return;
+            e.stopPropagation();
+            const r3fTarget = e.target as unknown as {
+              setPointerCapture?: (id: number) => void;
+              releasePointerCapture?: (id: number) => void;
+            };
+            r3fTarget?.setPointerCapture?.(e.pointerId);
+
+            const startX = e.nativeEvent.clientX;
+            const startY = e.nativeEvent.clientY;
+            let totalMove = 0;
+            let currentVal = useGameStore.getState().turbines[0]?.valve ?? 0;
+            let lastDetent = Math.round(currentVal * 100);
+            const initVal = currentVal;
+
+            const onMove = (ev: PointerEvent) => {
+              const dx = ev.clientX - startX;
+              const dy = startY - ev.clientY;
+              totalMove = Math.max(totalMove, Math.hypot(dx, dy));
+              const nextVal = THREE.MathUtils.clamp(
+                Math.round((initVal + (dx + dy) / 180) * 100) / 100,
+                0,
+                1,
+              );
+              if (Math.abs(nextVal - currentVal) >= 0.005) {
+                currentVal = nextVal;
+                const detent = Math.round(currentVal * 100);
+                if (detent !== lastDetent) {
+                  lastDetent = detent;
+                  playRheostatDetentClick(detent);
+                }
+                useGameStore.getState().setTurbineSteamValve(currentVal);
+              }
+            };
+            const onUp = () => {
+              r3fTarget?.releasePointerCapture?.(e.pointerId);
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+              window.removeEventListener("pointercancel", onUp);
+              if (totalMove < 6) {
+                const s = useGameStore.getState();
+                const curV = s.turbines[0]?.valve ?? 0;
+                const nextV =
+                  curV < 0.14
+                    ? 0.15
+                    : curV < 0.48
+                      ? 0.5
+                      : curV < 0.98
+                        ? 1.0
+                        : 0.0;
+                playRheostatDetentClick(Math.round(nextV * 100));
+                s.setTurbineSteamValve(nextV);
+              }
+              playSwitchClank(false);
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+            window.addEventListener("pointercancel", onUp);
+          }}
+        >
+          <mesh position={[0, 0, 0.04]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.165, 0.165, 0.12, 16]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+          <mesh position={[0, 0.24, 0.006]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.45, 0.105, 0.01]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.85}
+              roughness={0.28}
+            />
+          </mesh>
+          <mesh position={[0, 0.24, 0.012]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[0.435, 0.096]} />
+            <meshStandardMaterial
+              map={rheostatPlateTex}
+              emissive="#ffffff"
+              emissiveMap={rheostatPlateTex}
+              emissiveIntensity={0.35}
+              roughness={0.55}
+            />
+          </mesh>
+          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.145, 0.16, 0.048, 18]} />
+            <meshStandardMaterial
+              color="#141816"
+              roughness={0.44}
+              metalness={0.68}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+            />
+          </mesh>
+          <mesh position={[0, 0, 0.026]} raycast={NOOP_RAYCAST}>
+            <circleGeometry args={[0.132, 24]} />
+            <meshStandardMaterial
+              map={rheostatScaleTex}
+              emissive="#ffffff"
+              emissiveMap={rheostatScaleTex}
+              emissiveIntensity={0.38}
+              roughness={0.82}
+            />
+          </mesh>
+          <mesh position={[0, 0, 0.028]} raycast={NOOP_RAYCAST}>
+            <torusGeometry args={[0.134, 0.009, 10, 24]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.26}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+          <group ref={rheostatWheelRef} position={[0, 0, 0.048]}>
+            <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+              <cylinderGeometry args={[0.098, 0.112, 0.048, 16]} />
+              <meshStandardMaterial
+                color="#1e1512"
+                roughness={0.38}
+                metalness={0.25}
+              />
+            </mesh>
+            <mesh position={[0, 0.048, 0.026]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.02, 0.082, 0.016]} />
+              <meshStandardMaterial
+                color="#efe8d2"
+                emissive="#ffb000"
+                emissiveIntensity={0.35}
+                roughness={0.3}
+              />
+            </mesh>
+            <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+              <cylinderGeometry args={[0.028, 0.03, 0.056, 12]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.88}
+                roughness={0.22}
+              />
+            </mesh>
+          </group>
+        </group>
+
+        {/* 3. Multi-Part Copper Knife-Switch MAIN BREAKER (`ГЛАВНЫЙ РУБИЛЬНИК`) */}
+        <HighDetailKnifeBreaker3D
+          breakerArmRef={breakerArmRef}
+          breakerDragRef={breakerDragRef}
+          breakerPlateTex={breakerPlateTex}
+        />
+        <SovietBacklitIndicatorBlock3D
+          position={[0.56, 0.184, 0.038]}
+          label="ТАБЛО СЕТЬ"
+          getAlertState={(s) => ({
+            level:
+              s.isBlackout ||
+              !s.turbines[0]?.gridConnected ||
+              s.turbines[0]?.tripped
+                ? "critical"
+                : "normal",
+          })}
+        />
+      </group>
+
+      {/* Lower Sloped Deck Row: 4 Guarded Auxiliary Toggle Switches */}
+      <group position={[0, 0.545, 0.376]} rotation={[-0.406, 0, 0]}>
+        <mesh position={[0, 0.02, -0.008]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[1.76, 0.32, 0.024]} />
+          <meshStandardMaterial
+            color="#222a27"
+            roughness={0.45}
+            metalness={0.55}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
+          />
+        </mesh>
+        {toggleSpecs.map((tSpec, tIdx) => {
+          const triggerToggle = () => {
+            playSwitchClank(false);
+            const s = useGameStore.getState();
+            if (tIdx === 0) {
+              s.toggleVentilation();
+            } else if (tIdx === 1) {
+              s.toggleMusicMute();
+            } else if (tIdx === 2) {
+              s.toggleKgbLine();
+            } else {
+              s.resetTurbineTrip();
+            }
+          };
+          return (
+            <group
+              key={`aux-toggle-${tSpec.id}`}
+              position={[-0.6 + tIdx * 0.4, -0.02, 0.018]}
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                useGameStore
+                  .getState()
+                  .setHoveredControlHint(`${tSpec.label}: ${tSpec.sub}`);
+              }}
+              onPointerOut={(e) => {
+                e.stopPropagation();
+                useGameStore.getState().setHoveredControlHint(null);
+              }}
+              onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                if (useCameraLookStore.getState().isFreeLookMode) return;
+                e.stopPropagation();
+                toggleDragIdxRef.current = tIdx;
+                (e.target as Element | null)?.setPointerCapture?.(e.pointerId);
+              }}
+              onPointerUp={(e: ThreeEvent<PointerEvent>) => {
+                if (toggleDragIdxRef.current !== tIdx) return;
+                e.stopPropagation();
+                toggleDragIdxRef.current = null;
+                (e.target as Element | null)?.releasePointerCapture?.(
+                  e.pointerId,
+                );
+                triggerToggle();
+              }}
+            >
+              <mesh position={[0, 0.112, 0.004]}>
+                <boxGeometry args={[0.33, 0.098, 0.008]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.85}
+                  roughness={0.28}
+                />
+              </mesh>
+              <mesh position={[0, 0.112, 0.01]}>
+                <planeGeometry args={[0.318, 0.09]} />
+                <meshStandardMaterial
+                  map={tSpec.texture}
+                  emissive="#ffffff"
+                  emissiveMap={tSpec.texture}
+                  emissiveIntensity={0.36}
+                  roughness={0.65}
+                />
+              </mesh>
+              <CagedSovietJewelLamp3D
+                position={[-0.088, 0.0, 0.012]}
+                lampMatRef={toggleLampRefs[tIdx]}
+                scale={0.78}
+              />
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.026, 0.029, 0.018, 6]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.86}
+                  roughness={0.26}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+              {[-0.032, 0.032].map((gx, gIdx) => (
+                <mesh key={gIdx} position={[gx, 0, 0.02]}>
+                  <boxGeometry args={[0.007, 0.068, 0.038]} />
+                  <meshStandardMaterial
+                    color="#b8a46b"
+                    metalness={0.85}
+                    roughness={0.28}
+                  />
+                </mesh>
+              ))}
+              <group ref={toggleBatRefs[tIdx]} position={[0, 0, 0.012]}>
+                <mesh
+                  position={[0, 0, 0.03]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                >
+                  <cylinderGeometry args={[0.0105, 0.0065, 0.062, 10]} />
+                  <meshStandardMaterial
+                    color="#d8e2dc"
+                    metalness={0.92}
+                    roughness={0.18}
+                  />
+                </mesh>
+              </group>
+            </group>
+          );
+        })}
+      </group>
+    </group>
+  );
+});
+
+/**
+ * 3D Overhead Bulkhead Telemetry Board & 3D Camera Station Selector Rail
+ */
+const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
+  const lastRightDrawRef = useRef(0);
+  const lastThrottleDrawRef = useRef(-1);
+  const rightStatusMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const lastThrottleMwRef = useRef(-1);
+  const prevXenonRef = useRef(0);
+  const xenonBurningRef = useRef(false);
+
+  const batteryNeedleRef = useRef<THREE.Object3D | null>(null);
+  const batteryLampDischargeRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const batteryLampSyncRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const batteryMwBarRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+  const batteryBankSegRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+  const throttleReadoutTexRef = useRef<THREE.CanvasTexture | null>(null);
+
+  const batteryGridGltf = useGLTF("./models/battery_grid_panel.glb");
+
+  const batteryGridBundle = useMemo(() => {
+    const root = batteryGridGltf.scene.clone(true);
+    const glassNames = new Set([
+      "Readout_Window_Glass",
+      "HV_GlassWindow",
+      "Dial_Glass",
+      "Bank_A_GlassCover",
+      "Bank_B_GlassCover",
+    ]);
+
+    root.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      obj.raycast = NOOP_RAYCAST;
+      obj.castShadow = false;
+      obj.receiveShadow = false;
+      const mat = obj.material;
+      const isGlass =
+        glassNames.has(obj.name) ||
+        (mat instanceof THREE.Material && mat.transparent);
+      if (isGlass && mat instanceof THREE.MeshStandardMaterial) {
+        const gMat = mat.clone();
+        gMat.depthWrite = false;
+        gMat.transparent = true;
+        gMat.opacity = Math.min(gMat.opacity || 0.14, 0.14);
+        obj.material = gMat;
+      }
+    });
+
+    const cloneDynamicMat = (name: string): THREE.MeshStandardMaterial | null => {
+      const obj = root.getObjectByName(name);
+      if (
+        !(obj instanceof THREE.Mesh) ||
+        !(obj.material instanceof THREE.MeshStandardMaterial)
+      ) {
+        return null;
+      }
+      const clonedMat = obj.material.clone();
+      obj.material = clonedMat;
+      return clonedMat;
+    };
+
+    const bankSegMats = [
+      ...Array.from({ length: 5 }, (_, i) => cloneDynamicMat(`BankA_Seg_${i + 1}`)),
+      ...Array.from({ length: 5 }, (_, i) => cloneDynamicMat(`BankB_Seg_${i + 1}`)),
+    ];
+    const mwBarMats = Array.from({ length: 10 }, (_, i) =>
+      cloneDynamicMat(`MW_Bar_${String(i + 1).padStart(2, "0")}`),
+    );
+    const lampDischargeMat = cloneDynamicMat("Lamp_Discharge");
+    const lampGridSyncMat = cloneDynamicMat("Lamp_GridSync");
+
+    const readoutTex = createNearestCanvasTexture(192, 92, (ctx, w, h) => {
+      ctx.fillStyle = "#08120c";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#2b7a44";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(2, 2, w - 4, h - 4);
+      ctx.fillStyle = "#33ff66";
+      ctx.font = 'bold 46px "VT323", monospace';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("0 MW", w / 2, h / 2 + 2);
+    });
+    readoutTex.flipY = false;
+
+    const screenMeshRaw = root.getObjectByName("MW_Readout_Screen");
+    if (screenMeshRaw instanceof THREE.Mesh) {
+      screenMeshRaw.castShadow = false;
+      screenMeshRaw.receiveShadow = false;
+      screenMeshRaw.material = new THREE.MeshStandardMaterial({
+        color: "#ffffff",
+        map: readoutTex,
+        emissive: new THREE.Color("#ffffff"),
+        emissiveMap: readoutTex,
+        emissiveIntensity: 0.95,
+        roughness: 0.35,
+        metalness: 0.05,
+      });
+    }
+    const needleObj = root.getObjectByName("Center_Load_Needle") ?? null;
+
+    return {
+      root,
+      bankSegMats,
+      mwBarMats,
+      lampDischargeMat,
+      lampGridSyncMat,
+      readoutTex,
+      needleObj,
+    };
+  }, [batteryGridGltf.scene]);
+
+  useEffect(() => {
+    batteryNeedleRef.current = batteryGridBundle.needleObj;
+    batteryLampDischargeRef.current = batteryGridBundle.lampDischargeMat;
+    batteryLampSyncRef.current = batteryGridBundle.lampGridSyncMat;
+    batteryMwBarRefs.current = batteryGridBundle.mwBarMats;
+    batteryBankSegRefs.current = batteryGridBundle.bankSegMats;
+    throttleReadoutTexRef.current = batteryGridBundle.readoutTex;
+    return () => {
+      throttleReadoutTexRef.current = null;
+    };
+  }, [batteryGridBundle]);
+
   const rightPanelGroupRef = useRef<THREE.Group>(null);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
@@ -1673,102 +3708,39 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
   const terminalHousingModel = useMemo(() => {
     const cloned = terminalHousingGltf.scene.clone(true);
-    // 1. Strip the legacy flat kbOverlay group AND the 2 angled umbilical/flange cylinders (y < 0.88) that clipped into the bottom-left/right keys
-    // 2. Scale up the upper CRT housing/bezel/hood/bolts/knobs (y >= 0.88) by +40% width (1.40x) and +30% height (1.30x)
-    //    while anchoring the bottom bezel at y >= 0.94 so it stays 100% clear of the 3 DVK-84 switches & keyboard!
+    // Strip legacy lower pedestal/keyboard meshes (y < 0.88) and scale upper CRT housing cleanly
     const legacyLowerMeshes: THREE.Object3D[] = [];
     for (const child of cloned.children) {
       if (child.position.y < 0.88) {
         legacyLowerMeshes.push(child);
       } else {
-        child.position.x *= 1.68;
-        child.position.y = 0.94 + (child.position.y - 0.88) * 1.56;
-        child.scale.x *= 1.68;
-        child.scale.y *= 1.56;
+        child.position.x *= 1.58;
+        child.position.y = 0.94 + (child.position.y - 0.88) * 1.48;
+        child.scale.x *= 1.58;
+        child.scale.y *= 1.48;
       }
     }
     for (const obj of legacyLowerMeshes) {
       cloned.remove(obj);
     }
     applySovietPBRToHierarchy(cloned);
+    cloned.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.raycast = NOOP_RAYCAST;
+        obj.castShadow = false;
+        obj.receiveShadow = false;
+      }
+    });
     return cloned;
   }, [terminalHousingGltf.scene]);
 
-  const rheostatScaleTex = useMemo(
-    () =>
-      createCrispPanelTexture(256, 256, (ctx, w, h) => {
-        const cx = w / 2;
-        const cy = h / 2;
-
-        // Dark brushed-steel industrial valve mounting flange & recessed collar (NO white gauge face!)
-        const flangeGrad = ctx.createRadialGradient(cx, cy, 18, cx, cy, 124);
-        flangeGrad.addColorStop(0, "#141917");
-        flangeGrad.addColorStop(0.46, "#2c3531");
-        flangeGrad.addColorStop(0.84, "#1d2421");
-        flangeGrad.addColorStop(1, "#121715");
-        ctx.fillStyle = flangeGrad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 124, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Concentric machined steel lathe grooves
-        ctx.strokeStyle = "rgba(190, 206, 198, 0.14)";
-        ctx.lineWidth = 1.5;
-        for (const r of [42, 64, 86, 118]) {
-          ctx.beginPath();
-          ctx.arc(cx, cy, r, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        // Recessed inner gland seal ring
-        ctx.strokeStyle = "#0e1210";
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 52, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // 6 recessed dark-steel hex flange bolts
-        for (let b = 0; b < 6; b++) {
-          const ba = (b * Math.PI) / 3 + Math.PI / 6;
-          const bx = cx + Math.cos(ba) * 72;
-          const by = cy + Math.sin(ba) * 72;
-          ctx.fillStyle = "#121614";
-          ctx.beginPath();
-          ctx.arc(bx, by, 7, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = "#4c5953";
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-
-        // Crisp 0–100% industrial valve tick notches around outer rim
-        for (let i = 0; i <= 20; i++) {
-          const ratio = i / 20;
-          const ang = -Math.PI * 0.5 - Math.PI * 0.78 + ratio * Math.PI * 1.56;
-          const isMajor = i % 5 === 0;
-          const rOut = 115;
-          const rIn = isMajor ? 95 : 104;
-          ctx.strokeStyle =
-            i >= 18 ? "#ffb000" : isMajor ? "#d4ded9" : "#7e8e86";
-          ctx.lineWidth = isMajor ? 3.5 : 1.8;
-          ctx.beginPath();
-          ctx.moveTo(cx + Math.cos(ang) * rIn, cy + Math.sin(ang) * rIn);
-          ctx.lineTo(cx + Math.cos(ang) * rOut, cy + Math.sin(ang) * rOut);
-          ctx.stroke();
-        }
-      }),
-    [],
-  );
-
-  useEffect(() => {
-    applySovietPBRToHierarchy(rightPanelGroupRef.current);
-  }, []);
+  const crtHazardTex = useMemo(() => createHazardStripeTexture(256, 64, 24), []);
 
   const rightHeaderPlateTex = useMemo(
     () =>
       makePlaqueTex(
         "ENERGY STORAGE & GRID DISPATCH // UNIT C",
-        "ENERGY CREATED  •  BATTERY STORED  •  GRID DEMAND  •  SINGLE OUTPUT WHEEL",
+        "ENERGY CREATED  •  BATTERY STORED  •  GRID DEMAND  •  AUTO ZONE BUSBARS",
         {
           width: 960,
           height: 120,
@@ -1790,68 +3762,143 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
     const s = useGameStore.getState();
     const t = clock.getElapsedTime();
 
-    // 1. Animate Single Cast-Steel Battery-to-Grid Output Wheel + 10-Segment Bargraph
+    // 1. Animate 3D Blender Battery-Grid Panel Needle, Pilot Lamps, 10-Bar Column & VFD Readout
     const valveRatio = s.isBlackout ? 0 : s.batteryOutputValve;
-    const dispatchedMWNow = s.isBlackout ? 0 : Math.round(valveRatio * 1000);
-    if (rheostatWheelRef.current) {
-      const targetRotZ = -valveRatio * Math.PI * 2.2;
-      const alpha = Math.min(1, dt * 28);
-      rheostatWheelRef.current.rotation.z = THREE.MathUtils.lerp(
-        rheostatWheelRef.current.rotation.z,
-        targetRotZ,
-        alpha,
+    const dispatchedMWNow = s.isBlackout
+      ? 0
+      : Math.round(
+          s.totalElectricalMW > 0 ? s.totalElectricalMW : valveRatio * 1000,
+        );
+
+    if (batteryNeedleRef.current) {
+      const normLoad = THREE.MathUtils.clamp(dispatchedMWNow / 1000, 0, 1);
+      const baseAngle = THREE.MathUtils.lerp(Math.PI / 3, -Math.PI / 3, normLoad);
+      const tremor =
+        dispatchedMWNow > 0 && !s.isBlackout ? Math.sin(t * 31) * 0.004 : 0;
+      batteryNeedleRef.current.rotation.z = THREE.MathUtils.damp(
+        batteryNeedleRef.current.rotation.z,
+        baseAngle + tremor,
+        12,
+        dt,
       );
     }
 
+    if (batteryLampDischargeRef.current) {
+      const lm = batteryLampDischargeRef.current;
+      const netDrain = !s.isBlackout && s.energyCreatedMW < dispatchedMWNow - 15;
+      if (s.isBlackout) {
+        lm.color.copy(SCENE_COLOR_BAT_DISCHARGE_OFF);
+        lm.emissive.copy(SCENE_COLOR_BLACK);
+        lm.emissiveIntensity = 0.04;
+      } else if (netDrain) {
+        const pulse = (Math.sin(t * 5.2) + 1) * 0.5;
+        lm.color.copy(SCENE_COLOR_ORANGE);
+        lm.emissive.copy(SCENE_COLOR_ORANGE);
+        lm.emissiveIntensity = 1.4 + pulse * 0.7;
+      } else if (dispatchedMWNow > 0) {
+        lm.color.copy(SCENE_COLOR_ORANGE);
+        lm.emissive.copy(SCENE_COLOR_ORANGE);
+        lm.emissiveIntensity = 0.65;
+      } else {
+        lm.color.copy(SCENE_COLOR_BAT_DISCHARGE_IDLE);
+        lm.emissive.copy(SCENE_COLOR_BAT_DISCHARGE_IDLE_EM);
+        lm.emissiveIntensity = 0.12;
+      }
+    }
+
+    if (batteryLampSyncRef.current) {
+      const gm = batteryLampSyncRef.current;
+      const synced =
+        !s.isBlackout &&
+        Math.abs(dispatchedMWNow - s.energyDemandMW) <= 35 &&
+        dispatchedMWNow > 0;
+      if (s.isBlackout) {
+        gm.color.copy(SCENE_COLOR_BAT_SYNC_OFF);
+        gm.emissive.copy(SCENE_COLOR_BLACK);
+        gm.emissiveIntensity = 0.04;
+      } else if (synced) {
+        gm.color.copy(SCENE_COLOR_GREEN);
+        gm.emissive.copy(SCENE_COLOR_GREEN);
+        gm.emissiveIntensity = 1.65;
+      } else {
+        gm.color.copy(SCENE_COLOR_BAT_SYNC_IDLE);
+        gm.emissive.copy(SCENE_COLOR_BAT_SYNC_IDLE_EM);
+        gm.emissiveIntensity = 0.12;
+      }
+    }
+
     for (let seg = 0; seg < 10; seg++) {
-      const ledMat = throttleLedMatRefs.current[seg];
+      const ledMat = batteryMwBarRefs.current[seg];
       if (!ledMat) continue;
       const segThreshold = (seg + 1) * 100;
       const isLit = !s.isBlackout && dispatchedMWNow >= segThreshold - 50;
       const segCol =
-        seg >= 8 ? "#ff4444" : seg >= 6 ? "#ffb000" : "#33ff66";
-      ledMat.color.set(isLit ? segCol : "#121a16");
-      ledMat.emissive.set(isLit ? segCol : "#000000");
+        seg >= 8
+          ? SCENE_COLOR_RED
+          : seg >= 6
+            ? SCENE_COLOR_AMBER
+            : SCENE_COLOR_GREEN;
+      ledMat.color.copy(isLit ? segCol : SCENE_COLOR_OFF_DARK);
+      ledMat.emissive.copy(isLit ? segCol : SCENE_COLOR_BLACK);
       ledMat.emissiveIntensity = isLit ? 1.55 : 0.04;
-    }
-
-    if (dispatchedMWNow !== lastThrottleMwRef.current) {
-      lastThrottleMwRef.current = dispatchedMWNow;
-      const rdTex = throttleReadoutMatRef.current?.map as
-        | THREE.CanvasTexture
-        | undefined;
-      const rdCanvas = rdTex?.image as HTMLCanvasElement | undefined;
-      const rdCtx = rdCanvas?.getContext("2d");
-      if (rdTex && rdCanvas && rdCtx) {
-        rdCtx.fillStyle = "#08120c";
-        rdCtx.fillRect(0, 0, rdCanvas.width, rdCanvas.height);
-        rdCtx.strokeStyle = "#b8a46b";
-        rdCtx.lineWidth = 3;
-        rdCtx.strokeRect(2, 2, rdCanvas.width - 4, rdCanvas.height - 4);
-        rdCtx.fillStyle = dispatchedMWNow >= 850 ? "#ffb000" : "#33ff66";
-        rdCtx.font = 'bold 34px "VT323", monospace';
-        rdCtx.textAlign = "center";
-        rdCtx.fillText(`${dispatchedMWNow} MW`, rdCanvas.width / 2, 39);
-        rdTex.needsUpdate = true;
-      }
     }
 
     // 2. Animate 10 Accumulator Charge Bars across Bank A (0-50%) & Bank B (55-100%)
     const chargePct = s.batteryStoredPct;
     const chargeCol =
-      chargePct < 15 ? "#ff2a2a" : chargePct < 30 ? "#ffb000" : "#33ff66";
+      chargePct < 15
+        ? SCENE_COLOR_RED
+        : chargePct < 30
+          ? SCENE_COLOR_AMBER
+          : SCENE_COLOR_GREEN;
     for (let i = 0; i < 10; i++) {
-      const barMat = batteryCellBarMatRefs.current[i];
+      const barMat = batteryBankSegRefs.current[i];
       if (!barMat) continue;
       const threshold = (i + 1) * 10 - 5;
       const isLit = !s.isBlackout && chargePct >= threshold;
-      barMat.color.set(isLit ? chargeCol : "#121a16");
-      barMat.emissive.set(isLit ? chargeCol : "#000000");
+      barMat.color.copy(isLit ? chargeCol : SCENE_COLOR_OFF_DARK);
+      barMat.emissive.copy(isLit ? chargeCol : SCENE_COLOR_BLACK);
       barMat.emissiveIntensity = isLit ? 1.4 : 0.05;
     }
 
+    // Pause background canvas telemetry redraws while K.O.M.R.A.D.-84 easter egg video is playing
+    if (s.diagFeedActive) return;
+
+    if (
+      dispatchedMWNow !== lastThrottleMwRef.current &&
+      (lastThrottleDrawRef.current < 0 || t - lastThrottleDrawRef.current >= 0.08)
+    ) {
+      lastThrottleDrawRef.current = t;
+      lastThrottleMwRef.current = dispatchedMWNow;
+      const rdTex = throttleReadoutTexRef.current;
+      const rdCanvas = rdTex?.image as HTMLCanvasElement | undefined;
+      const rdCtx = rdCanvas?.getContext("2d");
+      if (rdTex && rdCanvas && rdCtx) {
+        rdCtx.fillStyle = "#08120c";
+        rdCtx.fillRect(0, 0, rdCanvas.width, rdCanvas.height);
+        rdCtx.strokeStyle = "#2b7a44";
+        rdCtx.lineWidth = 3;
+        rdCtx.strokeRect(2, 2, rdCanvas.width - 4, rdCanvas.height - 4);
+        rdCtx.fillStyle = s.isBlackout
+          ? "#552222"
+          : dispatchedMWNow >= 850
+            ? "#ffb000"
+            : "#33ff66";
+        rdCtx.font = 'bold 46px "VT323", monospace';
+        rdCtx.textAlign = "center";
+        rdCtx.textBaseline = "middle";
+        rdCtx.fillText(
+          `${dispatchedMWNow} MW`,
+          rdCanvas.width / 2,
+          rdCanvas.height / 2 + 2,
+        );
+        rdTex.needsUpdate = true;
+      }
+    }
+
     // Update UNIT C Master Overview Dashboard (`CRT-84C`, 1024x208) — throttled to ~13 FPS (0.075s)
-    if (t - lastRightDrawRef.current < 0.075) return;
+    if (lastRightDrawRef.current > 0 && t - lastRightDrawRef.current < 0.075) return;
+    lastRightDrawRef.current = t;
     if (Math.abs(s.xenon - prevXenonRef.current) > 0.05) {
       xenonBurningRef.current = s.xenon < prevXenonRef.current;
       prevXenonRef.current = s.xenon;
@@ -1874,7 +3921,6 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
     const rSig = `${s.phase}|${s.tutorialPhase}|${energyCreatedRound}|${batMWhRound}|${batPctRound}|${dispatchedRound}|${demandRound}|${wheelPctRound}|${steamBarRound}|${rodsPct}|${xenonRound}|${xenonBurningRef.current}|${voidPct}|${reactKey}|${s.isBlackout}`;
     const rTex = rightStatusMatRef.current?.map as THREE.CanvasTexture | undefined;
     if (rTex && rTex.userData.lastSig !== rSig) {
-      lastRightDrawRef.current = t;
       rTex.userData.lastSig = rSig;
       const canvas = rTex.image as HTMLCanvasElement;
       const ctx = canvas.getContext("2d");
@@ -1941,15 +3987,14 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   return (
     <>
       {/* ============================================================
-          3. NEW RIGHT-SIDE SOVIET CONTROL PANEL WING (<RightControlPanel3D />)
-          Positioned at comfortable 1.76m radius on Right Wall (x: 1.76, z: 2.02)
+          3. RIGHT CONSOLE BAY: UNIT C (BATTERY - GRID AUTO TELEMETRY)
          ============================================================ */}
       <group
         ref={rightPanelGroupRef}
-        position={[1.76, -0.02, 2.02]}
-        rotation={[0, -Math.PI / 2, 0]}
-        scale={[1.04, 1.05, 1.04]}
+        position={[3.22, 0, -1.16]}
+        rotation={[0, -(15 * Math.PI) / 180, 0]}
       >
+        <group position={[-0.74, 0.18, 0.08]} rotation={[-0.51, 0, 0]} scale={0.74}>
         {/* Authentic Layered Soviet RBMK Blue-Grey / Olive-Grey Modular Steel Cabinet (`#485450`),
             Upper Canopy Overhang with 6 `ТАБЛО` Annunciator Lamps, Console Ledge & Synoptic Mimic Lines */}
         <SovietModularSteelCabinet3D
@@ -1973,7 +4018,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         />
 
         {/* Heavy Stepped Bevel Plates, Welded Seams, Corner L-Angle Iron Trim & Hex Bolts */}
-        <mesh position={[-1.0, 1.18, 0.032]} castShadow receiveShadow>
+        <mesh position={[-1.0, 1.18, 0.032]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.042, 2.40, 0.036]} />
           <meshStandardMaterial
             color="#1e2422"
@@ -1983,7 +4028,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             bumpScale={0.008}
           />
         </mesh>
-        <mesh position={[1.0, 1.18, 0.032]} castShadow receiveShadow>
+        <mesh position={[1.0, 1.18, 0.032]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.042, 2.40, 0.036]} />
           <meshStandardMaterial
             color="#1e2422"
@@ -1998,7 +4043,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             <mesh
               position={[-1.0, by, 0.054]}
               rotation={[Math.PI / 2, 0, 0]}
-              castShadow
+              raycast={NOOP_RAYCAST}
             >
               <cylinderGeometry args={[0.012, 0.012, 0.014, 6]} />
               <meshStandardMaterial
@@ -2012,7 +4057,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             <mesh
               position={[1.0, by, 0.054]}
               rotation={[Math.PI / 2, 0, 0]}
-              castShadow
+              raycast={NOOP_RAYCAST}
             >
               <cylinderGeometry args={[0.012, 0.012, 0.014, 6]} />
               <meshStandardMaterial
@@ -2027,7 +4072,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         ))}
 
         {/* Top Riveted Header Plaque: Clear of overhead canopy overhang */}
-        <mesh position={[0, 2.095, 0.044]}>
+        <mesh position={[0, 2.095, 0.044]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[1.58, 0.138]} />
           <meshStandardMaterial
             map={rightHeaderPlateTex}
@@ -2048,7 +4093,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           ] as const
         ).map(([gx, gy], gIdx) => (
           <group key={gIdx} position={[gx, gy, 0.032]}>
-            <mesh castShadow receiveShadow>
+            <mesh raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.14, 0.14, 0.016]} />
               <meshStandardMaterial
                 color="#18211b"
@@ -2070,7 +4115,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 key={bIdx}
                 position={[bx, by, 0.012]}
                 rotation={[Math.PI / 2, 0, 0]}
-                castShadow
+                raycast={NOOP_RAYCAST}
               >
                 <cylinderGeometry args={[0.008, 0.008, 0.01, 6]} />
                 <meshStandardMaterial
@@ -2086,11 +4131,11 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         ))}
         {[-0.58, 0.58].map((lx, lIdx) => (
           <group key={lIdx} position={[lx, 2.43, 0.08]}>
-            <mesh position={[0, 0, -0.04]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <mesh position={[0, 0, -0.04]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.012, 0.014, 0.11, 8]} />
               <meshStandardMaterial color="#18211b" metalness={0.75} roughness={0.38} />
             </mesh>
-            <mesh position={[0, -0.018, 0.028]} rotation={[0.45, 0, 0]} castShadow>
+            <mesh position={[0, -0.018, 0.028]} rotation={[0.45, 0, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.024, 0.068, 0.065, 12]} />
               <meshStandardMaterial
                 color="#23312b"
@@ -2100,7 +4145,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 bumpScale={0.006}
               />
             </mesh>
-            <mesh position={[0, -0.036, 0.036]}>
+            <mesh position={[0, -0.036, 0.036]} raycast={NOOP_RAYCAST}>
               <sphereGeometry args={[0.018, 8, 8]} />
               <meshStandardMaterial
                 color="#ffcf75"
@@ -2185,7 +4230,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         {/* High-Mounted Sloped Deck Row (Raised cleanly ABOVE Inspector Desk Occlusion Shadow!) */}
         <group position={[0, 1.055, 0.152]} rotation={[-0.406, 0, 0]}>
           {/* Matte Steel Backing Plate for Energy Storage Deck */}
-          <mesh position={[0, 0.01, -0.01]} castShadow receiveShadow>
+          <mesh position={[0, 0.01, -0.01]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[1.82, 0.44, 0.022]} />
             <meshStandardMaterial
               color="#1e2723"
@@ -2196,16 +4241,14 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             />
           </mesh>
 
-          {/* 1. Single Cast-Steel 6-Spoke BATTERY -> GRID Dispatch Handwheel + 10-Segment Bargraph (0-1000 MW) */}
+          {/* High-Detail 3D Blender Battery-Grid Accumulator & Automatic Zone Telemetry Bay */}
           <group
-            position={[-0.01, -0.015, 0.018]}
-            scale={[1.02, 1.02, 1.02]}
             onPointerOver={(e) => {
               e.stopPropagation();
               const g = useGameStore.getState();
               g.setHoveredDiagnosticId("grid");
               g.setHoveredControlHint(
-                "BATTERY -> GRID (0–1000 MW): Drag Wheel or Scroll (±40 MW | Shift ±10 MW) to dispatch stored power to the grid",
+                "BATTERY - GRID AUTO TELEMETRY (0–1000 MW): Copper busbars automatically discharge Banks A & B to supply active Unit A substation levers",
               );
             }}
             onPointerOut={(e) => {
@@ -2216,395 +4259,25 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               }
               g.setHoveredControlHint(null);
             }}
-            onWheel={(e: ThreeEvent<WheelEvent>) => {
-              if (useCameraLookStore.getState().isFreeLookMode) return;
-              e.stopPropagation();
-              e.nativeEvent?.stopImmediatePropagation?.();
-              const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
-              const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 0.01 : 0.04);
-              const s = useGameStore.getState();
-              const curValve = s.batteryOutputValve;
-              const nextValve = THREE.MathUtils.clamp(
-                Math.round((curValve + step) * 100) / 100,
-                0,
-                1,
-              );
-              if (Math.abs(nextValve - curValve) >= 0.001) {
-                playRheostatDetentClick(Math.round(nextValve * 100));
-                s.setBatteryOutputValve(nextValve);
-                if (rheostatWheelRef.current) {
-                  rheostatWheelRef.current.rotation.z =
-                    -nextValve * Math.PI * 2.2;
-                }
-              }
-            }}
-            onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-              if (useCameraLookStore.getState().isFreeLookMode) return;
-              e.stopPropagation();
-              const r3fTarget = e.target as unknown as {
-                setPointerCapture?: (id: number) => void;
-                releasePointerCapture?: (id: number) => void;
-              };
-              r3fTarget?.setPointerCapture?.(e.pointerId);
-
-              const domElem =
-                (e.nativeEvent.target as HTMLElement | null) ??
-                document.querySelector("canvas");
-              const rect = domElem?.getBoundingClientRect();
-              let centerX = e.nativeEvent.clientX;
-              let centerY = e.nativeEvent.clientY;
-              const wheelObj = rheostatWheelRef.current;
-              if (wheelObj && rect && rect.width > 0 && rect.height > 0) {
-                const worldPos = new THREE.Vector3();
-                wheelObj.getWorldPosition(worldPos);
-                worldPos.project(e.camera);
-                centerX = rect.left + (worldPos.x * 0.5 + 0.5) * rect.width;
-                centerY = rect.top + (-worldPos.y * 0.5 + 0.5) * rect.height;
-              }
-
-              const startX = e.nativeEvent.clientX;
-              const startY = e.nativeEvent.clientY;
-              let prevY = startY;
-              let currentVal = useGameStore.getState().batteryOutputValve;
-              const initR = Math.hypot(startX - centerX, startY - centerY);
-              let hasValidAngle = initR >= 8;
-              let prevAngle = hasValidAngle
-                ? Math.atan2(startY - centerY, startX - centerX)
-                : 0;
-              let lastDetent = Math.round(currentVal * 100);
-
-              const handleMove = (ev: PointerEvent) => {
-                const dy = prevY - ev.clientY;
-                prevY = ev.clientY;
-
-                const rx = ev.clientX - centerX;
-                const ry = ev.clientY - centerY;
-                const r = Math.hypot(rx, ry);
-
-                let deltaValve = 0;
-                if (r >= 10) {
-                  const curAngle = Math.atan2(ry, rx);
-                  if (!hasValidAngle) {
-                    hasValidAngle = true;
-                    prevAngle = curAngle;
-                    return;
-                  }
-                  let dTheta = curAngle - prevAngle;
-                  while (dTheta > Math.PI) dTheta -= Math.PI * 2;
-                  while (dTheta < -Math.PI) dTheta += Math.PI * 2;
-                  prevAngle = curAngle;
-                  deltaValve = dTheta / (Math.PI * 1.65) + dy * 0.0022;
-                } else {
-                  deltaValve = dy * 0.0045;
-                }
-
-                const nextValve = THREE.MathUtils.clamp(
-                  Math.round((currentVal + deltaValve) * 100) / 100,
-                  0,
-                  1,
-                );
-                if (Math.abs(nextValve - currentVal) >= 0.002) {
-                  currentVal = nextValve;
-                  if (rheostatWheelRef.current) {
-                    rheostatWheelRef.current.rotation.z =
-                      -currentVal * Math.PI * 2.2;
-                  }
-                  const nextDetent = Math.round(currentVal * 100);
-                  if (nextDetent !== lastDetent) {
-                    lastDetent = nextDetent;
-                    playRheostatDetentClick(nextDetent);
-                  }
-                  useGameStore.getState().setBatteryOutputValve(currentVal);
-                }
-              };
-              const handleUp = () => {
-                r3fTarget?.releasePointerCapture?.(e.pointerId);
-                window.removeEventListener("pointermove", handleMove);
-                window.removeEventListener("pointerup", handleUp);
-                window.removeEventListener("pointercancel", handleUp);
-                playSwitchClank(false);
-              };
-              window.addEventListener("pointermove", handleMove);
-              window.addEventListener("pointerup", handleUp);
-              window.addEventListener("pointercancel", handleUp);
-            }}
           >
-            {/* Generous Invisible Hit-Box covering both Cast-Steel Handwheel and Vertical LED Bargraph */}
-            <mesh position={[0.02, -0.01, 0.05]}>
-              <boxGeometry args={[0.42, 0.34, 0.14]} />
+            {/* Lightweight 12-triangle hit proxy replacing raycasting on 30+ high-poly GLB meshes */}
+            <mesh position={[0, 0.015, 0.04]}>
+              <boxGeometry args={[1.76, 0.42, 0.09]} />
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
-            <mesh position={[0, 0.215, 0.006]} castShadow>
-              <boxGeometry args={[0.485, 0.108, 0.01]} />
-              <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
-            </mesh>
-            <mesh position={[0, 0.215, 0.012]}>
-              <planeGeometry args={[0.47, 0.098]} />
-              <meshStandardMaterial
-                map={rheostatPlateTex}
-                emissive="#ffffff"
-                emissiveMap={rheostatPlateTex}
-                emissiveIntensity={0.35}
-                roughness={0.55}
-              />
-            </mesh>
-            <SovietBacklitIndicatorBlock3D
-              position={[0, 0.148, 0.022]}
-              label="DISPATCH"
-              getAlertState={(s) => {
-                if (s.tutorialPhase !== "COMPLETED") {
-                  return { level: "normal", acknowledged: false };
-                }
-                const diff = Math.abs(s.totalElectricalMW - s.energyDemandMW);
-                return {
-                  level: diff > 90 ? "critical" : diff > 30 ? "warn" : "normal",
-                  acknowledged: false,
-                };
-              }}
+            <primitive
+              object={batteryGridBundle.root}
+              position={[0, 0.015, 0.032]}
+              scale={[1.28, 0.9, 1.0]}
             />
-
-            {/* Left Sub-Assembly: Bolted Cast-Iron Valve Manifold & 6-Spoke Cast-Steel Handwheel */}
-            <group position={[-0.058, -0.012, 0]}>
-              <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
-                <cylinderGeometry args={[0.128, 0.142, 0.044, 18]} />
-                <meshStandardMaterial
-                  color="#141816"
-                  roughness={0.44}
-                  metalness={0.68}
-                  bumpMap={ironTex.bumpMap}
-                  bumpScale={0.008}
-                />
-              </mesh>
-              <mesh position={[0, 0, 0.023]}>
-                <circleGeometry args={[0.116, 24]} />
-                <meshStandardMaterial
-                  map={rheostatScaleTex}
-                  metalness={0.62}
-                  roughness={0.38}
-                  emissive="#ffffff"
-                  emissiveMap={rheostatScaleTex}
-                  emissiveIntensity={0.08}
-                />
-              </mesh>
-              <mesh position={[0, 0, 0.025]} castShadow>
-                <torusGeometry args={[0.118, 0.008, 10, 24]} />
-                <meshStandardMaterial
-                  ref={rheostatRingMatRef}
-                  color="#b8a46b"
-                  metalness={0.86}
-                  roughness={0.26}
-                  bumpMap={brassTex.bumpMap}
-                  bumpScale={0.005}
-                />
-              </mesh>
-              {/* Central Valve Stem */}
-              <mesh position={[0, 0, 0.042]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-                <cylinderGeometry args={[0.022, 0.026, 0.052, 12]} />
-                <meshStandardMaterial
-                  color="#8c9690"
-                  metalness={0.82}
-                  roughness={0.28}
-                />
-              </mesh>
-
-              {/* Rotating 6-Spoke Soviet Cast-Steel Handwheel */}
-              <group ref={rheostatWheelRef} position={[0, 0, 0.068]}>
-                {/* Heavy Cast-Steel Outer Rim */}
-                <mesh castShadow>
-                  <torusGeometry args={[0.112, 0.0145, 12, 28]} />
-                  <meshStandardMaterial
-                    color="#3a4540"
-                    metalness={0.78}
-                    roughness={0.32}
-                    bumpMap={ironTex.bumpMap}
-                    bumpScale={0.006}
-                  />
-                </mesh>
-                {/* 6 Radial Cast-Steel Spokes */}
-                {[0, 1, 2, 3, 4, 5].map((spIdx) => (
-                  <mesh
-                    key={`spoke-${spIdx}`}
-                    rotation={[0, 0, (spIdx * Math.PI) / 3]}
-                    castShadow
-                  >
-                    <cylinderGeometry args={[0.0065, 0.0065, 0.215, 8]} />
-                    <meshStandardMaterial
-                      color="#98a49e"
-                      metalness={0.85}
-                      roughness={0.26}
-                    />
-                  </mesh>
-                ))}
-                {/* Central Brushed-Brass Hex Locknut Hub */}
-                <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-                  <cylinderGeometry args={[0.028, 0.032, 0.024, 6]} />
-                  <meshStandardMaterial
-                    color="#b8a46b"
-                    metalness={0.88}
-                    roughness={0.22}
-                  />
-                </mesh>
-                {/* Tactile Bakelite Crank Handle Peg + Illuminated Index Stripe on Rim */}
-                <mesh
-                  position={[0, 0.112, 0.024]}
-                  rotation={[Math.PI / 2, 0, 0]}
-                  castShadow
-                >
-                  <cylinderGeometry args={[0.014, 0.012, 0.042, 12]} />
-                  <meshStandardMaterial
-                    ref={rheostatPointerMatRef}
-                    color="#efe8d2"
-                    emissive="#ffb000"
-                    emissiveIntensity={0.45}
-                    roughness={0.3}
-                  />
-                </mesh>
-              </group>
-            </group>
-
-            {/* Right Sub-Assembly: Illuminated 10-Segment Vertical 3D LED Bargraph (0-1000 MW) + Digital MW Badge */}
-            <group position={[0.145, -0.012, 0.016]}>
-              <mesh castShadow receiveShadow>
-                <boxGeometry args={[0.102, 0.278, 0.024]} />
-                <meshStandardMaterial
-                  color="#101613"
-                  roughness={0.46}
-                  metalness={0.68}
-                  bumpMap={ironTex.bumpMap}
-                  bumpScale={0.005}
-                />
-              </mesh>
-              {/* Digital MW Readout Window at Top of Bargraph */}
-              <mesh position={[0, 0.106, 0.014]}>
-                <planeGeometry args={[0.088, 0.042]} />
-                <meshStandardMaterial
-                  ref={throttleReadoutMatRef}
-                  map={throttleReadoutTex}
-                  emissive="#ffffff"
-                  emissiveMap={throttleReadoutTex}
-                  emissiveIntensity={0.65}
-                  roughness={0.4}
-                />
-              </mesh>
-              {/* 10 Stacked Physical 3D LED Segments (Bottom 10% -> Top 100%) */}
-              {Array.from({ length: 10 }).map((_, segIdx) => {
-                const segY = -0.112 + segIdx * 0.021;
-                return (
-                  <mesh key={`tled-${segIdx}`} position={[0, segY, 0.014]}>
-                    <boxGeometry args={[0.068, 0.0145, 0.008]} />
-                    <meshStandardMaterial
-                      ref={(el) => {
-                        throttleLedMatRefs.current[segIdx] = el;
-                      }}
-                      color="#121a16"
-                      emissive="#000000"
-                      emissiveIntensity={0.04}
-                      roughness={0.28}
-                    />
-                  </mesh>
-                );
-              })}
-            </group>
           </group>
-
-          {/* 2 & 3. Non-Interactive 3D Soviet Heavy Accumulator Cell Banks (Left & Right, Compact High-Mount) */}
-          {[
-            { x: -0.63, tex: bankAPlateTex, offset: 0 },
-            { x: 0.63, tex: bankBPlateTex, offset: 5 },
-          ].map((bank) => (
-            <group
-              key={`acc-bank-${bank.offset}`}
-              position={[bank.x, -0.02, 0.015]}
-              scale={[0.95, 0.88, 0.95]}
-            >
-              {/* Brass Bank Header Plaque */}
-              <mesh position={[0, 0.228, 0.006]} castShadow>
-                <boxGeometry args={[0.44, 0.106, 0.01]} />
-                <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
-              </mesh>
-              <mesh position={[0, 0.228, 0.012]}>
-                <planeGeometry args={[0.425, 0.096]} />
-                <meshStandardMaterial
-                  map={bank.tex}
-                  emissive="#ffffff"
-                  emissiveMap={bank.tex}
-                  emissiveIntensity={0.35}
-                  roughness={0.55}
-                />
-              </mesh>
-              {/* Heavy Steel Cell Housing & Bakelite Top Insulator */}
-              <mesh castShadow receiveShadow>
-                <boxGeometry args={[0.38, 0.29, 0.056]} />
-                <meshStandardMaterial
-                  color="#18211b"
-                  roughness={0.46}
-                  metalness={0.62}
-                  bumpMap={ironTex.bumpMap}
-                  bumpScale={0.008}
-                />
-              </mesh>
-              <mesh position={[0, 0.128, 0.032]} castShadow>
-                <boxGeometry args={[0.34, 0.038, 0.024]} />
-                <meshStandardMaterial color="#141414" roughness={0.32} metalness={0.18} />
-              </mesh>
-              {/* Twin Copper/Brass Terminal Posts + Horizontal Bridge Busbar */}
-              {[-0.105, 0.105].map((tx, tid) => (
-                <group key={`term-${tid}`} position={[tx, 0.128, 0.05]}>
-                  <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-                    <cylinderGeometry args={[0.022, 0.026, 0.036, 12]} />
-                    <meshStandardMaterial
-                      color="#b8a46b"
-                      metalness={0.88}
-                      roughness={0.24}
-                      bumpMap={brassTex.bumpMap}
-                      bumpScale={0.004}
-                    />
-                  </mesh>
-                  <mesh position={[0, -0.145, -0.012]} castShadow>
-                    <cylinderGeometry args={[0.044, 0.048, 0.22, 14]} />
-                    <meshStandardMaterial
-                      color="#23332b"
-                      roughness={0.44}
-                      metalness={0.55}
-                    />
-                  </mesh>
-                </group>
-              ))}
-              <mesh position={[0, 0.078, 0.046]} castShadow>
-                <boxGeometry args={[0.22, 0.018, 0.012]} />
-                <meshStandardMaterial color="#c88d44" metalness={0.85} roughness={0.26} />
-              </mesh>
-              {/* Central Armored Window Housing with 5 Illuminated Charge Bars */}
-              <mesh position={[0, -0.035, 0.034]} castShadow>
-                <boxGeometry args={[0.105, 0.175, 0.018]} />
-                <meshStandardMaterial color="#0c120f" roughness={0.45} metalness={0.65} />
-              </mesh>
-              {Array.from({ length: 5 }).map((_, bIdx) => {
-                const barY = -0.098 + bIdx * 0.031;
-                return (
-                  <mesh key={`batbar-${bIdx}`} position={[0, barY, 0.046]}>
-                    <boxGeometry args={[0.078, 0.02, 0.008]} />
-                    <meshStandardMaterial
-                      ref={(el) => {
-                        batteryCellBarMatRefs.current[bank.offset + bIdx] = el;
-                      }}
-                      color="#121a16"
-                      emissive="#000000"
-                      emissiveIntensity={0.05}
-                      roughness={0.28}
-                    />
-                  </mesh>
-                );
-              })}
-            </group>
-          ))}
         </group>
 
         {/* Non-Interactive Bolted Lower Access Service Apron (Cleanly occupies lower desk-shadow skirt) */}
         <group position={[0, 0.62, 0.34]} rotation={[-0.406, 0, 0]}>
           {[-0.46, 0.46].map((ax, aIdx) => (
             <group key={`apron-bay-${aIdx}`} position={[ax, 0, 0.008]}>
-              <mesh castShadow receiveShadow>
+              <mesh raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.82, 0.30, 0.018]} />
                 <meshStandardMaterial
                   color="#1b2320"
@@ -2618,7 +4291,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 <mesh
                   key={`louver-${lIdx}`}
                   position={[0, ly, 0.01]}
-                  castShadow
+                  raycast={NOOP_RAYCAST}
                 >
                   <boxGeometry args={[0.64, 0.016, 0.008]} />
                   <meshStandardMaterial
@@ -2640,7 +4313,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                   key={`apron-bolt-${bIdx}`}
                   position={[bx, by, 0.012]}
                   rotation={[Math.PI / 2, 0, 0]}
-                  castShadow
+                  raycast={NOOP_RAYCAST}
                 >
                   <cylinderGeometry args={[0.009, 0.009, 0.008, 6]} />
                   <meshStandardMaterial
@@ -2653,60 +4326,125 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             </group>
           ))}
         </group>
+        </group>
       </group>
 
-      {/* 4. BEVELED ANGLE-IRON SEAMS FOR ENLARGED K.O.M.R.A.D.-84 MAINFRAME (+20% ADDITIONAL SCALE) */}
-      <group position={[0, 0.14, 2.18]}>
-        <group position={[0, 0, -1.62]}>
-          <primitive object={terminalHousingModel} />
-          {/* Heavy Welded Corner L-Angle Trim & Recessed Bezel Bolts on Enlarged K.O.M.R.A.D.-84 Mainframe */}
-          <mesh position={[-1.39, 1.32, 0.04]} castShadow receiveShadow>
-            <boxGeometry args={[0.054, 2.62, 0.054]} />
-            <meshStandardMaterial
-              color="#18211b"
-              metalness={0.68}
-              roughness={0.44}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-            />
-          </mesh>
-          <mesh position={[1.39, 1.32, 0.04]} castShadow receiveShadow>
-            <boxGeometry args={[0.054, 2.62, 0.054]} />
-            <meshStandardMaterial
-              color="#18211b"
-              metalness={0.68}
-              roughness={0.44}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-            />
-          </mesh>
-          {[-1.1, -0.55, 0, 0.55, 1.1].map((bx, idx) => (
-            <mesh
-              key={idx}
-              position={[bx, 2.53, 0.145]}
-              rotation={[Math.PI / 2, 0, 0]}
-              castShadow
-            >
-              <cylinderGeometry args={[0.016, 0.016, 0.02, 6]} />
+      {/* 4. MONUMENTAL 3D BOLTED OLIVE-STEEL MASTER PROJECTION FRAME FOR K.O.M.R.A.D.-84 (~3.84m × 2.30m) */}
+      <group
+        position={TERMINAL_ROOT_POS}
+        rotation={[TERMINAL_TILT_X, 0, 0]}
+        scale={TERMINAL_SCALE}
+      >
+        <primitive object={terminalHousingModel} />
+        {/* Heavy Bolted Olive-Steel Side Ribs Framing K.O.M.R.A.D.-84 Glass */}
+        {([-1.275, 1.275] as const).map((rx, rIdx) => (
+          <group key={`komrad-rib-${rIdx}`} position={[rx, 1.69, 0.08]}>
+            <mesh raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.15, 1.48, 0.26]} />
               <meshStandardMaterial
-                color="#b8a46b"
-                metalness={0.85}
-                roughness={0.28}
-                bumpMap={brassTex.bumpMap}
-                bumpScale={0.005}
+                color="#26362d"
+                metalness={0.62}
+                roughness={0.46}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.008}
               />
             </mesh>
-          ))}
-          {/* 5. LARGE PHYSICAL DIGITAL SHIFT CLOCK (`ЧАСЫ СМЕНЫ // ЭЛЕКТРОНИКА-7`) BOLTED ON TOP OF K.O.M.R.A.D.-84 */}
-          <SovietDigitalShiftClock3D />
-        </group>
+            {/* Side Cooling Louver Grilles */}
+            {[-0.18, -0.06, 0.06, 0.18, 0.3].map((ly, lIdx) => (
+              <mesh key={`rib-louver-${lIdx}`} position={[0, ly, 0.134]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.1, 0.024, 0.014]} />
+                <meshStandardMaterial color="#0e1411" metalness={0.55} roughness={0.58} />
+              </mesh>
+            ))}
+            {/* Brass Hex Bolts Along Vertical Rib */}
+            {[-0.66, -0.34, 0.44, 0.68].map((by, bIdx) => (
+              <mesh
+                key={`rib-bolt-${bIdx}`}
+                position={[0, by, 0.136]}
+                rotation={[Math.PI / 2, 0, 0]}
+                raycast={NOOP_RAYCAST}
+              >
+                <cylinderGeometry args={[0.015, 0.015, 0.016, 6]} />
+                <meshStandardMaterial
+                  color="#b8a46b"
+                  metalness={0.86}
+                  roughness={0.26}
+                  bumpMap={brassTex.bumpMap}
+                  bumpScale={0.005}
+                />
+              </mesh>
+            ))}
+            {/* Lower Corner Hazard Striping Cheek */}
+            <mesh position={[0, -0.52, 0.135]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.125, 0.26]} />
+              <meshStandardMaterial map={crtHazardTex} roughness={0.5} />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Top Overhanging Olive-Steel Glare Hood (`y = 2.44m` local) */}
+        <mesh position={[0, 2.44, 0.16]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[2.7, 0.08, 0.32]} />
+          <meshStandardMaterial
+            color="#23332a"
+            metalness={0.62}
+            roughness={0.46}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+          />
+        </mesh>
+        {[-1.1, -0.55, 0, 0.55, 1.1].map((bx, idx) => (
+          <mesh
+            key={`hood-bolt-${idx}`}
+            position={[bx, 2.44, 0.325]}
+            rotation={[Math.PI / 2, 0, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <cylinderGeometry args={[0.016, 0.016, 0.02, 6]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.85}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.005}
+            />
+          </mesh>
+        ))}
+
+        {/* Bottom Heavy Bevel Apron With Cooling Louvers & Hazard Striping */}
+        <mesh position={[0, 0.99, 0.12]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[2.7, 0.14, 0.28]} />
+          <meshStandardMaterial
+            color="#26362d"
+            metalness={0.62}
+            roughness={0.46}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.008}
+          />
+        </mesh>
+        {([-1.06, 1.06] as const).map((hx, hIdx) => (
+          <mesh key={`crt-bot-haz-${hIdx}`} position={[hx, 0.99, 0.264]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[0.52, 0.095]} />
+            <meshStandardMaterial map={crtHazardTex} roughness={0.5} />
+          </mesh>
+        ))}
+        {[-0.45, 0, 0.45].map((gx, gIdx) => (
+          <group key={`crt-bot-louver-${gIdx}`} position={[gx, 0.99, 0.264]}>
+            {[-0.032, 0, 0.032].map((ly, lIdx) => (
+              <mesh key={lIdx} position={[0, ly, 0]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.38, 0.016, 0.012]} />
+                <meshStandardMaterial color="#0e1411" metalness={0.55} roughness={0.58} />
+              </mesh>
+            ))}
+          </group>
+        ))}
       </group>
     </>
   );
 });
 
 /**
- * Suspended Bunker Dust Motes (120 slow-drifting micro-pixel dust particles floating
+ * Suspended Bunker Dust Motes (48 subtle drifting micro-pixel dust motes floating
  * lazily inside the overhead spotlight cone above the Inspector's Desk)
  */
 const BunkerDustMotes3D: React.FC = React.memo(() => {
@@ -2714,7 +4452,7 @@ const BunkerDustMotes3D: React.FC = React.memo(() => {
   const lastUpdateRef = useRef(0);
 
   const { positions, seeds } = useMemo(() => {
-    const count = 120;
+    const count = 48;
     const posArr = new Float32Array(count * 3);
     const seedArr = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -2731,9 +4469,9 @@ const BunkerDustMotes3D: React.FC = React.memo(() => {
       const angle = u1 * Math.PI * 2;
       const r = Math.sqrt(u3) * maxRadius;
 
-      posArr[i * 3] = Math.cos(angle) * r;
-      posArr[i * 3 + 1] = 0.85 + heightRatio * 1.45;
-      posArr[i * 3 + 2] = 1.48 + Math.sin(angle) * r * 0.72;
+      posArr[i * 3] = Math.cos(angle) * r * 0.72;
+      posArr[i * 3 + 1] = 0.78 + heightRatio * 1.42;
+      posArr[i * 3 + 2] = 1.8 + Math.sin(angle) * r * 0.55;
 
       seedArr[i * 3] = u1 * Math.PI * 2;
       seedArr[i * 3 + 1] = 0.35 + u2 * 0.65;
@@ -2758,7 +4496,7 @@ const BunkerDustMotes3D: React.FC = React.memo(() => {
       "position",
     ) as THREE.BufferAttribute;
     const arr = posAttr.array as Float32Array;
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 48; i++) {
       const phase = seeds[i * 3];
       const speed = seeds[i * 3 + 1];
       const phaseZ = seeds[i * 3 + 2];
@@ -2774,12 +4512,12 @@ const BunkerDustMotes3D: React.FC = React.memo(() => {
   });
 
   return (
-    <points ref={pointsRef} geometry={geometry}>
+    <points ref={pointsRef} geometry={geometry} raycast={NOOP_RAYCAST}>
       <pointsMaterial
-        color="#ffe3b8"
-        size={0.016}
+        color="#d8ba8c"
+        size={0.01}
         transparent
-        opacity={0.48}
+        opacity={0.17}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />
@@ -2788,15 +4526,10 @@ const BunkerDustMotes3D: React.FC = React.memo(() => {
 });
 
 const DynamicBunkerLighting: React.FC = React.memo(() => {
+  const hemiLightRef = useRef<THREE.HemisphereLight>(null);
+  const bunkerMainLightRef = useRef<THREE.PointLight>(null);
   const deskSpotRef = useRef<THREE.SpotLight>(null);
   const deskSpotTargetRef = useRef<THREE.Object3D>(null);
-  const deskBulbMeshRef = useRef<THREE.Mesh>(null);
-  const reactorSpotRef = useRef<THREE.PointLight>(null);
-  const az5GlowRef = useRef<THREE.PointLight>(null);
-  const crtLightRef = useRef<THREE.PointLight>(null);
-  const rearPoolLightRef = useRef<THREE.PointLight>(null);
-  const rightPoolLightRef = useRef<THREE.PointLight>(null);
-  const klaxonLightRef = useRef<THREE.PointLight>(null);
   const klaxonSpinnerRef = useRef<THREE.Group>(null);
   const klaxonLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
@@ -2815,17 +4548,18 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       powerAllocation,
       maxSafePower,
       isBlackout,
-      ciaIntrusionActive,
-      komradOverrideLocked,
     } = state;
     const totalMW =
       powerAllocation.cooling +
       powerAllocation.defense +
       powerAllocation.facility;
-    const totalAllocatedMW = Object.values(state.sectorMW).reduce(
-      (a, b) => a + b,
-      0,
-    );
+    const totalAllocatedMW =
+      state.sectorMW.pripyat +
+      state.sectorMW.kolkhoz +
+      state.sectorMW.duga +
+      state.sectorMW.kgb +
+      state.sectorMW.vodka +
+      state.sectorMW.steel;
     const isAlarmActive = coreTemp >= 750 || totalMW > maxSafePower;
 
     // Continuous 50Hz / 3000 RPM Turbine-Generator Pitch Hum
@@ -2846,6 +4580,28 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
             (0.32 + 0.14 * Math.sin(t * 62.8) * Math.cos(t * 94.2))
         : 1.0;
 
+    if (hemiLightRef.current) {
+      hemiLightRef.current.intensity = isBlackout ? 0.18 : 0.95 * humFlicker;
+    }
+
+    if (bunkerMainLightRef.current) {
+      if (isBlackout) {
+        bunkerMainLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_BLACKOUT);
+        bunkerMainLightRef.current.intensity = 0.6;
+      } else if (isAlarmActive) {
+        const wave = (Math.sin(t * 9.0) + 1) * 0.5;
+        bunkerMainLightRef.current.color.lerpColors(
+          SCENE_COLOR_MAIN_LIGHT_NORM,
+          SCENE_COLOR_RED,
+          0.35 + 0.55 * wave,
+        );
+        bunkerMainLightRef.current.intensity = (3.6 + wave * 2.2) * humFlicker;
+      } else {
+        bunkerMainLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_NORM);
+        bunkerMainLightRef.current.intensity = 4.2 * humFlicker;
+      }
+    }
+
     if (deskSpotRef.current) {
       if (isBlackout || powerAllocation.facility <= 0) {
         deskSpotRef.current.intensity = 0;
@@ -2862,48 +4618,6 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       }
     }
 
-    if (reactorSpotRef.current) {
-      reactorSpotRef.current.intensity = isBlackout
-        ? 0.35
-        : 2.1 * humFlicker;
-    }
-
-    if (rearPoolLightRef.current) {
-      rearPoolLightRef.current.intensity = isBlackout
-        ? 0.25
-        : 2.9 * humFlicker;
-    }
-
-    if (rightPoolLightRef.current) {
-      rightPoolLightRef.current.intensity = isBlackout
-        ? 0.25
-        : 2.6 * humFlicker;
-    }
-
-    if (az5GlowRef.current) {
-      az5GlowRef.current.intensity = isBlackout
-        ? 0.3
-        : isAlarmActive
-          ? 1.45 + Math.sin(t * 12.0) * 0.35
-          : 0.85 * humFlicker;
-    }
-
-    if (deskBulbMeshRef.current) {
-      const mat = deskBulbMeshRef.current
-        .material as THREE.MeshStandardMaterial;
-      const lampOn = !isBlackout && powerAllocation.facility > 0;
-      mat.emissiveIntensity = lampOn
-        ? Math.min(2.6, 0.7 + (powerAllocation.facility / 40) * 1.7) * humFlicker
-        : 0.02;
-    }
-
-    if (crtLightRef.current) {
-      crtLightRef.current.intensity = isBlackout ? 0.08 : 0.22;
-      crtLightRef.current.color.set(
-        komradOverrideLocked || ciaIntrusionActive ? "#ff2a2a" : "#38ff62",
-      );
-    }
-
     if (klaxonSpinnerRef.current && isAlarmActive) {
       klaxonSpinnerRef.current.rotation.y = t * 5.5;
     }
@@ -2912,132 +4626,50 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
         ? 1.4 + Math.sin(t * 9.0) * 0.8
         : 0.05;
     }
-    if (klaxonLightRef.current) {
-      klaxonLightRef.current.visible = isAlarmActive;
-      if (isAlarmActive) {
-        const wave = (Math.sin(t * 9.0) + 1) * 0.5;
-        klaxonLightRef.current.intensity = 1.6 + wave * 7.2;
-      } else {
-        klaxonLightRef.current.intensity = 0;
-      }
-    }
   });
 
   return (
     <>
-      {/* 1. Crushed Flat Ambient Light & Subtle Hemisphere Fill for Deep Chiaroscuro Bunker Shadows */}
-      <ambientLight intensity={0.06} color="#0a120e" />
-      <hemisphereLight args={["#1a2822", "#050706", 0.18]} />
+      {/* Consolidated 3 Un-Shadowed Scene Lights (castShadow={false}, never toggled invisible) */}
+      {/* 1. Institutional Warm-Ceiling / Terracotta-Floor Hemisphere Fill */}
+      <hemisphereLight
+        ref={hemiLightRef}
+        args={["#fff1d6", "#4a3c32", 0.95]}
+      />
 
-      {/* 2. Overhead Bunker Pendulum Lamp (Shadow-Casting SpotLight with Smooth Penumbra) */}
-      <group position={[0, -0.164, 1.48]}>
-        <object3D ref={deskSpotTargetRef} position={[0, 0.92, 0.04]} />
+      {/* 2. Central Bunker Overhead Fill & Redline Klaxon Wash PointLight */}
+      <pointLight
+        ref={bunkerMainLightRef}
+        castShadow={false}
+        position={[0, 3.35, -0.75]}
+        color="#ffe2ba"
+        intensity={4.2}
+        distance={18.0}
+        decay={0.85}
+      />
+
+      {/* 3. Overhead SpotLight centered over Shift Supervisor Desk at `z = +1.80` */}
+      <group position={[0, 0, 1.8]}>
+        <object3D ref={deskSpotTargetRef} position={[0, 0.7, 0]} />
         <spotLight
           ref={deskSpotRef}
-          castShadow
-          position={[0, 2.5, 0.2]}
-          angle={0.68}
+          castShadow={false}
+          position={[0, 2.7, 0.08]}
+          angle={0.76}
           penumbra={0.85}
-          intensity={3.2}
-          distance={7}
-          decay={1.15}
+          intensity={3.6}
+          distance={9.0}
+          decay={1.1}
           color="#ffe3b8"
-          shadow-bias={-0.0005}
-          shadow-mapSize={[1024, 1024]}
         />
-
-        {/* Heavy Industrial Enamel & Brass Pendulum Lamp Fixture */}
-        <group position={[0, 2.52, 0.2]}>
-          {/* Steel suspension rod to bunker ceiling */}
-          <mesh position={[0, 0.35, 0]}>
-            <cylinderGeometry args={[0.014, 0.014, 0.65, 8]} />
-            <meshStandardMaterial
-              color="#18211b"
-              metalness={0.75}
-              roughness={0.4}
-            />
-          </mesh>
-          <mesh position={[0, 0.08, 0]}>
-            <cylinderGeometry args={[0.048, 0.24, 0.18, 16]} />
-            <meshStandardMaterial
-              color="#23312b"
-              roughness={0.42}
-              metalness={0.68}
-            />
-          </mesh>
-          <mesh position={[0, -0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.24, 0.01, 8, 20]} />
-            <meshStandardMaterial
-              color="#b8a46b"
-              metalness={0.85}
-              roughness={0.28}
-            />
-          </mesh>
-          <mesh ref={deskBulbMeshRef} position={[0, -0.01, 0]}>
-            <sphereGeometry args={[0.055, 10, 10]} />
-            <meshStandardMaterial
-              color="#ffcf75"
-              emissive="#ffaa33"
-              emissiveIntensity={1.4}
-            />
-          </mesh>
-        </group>
       </group>
 
       {/* Suspended Bunker Dust Motes floating lazily inside the overhead spotlight cone */}
       <BunkerDustMotes3D />
 
-      {/* 3. CRT & Gauge Diegetic Glow:
-          Softened & repositioned forward/lower so it gently illuminates 3D keycaps without creating a specular glare spot on the CRT glass */}
-      <pointLight
-        ref={crtLightRef}
-        position={[0, 1.12, 1.18]}
-        color="#38ff62"
-        intensity={0.22}
-        distance={2.6}
-        decay={1.8}
-      />
-
-      {/* Warm Amber/Red Diegetic Glow near the АЗ-5 Emergency Button & Left Reactor Gauges */}
-      <pointLight
-        ref={az5GlowRef}
-        position={[-1.68, 1.05, 1.85]}
-        color="#ff3b1f"
-        intensity={0.85}
-        distance={1.6}
-        decay={1.4}
-      />
-      {/* Consolidated Left + Left-Rear Control Wing Pool Light */}
-      <pointLight
-        ref={reactorSpotRef}
-        position={[-1.12, 2.22, 2.65]}
-        color="#ffba5c"
-        intensity={2.9}
-        distance={7.5}
-        decay={1.15}
-      />
-
-      {/* Consolidated Rear-Left (`UNIT B`) + Right Wing Pool Light */}
-      <pointLight
-        ref={rearPoolLightRef}
-        position={[-1.12, 2.22, 5.25]}
-        color="#ffba5c"
-        intensity={2.9}
-        distance={7.5}
-        decay={1.15}
-      />
-      <pointLight
-        ref={rightPoolLightRef}
-        position={[1.15, 2.15, 2.15]}
-        color="#ffba5c"
-        intensity={2.6}
-        distance={6.5}
-        decay={1.25}
-      />
-
-      {/* Ceiling Rotating Redline / Meltdown Klaxon Beacon (#ff2a2a — Dark when nominal, blazes red during alarm) */}
-      <group position={[0, 2.86, -0.6]}>
-        <mesh position={[0, 0.06, 0]}>
+      {/* Ceiling Rotating Redline / Meltdown Klaxon Beacon centered under Hall Coffer Crown (`y = 3.92m`) */}
+      <group position={[0, 3.92, -0.25]}>
+        <mesh position={[0, 0.06, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.16, 0.2, 0.1, 12]} />
           <meshStandardMaterial
             color="#141414"
@@ -3046,7 +4678,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
           />
         </mesh>
         <group ref={klaxonSpinnerRef}>
-          <mesh position={[0, -0.04, 0]}>
+          <mesh position={[0, -0.04, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.11, 0.13, 0.16, 10]} />
             <meshStandardMaterial
               ref={klaxonLampMatRef}
@@ -3056,15 +4688,6 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
               roughness={0.35}
             />
           </mesh>
-          <pointLight
-            ref={klaxonLightRef}
-            visible={false}
-            position={[0.25, -0.08, 0]}
-            color="#ff2a2a"
-            intensity={0}
-            distance={9.5}
-            decay={1.2}
-          />
         </group>
       </group>
     </>
@@ -3086,61 +4709,88 @@ const KOMRAD_DARK_HUMOR_BULLETINS: readonly string[] = [
   "BUBBLER POOL NOTICE: PULL UNIT B DRAIN LEVER WHEN BUBBLER EXCEEDS 70% TO RECYCLE CONDENSATE INTO THE RESERVOIR!",
 ];
 
+function paintDiagOverlayStatic(
+  canvas: HTMLCanvasElement,
+  drawX: number,
+  drawY: number,
+  drawW: number,
+  drawH: number,
+): void {
+  const w = canvas.width;
+  const h = canvas.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Solid opaque letterbox/pillarbox bars outside video rectangle
+  ctx.fillStyle = "#020804";
+  if (drawY > 0) ctx.fillRect(0, 0, w, drawY);
+  if (drawY + drawH < h) ctx.fillRect(0, drawY + drawH, w, h - (drawY + drawH));
+  if (drawX > 0) ctx.fillRect(0, drawY, drawX, drawH);
+  if (drawX + drawW < w) ctx.fillRect(drawX + drawW, drawY, w - (drawX + drawW), drawH);
+
+  // Subtle CRT scanlines across the 1600x1000 display
+  ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+  for (let y = 0; y < h; y += 6) {
+    ctx.fillRect(0, y, w, 2);
+  }
+
+  // Outer phosphor frame
+  ctx.strokeStyle = "rgba(57, 255, 20, 0.55)";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(6, 6, w - 12, h - 12);
+
+  // Minimalist emerald phosphor header bar + divider + static channel title
+  ctx.fillStyle = "rgba(2, 10, 4, 0.88)";
+  ctx.fillRect(8, 8, w - 16, 40);
+  ctx.strokeStyle = "#1e6b34";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(8, 48);
+  ctx.lineTo(w - 8, 48);
+  ctx.stroke();
+
+  ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
+  ctx.textAlign = "left";
+  drawHeavyCrtText(
+    ctx,
+    "КАНАЛ АЗ-5 // СЛУЖЕБНЫЙ ЭФИР",
+    24,
+    36,
+    "#39ff14",
+    0.85,
+    900,
+  );
+}
+
 const Komrad84SplitScreenCrt3D: React.FC<{
   bulletinIdx: number;
   onCycleBulletin: () => void;
 }> = React.memo(({ bulletinIdx, onCycleBulletin }) => {
   const crtMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const diagOverlayMeshRef = useRef<THREE.Mesh>(null);
   const lastCrtDrawRef = useRef(0);
-  const lastDiagVideoTimeRef = useRef(-1);
-  const lastDiagFrameSeqRef = useRef(-1);
   const lastDiagGlitchTickRef = useRef(-1);
+  const diagVideoTexRef = useRef<THREE.VideoTexture | null>(null);
+  const crtTextureRef = useRef<THREE.CanvasTexture | null>(null);
+  const crtDiagOverlayTexRef = useRef<THREE.CanvasTexture | null>(null);
+  const lastDiagDimsRef = useRef("");
+  const lastDiagSecRef = useRef(-1);
 
-  const crtDiagOverlayCanvas = useMemo(() => {
+  const crtDiagOverlayTex = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 1600;
     canvas.height = 1000;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      // Solid opaque top & bottom letterbox bars (ensure previous MM:SS clears every frame)
-      ctx.fillStyle = "#020804";
-      ctx.fillRect(0, 0, 1600, 50);
-      ctx.fillRect(0, 950, 1600, 50);
-
-      // Subtle CRT scanlines across the 1600x1000 display
-      ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
-      for (let y = 0; y < 1000; y += 6) {
-        ctx.fillRect(0, y, 1600, 2);
-      }
-
-      // Outer phosphor frame
-      ctx.strokeStyle = "rgba(57, 255, 20, 0.55)";
-      ctx.lineWidth = 4;
-      ctx.strokeRect(6, 6, 1588, 988);
-
-      // Minimalist emerald phosphor header bar + divider + static channel title
-      ctx.fillStyle = "rgba(2, 10, 4, 0.88)";
-      ctx.fillRect(8, 8, 1584, 40);
-      ctx.strokeStyle = "#1e6b34";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(8, 48);
-      ctx.lineTo(1592, 48);
-      ctx.stroke();
-
-      ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
-      ctx.textAlign = "left";
-      drawHeavyCrtText(
-        ctx,
-        "КАНАЛ АЗ-5 // СЛУЖЕБНЫЙ ЭФИР",
-        24,
-        36,
-        "#39ff14",
-        0.85,
-        900,
-      );
-    }
-    return canvas;
+    paintDiagOverlayStatic(canvas, 0, 50, 1600, 900);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.anisotropy = 1;
+    tex.generateMipmaps = false;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    return tex;
   }, []);
 
   const crtTexture = useMemo(() => {
@@ -3151,59 +4801,78 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     const tex = new THREE.CanvasTexture(canvas);
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearFilter;
-    tex.anisotropy = 16;
+    tex.anisotropy = 1;
     tex.generateMipmaps = false;
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, []);
 
   const curvedCrtGeometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(2.26, 1.41, 16, 12);
+    const geo = new THREE.PlaneGeometry(2.4, 1.38, 18, 14);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i) / 1.13;
-      const y = pos.getY(i) / 0.705;
+      const x = pos.getX(i) / 1.2;
+      const y = pos.getY(i) / 0.69;
       const r2 = x * x + y * y;
-      const bulge = Math.max(0, 1 - r2 * 0.42) * 0.028;
+      const bulge = Math.max(0, 1 - r2 * 0.42) * 0.032;
       pos.setZ(i, bulge);
     }
     geo.computeVertexNormals();
     return geo;
   }, []);
 
+  useEffect(() => {
+    crtTextureRef.current = crtTexture;
+    crtDiagOverlayTexRef.current = crtDiagOverlayTex;
+    return () => {
+      crtTextureRef.current = null;
+      crtDiagOverlayTexRef.current = null;
+      diagVideoTexRef.current?.dispose();
+      diagVideoTexRef.current = null;
+      crtDiagOverlayTex.dispose();
+      crtTexture.dispose();
+      curvedCrtGeometry.dispose();
+    };
+  }, [crtDiagOverlayTex, crtTexture, curvedCrtGeometry]);
+
   useFrame(({ clock }) => {
+    const activeCrtTex = crtTextureRef.current;
+    const activeOverlayTex = crtDiagOverlayTexRef.current;
+    if (!activeCrtTex || !activeOverlayTex) return;
+
     const now = clock.getElapsedTime();
     const state = useGameStore.getState();
-    if (!state.diagFeedActive) {
-      lastDiagVideoTimeRef.current = -1;
-      lastDiagFrameSeqRef.current = -1;
-      lastDiagGlitchTickRef.current = -1;
-      if (now - lastCrtDrawRef.current < 0.08) return;
-    }
 
-    const tex = crtMatRef.current?.map as THREE.CanvasTexture | undefined;
-    const canvas = tex?.image as HTMLCanvasElement | undefined;
     if (state.diagFeedActive) {
-      if (!canvas || !tex) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      const w = 1600;
-      const h = 1000;
       const vid = getSkalaDiagFeedElement();
       const syncing = isSkalaDiagFeedSyncing();
 
       if (syncing || !vid || vid.readyState < 2) {
+        if (diagOverlayMeshRef.current?.visible) {
+          diagOverlayMeshRef.current.visible = false;
+        }
+        if (crtMatRef.current && crtMatRef.current.map !== activeCrtTex) {
+          crtMatRef.current.map = activeCrtTex;
+          crtMatRef.current.emissiveMap = activeCrtTex;
+          crtMatRef.current.needsUpdate = true;
+        }
         const elapsedMs = Math.max(
           0,
           performance.now() - getSkalaDiagFeedStartMs(),
         );
-        const tick = Math.floor(elapsedMs / 35);
+        // Cap sync glitch canvas uploads to 24 FPS (~42ms)
+        const tick = Math.floor(elapsedMs / 42);
         if (tick === lastDiagGlitchTickRef.current) return;
         lastDiagGlitchTickRef.current = tick;
         lastCrtDrawRef.current = 0;
-        tex.userData.lastSig = "";
+        activeCrtTex.userData.lastSig = "";
 
+        const canvas = activeCrtTex.image as HTMLCanvasElement;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const w = 1600;
+        const h = 1000;
         ctx.save();
         ctx.scale(canvas.width / w, canvas.height / h);
         ctx.fillStyle = "#020804";
@@ -3245,60 +4914,110 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           880,
         );
         ctx.restore();
-        tex.needsUpdate = true;
+        activeCrtTex.needsUpdate = true;
         return;
       }
 
-      const vTime = vid.currentTime;
-      const frameSeq = getSkalaDiagFeedFrameSeq();
-      if (
-        lastDiagVideoTimeRef.current >= 0 &&
-        frameSeq === lastDiagFrameSeqRef.current &&
-        Math.abs(vTime - lastDiagVideoTimeRef.current) < 0.004
-      ) {
-        return;
+      // Bind HTMLVideoElement directly via THREE.VideoTexture (zero 1600x1000 2D canvas drawImage copies!)
+      let vTex = diagVideoTexRef.current;
+      if (!vTex || vTex.image !== vid) {
+        vTex?.dispose();
+        vTex = new THREE.VideoTexture(vid);
+        vTex.minFilter = THREE.LinearFilter;
+        vTex.magFilter = THREE.LinearFilter;
+        vTex.generateMipmaps = false;
+        vTex.colorSpace = THREE.SRGBColorSpace;
+        vTex.wrapS = THREE.ClampToEdgeWrapping;
+        vTex.wrapT = THREE.ClampToEdgeWrapping;
+        diagVideoTexRef.current = vTex;
+        lastDiagDimsRef.current = "";
       }
-      lastDiagVideoTimeRef.current = vTime;
-      lastDiagFrameSeqRef.current = frameSeq;
-      lastCrtDrawRef.current = 0;
-      tex.userData.lastSig = "";
-
-      ctx.save();
-      ctx.scale(canvas.width / w, canvas.height / h);
 
       const vw = vid.videoWidth || 1280;
       const vh = vid.videoHeight || 720;
-      const fit = Math.min(1600 / vw, 900 / vh);
-      const drawW = Math.round(vw * fit);
-      const drawH = Math.round(vh * fit);
-      const drawX = Math.round((w - drawW) / 2);
-      const drawY = Math.round(50 + (900 - drawH) / 2);
-      if (drawW < 1600 || drawH < 900) {
-        ctx.fillStyle = "#020804";
-        ctx.fillRect(0, 50, 1600, 900);
+      const dimsKey = `${vw}x${vh}`;
+      if (dimsKey !== lastDiagDimsRef.current) {
+        lastDiagDimsRef.current = dimsKey;
+        const fit = Math.min(1600 / vw, 900 / vh);
+        const drawW = Math.round(vw * fit);
+        const drawH = Math.round(vh * fit);
+        const drawX = Math.round((1600 - drawW) / 2);
+        const drawY = Math.round(50 + (900 - drawH) / 2);
+
+        const rw = drawW / 1600;
+        const rh = drawH / 1000;
+        const u0 = drawX / 1600;
+        const v0 = (1000 - (drawY + drawH)) / 1000;
+        vTex.repeat.set(1 / rw, 1 / rh);
+        vTex.offset.set(-u0 / rw, -v0 / rh);
+
+        const overlayCanvas = activeOverlayTex.image as HTMLCanvasElement;
+        paintDiagOverlayStatic(overlayCanvas, drawX, drawY, drawW, drawH);
+        activeOverlayTex.needsUpdate = true;
+        lastDiagSecRef.current = -1;
       }
-      ctx.drawImage(vid, drawX, drawY, drawW, drawH);
-      ctx.drawImage(crtDiagOverlayCanvas, 0, 0);
 
-      const curSec = Math.max(0, Math.floor(vTime || 0));
-      const mm = String(Math.floor(curSec / 60)).padStart(2, "0");
-      const ss = String(curSec % 60).padStart(2, "0");
-      ctx.font = '700 22px "Consolas", "Lucida Console", monospace';
-      ctx.textAlign = "right";
-      drawHeavyCrtText(
-        ctx,
-        `${mm}:${ss}`,
-        w - 24,
-        36,
-        "#39ff14",
-        0.85,
-        200,
-      );
+      if (crtMatRef.current && crtMatRef.current.map !== vTex) {
+        crtMatRef.current.map = vTex;
+        crtMatRef.current.emissiveMap = vTex;
+        crtMatRef.current.needsUpdate = true;
+      }
+      if (diagOverlayMeshRef.current && !diagOverlayMeshRef.current.visible) {
+        diagOverlayMeshRef.current.visible = true;
+      }
 
-      ctx.restore();
-      tex.needsUpdate = true;
+      const curSec = Math.max(0, Math.floor(vid.currentTime || 0));
+      if (curSec !== lastDiagSecRef.current) {
+        lastDiagSecRef.current = curSec;
+        const overlayCanvas = activeOverlayTex.image as HTMLCanvasElement;
+        const oCtx = overlayCanvas.getContext("2d");
+        if (oCtx) {
+          const mm = String(Math.floor(curSec / 60)).padStart(2, "0");
+          const ss = String(curSec % 60).padStart(2, "0");
+          oCtx.fillStyle = "#020804";
+          oCtx.fillRect(1350, 10, 238, 36);
+          oCtx.font = '700 22px "Consolas", "Lucida Console", monospace';
+          oCtx.textAlign = "right";
+          drawHeavyCrtText(
+            oCtx,
+            `${mm}:${ss}`,
+            1600 - 24,
+            36,
+            "#39ff14",
+            0.85,
+            200,
+          );
+          activeOverlayTex.needsUpdate = true;
+        }
+      }
       return;
     }
+
+    // Normal telemetry mode: restore crtTexture & hide overlay if returning from video mode
+    lastDiagGlitchTickRef.current = -1;
+    if (diagOverlayMeshRef.current?.visible) {
+      diagOverlayMeshRef.current.visible = false;
+    }
+    if (crtMatRef.current && crtMatRef.current.map !== activeCrtTex) {
+      crtMatRef.current.map = activeCrtTex;
+      crtMatRef.current.emissiveMap = activeCrtTex;
+      crtMatRef.current.needsUpdate = true;
+      activeCrtTex.userData.lastSig = "";
+      lastCrtDrawRef.current = 0;
+    }
+    if (diagVideoTexRef.current) {
+      diagVideoTexRef.current.dispose();
+      diagVideoTexRef.current = null;
+      lastDiagDimsRef.current = "";
+      lastDiagSecRef.current = -1;
+    }
+
+    // Throttle normal telemetry redraws to ~12.5 Hz (0.08s) BEFORE building signature strings
+    if (lastCrtDrawRef.current > 0 && now - lastCrtDrawRef.current < 0.08) return;
+    lastCrtDrawRef.current = now;
+
+    const tex = activeCrtTex;
+    const canvas = tex.image as HTMLCanvasElement;
 
     const deskState = useDeskStore.getState();
     const activeDeskDoc = deskState.documents[0] ?? null;
@@ -3310,10 +5029,10 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       state.hoveredDiagnosticId !== null || state.tutorialStep === "DONE"
         ? getContextualDiagnosticHint(state, deskState.printingDoc !== null)
         : null;
-    const totalAllocatedMW = state.substations.reduce(
-      (sum, s) => sum + s.allocatedMW,
-      0,
-    );
+    let totalAllocatedMW = 0;
+    for (let i = 0; i < state.substations.length; i++) {
+      totalAllocatedMW += state.substations[i].allocatedMW;
+    }
     const hasGenDeficit =
       state.tutorialPhase === "COMPLETED" &&
       totalAllocatedMW > state.totalElectricalMW + 15;
@@ -3324,7 +5043,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       (state.coreTemp > 520 && state.controlRods > 0.75
         ? "⚠️ HIGH REACTIVITY: INSERT CONTROL RODS (UNIT A-2) OR BOOST PUMPS TO AVOID OVERHEAT!"
         : hasGenDeficit
-          ? `⚠️ GRID DEFICIT: TURN [BATTERY -> GRID] WHEEL ON UNIT C OR RAISE RODS (A-2) FOR ${totalAllocatedMW} MW!`
+          ? `⚠️ GRID DEFICIT: BATTERY BANK LOW OR TRIPPED ON UNIT C — RAISE RODS (A-2) FOR ${totalAllocatedMW} MW!`
           : rawHint);
     const subSig = state.substations
       .map((s) => `${s.id}:${s.allocatedMW}:${s.targetMW}:${s.statusText}:${s.quotaOk ? 1 : 0}`)
@@ -3332,7 +5051,6 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     const skalaSig = `${Math.round(state.heliumPressure)}:${Math.round(state.graphiteTemp)}:${Math.round(state.bubblerLevel)}:${state.sealToggles.join("")}:${Math.round(state.pumpAHeat)}:${Math.round(state.pumpBHeat)}:${Math.round(state.boronTankLevel)}:${Object.keys(state.channelHotspots).length}:${Math.round(state.pressureBar)}:${Math.round(state.energyCreatedMW)}:${Math.round(state.batteryStoredPct)}:${Math.round(state.batteryOutputValve * 100)}:${Math.round(state.energyDemandMW)}`;
     const sig = `${timeBucket}|${skalaSig}|${state.phase}|${state.tutorialPhase}|${state.tutorialPrompt.header}|${state.tutorialPrompt.body}|${latestChatMsg?.id ?? ""}|${cdSec}|${contextualHint ?? ""}|${Math.round(state.controlRods * 100)}|${Math.round(state.totalElectricalMW)}|${Math.round(state.drumWaterLevel)}|${Math.round(state.drumPressure)}|${subSig}|${deskState.printingDoc?.id ?? ""}|${deskState.capsuleState}|${deskState.hatchOpen}|${lastEntryId}|${state.bubblerDraining}|${state.auxLoopBActive}|${state.kgbLineActive}|${activeDeskDoc?.id ?? "NONE"}|${activeDeskDoc?.stamps.length ?? 0}|${Math.round(state.pumpThrottle[0])}|${Math.round(state.pumpThrottle[1])}|${Math.round(state.waterReservoir)}|${Math.round(state.waterUsage)}|${Math.round(state.coreTemp / 2) * 2}|${state.ciaIntrusionActive}|${Math.round(state.ciaIntrusionProgress)}|${state.komradOverrideLocked}|${state.isBlackout}|${bulletinIdx}`;
     if (!canvas || !tex || tex.userData.lastSig === sig) return;
-    lastCrtDrawRef.current = now;
     tex.userData.lastSig = sig;
 
     const ctx = canvas.getContext("2d");
@@ -3475,25 +5193,12 @@ const Komrad84SplitScreenCrt3D: React.FC<{
                       : `PUMPS: ${activePumpCount}/4 | GRAPHITE: ${Math.round(state.graphiteTemp)}°C | POOL: ${Math.round(state.bubblerLevel)}%`;
 
       // 2. UNIT A-2 (`[KEY 3] UNIT A-2 // CORE & BORON`)
-      const totalTargetGridMW = state.substations.reduce(
-        (s, x) => s + x.targetMW,
-        0,
-      );
-      const targetMWtForOrder = (totalTargetGridMW / 1000) * 3200;
-      const steamDrawMWtEst = state.batteryOutputValve * 3200;
       const highReactivityOverheat =
         state.coreTemp > 550 && state.controlRodLevel > 78;
-      const apSaturated =
-        state.tutorialPhase === "COMPLETED" &&
-        isCoreOperating &&
-        !state.autoRodEnabled &&
-        (Math.abs(targetMWtForOrder - state.thermalPower) > 180 ||
-          Math.abs(steamDrawMWtEst - state.thermalPower) > 200);
       const bayA2Status: "OK" | "WARN" | "ALERT" =
         hotspotCount >= 4 || bearingTemp > 90 || highReactivityOverheat
           ? "ALERT"
           : hotspotCount >= 1 ||
-              apSaturated ||
               bearingTemp > 80 ||
               state.boronTankLevel < 22 ||
               (isCoreOperating && state.pressureBar < 42)
@@ -3512,11 +5217,9 @@ const Komrad84SplitScreenCrt3D: React.FC<{
                   ? "⚠️ BEARINGS WARM! TURN [OIL COOLER]"
                   : state.boronTankLevel < 22
                     ? "⚠️ BORON <22% (WEAK RODS)! PULL [REFUEL LEVER]"
-                    : apSaturated
-                      ? "⚠️ AP SATURATED! MOVE [CONTROL RODS]!"
-                      : isCoreOperating && state.pressureBar < 42
-                        ? "⚡ LOW STEAM! RAISE [BORON RODS]"
-                        : `RODS: ${Math.round(state.controlRodLevel)}% | BEARINGS: ${bearingTemp}°C | BORON: ${Math.round(state.boronTankLevel)}%`;
+                    : isCoreOperating && state.pressureBar < 42
+                      ? "⚡ LOW STEAM! RAISE [BORON RODS]"
+                      : `RODS: ${Math.round(state.controlRodLevel)}% | BEARINGS: ${bearingTemp}°C | BORON: ${Math.round(state.boronTankLevel)}%`;
 
       // 3. UNIT A (`[KEY 1] UNIT A // LOOP & MW`)
       const bayAStatus: "OK" | "WARN" | "ALERT" =
@@ -3562,9 +5265,9 @@ const Komrad84SplitScreenCrt3D: React.FC<{
         state.isBlackout || batPct < 8
           ? "🚨 BATTERY LOW (<8%)! RAISE [RODS] ON A-2"
           : state.tutorialPhase === "COMPLETED" && deltaDemandC < -30
-            ? `⚡ ${deltaDemandC} MW DEFICIT! TURN [WHEEL] UP`
+            ? `⚡ ${deltaDemandC} MW DEFICIT! RAISE [A-2] RODS`
             : state.tutorialPhase === "COMPLETED" && deltaDemandC > 35
-              ? `⚠️ +${deltaDemandC} MW SURPLUS! TRIM [WHEEL] DOWN`
+              ? `⚠️ +${deltaDemandC} MW SURPLUS! LOWER [A] LEVERS`
               : state.pressureBar > 77
                 ? "⚠️ PRESSURE >77 BAR! TRIM [RODS] ON A-2"
                 : `GEN: ${createdMW}MW | BAT: ${batPct}% | GRID: ${totalGenMW}/${demandMW}MW`;
@@ -4967,7 +6670,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       ctx.font = '900 32px "VT323", "Consolas", monospace';
       drawHeavyCrtText(
         ctx,
-        "[1-5] STATION ZOOM | [0/ESC] CHAIR | DRAG UNIT A LEVERS FOR POWER",
+        "[1-7] BAY FOCUS | [RMB] LEAN IN | 360° SWIVEL CHAIR",
         w / 2,
         568,
         "#ffe600",
@@ -4986,824 +6689,103 @@ const Komrad84SplitScreenCrt3D: React.FC<{
   });
 
   return (
-    <mesh
-      geometry={curvedCrtGeometry}
-      position={[0, 1.74, 0.142]}
-      onClick={(e) => {
-        e.stopPropagation();
-        playSwitchClank();
-        const s = useGameStore.getState();
-        if (s.phase === "boot") {
-          s.startShift();
-          return;
-        }
-        if (s.phase !== "playing") {
-          s.resetShift();
-          return;
-        }
-        onCycleBulletin();
-      }}
-    >
-      <meshStandardMaterial
-        ref={crtMatRef}
-        map={crtTexture}
-        color="#1a261e"
-        emissive="#ffffff"
-        emissiveMap={crtTexture}
-        emissiveIntensity={0.92}
-        roughness={0.96}
-        metalness={0.0}
-      />
-    </mesh>
+    <>
+      <mesh
+        geometry={curvedCrtGeometry}
+        position={[0, 1.74, 0.145]}
+        onClick={(e) => {
+          e.stopPropagation();
+          playSwitchClank();
+          const s = useGameStore.getState();
+          if (s.phase === "boot") {
+            s.startShift();
+            return;
+          }
+          if (s.phase !== "playing") {
+            s.resetShift();
+            return;
+          }
+          onCycleBulletin();
+        }}
+      >
+        <meshStandardMaterial
+          ref={crtMatRef}
+          map={crtTexture}
+          color="#0d1710"
+          emissive="#ffffff"
+          emissiveMap={crtTexture}
+          emissiveIntensity={1.04}
+          roughness={0.95}
+          metalness={0.0}
+        />
+      </mesh>
+      <mesh
+        ref={diagOverlayMeshRef}
+        geometry={curvedCrtGeometry}
+        position={[0, 1.74, 0.147]}
+        raycast={NOOP_RAYCAST}
+        visible={false}
+      >
+        <meshBasicMaterial
+          map={crtDiagOverlayTex}
+          transparent
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+    </>
   );
 });
 
 /**
- * Heavy Soviet-Era Hermetic Steel Bunker Door (`Гермодверь ГД-84`) with Industrial Overhead Bulkhead Warning Light (`Плафон ВЗГ-200`)
- * Placed in the recessed wall gaps between control panels to seal the bunker perimeter with authentic 1984 Chernobyl-4 industrial detail.
+ * Recessed Soviet RBMK-1000 Coffered Acoustic Ceiling (`СВЕТОВОЙ ПОТОЛОК БЩУ-4`, `y = 3.90..4.20m`)
+ * across the `12m × 9m` hall using `InstancedMesh` putty-grey coffer tiles and glowing warm-white
+ * `#fff1d6` fluorescent tube troffers (with 2 aged/flickering gritty tubes).
  */
-const SovietHermeticBunkerDoor3D: React.FC<{
-  position: [number, number, number];
-  rotation: [number, number, number];
-  doorCode?: string;
-  subLabel?: string;
-}> = React.memo(
-  ({
-    position,
-    rotation,
-    doorCode = "AIRLOCK DOOR NO. 4 // SECTOR 04",
-    subLabel = "TURBINE HALL TG-1 AIRLOCK • CONTAINMENT SEAL",
-  }) => {
-    const wheelGroupRef = useRef<THREE.Group>(null);
-    const dogBarsGroupRef = useRef<THREE.Group>(null);
-    const bulbMatRef = useRef<THREE.MeshStandardMaterial>(null);
-    const glassMatRef = useRef<THREE.MeshStandardMaterial>(null);
-    const pointLightRef = useRef<THREE.PointLight>(null);
-    const wheelAngleRef = useRef(0);
-    const targetWheelAngleRef = useRef(0);
+const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
+  const tubeMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+  const dimTubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const flickerTubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const cofferTileInstRef = useRef<THREE.InstancedMesh>(null);
 
-    const ironTex = useMemo(() => getHammeredIronTextures(), []);
-    const brassTex = useMemo(() => getBrushedBrassTextures(), []);
-
-    // Procedural weathered olive-drab steel door texture (#2a3328 / #343b35) with grease grime halo around locking hub & rivets
-    const doorSteelTex = useMemo(
-      () =>
-        createNearestCanvasTexture(256, 512, (ctx, w, h) => {
-          ctx.fillStyle = "#2a3328";
-          ctx.fillRect(0, 0, w, h);
-
-          // Subtle vertical rolled-steel brushing & weld seam bands
-          for (let y = 0; y < h; y += 4) {
-            ctx.fillStyle =
-              y % 8 === 0
-                ? "rgba(52, 59, 53, 0.55)"
-                : "rgba(20, 26, 20, 0.35)";
-            ctx.fillRect(0, y, w, 2);
-          }
-
-          // Dark oil/grease grime halo around the central locking wheel shaft (x: 148, y: 268)
-          const grimeGrad = ctx.createRadialGradient(148, 268, 8, 148, 268, 72);
-          grimeGrad.addColorStop(0, "rgba(10, 12, 10, 0.85)");
-          grimeGrad.addColorStop(0.55, "rgba(18, 22, 16, 0.48)");
-          grimeGrad.addColorStop(1, "rgba(42, 51, 40, 0)");
-          ctx.fillStyle = grimeGrad;
-          ctx.beginPath();
-          ctx.arc(148, 268, 72, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Industrial edge wear & chipped primer scuffs along bottom threshold
-          const bottomWear = ctx.createLinearGradient(0, h - 68, 0, h);
-          bottomWear.addColorStop(0, "rgba(20, 24, 19, 0)");
-          bottomWear.addColorStop(1, "rgba(14, 16, 13, 0.82)");
-          ctx.fillStyle = bottomWear;
-          ctx.fillRect(0, h - 68, w, 68);
-
-          // Perimeter rivet dots
-          ctx.fillStyle = "#181e18";
-          for (let ry = 18; ry < h - 14; ry += 32) {
-            ctx.fillRect(10, ry, 5, 5);
-            ctx.fillRect(w - 15, ry, 5, 5);
-          }
-        }),
-      [],
-    );
-
-    // Worn yellow/black diagonal ГОСТ safety hazard stripes for the stepped door threshold sill & side jambs
-    const gostHazardTex = useMemo(
-      () =>
-        createNearestCanvasTexture(256, 64, (ctx, w, h) => {
-          ctx.fillStyle = "#141414";
-          ctx.fillRect(0, 0, w, h);
-          ctx.fillStyle = "#d99b16";
-          const stripeW = 24;
-          for (let x = -h; x < w + h; x += stripeW * 2) {
-            ctx.beginPath();
-            ctx.moveTo(x, h);
-            ctx.lineTo(x + stripeW, h);
-            ctx.lineTo(x + stripeW + h, 0);
-            ctx.lineTo(x + h, 0);
-            ctx.closePath();
-            ctx.fill();
-          }
-          // Grime & boot-scuff weathering across threshold hazard stripes
-          ctx.fillStyle = "rgba(16, 18, 15, 0.36)";
-          for (let y = 0; y < h; y += 6) {
-            ctx.fillRect(0, y, w, 2);
-          }
-          ctx.strokeStyle = "#2b302c";
-          ctx.lineWidth = 4;
-          ctx.strokeRect(2, 2, w - 4, h - 4);
-        }),
-      [],
-    );
-
-    // Stenciled Soviet ГОСТ Hermetic Door Warning Plaque
-    const doorPlaqueTex = useMemo(
-      () =>
-        makePlaqueTex(doorCode, subLabel, {
-          width: 448,
-          height: 112,
-          titleSize: 32,
-          subSize: 22,
-          titleColor: "#ffb000",
-          subColor: "#e6dec3",
-          borderColor: "#b8a46b",
-          bgColor: "#1a211c",
-        }),
-      [doorCode, subLabel],
-    );
-
-    useFrame(({ clock }, dt) => {
-      const t = clock.getElapsedTime();
-      const s = useGameStore.getState();
-      const totalMW =
-        s.powerAllocation.cooling +
-        s.powerAllocation.defense +
-        s.powerAllocation.facility +
-        (s.ventilationActive ? 10 : 0);
-      const isDanger =
-        s.coreTemp >= 700 ||
-        s.radiationLevel >= 2.2 ||
-        totalMW > s.maxSafePower ||
-        s.ciaIntrusionActive;
-
-      // Smoothly interpolate locking wheel (`штурвал`) and radiating dog bars
-      wheelAngleRef.current = THREE.MathUtils.lerp(
-        wheelAngleRef.current,
-        targetWheelAngleRef.current,
-        Math.min(1, dt * 14),
-      );
-      if (wheelGroupRef.current) {
-        wheelGroupRef.current.rotation.z = wheelAngleRef.current;
-      }
-      if (dogBarsGroupRef.current) {
-        const lockShift = Math.sin(wheelAngleRef.current) * 0.012;
-        dogBarsGroupRef.current.scale.setScalar(1 + lockShift);
-      }
-
-      // Animate overhead industrial bulkhead warning fixture (`#ffaa33` warm amber vs `#ff2a2a` alarm pulse)
-      const subtleFlicker =
-        0.92 +
-        Math.sin(t * 23.0 + position[0]) * 0.05 +
-        Math.cos(t * 47.0) * 0.03;
-      const alarmPulse = 0.55 + 0.45 * Math.sin(t * 10.5);
-
-      if (s.isBlackout) {
-        if (pointLightRef.current) pointLightRef.current.intensity = 0.12;
-        if (bulbMatRef.current) bulbMatRef.current.emissiveIntensity = 0.15;
-        if (glassMatRef.current) glassMatRef.current.emissiveIntensity = 0.08;
-      } else if (isDanger) {
-        if (pointLightRef.current) {
-          pointLightRef.current.color.set("#ff2a2a");
-          pointLightRef.current.intensity = (1.6 + alarmPulse * 1.8) * subtleFlicker;
-        }
-        if (bulbMatRef.current) {
-          bulbMatRef.current.color.set("#ff4433");
-          bulbMatRef.current.emissive.set("#ff2a2a");
-          bulbMatRef.current.emissiveIntensity = 1.8 + alarmPulse * 1.6;
-        }
-        if (glassMatRef.current) {
-          glassMatRef.current.color.set("#ff5533");
-          glassMatRef.current.emissive.set("#ff2a2a");
-          glassMatRef.current.emissiveIntensity = 0.9 + alarmPulse * 0.9;
-        }
-      } else {
-        if (pointLightRef.current) {
-          pointLightRef.current.color.set("#ffaa33");
-          pointLightRef.current.intensity = 1.75 * subtleFlicker;
-        }
-        if (bulbMatRef.current) {
-          bulbMatRef.current.color.set("#ffcf75");
-          bulbMatRef.current.emissive.set("#ffaa33");
-          bulbMatRef.current.emissiveIntensity = 1.65 * subtleFlicker;
-        }
-        if (glassMatRef.current) {
-          glassMatRef.current.color.set("#ffba52");
-          glassMatRef.current.emissive.set("#ff9922");
-          glassMatRef.current.emissiveIntensity = 0.72 * subtleFlicker;
+  const acousticTileTex = useMemo(() => {
+    const tex = createNearestCanvasTexture(64, 64, (ctx, w, h) => {
+      ctx.fillStyle = "#545b54";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#343b37";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, w - 2, h - 2);
+      ctx.fillStyle = "#2b322e";
+      for (let x = 8; x < w - 4; x += 8) {
+        for (let y = 8; y < h - 4; y += 8) {
+          ctx.fillRect(x, y, 2, 2);
         }
       }
     });
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2, 2);
+    return tex;
+  }, []);
 
-    return (
-      <group position={position} rotation={rotation}>
-        {/* 1. RECESSED CONCRETE & WELDED STEEL BULKHEAD SURROUND WALL */}
-        <mesh position={[0, 1.24, -0.14]} castShadow receiveShadow>
-          <boxGeometry args={[1.64, 2.52, 0.18]} />
-          <meshStandardMaterial
-            color="#1c241e"
-            roughness={0.62}
-            metalness={0.52}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.009}
-            roughnessMap={ironTex.roughnessMap}
-          />
-        </mesh>
-
-        {/* Left & Right Vertical Steel Bulkhead Stiffener Columns */}
-        {[-0.74, 0.74].map((cx, cIdx) => (
-          <mesh
-            key={`stiff-${cIdx}`}
-            position={[cx, 1.22, -0.04]}
-            castShadow
-            receiveShadow
-          >
-            <boxGeometry args={[0.12, 2.46, 0.08]} />
-            <meshStandardMaterial
-              color="#222a24"
-              roughness={0.48}
-              metalness={0.68}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-            />
-          </mesh>
-        ))}
-
-        {/* 2. HEAVY BOLTED STEEL OUTER DOOR FRAME (`КОРОБКА ГЕРМОДВЕРИ`) */}
-        {/* Left & Right Outer Frame Jambs */}
-        {[-0.54, 0.54].map((jx, jIdx) => (
-          <group key={`jamb-${jIdx}`} position={[jx, 1.09, 0.01]}>
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[0.11, 2.16, 0.11]} />
-              <meshStandardMaterial
-                color="#2a3328"
-                roughness={0.46}
-                metalness={0.68}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.008}
-                roughnessMap={ironTex.roughnessMap}
-              />
-            </mesh>
-            {/* 7 Heavy Protruding Perimeter Hex Bolts per Jamb */}
-            {[-0.92, -0.62, -0.32, 0, 0.32, 0.62, 0.92].map((by, bIdx) => (
-              <mesh
-                key={`jbolt-${bIdx}`}
-                position={[jIdx === 0 ? -0.015 : 0.015, by, 0.06]}
-                rotation={[Math.PI / 2, 0, 0]}
-                castShadow
-              >
-                <cylinderGeometry args={[0.013, 0.013, 0.018, 6]} />
-                <meshStandardMaterial
-                  color="#b8a46b"
-                  metalness={0.86}
-                  roughness={0.28}
-                  bumpMap={brassTex.bumpMap}
-                  bumpScale={0.005}
-                />
-              </mesh>
-            ))}
-          </group>
-        ))}
-
-        {/* Top Lintel Beam & Bottom Hermetic Coaming Sill (`Порог Гермодвери`) */}
-        <mesh position={[0, 2.12, 0.015]} castShadow receiveShadow>
-          <boxGeometry args={[1.22, 0.12, 0.12]} />
-          <meshStandardMaterial
-            color="#2a3328"
-            roughness={0.46}
-            metalness={0.68}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.008}
-          />
-        </mesh>
-        <mesh position={[0, 0.07, 0.02]} castShadow receiveShadow>
-          <boxGeometry args={[1.22, 0.14, 0.13]} />
-          <meshStandardMaterial
-            color="#242b23"
-            roughness={0.5}
-            metalness={0.68}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.008}
-          />
-        </mesh>
-
-        {/* Worn Yellow/Black Diagonal ГОСТ Hazard Stripes across Threshold Sill & Upper Lintel */}
-        <mesh position={[0, 0.07, 0.087]}>
-          <planeGeometry args={[1.14, 0.095]} />
-          <meshStandardMaterial
-            map={gostHazardTex}
-            roughness={0.65}
-            metalness={0.25}
-          />
-        </mesh>
-        <mesh position={[0, 2.12, 0.077]}>
-          <planeGeometry args={[1.14, 0.065]} />
-          <meshStandardMaterial
-            map={gostHazardTex}
-            roughness={0.65}
-            metalness={0.25}
-          />
-        </mesh>
-
-        {/* Top Lintel Hex Bolts */}
-        {[-0.42, -0.21, 0, 0.21, 0.42].map((bx, bIdx) => (
-          <mesh
-            key={`tbolt-${bIdx}`}
-            position={[bx, 2.12, 0.08]}
-            rotation={[Math.PI / 2, 0, 0]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.013, 0.013, 0.018, 6]} />
-            <meshStandardMaterial
-              color="#b8a46b"
-              metalness={0.86}
-              roughness={0.28}
-            />
-          </mesh>
-        ))}
-
-        {/* 4 Welded Corner Gusset Plates */}
-        {(
-          [
-            [-0.48, 2.04],
-            [0.48, 2.04],
-            [-0.48, 0.16],
-            [0.48, 0.16],
-          ] as const
-        ).map(([gx, gy], gIdx) => (
-          <mesh
-            key={`gusset-${gIdx}`}
-            position={[gx, gy, 0.062]}
-            castShadow
-            receiveShadow
-          >
-            <boxGeometry args={[0.13, 0.13, 0.016]} />
-            <meshStandardMaterial
-              color="#1e241e"
-              metalness={0.75}
-              roughness={0.4}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.006}
-            />
-          </mesh>
-        ))}
-
-        {/* 3. RECESSED ARMORED STEEL DOOR LEAF (`ПОЛОТНО ГЕРМОДВЕРИ`) */}
-        <mesh position={[0, 1.09, -0.02]} castShadow receiveShadow>
-          <boxGeometry args={[0.98, 1.92, 0.065]} />
-          <meshStandardMaterial
-            map={doorSteelTex}
-            color="#343b35"
-            roughness={0.52}
-            metalness={0.62}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.008}
-            roughnessMap={ironTex.roughnessMap}
-          />
-        </mesh>
-
-        {/* Inner Rubber Compression Gasket Frame around Door Leaf */}
-        <mesh position={[0, 1.09, -0.04]}>
-          <boxGeometry args={[1.02, 1.96, 0.02]} />
-          <meshStandardMaterial color="#121412" roughness={0.92} />
-        </mesh>
-
-        {/* 4 Horizontal Welded Steel Reinforcing Ribs across the Door Leaf */}
-        {[0.34, 0.76, 1.44, 1.84].map((ry, rIdx) => (
-          <group key={`rib-${rIdx}`} position={[0, ry, 0.022]}>
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[0.94, 0.048, 0.032]} />
-              <meshStandardMaterial
-                color="#2a3328"
-                roughness={0.44}
-                metalness={0.7}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.007}
-              />
-            </mesh>
-            {[-0.38, -0.19, 0, 0.19, 0.38].map((rx, bIdx) => (
-              <mesh
-                key={`rbolt-${bIdx}`}
-                position={[rx, 0, 0.02]}
-                rotation={[Math.PI / 2, 0, 0]}
-              >
-                <cylinderGeometry args={[0.008, 0.008, 0.01, 6]} />
-                <meshStandardMaterial
-                  color="#8a929a"
-                  metalness={0.85}
-                  roughness={0.3}
-                />
-              </mesh>
-            ))}
-          </group>
-        ))}
-
-        {/* 3 Massive Cylindrical Industrial Barrel Hinges on Left Side (`Петли Гермодвери`) */}
-        {[0.42, 1.09, 1.76].map((hy, hIdx) => (
-          <group key={`hinge-${hIdx}`} position={[-0.50, hy, 0.052]}>
-            {/* Upper & Lower Hinge knuckles */}
-            <mesh castShadow receiveShadow>
-              <cylinderGeometry args={[0.038, 0.038, 0.18, 12]} />
-              <meshStandardMaterial
-                color="#242b24"
-                roughness={0.42}
-                metalness={0.74}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.008}
-              />
-            </mesh>
-            {/* Central Brass Hinge Pin & Grease Nipple */}
-            <mesh castShadow>
-              <cylinderGeometry args={[0.024, 0.024, 0.21, 10]} />
-              <meshStandardMaterial
-                color="#b8a46b"
-                metalness={0.86}
-                roughness={0.26}
-              />
-            </mesh>
-            {/* Welded Hinge Leaf Strap onto Door Plate */}
-            <mesh position={[0.09, 0, -0.022]} castShadow receiveShadow>
-              <boxGeometry args={[0.16, 0.075, 0.026]} />
-              <meshStandardMaterial
-                color="#2a3328"
-                roughness={0.44}
-                metalness={0.7}
-              />
-            </mesh>
-          </group>
-        ))}
-
-        {/* Stenciled ГОСТ Warning Plaque & Armored Inspection Peep-Port (`Смотровое Окно`) */}
-        <mesh position={[0, 1.63, 0.02]}>
-          <boxGeometry args={[0.66, 0.155, 0.012]} />
-          <meshStandardMaterial
-            color="#b8a46b"
-            metalness={0.82}
-            roughness={0.3}
-          />
-        </mesh>
-        <mesh position={[0, 1.63, 0.028]}>
-          <planeGeometry args={[0.64, 0.14]} />
-          <meshStandardMaterial
-            map={doorPlaqueTex}
-            emissive="#ffffff"
-            emissiveMap={doorPlaqueTex}
-            emissiveIntensity={0.28}
-            roughness={0.65}
-          />
-        </mesh>
-
-        {/* Armored Circular Peep-Port above Locking Wheel */}
-        <group position={[-0.24, 1.29, 0.022]}>
-          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-            <cylinderGeometry args={[0.068, 0.076, 0.028, 16]} />
-            <meshStandardMaterial
-              color="#1e241e"
-              metalness={0.76}
-              roughness={0.38}
-            />
-          </mesh>
-          <mesh position={[0, 0, 0.015]}>
-            <circleGeometry args={[0.052, 16]} />
-            <meshStandardMaterial
-              color="#0a1610"
-              emissive="#123020"
-              emissiveIntensity={0.35}
-              roughness={0.18}
-              metalness={0.4}
-            />
-          </mesh>
-          {/* Cross-Bar Guard over Peep-Port */}
-          {[0, Math.PI / 2].map((ang, idx) => (
-            <mesh
-              key={`pguard-${idx}`}
-              position={[0, 0, 0.018]}
-              rotation={[0, 0, ang]}
-            >
-              <boxGeometry args={[0.105, 0.008, 0.006]} />
-              <meshStandardMaterial
-                color="#2a3328"
-                metalness={0.78}
-                roughness={0.35}
-              />
-            </mesh>
-          ))}
-        </group>
-
-        {/* 4. CENTRAL LOCKING WHEEL MECHANISM (`ШТУРВАЛ ГЕРМОДВЕРИ`) & RADIATING LOCKING BARS (`РИГЕЛИ`) */}
-        <group
-          position={[0.08, 1.06, 0.024]}
-          onClick={(e) => {
-            if (useCameraLookStore.getState().isFreeLookMode) return;
-            e.stopPropagation();
-            targetWheelAngleRef.current += Math.PI / 3;
-            playSwitchClank(true);
-            playLeverRatchet(0.9);
-          }}
-        >
-          {/* Central Cast-Iron Gearbox Boss & Brass Stuffing Gland */}
-          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
-            <cylinderGeometry args={[0.125, 0.145, 0.044, 16]} />
-            <meshStandardMaterial
-              color="#181e19"
-              roughness={0.46}
-              metalness={0.72}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-            />
-          </mesh>
-          <mesh
-            position={[0, 0, 0.032]}
-            rotation={[Math.PI / 2, 0, 0]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.052, 0.062, 0.042, 12]} />
-            <meshStandardMaterial
-              color="#b8a46b"
-              metalness={0.86}
-              roughness={0.28}
-              bumpMap={brassTex.bumpMap}
-              bumpScale={0.005}
-            />
-          </mesh>
-
-          {/* 4 Radiating Steel Locking Bars / Wedges (`Запоры`) engaging the Frame Keepers */}
-          <group ref={dogBarsGroupRef}>
-            {/* Left & Right Horizontal Locking Bars */}
-            <mesh position={[-0.31, 0, 0.008]} castShadow>
-              <boxGeometry args={[0.42, 0.034, 0.022]} />
-              <meshStandardMaterial
-                color="#8a929a"
-                metalness={0.84}
-                roughness={0.32}
-              />
-            </mesh>
-            <mesh position={[0.25, 0, 0.008]} castShadow>
-              <boxGeometry args={[0.32, 0.034, 0.022]} />
-              <meshStandardMaterial
-                color="#8a929a"
-                metalness={0.84}
-                roughness={0.32}
-              />
-            </mesh>
-            {/* Top & Bottom Diagonal/Vertical Locking Wedges */}
-            <mesh
-              position={[0.16, 0.24, 0.008]}
-              rotation={[0, 0, 0.72]}
-              castShadow
-            >
-              <boxGeometry args={[0.38, 0.028, 0.02]} />
-              <meshStandardMaterial
-                color="#8a929a"
-                metalness={0.84}
-                roughness={0.32}
-              />
-            </mesh>
-            <mesh
-              position={[0.16, -0.24, 0.008]}
-              rotation={[0, 0, -0.72]}
-              castShadow
-            >
-              <boxGeometry args={[0.38, 0.028, 0.02]} />
-              <meshStandardMaterial
-                color="#8a929a"
-                metalness={0.84}
-                roughness={0.32}
-              />
-            </mesh>
-          </group>
-
-          {/* Heavy Frame Locking Dog Keeper Brackets on Right Jamb */}
-          {[-0.26, 0, 0.26].map((ky, kIdx) => (
-            <mesh
-              key={`keeper-${kIdx}`}
-              position={[0.39, ky, 0.018]}
-              castShadow
-            >
-              <boxGeometry args={[0.068, 0.064, 0.044]} />
-              <meshStandardMaterial
-                color="#1e241e"
-                metalness={0.78}
-                roughness={0.38}
-              />
-            </mesh>
-          ))}
-
-          {/* 6-Spoke Circular Steel Locking Handwheel (`Штурвал`) */}
-          <group ref={wheelGroupRef} position={[0, 0, 0.078]}>
-            {/* Invisible Hit-Cylinder */}
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.22, 0.22, 0.08, 16]} />
-              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-            </mesh>
-            {/* Heavy Cast-Iron Rim painted weathered Soviet crimson-oxide (#7a1f18) */}
-            <mesh castShadow receiveShadow>
-              <torusGeometry args={[0.175, 0.02, 12, 28]} />
-              <meshStandardMaterial
-                color="#7a1f18"
-                roughness={0.44}
-                metalness={0.52}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.008}
-                roughnessMap={ironTex.roughnessMap}
-              />
-            </mesh>
-            {/* 3 Intersecting Steel Bars = 6 Spokes */}
-            {[0, Math.PI / 3, (2 * Math.PI) / 3].map((ang, sIdx) => (
-              <mesh key={`spoke-${sIdx}`} rotation={[0, 0, ang]} castShadow>
-                <cylinderGeometry args={[0.011, 0.011, 0.34, 8]} />
-                <meshStandardMaterial
-                  color="#8a929a"
-                  metalness={0.85}
-                  roughness={0.32}
-                />
-              </mesh>
-            ))}
-            {/* Central Machined Steel Cap & Brass Nut */}
-            <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-              <cylinderGeometry args={[0.038, 0.042, 0.036, 12]} />
-              <meshStandardMaterial
-                color="#b8a46b"
-                metalness={0.88}
-                roughness={0.24}
-              />
-            </mesh>
-          </group>
-        </group>
-
-        {/* 5. INDUSTRIAL OVERHEAD SOVIET BULKHEAD WARNING LIGHT FIXTURE (`ПЛАФОН ВЗГ-200`) */}
-        <group position={[0, 2.33, 0.08]}>
-          {/* Cast-Iron Conduit Pipe & Wall Mounting Flange */}
-          <mesh position={[0, 0.02, -0.05]} castShadow>
-            <boxGeometry args={[0.18, 0.14, 0.04]} />
-            <meshStandardMaterial
-              color="#18211b"
-              metalness={0.75}
-              roughness={0.4}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.006}
-            />
-          </mesh>
-          <mesh
-            position={[0, 0.04, 0.01]}
-            rotation={[Math.PI / 2, 0, 0]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.024, 0.028, 0.12, 10]} />
-            <meshStandardMaterial
-              color="#222b25"
-              metalness={0.75}
-              roughness={0.38}
-            />
-          </mesh>
-          {/* Heavy Cast-Iron Lamp Dome Cap */}
-          <mesh position={[0, 0.015, 0.06]} castShadow>
-            <cylinderGeometry args={[0.068, 0.082, 0.055, 14]} />
-            <meshStandardMaterial
-              color="#23312b"
-              metalness={0.72}
-              roughness={0.4}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.006}
-            />
-          </mesh>
-          {/* Thick Ribbed Amber/Red Glass Lens Cylinder */}
-          <mesh position={[0, -0.055, 0.06]}>
-            <cylinderGeometry args={[0.064, 0.056, 0.11, 14]} />
-            <meshStandardMaterial
-              ref={glassMatRef}
-              color="#ffba52"
-              emissive="#ff9922"
-              emissiveIntensity={0.72}
-              transparent
-              opacity={0.86}
-              roughness={0.22}
-              metalness={0.1}
-            />
-          </mesh>
-          {/* Inner Glowing Tungsten Filament Bulb */}
-          <mesh position={[0, -0.05, 0.06]}>
-            <sphereGeometry args={[0.036, 10, 10]} />
-            <meshStandardMaterial
-              ref={bulbMatRef}
-              color="#ffcf75"
-              emissive="#ffaa33"
-              emissiveIntensity={1.65}
-            />
-          </mesh>
-          {/* Protective Brass & Cast-Iron Wire Guard Cage */}
-          <mesh
-            position={[0, -0.02, 0.06]}
-            rotation={[Math.PI / 2, 0, 0]}
-            castShadow
-          >
-            <torusGeometry args={[0.072, 0.006, 8, 16]} />
-            <meshStandardMaterial
-              color="#b8a46b"
-              metalness={0.86}
-              roughness={0.28}
-            />
-          </mesh>
-          <mesh
-            position={[0, -0.09, 0.06]}
-            rotation={[Math.PI / 2, 0, 0]}
-            castShadow
-          >
-            <torusGeometry args={[0.064, 0.005, 8, 16]} />
-            <meshStandardMaterial
-              color="#b8a46b"
-              metalness={0.86}
-              roughness={0.28}
-            />
-          </mesh>
-          {[0, Math.PI / 2, Math.PI / 4, -Math.PI / 4].map((cAng, cIdx) => (
-            <mesh
-              key={`cage-${cIdx}`}
-              position={[0, -0.062, 0.06]}
-              rotation={[Math.PI, cAng, 0]}
-              castShadow
-            >
-              <torusGeometry args={[0.068, 0.0045, 6, 12, Math.PI]} />
-              <meshStandardMaterial
-                color="#b8a46b"
-                metalness={0.86}
-                roughness={0.28}
-              />
-            </mesh>
-          ))}
-          {/* Atmospheric Warm Amber/Red PointLight casting glow onto the steel door and wheel below */}
-          <pointLight
-            ref={pointLightRef}
-            position={[0, -0.12, 0.18]}
-            color="#ffaa33"
-            intensity={1.75}
-            distance={3.2}
-            decay={1.4}
-          />
-        </group>
-      </group>
-    );
-  },
-);
-
-/**
- * Recessed Soviet Industrial Luminous Ceiling Grid (`СВЕТОВОЙ ПОТОЛОК БЩУ-4`)
- * Dark steel T-bar grid beams with dim, moody warm-grey/amber baffled diffuser panels
- * high overhead (`y = 3.32m..3.39m`) that give the control room authentic Chernobyl-4
- * ceiling architecture and subtle metallic edge reflections without brightening the dark night shift mood.
- */
-const SovietLuminousCeilingGrid3D: React.FC = React.memo(() => {
-  const diffuserMatRef = useRef<THREE.MeshStandardMaterial>(null);
-
-  const diffuserGridTex = useMemo(
-    () =>
-      createNearestCanvasTexture(256, 256, (ctx, w, h) => {
-        ctx.fillStyle = "#2b332f";
-        ctx.fillRect(0, 0, w, h);
-
-        // Egg-crate acoustic/luminous baffle louver grid
-        ctx.strokeStyle = "#161b19";
-        ctx.lineWidth = 3;
-        for (let x = 0; x <= w; x += 32) {
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, h);
-          ctx.stroke();
-        }
-        for (let y = 0; y <= h; y += 32) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(w, y);
-          ctx.stroke();
-        }
-
-        // Subtle warm-amber/grey fluorescent tube glow behind louver cells
-        for (let cy = 16; cy < h; cy += 32) {
-          for (let cx = 16; cx < w; cx += 32) {
-            ctx.fillStyle =
-              (cx + cy) % 64 === 0
-                ? "rgba(218, 198, 152, 0.42)"
-                : "rgba(168, 184, 174, 0.32)";
-            ctx.fillRect(cx - 11, cy - 11, 22, 22);
-          }
-        }
-
-        ctx.strokeStyle = "#141817";
-        ctx.lineWidth = 8;
-        ctx.strokeRect(4, 4, w - 8, h - 8);
-      }),
-    [],
-  );
+  useEffect(() => {
+    const mesh = cofferTileInstRef.current;
+    if (!mesh) return;
+    const dummy = new THREE.Object3D();
+    const xs = [-4.8, -2.4, 0, 2.4, 4.8];
+    const zs = [-3.375, -1.125, 1.125, 3.375];
+    let idx = 0;
+    for (const z of zs) {
+      for (const x of xs) {
+        dummy.position.set(x, 4.14, z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(idx++, dummy.matrix);
+      }
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }, []);
 
   useFrame(({ clock }) => {
     const s = useGameStore.getState();
@@ -5823,74 +6805,511 @@ const SovietLuminousCeilingGrid3D: React.FC = React.memo(() => {
             (0.32 + 0.14 * Math.sin(t * 62.8) * Math.cos(t * 94.2))
         : 1.0;
 
-    if (diffuserMatRef.current) {
+    const baseIntensity = s.isBlackout
+      ? 0.03
+      : s.powerAllocation.facility <= 10
+        ? 1.15 * humFlicker
+        : 1.9 * humFlicker;
+    const mainColor = s.isBlackout
+      ? SCENE_COLOR_TUBE_BLACKOUT
+      : isAlarm
+        ? SCENE_COLOR_TUBE_ALARM
+        : SCENE_COLOR_TUBE_NORM;
+
+    for (let i = 0; i < tubeMatRefs.current.length; i++) {
+      const mat = tubeMatRefs.current[i];
+      if (!mat) continue;
+      mat.emissive.copy(mainColor);
+      mat.emissiveIntensity = baseIntensity;
+    }
+
+    // Aged/dimmed warm-amber gritty tube (35% output)
+    if (dimTubeMatRef.current) {
+      dimTubeMatRef.current.emissive.copy(
+        s.isBlackout ? SCENE_COLOR_TUBE_DIM_BLACKOUT : SCENE_COLOR_TUBE_DIM,
+      );
+      dimTubeMatRef.current.emissiveIntensity = s.isBlackout
+        ? 0.02
+        : 0.65 * humFlicker;
+    }
+
+    // Subtle gritty starter-flicker tube
+    if (flickerTubeMatRef.current) {
       if (s.isBlackout) {
-        diffuserMatRef.current.emissive.set("#000000");
-        diffuserMatRef.current.emissiveIntensity = 0.02;
-      } else if (isAlarm) {
-        diffuserMatRef.current.emissive.set("#d86848");
-        diffuserMatRef.current.emissiveIntensity = 0.22 * humFlicker;
-      } else if (s.powerAllocation.facility <= 10) {
-        diffuserMatRef.current.emissive.set("#a89874");
-        diffuserMatRef.current.emissiveIntensity = 0.11 * humFlicker;
+        flickerTubeMatRef.current.emissive.copy(
+          SCENE_COLOR_TUBE_FLICKER_BLACKOUT,
+        );
+        flickerTubeMatRef.current.emissiveIntensity = 0.02;
       } else {
-        diffuserMatRef.current.emissive.set("#c8be9e");
-        diffuserMatRef.current.emissiveIntensity = 0.18 * humFlicker;
+        const pulse = Math.sin(t * 17.3) * Math.cos(t * 41.7);
+        const sputter = pulse > 0.72 ? 0.35 : 0.92 + 0.08 * Math.sin(t * 11.0);
+        flickerTubeMatRef.current.emissive.copy(SCENE_COLOR_TUBE_NORM);
+        flickerTubeMatRef.current.emissiveIntensity = 1.75 * sputter * humFlicker;
       }
     }
   });
 
-  const longitudinalXs = [-2.7, -1.8, -0.9, 0.0, 0.9, 1.8, 2.7];
-  const bayZs = [-1.0, 0.2, 1.4, 2.6, 3.8, 5.0];
-  const bayXs = [-2.25, -1.35, -0.45, 0.45, 1.35, 2.25];
+  const longitudinalXs = [-3.6, -1.2, 1.2, 3.6];
+  const transverseZs = [-2.25, 0.0, 2.25];
+  const troughZs = [-2.85, -0.85, 1.8];
+  const tubeXs = [-3.25, -1.1, 1.1, 3.25];
+  const baffleXs = [-4.0, -3.0, -2.0, -1.0, 0, 1.0, 2.0, 3.0, 4.0];
 
   return (
     <group>
-      {/* Longitudinal Steel T-Bar Ceiling Runners (`y = 3.33m`) */}
+      {/* Instanced Recessed Putty-Grey Acoustic Coffer Tiles (`5 × 4 = 20` bays) */}
+      <instancedMesh
+        ref={cofferTileInstRef}
+        args={[undefined, undefined, 20]}
+        raycast={NOOP_RAYCAST}
+      >
+        <boxGeometry args={[2.18, 0.05, 2.02]} />
+        <meshStandardMaterial
+          map={acousticTileTex}
+          color="#767d75"
+          roughness={0.78}
+          metalness={0.18}
+        />
+      </instancedMesh>
+
+      {/* Deep Concrete/Steel Coffer Grid Beams (`y = 4.02m`) */}
       {longitudinalXs.map((lx) => (
-        <mesh key={`ceil-runner-${lx}`} position={[lx, 3.33, 2.0]}>
-          <boxGeometry args={[0.065, 0.08, 7.4]} />
-          <meshStandardMaterial
-            color="#1c2321"
-            metalness={0.68}
-            roughness={0.44}
-          />
+        <mesh key={`ceil-beam-x-${lx}`} position={[lx, 4.04, 0]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.22, 0.26, HALL_HALF_D * 2]} />
+          <meshStandardMaterial color="#343b38" metalness={0.42} roughness={0.62} />
+        </mesh>
+      ))}
+      {transverseZs.map((tz) => (
+        <mesh key={`ceil-beam-z-${tz}`} position={[0, 4.04, tz]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[HALL_HALF_W * 2, 0.26, 0.22]} />
+          <meshStandardMaterial color="#343b38" metalness={0.42} roughness={0.62} />
         </mesh>
       ))}
 
-      {/* Recessed Baffled Fluorescent Diffuser Panels Between Ceiling Beams (`y = 3.36m`) */}
-      {bayZs.map((bz) =>
-        bayXs.map((bx) => {
-          const isLitTile = Math.abs(bx) <= 1.4 || bz === 0.2 || bz === 2.6;
-          return (
-            <mesh
-              key={`ceil-tile-${bx}-${bz}`}
-              position={[bx, 3.36, bz]}
-              rotation={[Math.PI / 2, 0, 0]}
-            >
-              <planeGeometry args={[0.82, 1.02]} />
-              {isLitTile ? (
-                <meshStandardMaterial
-                  ref={diffuserMatRef}
-                  map={diffuserGridTex}
-                  color="#485450"
-                  emissive="#c8be9e"
-                  emissiveMap={diffuserGridTex}
-                  emissiveIntensity={0.18}
-                  roughness={0.48}
-                  metalness={0.32}
-                />
-              ) : (
-                <meshStandardMaterial
-                  color="#262e2c"
-                  roughness={0.65}
-                  metalness={0.45}
-                />
-              )}
+      {/* Long Glowing Warm-White Fluorescent Troffers with Louvered Cross-Baffles */}
+      {troughZs.map((tz, tIdx) => (
+        <group key={`ceil-trough-${tIdx}`} position={[0, 3.96, tz]}>
+          {/* Steel Recessed Troffer Reflector Housing */}
+          <mesh position={[0, 0.05, 0]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[9.2, 0.08, 0.64]} />
+            <meshStandardMaterial color="#232b28" metalness={0.64} roughness={0.46} />
+          </mesh>
+          <mesh position={[0, 0.006, 0]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[8.9, 0.54]} />
+            <meshStandardMaterial color="#8d948d" roughness={0.55} metalness={0.28} />
+          </mesh>
+
+          {/* Twin Rows of Glowing Fluorescent Tubes (`y = -0.015m`) */}
+          {tubeXs.map((tx, xIdx) => (
+            <React.Fragment key={`tube-pair-${tIdx}-${xIdx}`}>
+              {([-0.14, 0.14] as const).map((dz, rowIdx) => {
+                const isDim = tIdx === 1 && xIdx === 2 && rowIdx === 0;
+                const isFlicker = tIdx === 0 && xIdx === 3 && rowIdx === 1;
+                const refIdx = tIdx * 8 + xIdx * 2 + rowIdx;
+                return (
+                  <mesh
+                    key={`fl-tube-${refIdx}`}
+                    position={[tx, -0.012, dz]}
+                    rotation={[0, 0, Math.PI / 2]}
+                    raycast={NOOP_RAYCAST}
+                  >
+                    <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
+                    <meshStandardMaterial
+                      ref={
+                        isDim
+                          ? dimTubeMatRef
+                          : isFlicker
+                            ? flickerTubeMatRef
+                            : (el) => {
+                                tubeMatRefs.current[refIdx] = el;
+                              }
+                      }
+                      color={isDim ? "#e2a24c" : "#fff6e5"}
+                      emissive={isDim ? "#e2a24c" : "#fff1d6"}
+                      emissiveIntensity={isDim ? 0.65 : 1.9}
+                      roughness={0.25}
+                    />
+                  </mesh>
+                );
+              })}
+            </React.Fragment>
+          ))}
+
+          {/* Louvered Steel Cross-Baffles */}
+          {baffleXs.map((bx, bIdx) => (
+            <mesh key={`baffle-${tIdx}-${bIdx}`} position={[bx, -0.018, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.032, 0.055, 0.58]} />
+              <meshStandardMaterial color="#2c3531" metalness={0.58} roughness={0.48} />
             </mesh>
-          );
-        }),
-      )}
+          ))}
+        </group>
+      ))}
+    </group>
+  );
+});
+
+/**
+ * Industrial Control Room Clutter, Color-Coded Ceiling Piping, `СМ-2М` Magnetic Tape Cabinets,
+ * 3 Wheeled Operator Swivel Chairs, and Red Wall Fire-Shield (`ПОЖАРНЫЙ ЩИТ №4`).
+ */
+const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+  const brassTex = useMemo(() => getBrushedBrassTextures(), []);
+  const reelRefs = useRef<Array<THREE.Group | null>>([]);
+  const ledMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+
+  const fireShieldTex = useMemo(
+    () =>
+      createNearestCanvasTexture(512, 320, (ctx, w, h) => {
+        ctx.fillStyle = "#f0ece0";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#b8221a";
+        ctx.lineWidth = 14;
+        ctx.strokeRect(7, 7, w - 14, h - 14);
+        ctx.fillStyle = "#b8221a";
+        ctx.fillRect(14, 14, w - 28, 56);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = 'bold 30px "Kremlin", "Courier Prime", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("ПОЖАРНЫЙ ЩИТ №4 // БЩУ-4", w / 2, 52);
+        ctx.fillStyle = "#141414";
+        ctx.font = 'bold 20px "Courier Prime", monospace';
+        ctx.fillText("ПРИ ПОЖАРЕ ЗВОНИТЬ 01", w / 2, h - 22);
+      }),
+    [],
+  );
+
+  const sm2mNameplateTex = useMemo(
+    () =>
+      createNearestCanvasTexture(256, 64, (ctx, w, h) => {
+        ctx.fillStyle = "#18201d";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#8a948e";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.fillStyle = "#e6dec3";
+        ctx.font = 'bold 22px "Kremlin", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("ЭВМ СМ-2М // НМЛ", w / 2, 40);
+      }),
+    [],
+  );
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    const s = useGameStore.getState();
+
+    // Animate spinning 3D magnetic tape reels with realistic forward/pause/rewind seek bursts
+    for (let i = 0; i < reelRefs.current.length; i++) {
+      const reel = reelRefs.current[i];
+      if (!reel) continue;
+      if (s.isBlackout) continue;
+      const cycle = (t * 0.7 + i * 1.37) % 4.0;
+      const dir = cycle < 2.2 ? 1 : cycle < 2.9 ? 0 : -1.4;
+      reel.rotation.z -= dir * 0.045;
+    }
+
+    // Animate blinking LED register strips on СМ-2М tape cabinets
+    for (let i = 0; i < ledMatRefs.current.length; i++) {
+      const mat = ledMatRefs.current[i];
+      if (!mat) continue;
+      if (s.isBlackout) {
+        mat.emissiveIntensity = 0.04;
+      } else {
+        const bit = Math.floor(t * (2.5 + (i % 4) * 1.1) + i * 3) % 3;
+        mat.emissiveIntensity = bit === 0 ? 1.8 : 0.25;
+      }
+    }
+  });
+
+  const pipeLines = [
+    { y: 3.76, color: "#b8241e", offset: 0.14 }, // Crimson-Red Fire Line
+    { y: 3.66, color: "#e09f18", offset: 0.26 }, // Yellow Gas / Instrument Air Line
+    { y: 3.56, color: "#626c68", offset: 0.38 }, // Galvanized Grey Conduit
+  ] as const;
+
+  const chairConfigs = [
+    { pos: [-4.08, 0.016, -0.1] as const, rotY: 0.42, cushion: "#4a1e1a" },
+    { pos: [4.08, 0.016, -0.1] as const, rotY: -0.42, cushion: "#4a1e1a" },
+  ] as const;
+  const starAngles = [0, 1, 2, 3, 4].map((i) => (i * Math.PI * 2) / 5);
+
+  const renderTapeDriveBay = (bayPrefix: string, baseIdx: number, xOffset: number) => (
+    <group key={bayPrefix} position={[xOffset, 1.48, 0.29]}>
+      {/* Dark Recessed Drive Window Cavity */}
+      <mesh raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.56, 0.62, 0.04]} />
+        <meshStandardMaterial color="#101513" metalness={0.62} roughness={0.45} />
+      </mesh>
+      {/* Twin Spinning 3D Magnetic Tape Reels */}
+      {([-0.14, 0.14] as const).map((rx, rIdx) => (
+        <group
+          key={`${bayPrefix}-reel-${rIdx}`}
+          position={[rx, 0.08, 0.026]}
+          ref={(el) => {
+            reelRefs.current[baseIdx + rIdx] = el;
+          }}
+        >
+          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.115, 0.115, 0.022, 18]} />
+            <meshStandardMaterial color="#2a2824" roughness={0.42} metalness={0.55} />
+          </mesh>
+          <mesh position={[0, 0, 0.013]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.042, 0.042, 0.012, 12]} />
+            <meshStandardMaterial color="#c4ccd0" metalness={0.85} roughness={0.25} />
+          </mesh>
+          <mesh position={[0, 0.072, 0.014]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.022, 0.056, 0.008]} />
+            <meshStandardMaterial color="#e6dec3" roughness={0.5} />
+          </mesh>
+        </group>
+      ))}
+      {/* Glass Door Frame Strip & Blinking LED Register Row */}
+      <mesh position={[0, -0.18, 0.024]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.48, 0.08, 0.014]} />
+        <meshStandardMaterial color="#181f1c" metalness={0.65} roughness={0.44} />
+      </mesh>
+      {[-0.18, -0.09, 0, 0.09, 0.18].map((lx, lIdx) => {
+        const col = lIdx === 0 ? "#ff2a2a" : lIdx < 3 ? "#ffb000" : "#33ff66";
+        const ledIdx = baseIdx * 3 + lIdx;
+        return (
+          <mesh key={`${bayPrefix}-led-${lIdx}`} position={[lx, -0.18, 0.034]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.026, 0.018, 0.008]} />
+            <meshStandardMaterial
+              ref={(el) => {
+                ledMatRefs.current[ledIdx] = el;
+              }}
+              color={col}
+              emissive={col}
+              emissiveIntensity={1.4}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+
+  return (
+    <group>
+      {/* 1. Color-Coded Soviet Ceiling & Corner Industrial Piping (Clear of Both Windows & Doors) */}
+      {pipeLines.map((pipe, pIdx) => (
+        <group key={`ceil-pipe-set-${pIdx}`}>
+          {/* Left Wall Overhead Run (`x = -5.82`, `z = -4.2..+4.2`) */}
+          <mesh
+            position={[-5.92 + pipe.offset, pipe.y, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <cylinderGeometry args={[0.036, 0.036, 8.6, 10]} />
+            <meshStandardMaterial color={pipe.color} metalness={0.56} roughness={0.42} />
+          </mesh>
+          {/* Right Wall Overhead Run (`x = +5.82`, above Window 1 lintel `y = 2.85m`) */}
+          <mesh
+            position={[5.92 - pipe.offset, pipe.y, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <cylinderGeometry args={[0.036, 0.036, 8.6, 10]} />
+            <meshStandardMaterial color={pipe.color} metalness={0.56} roughness={0.42} />
+          </mesh>
+          {/* Front & Rear Wall Overhead Runs (`z = ±4.34`, well above doors & windows) */}
+          <mesh
+            position={[0, pipe.y, -4.42 + pipe.offset]}
+            rotation={[0, 0, Math.PI / 2]}
+            raycast={NOOP_RAYCAST}
+          >
+            <cylinderGeometry args={[0.034, 0.034, 11.4, 10]} />
+            <meshStandardMaterial color={pipe.color} metalness={0.56} roughness={0.42} />
+          </mesh>
+          <mesh
+            position={[0, pipe.y, 4.42 - pipe.offset]}
+            rotation={[0, 0, Math.PI / 2]}
+            raycast={NOOP_RAYCAST}
+          >
+            <cylinderGeometry args={[0.034, 0.034, 11.4, 10]} />
+            <meshStandardMaterial color={pipe.color} metalness={0.56} roughness={0.42} />
+          </mesh>
+          {/* 4 Corner Vertical Pipe Risers */}
+          {(
+            [
+              [-5.92 + pipe.offset, -4.3],
+              [5.92 - pipe.offset, -4.3],
+              [-5.92 + pipe.offset, 4.3],
+              [5.92 - pipe.offset, 4.3],
+            ] as const
+          ).map(([rx, rz], rIdx) => (
+            <mesh key={`corner-riser-${pIdx}-${rIdx}`} position={[rx, pipe.y * 0.5, rz]} raycast={NOOP_RAYCAST}>
+              <cylinderGeometry args={[0.032, 0.032, pipe.y, 10]} />
+              <meshStandardMaterial color={pipe.color} metalness={0.56} roughness={0.42} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {/* Flanged Gate Valve Handwheels on Left & Right Overhead Fire/Air Lines */}
+      {([-5.78, 5.78] as const).map((vx, idx) => (
+        <mesh
+          key={`pipe-valve-${idx}`}
+          position={[vx, 3.76, -0.6]}
+          rotation={[0, 0, Math.PI / 2]}
+          raycast={NOOP_RAYCAST}
+        >
+          <torusGeometry args={[0.09, 0.016, 8, 16]} />
+          <meshStandardMaterial color="#d42b22" metalness={0.4} roughness={0.45} />
+        </mesh>
+      ))}
+
+      {/* 2. Three Wheeled Soviet Leatherette Operator Swivel Chairs Along Main Console Arc */}
+      {chairConfigs.map((ch, cIdx) => (
+        <group key={`op-chair-${cIdx}`} position={[ch.pos[0], ch.pos[1], ch.pos[2]]} rotation={[0, ch.rotY, 0]}>
+          <mesh position={[0, 0.045, 0]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.068, 0.088, 0.075, 14]} />
+            <meshStandardMaterial color="#1a211e" metalness={0.72} roughness={0.44} />
+          </mesh>
+          <mesh position={[0, 0.21, 0]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.03, 0.038, 0.34, 12]} />
+            <meshStandardMaterial color="#8c969c" metalness={0.86} roughness={0.28} />
+          </mesh>
+          {starAngles.map((ang, sIdx) => (
+            <group key={`op-leg-${cIdx}-${sIdx}`} rotation={[0, ang, 0]}>
+              <mesh position={[0, 0.036, 0.15]} rotation={[0.08, 0, 0]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.038, 0.03, 0.27]} />
+                <meshStandardMaterial color="#1c2320" metalness={0.68} roughness={0.46} />
+              </mesh>
+              <mesh position={[0, 0.018, 0.265]} rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST}>
+                <cylinderGeometry args={[0.02, 0.02, 0.024, 10]} />
+                <meshStandardMaterial color="#101211" roughness={0.82} />
+              </mesh>
+            </group>
+          ))}
+          <mesh position={[0, 0.4, 0]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.45, 0.07, 0.44]} />
+            <meshStandardMaterial color={ch.cushion} roughness={0.66} metalness={0.1} />
+          </mesh>
+          <mesh position={[0, 0.6, 0.22]} rotation={[0.1, 0, 0]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.072, 0.38, 0.028]} />
+            <meshStandardMaterial color="#1e2623" metalness={0.68} roughness={0.44} />
+          </mesh>
+          <mesh position={[0, 0.74, 0.2]} rotation={[0.08, 0, 0]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.42, 0.34, 0.06]} />
+            <meshStandardMaterial color={ch.cushion} roughness={0.66} metalness={0.1} />
+          </mesh>
+          {([-0.23, 0.23] as const).map((ax, aIdx) => (
+            <mesh key={`op-arm-${aIdx}`} position={[ax, 0.53, 0.01]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.04, 0.028, 0.31]} />
+              <meshStandardMaterial color="#1a1817" roughness={0.58} metalness={0.25} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* 3. Front-Left Twin-Bay `СМ-2М` Magnetic Tape Computer Cabinet (`[-5.56, 0, -1.96]`) */}
+      <group position={[-5.56, 0, -1.96]} rotation={[0, Math.PI / 2, 0]}>
+        <mesh position={[0, 1.14, 0]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[1.52, 2.28, 0.56]} />
+          <meshStandardMaterial
+            color="#2f443e"
+            metalness={0.46}
+            roughness={0.54}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
+          />
+        </mesh>
+        <mesh position={[0, 2.1, 0.285]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.92, 0.2]} />
+          <meshStandardMaterial map={sm2mNameplateTex} roughness={0.48} />
+        </mesh>
+        {renderTapeDriveBay("sm2m-fl-1", 0, -0.36)}
+        {renderTapeDriveBay("sm2m-fl-2", 2, 0.36)}
+        {[-0.36, 0.36].map((dx, dIdx) => (
+          <mesh key={`sm2m-fl-door-${dIdx}`} position={[dx, 0.54, 0.286]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.64, 0.88, 0.018]} />
+            <meshStandardMaterial color="#21302a" metalness={0.54} roughness={0.52} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* 4. Front-Right Single-Bay `СМ-2М` Tape Computer Cabinet (`[5.56, 0, -2.50]`, clear of Window 1) */}
+      <group position={[5.56, 0, -2.5]} rotation={[0, -Math.PI / 2, 0]}>
+        <mesh position={[0, 1.14, 0]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[1.04, 2.28, 0.54]} />
+          <meshStandardMaterial
+            color="#2f443e"
+            metalness={0.46}
+            roughness={0.54}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.006}
+          />
+        </mesh>
+        <mesh position={[0, 2.1, 0.275]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.84, 0.18]} />
+          <meshStandardMaterial map={sm2mNameplateTex} roughness={0.48} />
+        </mesh>
+        {renderTapeDriveBay("sm2m-fr-1", 4, 0)}
+        <mesh position={[0, 0.54, 0.276]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.84, 0.88, 0.018]} />
+          <meshStandardMaterial color="#21302a" metalness={0.54} roughness={0.52} />
+        </mesh>
+      </group>
+
+      {/* 5. Red Soviet Wall Fire-Shield (`ПОЖАРНЫЙ ЩИТ №4`) & Sand Box Near Rear Door (`[-4.05, 0, 4.39]`) */}
+      <group position={[-4.05, 0, 4.39]} rotation={[0, Math.PI, 0]}>
+        {/* Red & White Wall Fire-Shield Board (`y = 0.78..1.98m`) */}
+        <mesh position={[0, 1.38, 0]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[1.18, 1.2, 0.04]} />
+          <meshStandardMaterial color="#b8221a" roughness={0.55} metalness={0.22} />
+        </mesh>
+        <mesh position={[0, 1.38, 0.024]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[1.1, 1.12]} />
+          <meshStandardMaterial map={fireShieldTex} roughness={0.58} />
+        </mesh>
+        {/* Two Red Cone Fire Buckets (`Ведро-конус`) */}
+        {([-0.34, -0.06] as const).map((bx, bIdx) => (
+          <mesh
+            key={`fire-cone-${bIdx}`}
+            position={[bx, 1.26, 0.11]}
+            rotation={[Math.PI, 0, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <coneGeometry args={[0.105, 0.28, 12]} />
+            <meshStandardMaterial color="#c81e1a" roughness={0.44} metalness={0.26} />
+          </mesh>
+        ))}
+        {/* Red `ОУ-5` CO2 Fire Extinguisher & Black Horn */}
+        <group position={[0.34, 1.14, 0.12]}>
+          <mesh raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.078, 0.078, 0.42, 12]} />
+            <meshStandardMaterial color="#c81e1a" roughness={0.38} metalness={0.34} />
+          </mesh>
+          <mesh position={[0, 0.24, 0]} raycast={NOOP_RAYCAST}>
+            <cylinderGeometry args={[0.018, 0.024, 0.08, 8]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.86}
+              roughness={0.26}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+          <mesh position={[-0.07, 0.16, 0.03]} rotation={[0.2, 0, 0.4]} raycast={NOOP_RAYCAST}>
+            <coneGeometry args={[0.038, 0.14, 10]} />
+            <meshStandardMaterial color="#141414" roughness={0.65} />
+          </mesh>
+        </group>
+        {/* Fire Crowbar & Axe */}
+        <mesh position={[0.14, 1.26, 0.045]} rotation={[0, 0, 0.08]} raycast={NOOP_RAYCAST}>
+          <cylinderGeometry args={[0.012, 0.012, 0.68, 8]} />
+          <meshStandardMaterial color="#c81e1a" metalness={0.55} roughness={0.45} />
+        </mesh>
+        {/* Floor Sand Box (`ЯЩИК ДЛЯ ПЕСКА`) */}
+        <mesh position={[0, 0.21, 0.16]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.98, 0.42, 0.34]} />
+          <meshStandardMaterial color="#a61e18" roughness={0.62} metalness={0.24} />
+        </mesh>
+        <mesh position={[0, 0.425, 0.16]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.92, 0.02, 0.28]} />
+          <meshStandardMaterial color="#b89b62" roughness={0.92} />
+        </mesh>
+      </group>
     </group>
   );
 });
@@ -5899,8 +7318,167 @@ export const ControlRoomScene: React.FC = React.memo(() => {
   const bunkerArchRef = useRef<THREE.Group>(null);
   const reactorWrapRef = useRef<THREE.Group>(null);
   const terminalWrapRef = useRef<THREE.Group>(null);
+  const inspectorWrapRef = useRef<THREE.Group>(null);
+  const cloudTonedDownRef = useRef(false);
   const legacyBulletinTargetRef = useRef<THREE.Object3D | null>(null);
   const [bulletinIdx, setBulletinIdx] = useState(0);
+  const ironTex = useMemo(() => getHammeredIronTextures(), []);
+
+  const linoleumFloorTex = useMemo(() => {
+    const tex = createNearestCanvasTexture(128, 128, (ctx, w, h) => {
+      ctx.fillStyle = "#5c3424";
+      ctx.fillRect(0, 0, w, h);
+      const half = w / 2;
+      // Warm Soviet terracotta-ochre tiles
+      ctx.fillStyle = "#8e4830";
+      ctx.fillRect(0, 0, half, half);
+      ctx.fillRect(half, half, half, half);
+      // Desaturated slate-green tiles
+      ctx.fillStyle = "#35403f";
+      ctx.fillRect(half, 0, half, half);
+      ctx.fillRect(0, half, half, half);
+      // Subtle inner tile bevels & terrazzo mineral flecks
+      ctx.fillStyle = "#7c3d28";
+      ctx.fillRect(4, 4, half - 8, half - 8);
+      ctx.fillRect(half + 4, half + 4, half - 8, half - 8);
+      ctx.fillStyle = "#2c3635";
+      ctx.fillRect(half + 4, 4, half - 8, half - 8);
+      ctx.fillRect(4, half + 4, half - 8, half - 8);
+      for (let i = 0; i < 44; i++) {
+        const fx = ((i * 37 + 11) % (w - 4)) + 2;
+        const fy = ((i * 53 + 19) % (h - 4)) + 2;
+        ctx.fillStyle = i % 3 === 0 ? "#c89668" : "#1c201e";
+        ctx.fillRect(fx, fy, 2, 2);
+      }
+      ctx.strokeStyle = "#1b1e1c";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 0, w, h);
+      ctx.beginPath();
+      ctx.moveTo(half, 0);
+      ctx.lineTo(half, h);
+      ctx.moveTo(0, half);
+      ctx.lineTo(w, half);
+      ctx.stroke();
+    });
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(12, 9);
+    return tex;
+  }, []);
+
+  const diamondPlateTex = useMemo(() => {
+    const tex = createNearestCanvasTexture(64, 64, (ctx, w, h) => {
+      ctx.fillStyle = "#48524e";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#2c3330";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, w - 2, h - 2);
+      for (let y = 8; y < h; y += 16) {
+        for (let x = 8; x < w; x += 16) {
+          ctx.fillStyle = "#6c7872";
+          ctx.fillRect(x - 3, y - 1, 6, 2);
+          ctx.fillStyle = "#5c6662";
+          ctx.fillRect(x - 1, y - 3, 2, 6);
+        }
+      }
+    });
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(8, 2);
+    return tex;
+  }, []);
+
+  const rubberMatTex = useMemo(() => {
+    const tex = createNearestCanvasTexture(128, 64, (ctx, w, h) => {
+      ctx.fillStyle = "#141615";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#d99b16";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(1.5, 1.5, w - 3, h - 3);
+      ctx.fillStyle = "#212523";
+      for (let y = 8; y < h - 8; y += 8) {
+        ctx.fillRect(6, y, w - 12, 3);
+      }
+    });
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(4, 1);
+    return tex;
+  }, []);
+
+  const wainscotWallTex = useMemo(() => {
+    const tex = createNearestCanvasTexture(128, 64, (ctx, w, h) => {
+      ctx.fillStyle = "#34493e";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#24342c";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, w - 2, h - 2);
+      ctx.fillStyle = "#486153";
+      for (const rx of [6, w - 6]) {
+        for (let ry = 8; ry < h; ry += 16) {
+          ctx.fillRect(rx - 1, ry - 1, 2, 2);
+        }
+      }
+    });
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(8, 2);
+    return tex;
+  }, []);
+
+  const acousticWallTex = useMemo(() => {
+    const tex = createNearestCanvasTexture(64, 64, (ctx, w, h) => {
+      ctx.fillStyle = "#767c74";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "#5c625b";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(1, 1, w - 2, h - 2);
+      ctx.fillStyle = "#4c524e";
+      for (let x = 8; x < w - 4; x += 8) {
+        for (let y = 8; y < h - 4; y += 8) {
+          ctx.fillRect(x, y, 2, 2);
+        }
+      }
+    });
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(16, 4);
+    return tex;
+  }, []);
+
+  const pillarHazardTex = useMemo(() => createHazardStripeTexture(256, 64, 24), []);
+
+  const pillarWarningPlaqueTex = useMemo(
+    () =>
+      createNearestCanvasTexture(128, 128, (ctx, w, h) => {
+        ctx.fillStyle = "#ffb000";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#141414";
+        ctx.lineWidth = 6;
+        ctx.strokeRect(3, 3, w - 6, h - 6);
+        // Radiation trefoil triangle
+        ctx.fillStyle = "#141414";
+        ctx.beginPath();
+        ctx.moveTo(w / 2, 18);
+        ctx.lineTo(w - 22, 78);
+        ctx.lineTo(22, 78);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "#ffb000";
+        ctx.beginPath();
+        ctx.arc(w / 2, 56, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#141414";
+        ctx.beginPath();
+        ctx.arc(w / 2, 56, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#c81919";
+        ctx.font = 'bold 16px "Kremlin", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("ЗОНА РБМК-4", w / 2, 108);
+      }),
+    [],
+  );
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -5914,8 +7492,21 @@ export const ControlRoomScene: React.FC = React.memo(() => {
     applySovietPBRToHierarchy(reactorWrapRef.current);
     applySovietPBRToHierarchy(terminalWrapRef.current);
 
-    // 1. Hide the legacy toy-brick keyboard group & small CRT screen inside <TerminalStation3D />
-    // 2. Scale up the CRT monitor bezel (+40% width, +30% height) & cabinet width while keeping bottom bezel at y >= 0.94m so the 3 DVK-84 switches stay 100% clear!
+    for (const grp of [
+      bunkerArchRef.current,
+      reactorWrapRef.current,
+      terminalWrapRef.current,
+    ]) {
+      grp?.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.castShadow = false;
+          obj.receiveShadow = false;
+        }
+      });
+    }
+
+    // 1. Hide the legacy toy-brick keyboard group, lower pedestal meshes & small CRT screen inside <TerminalStation3D />
+    // 2. Scale up the CRT monitor bezel & cabinet width cleanly
     if (terminalWrapRef.current) {
       terminalWrapRef.current.traverse((obj) => {
         if (
@@ -5924,22 +7515,27 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         ) {
           return;
         }
-        // Widen rear cabinet box to frame the +20% scaled CRT housing
+        if ((obj as THREE.Mesh).isMesh) {
+          obj.raycast = NOOP_RAYCAST;
+          obj.castShadow = false;
+          obj.receiveShadow = false;
+        }
+        // Widen rear cabinet box to frame the enlarged CRT housing
         if (
           (obj as THREE.Mesh).isMesh &&
           Math.abs(obj.position.y - 1.01) < 0.05 &&
           Math.abs(obj.position.z - -0.18) < 0.05
         ) {
-          obj.scale.set(1.64, 1.25, 1);
+          obj.scale.set(1.58, 1.32, 1);
         }
-        // Scale CRT outer bezel box (+20% additional scale) and shift Y upward to y = 1.74 while keeping bottom edge above desk buttons
+        // Scale CRT outer bezel box and shift Y upward to y = 1.74
         if (
           (obj as THREE.Mesh).isMesh &&
           Math.abs(obj.position.y - 1.4) < 0.03 &&
           Math.abs(obj.position.z - 0.02) < 0.03
         ) {
           obj.position.y = 1.74;
-          obj.scale.set(1.68, 1.56, 1);
+          obj.scale.set(1.58, 1.48, 1);
         }
         // Hide the legacy smaller 512x352 CRT glass mesh (replaced by <Komrad84SplitScreenCrt3D />)
         if (
@@ -5948,7 +7544,7 @@ export const ControlRoomScene: React.FC = React.memo(() => {
           Math.abs(obj.position.z - 0.135) < 0.03
         ) {
           obj.visible = false;
-          obj.raycast = () => {};
+          obj.raycast = NOOP_RAYCAST;
         }
         if (
           obj.type === "Group" &&
@@ -5963,13 +7559,48 @@ export const ControlRoomScene: React.FC = React.memo(() => {
           obj.visible = false;
           obj.traverse((sub) => {
             if ((sub as THREE.Mesh).isMesh) {
-              sub.raycast = () => {};
+              sub.raycast = NOOP_RAYCAST;
             }
           });
+          return;
+        }
+        // Hide any remaining legacy lower pedestal meshes (relY < 0.88) from <TerminalStation3D />
+        if ((obj as THREE.Mesh).isMesh) {
+          let relY = obj.position.y;
+          let p = obj.parent;
+          while (p && p !== terminalWrapRef.current) {
+            relY += p.position.y;
+            p = p.parent;
+          }
+          if (relY < 0.88) {
+            obj.visible = false;
+            obj.raycast = NOOP_RAYCAST;
+          }
         }
       });
     }
   }, []);
+
+  // Tone down the Inspector Desk pneumatic-tube particle cloud by ~60% without touching InspectorDesk3D.tsx
+  useFrame(() => {
+    if (cloudTonedDownRef.current) return;
+    const root = inspectorWrapRef.current;
+    if (!root) return;
+    root.traverse((obj) => {
+      if (obj instanceof THREE.Points) {
+        obj.raycast = NOOP_RAYCAST;
+        if (!obj.userData.__cloudTonedDown) {
+          obj.userData.__cloudTonedDown = true;
+          if (obj.material instanceof THREE.PointsMaterial) {
+            obj.material.opacity *= 0.38;
+            obj.material.size *= 0.78;
+            obj.material.needsUpdate = true;
+          }
+        }
+        cloudTonedDownRef.current = true;
+      }
+    });
+  });
 
   const handleCycleBulletin = useCallback(() => {
     setBulletinIdx((prev) => prev + 1);
@@ -5983,10 +7614,25 @@ export const ControlRoomScene: React.FC = React.memo(() => {
     }
   }, []);
 
+  const hallPillars = [
+    { pos: [-5.86, -4.36] as const, plaqueDir: null },
+    { pos: [5.86, -4.36] as const, plaqueDir: null },
+    { pos: [-5.86, 4.36] as const, plaqueDir: null },
+    { pos: [5.86, 4.36] as const, plaqueDir: null },
+    { pos: [-2.4, -4.38] as const, plaqueDir: [0, 0, 0.162, 0] as const },
+    { pos: [2.4, -4.38] as const, plaqueDir: [0, 0, 0.162, 0] as const },
+    { pos: [-2.4, 4.38] as const, plaqueDir: [0, 0, -0.162, Math.PI] as const },
+    { pos: [1.46, 4.38] as const, plaqueDir: [0, 0, -0.162, Math.PI] as const },
+    { pos: [-5.88, -1.6] as const, plaqueDir: [0.162, 0, 0, Math.PI / 2] as const },
+    { pos: [-5.88, 1.6] as const, plaqueDir: [0.162, 0, 0, Math.PI / 2] as const },
+    { pos: [5.88, -1.92] as const, plaqueDir: [-0.162, 0, 0, -Math.PI / 2] as const },
+    { pos: [5.88, 2.32] as const, plaqueDir: [-0.162, 0, 0, -Math.PI / 2] as const },
+  ] as const;
+
   return (
     <>
-      <color attach="background" args={["#050706"]} />
-      <fog attach="fog" args={["#050706", 5.8, 14.0]} />
+      <color attach="background" args={["#0a0f0d"]} />
+      <fog attach="fog" args={["#0d1411", 13.5, 29.0]} />
 
       <CameraController />
       <BuckshotDitherPass />
@@ -5994,244 +7640,384 @@ export const ControlRoomScene: React.FC = React.memo(() => {
       <BunkerTelemetryAndControlRail3D />
 
       {/* ============================================================
-          SOVIET BUNKER ARCHITECTURE (WALLS, FLOOR, CEILING, PIPES)
+          SOVIET RBMK-1000 БЩУ HALL ARCHITECTURE (`12.0m × 9.0m × 4.2m`)
          ============================================================ */}
       <group ref={bunkerArchRef}>
+        {/* Subfloor & Warm Terracotta-Ochre / Slate-Checkered Linoleum Floor (`y = 0`) */}
         <mesh
-          position={[0, -0.02, 1.2]}
+          position={[0, -0.02, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
-          receiveShadow
+          raycast={NOOP_RAYCAST}
         >
-          <planeGeometry args={[12, 12]} />
-          <meshStandardMaterial
-            color="#141414"
-            roughness={0.92}
-            metalness={0.15}
-          />
+          <planeGeometry args={[HALL_HALF_W * 2 + 0.6, HALL_HALF_D * 2 + 0.6]} />
+          <meshStandardMaterial color="#181b19" roughness={0.94} metalness={0.14} />
         </mesh>
 
         <mesh
-          position={[0, 0.005, 2.3]}
+          position={[0, 0.001, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
-          receiveShadow
+          raycast={NOOP_RAYCAST}
         >
-          <planeGeometry args={[6.4, 9.2]} />
+          <planeGeometry args={[HALL_HALF_W * 2, HALL_HALF_D * 2]} />
           <meshStandardMaterial
-            color="#23312b"
-            roughness={0.85}
-            metalness={0.2}
+            map={linoleumFloorTex}
+            color="#ded8ce"
+            roughness={0.72}
+            metalness={0.14}
           />
         </mesh>
 
-        <mesh position={[0, 1.6, -2.35]} receiveShadow>
-          <boxGeometry args={[9.2, 3.6, 0.25]} />
-          <meshStandardMaterial
-            color="#23312b"
-            roughness={0.82}
-            metalness={0.28}
-          />
-        </mesh>
-
-        <mesh
-          position={[-4.05, 1.6, 0.2]}
-          rotation={[0, Math.PI / 2.35, 0]}
-          receiveShadow
-        >
-          <boxGeometry args={[7.6, 3.6, 0.25]} />
-          <meshStandardMaterial
-            color="#1c2621"
-            roughness={0.85}
-            metalness={0.25}
-          />
-        </mesh>
-        <mesh
-          position={[3.85, 1.6, 0.1]}
-          rotation={[0, -Math.PI / 2.35, 0]}
-          receiveShadow
-        >
-          <boxGeometry args={[7.4, 3.6, 0.25]} />
-          <meshStandardMaterial
-            color="#1c2621"
-            roughness={0.85}
-            metalness={0.25}
-          />
-        </mesh>
-
-        <mesh position={[0, 3.42, 1.5]} rotation={[Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[14, 14]} />
-          <meshStandardMaterial
-            color="#141414"
-            roughness={0.9}
-            metalness={0.3}
-          />
-        </mesh>
-        {[-1.6, -0.4, 0.8, 2.0, 3.2, 4.4, 5.6, 6.8].map((zPos) => (
-          <mesh key={zPos} position={[0, 3.30, zPos]} castShadow receiveShadow>
-            <boxGeometry args={[9.6, 0.14, 0.18]} />
+        {/* Metallic Diamond-Plate Cable Trench Covers (`Рифлёная сталь`) Along Console Bases & To Synoptic Wall */}
+        {[
+          { pos: [-3.22, 0.006, -1.56] as const, rotY: (15 * Math.PI) / 180, args: [3.34, 0.012, 0.44] as const },
+          { pos: [3.22, 0.006, -1.56] as const, rotY: -(15 * Math.PI) / 180, args: [3.34, 0.012, 0.44] as const },
+          { pos: [-2.2, 0.006, -2.72] as const, rotY: 0, args: [0.46, 0.012, 2.02] as const },
+          { pos: [2.2, 0.006, -2.72] as const, rotY: 0, args: [0.46, 0.012, 2.02] as const },
+          { pos: [0, 0.006, -3.52] as const, rotY: 0, args: [9.8, 0.012, 0.44] as const },
+          { pos: [-4.22, 0.006, 1.35] as const, rotY: 0, args: [0.54, 0.012, 3.6] as const },
+          { pos: [0, 0.006, 1.8] as const, rotY: 0, args: [2.85, 0.012, 1.45] as const },
+        ].map((plate, pIdx) => (
+          <mesh
+            key={`cable-trench-${pIdx}`}
+            position={[plate.pos[0], plate.pos[1], plate.pos[2]]}
+            rotation={[0, plate.rotY, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <boxGeometry args={[plate.args[0], plate.args[1], plate.args[2]]} />
             <meshStandardMaterial
-              color="#1e2422"
-              roughness={0.62}
-              metalness={0.58}
+              map={diamondPlateTex}
+              color="#7a8580"
+              metalness={0.68}
+              roughness={0.44}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.005}
             />
           </mesh>
         ))}
 
-        {/* Recessed Soviet Luminous Ceiling Grid (`СВЕТОВОЙ ПОТОЛОК БЩУ-4`) */}
-        <SovietLuminousCeilingGrid3D />
+        {/* Black Ribbed Rubber Anti-Static Operator Walkway Mats Along Console Fronts */}
+        {[
+          { pos: [-3.0, 0.008, -0.36] as const, rotY: (15 * Math.PI) / 180, args: [3.26, 0.012, 0.82] as const },
+          { pos: [3.0, 0.008, -0.36] as const, rotY: -(15 * Math.PI) / 180, args: [3.26, 0.012, 0.82] as const },
+          { pos: [-3.94, 0.008, 1.35] as const, rotY: Math.PI / 2, args: [2.2, 0.012, 0.7] as const },
+        ].map((mat, mIdx) => (
+          <mesh
+            key={`anti-static-mat-${mIdx}`}
+            position={[mat.pos[0], mat.pos[1], mat.pos[2]]}
+            rotation={[0, mat.rotY, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <boxGeometry args={[mat.args[0], mat.args[1], mat.args[2]]} />
+            <meshStandardMaterial map={rubberMatTex} roughness={0.84} metalness={0.1} />
+          </mesh>
+        ))}
 
-        {/* Industrial Steel Perimeter Floor Baseboards / Cable Trunking (`ПЛИНТУС КАБЕЛЬ-КАНАЛ`) */}
-        <mesh position={[0, 0.08, -2.2]} castShadow receiveShadow>
-          <boxGeometry args={[9.8, 0.16, 0.12]} />
-          <meshStandardMaterial
-            color="#2b3532"
-            roughness={0.55}
-            metalness={0.58}
-          />
-        </mesh>
-        <mesh position={[0, 0.08, 7.16]} castShadow receiveShadow>
-          <boxGeometry args={[9.8, 0.16, 0.12]} />
-          <meshStandardMaterial
-            color="#2b3532"
-            roughness={0.55}
-            metalness={0.58}
-          />
-        </mesh>
+        {/* Front Wall (`z = -4.5`) & Left Wall (`x = -6.0`, `UNIT D`) — Two-Tone Olive Wainscot + Dual Rail + Putty Acoustic Upper */}
+        {(
+          [
+            { pos: [0, 0, -HALL_HALF_D] as const, rotY: 0, span: HALL_HALF_W * 2 },
+            { pos: [-HALL_HALF_W, 0, 0] as const, rotY: Math.PI / 2, span: HALL_HALF_D * 2 },
+          ] as const
+        ).map((w, idx) => (
+          <group key={`hall-wall-${idx}`} position={[w.pos[0], 0, w.pos[2]]} rotation={[0, w.rotY, 0]}>
+            {/* Lower Muted Soviet Olive/Sage-Green Steel Wainscot (`y = 0..1.55m`) */}
+            <mesh position={[0, 0.775, -0.06]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[w.span, 1.55, 0.14]} />
+              <meshStandardMaterial
+                map={wainscotWallTex}
+                color="#4d6658"
+                roughness={0.72}
+                metalness={0.28}
+              />
+            </mesh>
+            {/* Dark Steel Skirting (`y = 0..0.16m`) */}
+            <mesh position={[0, 0.08, 0.025]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[w.span, 0.16, 0.04]} />
+              <meshStandardMaterial color="#1f2824" roughness={0.56} metalness={0.52} />
+            </mesh>
+            {/* Dual Brushed Aluminum & Dark-Brass Dado Trim Rail (`y = 1.55m`) */}
+            <mesh position={[0, 1.535, 0.022]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[w.span, 0.024, 0.042]} />
+              <meshStandardMaterial color="#b8a46b" roughness={0.34} metalness={0.82} />
+            </mesh>
+            <mesh position={[0, 1.565, 0.024]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[w.span, 0.034, 0.048]} />
+              <meshStandardMaterial color="#9aa49e" roughness={0.36} metalness={0.78} />
+            </mesh>
+            {/* Upper Desaturated Putty / Cream-Grey Acoustic Perforated Panels (`y = 1.58..4.20m`) */}
+            <mesh position={[0, 2.89, -0.06]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[w.span, 2.62, 0.14]} />
+              <meshStandardMaterial
+                map={acousticWallTex}
+                color="#d8ddd6"
+                roughness={0.84}
+                metalness={0.12}
+              />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Right Wall (`x = +6.0`, `rotY = -Math.PI / 2`) Framed Around Window 1 (`worldZ = -1.70..+2.10`, `y = 1.05..2.85`) */}
+        <group position={[HALL_HALF_W, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
+          {/* Continuous Floor Skirting (`9.0m`) */}
+          <mesh position={[0, 0.08, 0.025]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[HALL_HALF_D * 2, 0.16, 0.04]} />
+            <meshStandardMaterial color="#1f2824" roughness={0.56} metalness={0.52} />
+          </mesh>
+          {/* Full-Height Flanks (`lx = -4.50..-1.70` & `lx = +2.10..+4.50`) */}
+          {(
+            [
+              { cx: -3.1, w: 2.8 },
+              { cx: 3.3, w: 2.4 },
+            ] as const
+          ).map((flank, fIdx) => (
+            <group key={`right-flank-${fIdx}`} position={[flank.cx, 0, 0]}>
+              <mesh position={[0, 0.775, -0.06]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 1.55, 0.14]} />
+                <meshStandardMaterial map={wainscotWallTex} color="#4d6658" roughness={0.72} metalness={0.28} />
+              </mesh>
+              <mesh position={[0, 1.535, 0.022]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 0.024, 0.042]} />
+                <meshStandardMaterial color="#b8a46b" roughness={0.34} metalness={0.82} />
+              </mesh>
+              <mesh position={[0, 1.565, 0.024]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 0.034, 0.048]} />
+                <meshStandardMaterial color="#9aa49e" roughness={0.36} metalness={0.78} />
+              </mesh>
+              <mesh position={[0, 2.89, -0.06]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 2.62, 0.14]} />
+                <meshStandardMaterial map={acousticWallTex} color="#d8ddd6" roughness={0.84} metalness={0.12} />
+              </mesh>
+            </group>
+          ))}
+          {/* Window 1 Lower Sill Wall (`y = 0..1.05m`, `width = 3.80m`, `center lx = +0.20`) */}
+          <mesh position={[0.2, 0.525, -0.06]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[3.8, 1.05, 0.14]} />
+            <meshStandardMaterial map={wainscotWallTex} color="#4d6658" roughness={0.72} metalness={0.28} />
+          </mesh>
+          {/* Window 1 Upper Lintel Wall (`y = 2.85..4.20m`, `width = 3.80m`, `center lx = +0.20`) */}
+          <mesh position={[0.2, 3.525, -0.06]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[3.8, 1.35, 0.14]} />
+            <meshStandardMaterial map={acousticWallTex} color="#d8ddd6" roughness={0.84} metalness={0.12} />
+          </mesh>
+        </group>
+
+        {/* Rear Wall (`z = +4.5`, `rotY = Math.PI`) Framed Around Window 2 (`worldX = +1.70..+5.30`, `y = 1.05..2.85`) */}
+        <group position={[0, 0, HALL_HALF_D]} rotation={[0, Math.PI, 0]}>
+          {/* Continuous Floor Skirting (`12.0m`) */}
+          <mesh position={[0, 0.08, 0.025]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[HALL_HALF_W * 2, 0.16, 0.04]} />
+            <meshStandardMaterial color="#1f2824" roughness={0.56} metalness={0.52} />
+          </mesh>
+          {/* Full-Height Left/Door Section (`worldX = -6.0..+1.70`, `lx = +2.15`) & Right Corner Strip (`worldX = +5.30..+6.0`, `lx = -5.65`) */}
+          {(
+            [
+              { cx: 2.15, w: 7.7 },
+              { cx: -5.65, w: 0.7 },
+            ] as const
+          ).map((flank, fIdx) => (
+            <group key={`rear-flank-${fIdx}`} position={[flank.cx, 0, 0]}>
+              <mesh position={[0, 0.775, -0.06]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 1.55, 0.14]} />
+                <meshStandardMaterial map={wainscotWallTex} color="#4d6658" roughness={0.72} metalness={0.28} />
+              </mesh>
+              <mesh position={[0, 1.535, 0.022]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 0.024, 0.042]} />
+                <meshStandardMaterial color="#b8a46b" roughness={0.34} metalness={0.82} />
+              </mesh>
+              <mesh position={[0, 1.565, 0.024]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 0.034, 0.048]} />
+                <meshStandardMaterial color="#9aa49e" roughness={0.36} metalness={0.78} />
+              </mesh>
+              <mesh position={[0, 2.89, -0.06]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 2.62, 0.14]} />
+                <meshStandardMaterial map={acousticWallTex} color="#d8ddd6" roughness={0.84} metalness={0.12} />
+              </mesh>
+            </group>
+          ))}
+          {/* Window 2 Lower Sill Wall (`y = 0..1.05m`, `width = 3.60m`, `center lx = -3.50` -> `worldX = +3.50`) */}
+          <mesh position={[-3.5, 0.525, -0.06]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[3.6, 1.05, 0.14]} />
+            <meshStandardMaterial map={wainscotWallTex} color="#4d6658" roughness={0.72} metalness={0.28} />
+          </mesh>
+          {/* Window 2 Upper Lintel Wall (`y = 2.85..4.20m`, `width = 3.60m`, `center lx = -3.50` -> `worldX = +3.50`) */}
+          <mesh position={[-3.5, 3.525, -0.06]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[3.6, 1.35, 0.14]} />
+            <meshStandardMaterial map={acousticWallTex} color="#d8ddd6" roughness={0.84} metalness={0.12} />
+          </mesh>
+        </group>
+
+        {/* Heavy Ribbed Concrete Columns with Safety-Ochre / Red Hazard Bands & Radiation Placards */}
+        {hallPillars.map((pil, idx) => (
+          <group key={`hall-pillar-${idx}`} position={[pil.pos[0], 0, pil.pos[1]]}>
+            {/* Ribbed Concrete Pillar Core */}
+            <mesh position={[0, HALL_CEILING_Y * 0.5, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.3, HALL_CEILING_Y, 0.3]} />
+              <meshStandardMaterial color="#5c605a" metalness={0.18} roughness={0.82} />
+            </mesh>
+            {/* Vertical Corner Fluting Ribs */}
+            {(
+              [
+                [-0.14, -0.14],
+                [0.14, -0.14],
+                [-0.14, 0.14],
+                [0.14, 0.14],
+              ] as const
+            ).map(([rx, rz], rIdx) => (
+              <mesh key={`pil-rib-${rIdx}`} position={[rx, HALL_CEILING_Y * 0.5, rz]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.045, HALL_CEILING_Y, 0.045]} />
+                <meshStandardMaterial color="#3c423e" metalness={0.42} roughness={0.6} />
+              </mesh>
+            ))}
+            {/* Steel Base Boot (`y = 0..0.28m`) */}
+            <mesh position={[0, 0.14, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.34, 0.28, 0.34]} />
+              <meshStandardMaterial color="#1f2623" metalness={0.62} roughness={0.5} />
+            </mesh>
+            {/* Safety-Ochre Hazard Band & Crimson Red Stripe (`y = 1.08..1.50m`) */}
+            <mesh position={[0, 1.24, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.325, 0.22, 0.325]} />
+              <meshStandardMaterial map={pillarHazardTex} roughness={0.52} />
+            </mesh>
+            <mesh position={[0, 1.42, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.325, 0.12, 0.325]} />
+              <meshStandardMaterial color="#c8221c" roughness={0.48} metalness={0.22} />
+            </mesh>
+            {/* Bolted Radiation Warning Placard Facing Control Room Hall */}
+            {pil.plaqueDir && (
+              <mesh
+                position={[pil.plaqueDir[0], 1.72, pil.plaqueDir[2]]}
+                rotation={[0, pil.plaqueDir[3], 0]}
+                raycast={NOOP_RAYCAST}
+              >
+                <planeGeometry args={[0.2, 0.2]} />
+                <meshStandardMaterial map={pillarWarningPlaqueTex} roughness={0.45} />
+              </mesh>
+            )}
+          </group>
+        ))}
+
+        {/* Overhead Ceiling Slab (`y = 4.19m`) & Overhead Cable Trays */}
         <mesh
-          position={[-3.92, 0.08, 0.2]}
-          rotation={[0, Math.PI / 2.35, 0]}
-          castShadow
-          receiveShadow
+          position={[0, HALL_CEILING_Y - 0.01, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+          raycast={NOOP_RAYCAST}
         >
-          <boxGeometry args={[7.6, 0.16, 0.12]} />
-          <meshStandardMaterial
-            color="#2b3532"
-            roughness={0.55}
-            metalness={0.58}
-          />
-        </mesh>
-        <mesh
-          position={[3.72, 0.08, 0.1]}
-          rotation={[0, -Math.PI / 2.35, 0]}
-          castShadow
-          receiveShadow
-        >
-          <boxGeometry args={[7.4, 0.16, 0.12]} />
-          <meshStandardMaterial
-            color="#2b3532"
-            roughness={0.55}
-            metalness={0.58}
-          />
+          <planeGeometry args={[HALL_HALF_W * 2, HALL_HALF_D * 2]} />
+          <meshStandardMaterial color="#2a312e" roughness={0.86} metalness={0.24} />
         </mesh>
 
-        {/* Rear Bunker Concrete Bulkhead Wall enclosing the Expanded 3-Bay Horseshoe Console */}
-        <mesh position={[0, 1.75, 7.32]} receiveShadow>
-          <boxGeometry args={[10.2, 3.8, 0.25]} />
-          <meshStandardMaterial
-            color="#1c2621"
-            roughness={0.85}
-            metalness={0.25}
-          />
-        </mesh>
+        {([-4.8, 4.8] as const).map((xTray, idx) => (
+          <mesh
+            key={`overhead-tray-x-${idx}`}
+            position={[xTray, 3.82, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <boxGeometry args={[0.42, 0.055, 8.4]} />
+            <meshStandardMaterial color="#34403b" metalness={0.66} roughness={0.48} />
+          </mesh>
+        ))}
 
-        {/* Industrial Coolant Pipe placed high against the back wall so it never intersects the overhead telemetry board */}
-        <mesh
-          position={[0, 2.78, -2.18]}
-          rotation={[0, 0, Math.PI / 2]}
-          castShadow
-          receiveShadow
-        >
-          <cylinderGeometry args={[0.09, 0.09, 7.6, 12]} />
-          <meshStandardMaterial
-            color="#364940"
-            roughness={0.55}
-            metalness={0.65}
-          />
-        </mesh>
+        {/* Coffered Acoustic Ceiling & Glowing Warm-White Fluorescent Troffers */}
+        <SovietRbmkCofferedCeiling3D />
+
+        {/* Color-Coded Industrial Ceiling Piping, 3 Swivel Chairs, СМ-2М Tape Cabinets & Fire-Shield */}
+        <SovietIndustrialPipingAndProps3D />
+
+        {/* Caged Industrial Tungsten Wall Sconces (`Плафон ВЗГ-200`) on Side Wall Columns */}
+        <SovietWallPillarLamp3D position={[-5.71, 2.88, -1.6]} rotY={Math.PI / 2} />
+        <SovietWallPillarLamp3D position={[-5.71, 2.88, 1.6]} rotY={Math.PI / 2} />
+        <SovietWallPillarLamp3D position={[5.71, 2.88, 2.32]} rotY={-Math.PI / 2} />
+        <SovietWallPillarLamp3D position={[5.71, 2.88, -1.92]} rotY={-Math.PI / 2} />
+
+        {/* Front Curved 3-Part Synoptic Wall (`Мнемосхема`) & Side Instrument Cabinets */}
+        <SovietRbmkFrontSynopticWall3D />
+
+        {/* Rear Double Steel Entry Doors with Wired Glass & Signage (No Airlock Wheel Door) */}
+        <SovietRearDoubleEntryDoors3D />
+
+        {/* Left Wall Electrical Switchgear Cabinet Alcove Framing 1.25x `UNIT D` */}
+        <SovietLeftWallSwitchgearAlcove3D />
+
+        {/* Continuous ~10.4m Sloped 3-Bay Operator Console Plinth (`Пульт СИУР / СИУБ / СИУТ`) */}
+        <SovietRbmkOperatorConsolePlinth3D />
+
+        {/* Supervisor Desk Pedestal Surround & Swivel Chair (`Стол НСБ`) */}
+        <SovietSupervisorDeskSurroundAndChair3D />
       </group>
 
+      {/* Panoramic Exterior Observation Windows & Forced-Perspective Dioramas */}
+      <ExteriorDioramas3D />
+
       {/* ============================================================
-          1. FRONT-HINGED UNBROKEN 3-BAY HORSESHOE CONSOLE (`z_hinge = +0.505m`)
-             Adjacent front desk lips meet point-to-point with 0.000m overlap:
-             - Bay 1 (`UNIT A`, 1.98m):      pos = [-2.1600, -0.02, 3.1600], rotY = 1.7600 (100.8°)
-             - Trapezoidal Bridge 1 (`J1`):  pos = [-1.4505, -0.02, 4.0724], rotY = 2.1200 (121.5°)
-             - Bay 2 (`UNIT A-2`, 1.66m):    pos = [-1.0920, -0.02, 5.0171], rotY = 2.4800 (142.1°)
-             - Trapezoidal Bridge 2 (`J2`):  pos = [-0.0882, -0.02, 5.1329], rotY = 2.8400 (162.7°)
-             - Bay 3 (`UNIT B`, 1.66m):      pos = [ 0.8042, -0.02, 5.6068], rotY = 3.2000 (183.3°)
+          ERGONOMIC INTERACTIVE STATIONS IN RBMK-1000 БЩУ HALL (1.37x Split Wing Consoles)
+          - Front Synoptic Center: K.O.M.R.A.D.-84 Master CRT (`z = -3.96, y = 0.18, scale = 1.42`)
+          - Operator Wing Left (`x = -3.22, z = -1.16, +15°`): UNIT A-2 (Core/Rods) & UNIT A (Cooling/MW)
+          - Open Center Aisle (`x = -1.3..+1.3`): Clear unobstructed view of K.O.M.R.A.D.-84
+          - Operator Wing Right (`x = +3.22, z = -1.16, -15°`): UNIT C (Battery/Grid) & UNIT B (Coolant/Pumps)
+          - Left Wall Switchgear (`x = -4.6, z = +1.35, +90°`): UNIT D (1.25x)
+          - Central Supervisor Desk (`x = 0.0, z = +1.8`): InspectorDesk3D
          ============================================================ */}
-      <group
-        ref={reactorWrapRef}
-        position={[-2.16, -0.02, 3.16]}
-        rotation={[0, 1.76, 0]}
-        scale={[1.04, 1.05, 1.04]}
-      >
-        <group rotation={[0, -0.42, 0]}>
-          <group position={[2.15, 0, 1.08]}>
-            <HighDetailReactorPanel3D />
+
+      {/* LEFT DESK (`x = -3.22, z = -1.16, +15°` inward): UNIT A-2 (Core & Rods) + UNIT A (Cooling & MW Levers) */}
+      <group position={[-3.22, 0, -1.16]} rotation={[0, (15 * Math.PI) / 180, 0]}>
+        <group position={[-0.78, 0.18, 0.08]} rotation={[-0.51, 0, 0]} scale={0.74}>
+          <LeftRearWrapAroundPanel3D variant="left-rear" />
+        </group>
+        <group
+          ref={reactorWrapRef}
+          position={[0.73, 0.18, 0.08]}
+          rotation={[-0.51, 0, 0]}
+          scale={0.74}
+        >
+          <group rotation={[0, -0.42, 0]}>
+            <group position={[2.15, 0, 1.08]}>
+              <HighDetailReactorPanel3D />
+            </group>
           </group>
         </group>
       </group>
 
-      {/* Seamless Trapezoidal Corner Console Bridge 1 (Anchored at Front Hinge `J1` between `UNIT A` & `UNIT A-2`) */}
-      <SovietConsoleCornerWedge3D
-        position={[-1.4505, -0.02, 4.0724]}
-        rotationY={2.12}
-        hingeAngle={0.72}
-      />
-
-      {/* 1B. MIDDLE-LEFT PANEL (`UNIT A-2`): Front-hinged at `J1` [-1.0920, -0.02, 5.0171] */}
-      <group
-        position={[-1.092, -0.02, 5.0171]}
-        rotation={[0, 2.48, 0]}
-        scale={[1.04, 1.05, 1.04]}
-      >
-        <LeftRearWrapAroundPanel3D variant="left-rear" />
-      </group>
-
-      {/* Seamless Trapezoidal Corner Console Bridge 2 (Anchored at Front Hinge `J2` between `UNIT A-2` & `UNIT B`) */}
-      <SovietConsoleCornerWedge3D
-        position={[-0.0882, -0.02, 5.1329]}
-        rotationY={2.84}
-        hingeAngle={0.72}
-      />
-
-      {/* 1C. BACK-LEFT PANEL (`UNIT B`): Front-hinged at `J2` [0.8042, -0.02, 5.6068] */}
-      <group
-        position={[0.8042, -0.02, 5.6068]}
-        rotation={[0, 3.20, 0]}
-        scale={[1.04, 1.05, 1.04]}
-      >
-        <LeftRearWrapAroundPanel3D variant="rear" />
-      </group>
-
-      {/* 1D. HERMETIC SOVIET STEEL BUNKER DOOR (`ГЕРМОДВЕРЬ ГД-84`) IN THE GAP BETWEEN `UNIT B` AND `UNIT C` */}
-      <SovietHermeticBunkerDoor3D
-        position={[2.34, -0.02, 4.18]}
-        rotation={[0, -1.88, 0]}
-        doorCode="AIRLOCK DOOR NO. 4 // SECTOR 04"
-        subLabel="TURBINE HALL TG-1 AIRLOCK • CONTAINMENT SEAL"
-      />
-
-      {/* 2. CENTER COCKPIT LOOMING TERMINAL: <TerminalStation3D /> + Enlarged Split-Screen CRT + High-Detail Soviet DVK-84 Console */}
-      <group ref={terminalWrapRef} position={[0, 0.14, 2.18]}>
-        <TerminalStation3D />
-        <group
-          position={[0, 0, -1.62]}
-          userData={{ isDvk84Replacement: true }}
-        >
-          <Komrad84SplitScreenCrt3D
-            bulletinIdx={bulletinIdx}
-            onCycleBulletin={handleCycleBulletin}
-          />
-          <SovietDvk84KeyboardConsole3D onCycleBulletin={handleCycleBulletin} />
+      {/* RIGHT DESK OUTER BAY (`x = +3.22, z = -1.16, -15°` inward): UNIT B (Drum Separators & Coolant Loop) */}
+      <group position={[3.22, 0, -1.16]} rotation={[0, -(15 * Math.PI) / 180, 0]}>
+        <group position={[0.8, 0.18, 0.08]} rotation={[-0.51, 0, 0]} scale={0.74}>
+          <LeftRearWrapAroundPanel3D variant="rear" />
         </group>
       </group>
 
-      {/* 3. CENTRAL COMMAND DESK: <InspectorDesk3D /> */}
-      {ExternalInspectorDesk3D ? (
-        <ExternalInspectorDesk3D />
-      ) : (
-        <InspectorDesk3DPlaceholder />
-      )}
+      {/* LEFT WALL SWITCHGEAR (`x = -4.6, z = +1.35, facing +X`): 1.25x UNIT D Breakers & Fuses */}
+      <SovietRearAuxBreakerPanel3D />
+
+      {/* CENTER UPPER SYNOPTIC WALL (`z = -3.96, y = 0.28`): K.O.M.R.A.D.-84 Master 1600x1000 CRT Screen */}
+      <group
+        position={TERMINAL_ROOT_POS}
+        rotation={[TERMINAL_TILT_X, 0, 0]}
+        scale={TERMINAL_SCALE}
+      >
+        <group ref={terminalWrapRef} position={[0, 0, 1.62]}>
+          <TerminalStation3D />
+          <group
+            position={[0, 0, -1.62]}
+            userData={{ isDvk84Replacement: true }}
+          >
+            <Komrad84SplitScreenCrt3D
+              bulletinIdx={bulletinIdx}
+              onCycleBulletin={handleCycleBulletin}
+            />
+          </group>
+        </group>
+      </group>
+
+      {/* SHIFT SUPERVISOR DESK (`Стол НСБ` at `x = 0.0, z = +1.8`): <InspectorDesk3D /> */}
+      <group ref={inspectorWrapRef} position={[0, 0, 2.76]}>
+        {ExternalInspectorDesk3D ? (
+          <ExternalInspectorDesk3D />
+        ) : (
+          <InspectorDesk3DPlaceholder />
+        )}
+      </group>
     </>
   );
 });
+
+useGLTF.preload("./models/battery_grid_panel.glb");

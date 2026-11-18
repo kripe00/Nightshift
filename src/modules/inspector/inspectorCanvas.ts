@@ -2615,8 +2615,8 @@ export function drawSecurityManualCanvas(
           '-> Fills ACCUMULATOR BANKS [UNIT C]!',
         ],
         effectLines: [
-          'Turning BATTERY -> GRID wheel dispatches',
-          'stored MWh; low RODS drains Battery <10%!',
+          'Unit C busbars auto-drain Bank A & B',
+          'to feed substations; low RODS drains <10%!',
         ],
         reactionLines: [
           'Keep RODS & FEEDWATER balanced; 4+ AMBER',
@@ -2631,8 +2631,8 @@ export function drawSecurityManualCanvas(
           '2. Pull Sector Lever [A] (DEMAND MW) ->',
         ],
         effectLines: [
-          '3. Turn BATTERY -> GRID [C] to match!',
-          '-MW: 1. Lower Lever [A] & WHEEL [C] ->',
+          '3. Unit C [C] auto-dispatches Zone MW!',
+          '-MW: 1. Lower Lever [A] (C auto-trims) ->',
         ],
         reactionLines: [
           '2. Insert RODS [A-2] & trim WATER [B]',
@@ -2666,8 +2666,8 @@ export function drawSecurityManualCanvas(
           'DUGA-1, KGB BUNKER, VODKA & STEEL WORKS.',
         ],
         reactionLines: [
-          'Match total DEMAND MW on UNIT C using',
-          'the single BATTERY -> GRID handwheel!',
+          'Unit C Copper Busbars auto-feed DEMAND',
+          'MW from Bank A & B to all Zone Levers!',
         ],
       },
       {
@@ -2735,17 +2735,17 @@ export function drawSecurityManualCanvas(
       },
       {
         icon: 'wheel',
-        badge: '[UNIT A-2] CONTROL ROD WHEEL & [AUTO RODS]',
+        badge: '[UNIT A-2] CONTROL ROD DRIVE WHEEL',
         useLines: [
-          'Click [AUTO RODS] button above left wheel;',
-          'scroll/drag CONTROL RODS (55% nominal).',
+          'Scroll or drag [CONTROL ROD DRIVE] wheel',
+          'on A-2 left bay (55% nominal baseline).',
         ],
         effectLines: [
-          '[AUTO RODS] micro-trims core reactivity;',
-          'pulling rods UP boils more steam -> MW.',
+          'Pulling Boron rods UP raises core fission',
+          'reactivity & boils more steam -> MW.',
         ],
         reactionLines: [
-          'Manual Scroll/Drag adjusts Rods anytime;',
+          'Balance with UNIT B [FEEDWATER] (~50%);',
           'hold SHIFT while scrolling for ±1% trim!',
         ],
       },
@@ -2809,7 +2809,7 @@ export function drawSecurityManualCanvas(
     ctx.fillStyle = '#094a20'
     ctx.font = `bold 21px ${MANUAL_BODY_FONT_STACK}`
     ctx.textAlign = 'left'
-    ctx.fillText('7. UNIT C: BATTERY STORAGE & GRID WHEEL [KEY 5]', 38, 156)
+    ctx.fillText('7. UNIT C: ACCUMULATOR BANK & AUTO BUSBARS [KEY 5]', 38, 156)
 
     const gridCards: FieldGuideCardSpec[] = [
       {
@@ -2830,18 +2830,18 @@ export function drawSecurityManualCanvas(
       },
       {
         icon: 'wheel',
-        badge: '[KEY 5] SINGLE BATTERY -> GRID WHEEL',
+        badge: '[KEY 5] AUTOMATIC BATTERY -> GRID BUSBAR',
         useLines: [
-          'Drag or scroll the center handwheel on',
-          'UNIT C to dispatch 0-1000 MW to substations.',
+          'Unit C copper busbars automatically drain',
+          'Bank A & B to feed active Unit A zones.',
         ],
         effectLines: [
-          'RED MARKER = ENERGY DEMAND (Quotas + Aux);',
-          'BLACK NEEDLE = OUTPUT pushed from Batteries.',
+          'ANALOG DIAL = LIVE ZONE DRAIN (0-10 x100);',
+          'VFD WINDOW = TOTAL AUTO-DISPATCHED MW.',
         ],
         reactionLines: [
-          'Align BLACK needle onto RED DEMAND marker',
-          'so substations stay fed without wasting MWh!',
+          'Keep Bank A & B charged via A-2 + B so',
+          'automatic zone drain never starves!',
         ],
       },
       {
@@ -2872,8 +2872,8 @@ export function drawSecurityManualCanvas(
           'battery or demand adjustments if off-target.',
         ],
         reactionLines: [
-          'Pair KEY 5 wheel trim with KEY 1 Substation',
-          'levers whenever Moscow changes MW quotas!',
+          'Balance KEY 1 Substation levers with A-2',
+          'generation whenever Moscow shifts quotas!',
         ],
       },
     ]
@@ -3275,7 +3275,7 @@ export function drawWePad84ScreenCanvas(
     const rows: Array<{ label: string; val: string; col: string }> = [
       {
         label: 'ENERGY CREATED',
-        val: `${Math.round(payload.energyCreatedMW)} MW (${payload.batteryWheelPct}% OUT)`,
+        val: `${Math.round(payload.energyCreatedMW)} MW (${payload.batteryWheelPct}% DRAIN)`,
         col: payload.energyCreatedMW >= 200 ? '#39ff14' : '#ffd000',
       },
       {
@@ -3380,14 +3380,14 @@ export function drawWePad84ScreenCanvas(
             line2: 'turn HELIUM-N2 & FEEDWATER ~50%.',
           },
           {
-            head: '2. [KEY 3] UNIT A-2: AUTO RODS & 55%',
-            line1: 'Click [AUTO RODS] ON (above left wheel)',
-            line2: '& raise BORON RODS to 55% (charge BAT).',
+            head: '2. [KEY 3] UNIT A-2: BORON RODS 55%',
+            line1: 'Scroll or drag [CONTROL ROD DRIVE] wheel',
+            line2: 'to raise BORON RODS to 55% (charge BAT).',
           },
           {
-            head: '3. [KEY 5] UNIT C: BATTERY WHEEL',
-            line1: 'Turn single [BATTERY -> GRID] wheel',
-            line2: 'to 600 MW (60%) to match GRID DEMAND!',
+            head: '3. [KEY 5] UNIT C: AUTO ZONE DISPATCH',
+            line1: 'Unit C auto-drains Banks A & B to match',
+            line2: 'Unit A levers! Verify 600 MW on VFD/Dial.',
           },
           {
             head: '4. [KEY 1] UNIT A: 6 SUBSTATIONS',
@@ -3402,18 +3402,18 @@ export function drawWePad84ScreenCanvas(
         '+MW SURGE vs -MW SHED ORDERS',
         [
           {
-            head: 'SINGLE BATTERY DISPATCH WHEEL!',
-            line1: 'Battery buffers reactor output! Wheel',
-            line2: 'pushes MW from Battery to match DEMAND.',
+            head: 'AUTOMATIC BATTERY -> GRID DISPATCH!',
+            line1: 'Battery buffers reactor output! Unit C',
+            line2: 'auto-drains Banks A & B to feed DEMAND.',
           },
           {
             head: '+MW ORDER (NEED MORE POWER):',
             line1: '1. RODS UP [A-2] to charge Battery faster',
-            line2: '2. Turn [BATTERY -> GRID] UP + Levers [A]!',
+            line2: '2. Raise Sector Levers [A] — C auto-feeds!',
           },
           {
             head: '-MW ORDER (SHED GRID LOAD):',
-            line1: '1. Lower Levers [A] & [BATTERY -> GRID] [C]',
+            line1: '1. Lower Sector Levers [A] (C auto-trims!)',
             line2: '2. Trim RODS IN [A-2] to avoid >75 BAR!',
           },
           {
@@ -3467,8 +3467,8 @@ export function drawWePad84ScreenCanvas(
           },
           {
             head: 'HEAVY ACCUMULATOR BANK ([KEY 5] C):',
-            line1: 'Reactor fills Battery (ENERGY CREATED);',
-            line2: 'Single wheel feeds Grid (ENERGY DEMAND)!',
+            line1: 'Reactor fills Banks A/B (ENERGY CREATED);',
+            line2: 'Zone Busbars auto-drain to feed DEMAND!',
           },
           {
             head: 'SCROLL WHEEL SHORTCUT:',

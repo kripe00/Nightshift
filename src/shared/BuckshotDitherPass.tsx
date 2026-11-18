@@ -99,11 +99,13 @@ const FRAGMENT_SHADER = /* glsl */ `
     col *= mix(vec3(1.0), warmAmberHighlight, highlightWeight * 0.38);
 
     // 2. Exponential Distance Fog in Deep Bunker Corners (using scene depth buffer)
+    // Indoor hall max diagonal is <14.6m, so 0m-15m stays 100% identical while >15m exterior panoramas stay crisp out to 90m+.
     float rawDepth = texture2D(tDepth, vUv).r;
     float viewDist = linearizeDepth(rawDepth);
     float fogFactor = (1.0 - exp(-pow(max(0.0, viewDist - 2.1) * 0.19, 1.85))) * (1.0 - protectText);
+    float maxBunkerFog = mix(0.78, 0.08, smoothstep(15.0, 25.0, viewDist));
     vec3 deepBunkerFog = vec3(0.022, 0.038, 0.033);
-    col = mix(col, deepBunkerFog, clamp(fogFactor, 0.0, 0.78));
+    col = mix(col, deepBunkerFog, clamp(fogFactor, 0.0, maxBunkerFog));
 
     // Coarse 2.5px Bayer grid (clearly visible Buckshot Roulette cross-hatched stippling!)
     vec2 bayerCell = floor(gl_FragCoord.xy / uDitherPixelSize);
@@ -193,8 +195,8 @@ export const BuckshotDitherPass: React.FC = () => {
         tDiffuse: { value: renderTarget.texture },
         tDepth: { value: renderTarget.depthTexture },
         uResolution: { value: new THREE.Vector2(size.width, size.height) },
-        uCameraNear: { value: 0.1 },
-        uCameraFar: { value: 25.0 },
+        uCameraNear: { value: 0.05 },
+        uCameraFar: { value: 160.0 },
         uDitherPixelSize: { value: 2.5 },
         uDitherStrength: { value: 0.14 },
         uColorLevels: { value: 7.0 },

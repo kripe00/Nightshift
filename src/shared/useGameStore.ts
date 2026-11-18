@@ -80,7 +80,6 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
   return {
     rodTargetRate: state.rodTargetRate,
     az5Active: state.az5Active,
-    autoRodEnabled: state.autoRodEnabled,
     mcpActive: [...state.mcpActive],
     pumpThrottle: [state.pumpThrottle[0], state.pumpThrottle[1]],
     oilCoolerValve: state.oilCoolerValve,
@@ -139,7 +138,20 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
     houseLoadMW: state.houseLoadMW,
     energyCreatedMW: state.energyCreatedMW,
     batteryStoredMWh: state.batteryStoredMWh,
-    batteryOutputValve: state.batteryOutputValve,
+    batteryOutputValve: state.az5Active
+      ? 0
+      : Math.max(
+          0,
+          Math.min(
+            1,
+            Number(
+              (
+                state.substations.reduce((acc, s) => acc + (s.allocatedMW ?? 0), 0) /
+                1000
+              ).toFixed(3)
+            )
+          )
+        ),
     energyDemandMW: state.energyDemandMW,
     totalElectricalMW: state.totalElectricalMW,
     substations: state.substations.map((s) => ({ ...s })),
@@ -148,11 +160,74 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
   }
 }
 
+function cleanWheelText(text: string): string {
+  return text
+    .replace(/GO TO:\s*\[KEY 5\]\s*UNIT C\s*\(BATTERY WHEEL\)/gi, 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)')
+    .replace(/\[BATTERY\s*->\s*GRID\]\s*WHEEL/gi, 'UNIT C AUTO BUSBARS')
+    .replace(/TURN\s+BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?\s*TO\s*(\d+\s*MW)/gi, 'SET SECTOR LEVERS [A] TO $3 (UNIT C AUTO-DRAINS)')
+    .replace(/BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?/gi, 'UNIT C AUTO BUSBARS')
+    .replace(/single\s+UNIT\s+C\s+wheel/gi, 'UNIT C copper busbars')
+    .replace(/UNIT\s+C\s+wheel/gi, 'UNIT C auto-dispatch')
+    .replace(/&\s*Wheel\s*\[C\]/gi, '(C auto-trims)')
+    .replace(/3\.\s*Battery\s*Wheel\s*\[C\]/gi, '3. Unit C Auto-Drains')
+    .replace(/\bTURN\s+WHEEL\b/gi, 'CHECK AUTO DRAIN')
+}
+
+function evaluateWheelFreeTutorial(
+  r: ReactorState,
+  tutorialPhase: TutorialPhase
+): TutorialPrompt {
+  const effectivePhase: TutorialPhase =
+    tutorialPhase === 'STEP_4_SPIN_TURBINE' ? 'STEP_6_BASELINE_600MW' : tutorialPhase
+  const raw = evaluateTutorial(r, effectivePhase)
+  const resolved =
+    raw.phase === 'STEP_4_SPIN_TURBINE'
+      ? evaluateTutorial(r, 'STEP_6_BASELINE_600MW')
+      : raw
+
+  if (resolved.phase === 'STEP_6_BASELINE_600MW') {
+    return {
+      ...resolved,
+      phase: 'STEP_6_BASELINE_600MW',
+      header: '>> STEP 4/6 [KEY 1 -> UNIT A // 6 SECTOR LEVERS]:',
+      body:
+        'ACTION: GO TO UNIT A [KEY 1] AND SET ALL 6 SECTOR LEVERS TO 100 MW! UNIT C COPPER BUSBARS AUTOMATICALLY DRAIN BANKS A & B TO SUPPLY 600 MW.',
+      hint:
+        'WHY: Raising Unit A substation levers automatically draws matching MW from Unit C Accumulator Banks A & B.',
+      panelKey: 'GO TO: [KEY 1] UNIT A (6 LEVERS)',
+      actionLine:
+        'SET ALL 6 SECTOR LEVERS ON UNIT A TO 100 MW (UNIT C AUTO-DRAINS)',
+      whyLines: [
+        'Unit C copper busbars drain Accumulator Banks A & B automatically per Unit A lever demand.',
+        'Check [KEY 5] Unit C dial & VFD readout to monitor live zone drain.',
+      ],
+    }
+  }
+
+  if (resolved.phase === 'COMPLETED') {
+    return {
+      ...resolved,
+      header: cleanWheelText(resolved.header),
+      body: cleanWheelText(resolved.body),
+      hint: cleanWheelText(resolved.hint),
+      panelKey: cleanWheelText(resolved.panelKey),
+      actionLine: cleanWheelText(resolved.actionLine),
+      whyLines: [
+        cleanWheelText(resolved.whyLines[0]),
+        cleanWheelText(resolved.whyLines[1]),
+      ],
+      volkovQuote: cleanWheelText(resolved.volkovQuote),
+    }
+  }
+
+  return resolved
+}
+
 function mapReactorToGameStateFields(
   r: ReactorState,
   tutorialPhase: TutorialPhase
 ) {
-  const evalRes = evaluateTutorial(r, tutorialPhase)
+  const evalRes = evaluateWheelFreeTutorial(r, tutorialPhase)
   const sub1 = findSubById(r.substations, 1)
   const sub2 = findSubById(r.substations, 2)
   const sub3 = findSubById(r.substations, 3)
@@ -312,12 +387,12 @@ export function getContextualDiagnosticHint(
           return '🔋 BATTERY BANK LOW (<8%): WITHDRAW RODS (A-2) TO GENERATE >500 MW AND RECHARGE ACCUMULATORS!'
         }
         if (state.totalElectricalMW > state.energyDemandMW + 60) {
-          return '⚡ GRID OVER-DISPATCH: LOWER [BATTERY -> GRID] WHEEL ON UNIT C [KEY 5] TO MATCH ENERGY DEMAND!'
+          return '⚡ GRID OVER-DISPATCH: LOWER UNIT A SECTOR LEVERS [KEY 1] TO SHED SURPLUS LOAD (UNIT C AUTO-DRAINS)!'
         }
         if (state.totalElectricalMW < state.energyDemandMW - 40) {
-          return '⚡ DEMAND DEFICIT: TURN [BATTERY -> GRID] WHEEL UP ON UNIT C [KEY 5] TO SUPPLY THE GRID!'
+          return '⚡ DEMAND DEFICIT: BATTERY BANK LOW OR TRIPPED ON UNIT C [KEY 5] — RAISE RODS ON A-2 TO SUPPLY DEMAND!'
         }
-        return '🔋 BATTERY BANK & DISPATCH OK: BALANCE UNIT A SUBSTATIONS TO MATCH ENERGY DEMAND WITH THE UNIT C WHEEL.'
+        return '🔋 BATTERY BANK & AUTO DISPATCH OK: UNIT C COPPER BUSBARS ARE AUTOMATICALLY SUPPLYING UNIT A ZONE LOAD.'
       case 'order':
         return '📄 NEW DIRECTIVE IN PRINTER: PRESS [KEY 4] -> TEAR PAPER, INSPECT SEAL/FONT/COLOR, STAMP & DISPATCH (TUBE) OR SHRED!'
     }
@@ -949,7 +1024,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...createColdStartState(),
         rodTargetRate: 0,
         az5Active: false,
-        autoRodEnabled: true,
         mcpActive: [true, true, true, true],
         pumpThrottle: [60, 60],
         oilCoolerValve: 50,
@@ -1344,43 +1418,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         rodTargetRate: rate,
-        autoRodEnabled: rate !== 0 ? false : state.autoRodEnabled,
       }
       return mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
-    })
-  },
-
-  setAutoRodEnabled: (enabled?: boolean) => {
-    set((state) => {
-      const nextAuto =
-        typeof enabled === 'boolean' ? enabled : !state.autoRodEnabled
-      const nextReactor: ReactorState = {
-        ...extractReactorState(state),
-        autoRodEnabled: nextAuto,
-        rodTargetRate: nextAuto ? 0 : state.rodTargetRate,
-      }
-      const prevPhase = state.tutorialPhase
-      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      const entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'OPERATOR',
-        `AUTOMATIC ROD REGULATOR (АР) ${nextAuto ? 'ENGAGED (HOLDING STABLE POWER & 70 BAR)' : 'DISENGAGED (MANUAL СУЗ)'}.`,
-        'normal'
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
-      }
     })
   },
 
@@ -1468,9 +1507,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextSubstations: SubstationQuota[] = state.substations.map((s) =>
         s.id === subId ? { ...s, allocatedMW: clamped } : { ...s }
       )
+      const totalNextSubMW = nextSubstations.reduce((acc, s) => acc + (s.allocatedMW ?? 0), 0)
+      const nextAutoValve = state.az5Active
+        ? 0
+        : Math.max(0, Math.min(1, Number((totalNextSubMW / 1000).toFixed(3))))
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         substations: nextSubstations,
+        batteryOutputValve: nextAutoValve,
       }
 
       const nextVoltageDip =
@@ -2043,7 +2087,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       let nextTargetDefense = state.targetDefenseMW
       let nextTargetVodka = state.targetVodkaMW
       let nextTutorialStep = state.tutorialStep
-      let nextAutoRodEnabled = state.autoRodEnabled
       let feedback = ''
       let logLevel: TerminalLogEntry['level'] = 'normal'
 
@@ -2108,9 +2151,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           0
         )
         const totalDeltaMW = newTotalMW - prevTotalMW
-        if (Math.abs(totalDeltaMW) >= 50) {
-          nextAutoRodEnabled = false
-        }
 
         const changeDescriptions = (
           changedSectors.length > 0 ? changedSectors : (['vodka'] as SectorNodeId[])
@@ -2123,10 +2163,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         const plantGuidance =
           totalDeltaMW >= 25
-            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): 1)[A-2] RAISE RODS & [B] MATCH FEEDWATER -> 2)[A] SET MW LEVER -> 3)[C] TURN [BATTERY -> GRID] WHEEL UP!`
+            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): 1)[A-2] RAISE RODS & [B] MATCH FEEDWATER -> 2)[A] SET MW LEVERS (UNIT C AUTO-DRAINS BANKS)!`
             : totalDeltaMW <= -25
-              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): 1)[A] LOWER MW LEVER -> 2)[C] DIAL DOWN [BATTERY -> GRID] WHEEL -> 3)[A-2] INSERT RODS & [B] TRIM FEEDWATER!`
-              : `DIVERT POWER (${newTotalMW} MWe TOTAL): RE-BALANCE UNIT A LEVERS & VERIFY UNIT C [BATTERY -> GRID] WHEEL!`
+              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): 1)[A] LOWER MW LEVERS (UNIT C AUTO-TRIMS) -> 2)[A-2] INSERT RODS & [B] TRIM FEEDWATER!`
+              : `DIVERT POWER (${newTotalMW} MWe TOTAL): RE-BALANCE UNIT A LEVERS & VERIFY [KEY 5] UNIT C ZONE DRAIN!`
 
         const routeReqText = `${changeDescriptions.join(' & ')} // ${plantGuidance}`
 
@@ -2197,7 +2237,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       return {
         substations: nextSubstations,
         tutorialStep: nextTutorialStep,
-        autoRodEnabled: nextAutoRodEnabled,
         coreTemp: nextTemp,
         pressureBar: nextPressure,
         redlineInstability: nextInstability,
@@ -2388,7 +2427,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           surplusOverloadSeconds = 0
           nextInstability = Math.min(100, nextInstability + 10)
           pushKomradLiveDispatch(
-            `⚡ [GRID OVER-DISPATCH: +${Math.round(deltaDispatchMWe)} MWe SURPLUS]: OVER-FEEDING SUBSTATIONS FROM BATTERY! LOWER [BATTERY -> GRID] WHEEL ON UNIT C (+10% INSTABILITY)!`,
+            `⚡ [GRID OVER-DISPATCH: +${Math.round(deltaDispatchMWe)} MWe SURPLUS]: EXCESS LOAD DRAINING ACCUMULATOR! LOWER UNIT A ZONE LEVERS (+10% INSTABILITY)!`,
             'warn'
           )
         }
@@ -2564,7 +2603,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...base,
         az5Active: nextAz5,
         az5Timer: nextAz5 ? 0 : state.az5Timer,
-        autoRodEnabled: nextAz5 ? false : state.autoRodEnabled,
         turbines: nextAz5
           ? [
               {

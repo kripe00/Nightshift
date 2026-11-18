@@ -231,3 +231,17 @@
   >
   > *KGB-inspeksjon er kjørt med 0 advarsler og 0 feil. Ta en ny prøvetur, kjenn på gasspedalen og meld tilbake! Lenge leve Femårsplanen — MELTDOWN IS PROPAGANDA! 🎖️⚡⚙️☢️☭"*
 
+### [TELEGRAM #017 — STEMPLET: QUOTA-84 // FULL 3D RBMK-1000 KONTROLLHALL, PANORAMAVINDUER, TO-VINGET PULT, PEKERLÅS & 60 FPS GPU-OPTIMALISERING!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Komplett sovjetisk RBMK-1000 kontrollhall med utendørs dioramaer, to-vinget pult, fri WASD/pekerlås & null-lag 60 FPS optimalisering!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Inspektoratet melder om full overhaling av hele Sektor 84-kontrollhallen:*
+  > *1. **Komplett 3D RBMK-1000 Kontrollhall & Utendørs Dioramaer (`ExteriorDioramas3D.tsx`):** Bunkeren har fått full sovjetisk arkitektur med synoptisk hovedtavle (`ПЛАТО СФКРЭ` og `МНЕМОСХЕМА МПЦ & ТГ-7/8`), `ЭВМ СМ-2М` båndstasjoner, `ЧАСЫ БЩУ`-klokke, `UNIT D`-sikringsskap med knivbryter, og to panoramavinduer ut mot kraftverket, kjøletårn, snølandskap og Pripyat!*
+  > *2. **To-Vinget Kontrollpult med Åpen Midtgang:** Midt-pulten, gammelt tastatur og midt-kiler er fjernet slik at utsikten rett mot `K.O.M.R.A.D.-84` er 100 % fri fra gulv til tak, mens `UNIT B` har fått fast plass på høyre vinge og begge vingeender er forseglet med stålplater.*
+  > *3. **Førstepersons WASD + Pekelås (`Pointer Lock`) & Stasjonsfokus (`[0]–[7]`):** Operatører spaserer fritt i hele hallen (også rett gjennom den nye midtgangen!) og drar alle fysiske spaker og ratt direkte med virtuell peker.*
+  > *4. **60 FPS WebGL- & Easter-Egg Video-Optimalisering:** Direkte `THREE.VideoTexture` på `K.O.M.R.A.D.-84`, `dpr={1}`, `NOOP_RAYCAST` på dekorative mesher, 3 uskyggelagte scenelys og pauset bakgrunnstelemetri under videoavspilling — bekreftet med `0 feil` og `0 advarsler` i `npm run kgb` og `npm run build`!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og inspiser hallen! MELTDOWN IS PROPAGANDA! 🎖️🏗️⚙️☢️☭"*
+

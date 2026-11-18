@@ -9,6 +9,7 @@ import {
   startSoundtrack,
   updateSoundtrackState,
 } from '../modules/reactor/soundtrackPlayer'
+import { updatePointerLockInteraction } from './pointerLockState'
 import { useGameStore } from './useGameStore'
 
 const STORAGE_KEY = 'MIP_SAVED_SHIFT_84'
@@ -168,6 +169,13 @@ export const MainMenuOverlay: React.FC = () => {
   )
 
   const fxCanvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  useEffect(() => {
+    updatePointerLockInteraction({ mainMenuOpen: isMenuOpen })
+    if (isMenuOpen && document.pointerLockElement) {
+      document.exitPointerLock?.()
+    }
+  }, [isMenuOpen])
 
   // Continuously persist active shift progress in localStorage whenever shiftTimeMinutes advances
   useEffect(() => {

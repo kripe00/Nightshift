@@ -265,7 +265,6 @@ export interface GameState extends ReactorState {
   setSteamDumpValve: (open: boolean) => void
   toggleSteamDumpValve: () => void
   setRodTargetRate: (rate: -1 | 0 | 1) => void
-  setAutoRodEnabled: (enabled?: boolean) => void
   setTurbineSteamValve: (valveRatioOrPct: number) => void
   setBatteryOutputValve: (valveRatioOrPct: number) => void
   setShiftKeyHeld: (held: boolean) => void
