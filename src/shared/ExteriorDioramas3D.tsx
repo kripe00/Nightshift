@@ -18,7 +18,7 @@ interface DioramaGridState {
   cherenkovLevel: number;
 }
 
-function computeDioramaGridState(t: number): DioramaGridState {
+function computeDioramaGridState(): DioramaGridState {
   const s = useGameStore.getState();
   let totalTargetMW = 0;
   let totalAllocatedMW = 0;
@@ -75,9 +75,11 @@ function computeDioramaGridState(t: number): DioramaGridState {
   if (vodkaSupply <= 0.005) {
     vodkaFlicker = 0;
   } else if (vodkaSupply < 0.12) {
-    // Dying neon buzz right before total failure
-    const buzz = Math.sin(t * 43.0) * Math.cos(t * 19.0 + 0.7);
-    vodkaFlicker = buzz > -0.15 ? 0.82 : 0.08;
+    vodkaFlicker = THREE.MathUtils.lerp(
+      0.28,
+      1.0,
+      (vodkaSupply - 0.005) / 0.115,
+    );
   }
 
   // Cherenkov ionized sky-beam & cyan steam during reactor excursion / AZ-5 / meltdown
@@ -293,7 +295,7 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
         </group>
 
         {/* Narrow Green-Tinted Perimeter Edge Grime Strips (Hugged Tight to Mullions so Center Glass is Clear) */}
-        <mesh position={[0, hh - 0.045, 0.01]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, hh - 0.045, 0.01]} renderOrder={5} raycast={NOOP_RAYCAST} frustumCulled={false}>
           <planeGeometry args={[width - 0.08, 0.042]} />
           <meshBasicMaterial
             map={grimeEdgeTex}
@@ -305,6 +307,7 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
         <mesh
           position={[0, -hh + 0.045, 0.01]}
           rotation={[0, 0, Math.PI]}
+          renderOrder={5}
           raycast={NOOP_RAYCAST}
           frustumCulled={false}
         >
@@ -319,6 +322,7 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
         <mesh
           position={[-hw + 0.045, 0, 0.01]}
           rotation={[0, 0, Math.PI / 2]}
+          renderOrder={5}
           raycast={NOOP_RAYCAST}
           frustumCulled={false}
         >
@@ -333,6 +337,7 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
         <mesh
           position={[hw - 0.045, 0, 0.01]}
           rotation={[0, 0, -Math.PI / 2]}
+          renderOrder={5}
           raycast={NOOP_RAYCAST}
           frustumCulled={false}
         >
@@ -351,9 +356,15 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
             <boxGeometry args={[1.38, 0.13, 0.016]} />
             <meshBasicMaterial color="#8c7a4b" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.01]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.022]} raycast={NOOP_RAYCAST} frustumCulled={false}>
             <planeGeometry args={[1.34, 0.115]} />
-            <meshBasicMaterial map={plaqueTex} fog={false} />
+            <meshBasicMaterial
+              map={plaqueTex}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+              fog={false}
+            />
           </mesh>
         </group>
 
@@ -565,7 +576,7 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
         ))}
 
         {/* Subtle Corner Frost & Condensation Strips Along Narrow Bottom & Upper Pane Corners */}
-        <mesh position={[0, -hh + 0.065, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, -hh + 0.065, 0.02]} renderOrder={5} raycast={NOOP_RAYCAST} frustumCulled={false}>
           <planeGeometry args={[width - 0.08, 0.11]} />
           <meshBasicMaterial
             map={frostEdgeTex}
@@ -578,6 +589,7 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
         <mesh
           position={[0, hh - 0.06, 0.02]}
           rotation={[0, 0, Math.PI]}
+          renderOrder={5}
           raycast={NOOP_RAYCAST}
           frustumCulled={false}
         >
@@ -597,9 +609,15 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
             <boxGeometry args={[0.125, 0.27, 0.045]} />
             <meshBasicMaterial color="#2b3a34" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.025]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.036]} raycast={NOOP_RAYCAST} frustumCulled={false}>
             <planeGeometry args={[0.11, 0.245]} />
-            <meshBasicMaterial map={thermometerTex} fog={false} />
+            <meshBasicMaterial
+              map={thermometerTex}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+              fog={false}
+            />
           </mesh>
           <mesh position={[-0.035, -0.49, -0.005]} raycast={NOOP_RAYCAST} frustumCulled={false}>
             <cylinderGeometry args={[0.007, 0.007, 0.72, 6]} />
@@ -697,9 +715,15 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
             <boxGeometry args={[1.38, 0.13, 0.016]} />
             <meshBasicMaterial color="#8c7a4b" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.01]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.022]} raycast={NOOP_RAYCAST} frustumCulled={false}>
             <planeGeometry args={[1.34, 0.115]} />
-            <meshBasicMaterial map={plaqueTex} fog={false} />
+            <meshBasicMaterial
+              map={plaqueTex}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+              fog={false}
+            />
           </mesh>
         </group>
       </group>
@@ -1318,7 +1342,6 @@ const UnifiedExteriorWorld3D: React.FC = React.memo(() => {
       >
         <meshBasicMaterial
           map={pineTex}
-          transparent
           alphaTest={0.5}
           side={THREE.DoubleSide}
           fog={false}
@@ -1658,7 +1681,7 @@ const Win1SteelDripAndPipeLedge3D: React.FC = React.memo(() => {
           <boxGeometry args={[0.032, 0.038, 0.003]} />
           <meshBasicMaterial color="#182128" fog={false} />
         </mesh>
-        <mesh position={[0, 0.052, 0.018]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, 0.052, 0.018]} renderOrder={2} raycast={NOOP_RAYCAST} frustumCulled={false}>
           <planeGeometry args={[0.08, 0.08]} />
           <meshBasicMaterial
             color="#ff3b2a"
@@ -1777,7 +1800,9 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
   const win1BeaconTimerRef = useRef(0.125);
   const win1BeaconMaskRef = useRef(-1);
   const lastRidgePowerRatioRef = useRef(-1);
-  const ridgeSlowBlinkTimerRef = useRef(0);
+  const ridgeWinLitRef = useRef<Uint8Array>(
+    new Uint8Array(WIN1_MAX_RIDGE_WINDOWS).fill(1),
+  );
 
   const fourFaceGeo = useMemo(() => createFourFaceBoxGeometry(), []);
   const coolingTowerGeo = useMemo(() => createCoolingTowerLatheGeometry(), []);
@@ -2971,6 +2996,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
     if (ridgeWindowsRef.current) {
       ridgeWindowsRef.current.count = stageLayout.ridgeWindows.length;
       stageLayout.ridgeWindows.forEach((w, idx) => {
+        ridgeWinLitRef.current[idx] = 1;
         dummy.position.set(w.x, w.y, w.z);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.set(w.w, w.h, 1);
@@ -3014,7 +3040,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
     const t = clock.getElapsedTime();
     const dt = Math.min(delta, 0.1);
     const { citySatisfaction, vodkaFlicker, cherenkovLevel } =
-      computeDioramaGridState(t);
+      computeDioramaGridState();
 
     // 1. Sacred Vodka Priority: Star rotation, Distillery lights, Neon Sign, VIP Pipeline & Light Pollution
     if (starGroupRef.current) {
@@ -3219,8 +3245,8 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
       const active = cherenkovLevel > 0.01;
       cherenkovRef.current.visible = active;
       if (active) {
-        const pulse = 0.78 + 0.22 * Math.sin(t * 27.0) * Math.cos(t * 11.3);
-        const upwardPulse = 0.5 + 0.5 * Math.sin(t * 9.5);
+        const pulse = 0.88 + 0.12 * Math.sin(t * 3.2);
+        const upwardPulse = 0.5 + 0.5 * Math.sin(t * 2.1);
         if (cherenkovCoreMatRef.current) {
           cherenkovCoreMatRef.current.opacity = THREE.MathUtils.clamp(
             cherenkovLevel * 0.94 * pulse,
@@ -3263,7 +3289,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
       const phase = (t * driftSpeed + localIdx * 0.125) % 1;
       m.position.x = baseX + phase * 4.4 + layerSign * 0.35;
       m.position.y = Y(1.05) + phase * 3.8;
-      m.position.z = baseZ + (localIdx % 3) * 0.28;
+      m.position.z = baseZ + localIdx * 0.06;
       const s = 0.72 + phase * 1.15;
       m.scale.set(s, s * 0.74, 1);
 
@@ -3313,6 +3339,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             : distilleryGroundW + 4.95;
       m.position.x = DIST_STACK_XS[sIdx] + phase * 2.2;
       m.position.y = Y(stackTop) + phase * 2.6;
+      m.position.z = -35.1 + i * 0.02;
       const s = 0.48 + phase * 1.35;
       m.scale.set(s, s * 0.72, 1);
       const sm = distillerySmokeMatsRef.current[i];
@@ -3321,29 +3348,25 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
       }
     }
 
-    // 9. Surrounding Non-Vodka Ridge Warehouse Windows Dim With City Grid Power (Quantized Dirty-Check + 2 Hz Blink)
-    ridgeSlowBlinkTimerRef.current += dt;
+    // 9. Surrounding Non-Vodka Ridge Warehouse Windows Dim With City Grid Power (>= 0.03 Deadband + Hysteresis)
     const powerChanged =
-      Math.abs(citySatisfaction - lastRidgePowerRatioRef.current) > 0.015;
-    const inFlickerBand = citySatisfaction > 0.01 && citySatisfaction < 0.93;
-    const slowBlinkDue = ridgeSlowBlinkTimerRef.current >= 0.5;
-    if (slowBlinkDue) ridgeSlowBlinkTimerRef.current = 0;
-    if (powerChanged || (slowBlinkDue && inFlickerBand)) {
+      lastRidgePowerRatioRef.current < 0 ||
+      Math.abs(citySatisfaction - lastRidgePowerRatioRef.current) >= 0.03 ||
+      (citySatisfaction === 0 && lastRidgePowerRatioRef.current !== 0) ||
+      (citySatisfaction === 1 && lastRidgePowerRatioRef.current !== 1);
+    if (powerChanged) {
       lastRidgePowerRatioRef.current = citySatisfaction;
       if (ridgeWindowsRef.current && ridgeWindowsRef.current.instanceColor) {
         for (let i = 0; i < stageLayout.ridgeWindows.length; i++) {
           const rw = stageLayout.ridgeWindows[i];
-          if (citySatisfaction <= Math.max(0.01, rw.threshold - 0.08)) {
-            ridgeWindowsRef.current.setColorAt(i, COLOR_WIN_OFF);
-          } else if (citySatisfaction < rw.threshold) {
-            const flick = Math.sin(t * 25.0 + i * 2.1) > 0.05;
-            ridgeWindowsRef.current.setColorAt(
-              i,
-              flick ? rw.color : COLOR_WIN_OFF,
-            );
-          } else {
-            ridgeWindowsRef.current.setColorAt(i, rw.color);
+          let lit = ridgeWinLitRef.current[i] === 1;
+          if (citySatisfaction <= Math.max(0.01, rw.threshold - 0.02)) {
+            lit = false;
+          } else if (citySatisfaction >= Math.min(0.99, rw.threshold + 0.02)) {
+            lit = true;
           }
+          ridgeWinLitRef.current[i] = lit ? 1 : 0;
+          ridgeWindowsRef.current.setColorAt(i, lit ? rw.color : COLOR_WIN_OFF);
         }
         ridgeWindowsRef.current.instanceColor.needsUpdate = true;
       }
@@ -3546,7 +3569,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 <planeGeometry args={[0.92, 7.4]} />
                 <meshBasicMaterial
                   map={vt2LatticeTex}
-                  transparent
                   alphaTest={0.5}
                   side={THREE.DoubleSide}
                   fog={false}
@@ -3561,7 +3583,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 <planeGeometry args={[0.92, 7.4]} />
                 <meshBasicMaterial
                   map={vt2LatticeTex}
-                  transparent
                   alphaTest={0.5}
                   side={THREE.DoubleSide}
                   fog={false}
@@ -3665,7 +3686,14 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[1, 1]} />
-              <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ffffff"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
             <instancedMesh
               ref={roofLampsRef}
@@ -3674,11 +3702,19 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[0.2, 0.16]} />
-              <meshBasicMaterial color="#ffba52" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ffba52"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
             <instancedMesh
               ref={roofLampPoolsRef}
               args={[undefined, undefined, 14]}
+              renderOrder={2}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -3697,7 +3733,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             {/* Upgraded Cherenkov Ionized Roof Vent Beam & Roofscape Glow */}
             <group name="cherenkov-roof-glow" ref={cherenkovRef} visible={false}>
               {/* Primary Unit 3 Biological Shield Roof Column */}
-              <mesh position={[6.2, Y(-0.2), -7.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[6.2, Y(-0.2), -7.2]} renderOrder={4} raycast={NOOP_RAYCAST} frustumCulled={false}>
                 <planeGeometry args={[2.6, 9.6]} />
                 <meshBasicMaterial
                   ref={cherenkovCoreMatRef}
@@ -3710,7 +3746,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[6.2, Y(0.6), -7.1]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[6.2, Y(0.6), -7.1]} renderOrder={3} raycast={NOOP_RAYCAST} frustumCulled={false}>
                 <planeGeometry args={[6.4, 11.4]} />
                 <meshBasicMaterial
                   ref={cherenkovHaloMatRef}
@@ -3727,6 +3763,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               <mesh
                 position={[4.2, Y(-4.65), -6.8]}
                 rotation={[-Math.PI / 2, 0, 0]}
+                renderOrder={2}
                 raycast={NOOP_RAYCAST}
                 frustumCulled={false}
               >
@@ -3747,7 +3784,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             {/* 7. 500kV High-Voltage Switchyard (8 Heavy Transformers, 48 Bushings, 6 Gantries, 4 Pylons, Wires) */}
             <mesh position={[-5.5, Y(-10.22), -12.52]} raycast={NOOP_RAYCAST} frustumCulled={false}>
               <planeGeometry args={[34.0, 1.16]} />
-              <meshBasicMaterial map={chainLinkTex} transparent alphaTest={0.5} fog={false} />
+              <meshBasicMaterial map={chainLinkTex} alphaTest={0.5} fog={false} />
             </mesh>
             <mesh position={[-5.5, Y(-9.62), -12.52]} raycast={NOOP_RAYCAST} frustumCulled={false}>
               <planeGeometry args={[34.0, 0.04]} />
@@ -3810,7 +3847,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 <planeGeometry args={[2.45, 6.4]} />
                 <meshBasicMaterial
                   map={latticePylonTex}
-                  transparent
                   alphaTest={0.5}
                   fog={false}
                 />
@@ -3843,11 +3879,19 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[0.24, 0.14]} />
-              <meshBasicMaterial color="#ff9b38" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ff9b38"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
             <instancedMesh
               ref={yardFloodPoolsRef}
               args={[undefined, undefined, 10]}
+              renderOrder={2}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -3941,6 +3985,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             <instancedMesh
               ref={truckHalosRef}
               args={[undefined, undefined, WIN1_TRUCK_COUNT]}
+              renderOrder={2}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -4001,7 +4046,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               <planeGeometry args={[1.18, 1.9]} />
               <meshBasicMaterial
                 map={pineTex}
-                transparent
                 alphaTest={0.5}
                 fog={false}
               />
@@ -4058,6 +4102,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 <mesh
                   position={[tc.x, Y(0.84), tc.z]}
                   rotation={[-Math.PI / 2, 0, 0]}
+                  renderOrder={1}
                   raycast={NOOP_RAYCAST}
                   frustumCulled={false}
                 >
@@ -4092,6 +4137,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   steamRefs.current[idx] = el;
                 }}
                 position={[idx < 8 ? -9.6 : -0.6, Y(1.2), -18.0]}
+                renderOrder={4}
                 raycast={NOOP_RAYCAST}
                 frustumCulled={false}
               >
@@ -4145,12 +4191,16 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 ref={vipLampsMatRef}
                 color="#ffe170"
                 toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
                 fog={false}
               />
             </instancedMesh>
             <instancedMesh
               ref={vipLampHalosRef}
               args={[undefined, undefined, 28]}
+              renderOrder={2}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -4173,6 +4223,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   vipSteamRefs.current[idx] = el;
                 }}
                 position={[anc.x, anc.y + 0.25, anc.z]}
+                renderOrder={4}
                 raycast={NOOP_RAYCAST}
                 frustumCulled={false}
               >
@@ -4203,7 +4254,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               <planeGeometry args={[49.6, 2.65]} />
               <meshBasicMaterial
                 map={viaductArchesTex}
-                transparent
                 alphaTest={0.5}
                 fog={false}
               />
@@ -4261,7 +4311,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                     fog={false}
                   />
                 </mesh>
-                <mesh position={[1.8, -0.05, 0.1]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[1.8, -0.05, 0.1]} renderOrder={2} raycast={NOOP_RAYCAST} frustumCulled={false}>
                   <planeGeometry args={[2.2, 0.56]} />
                   <meshBasicMaterial
                     ref={spiritTrainBeamMatRef}
@@ -4330,6 +4380,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             <mesh
               position={[-0.2, Y(2.8), 6.0]}
               rotation={[0, Math.PI / 2, 0]}
+              renderOrder={1}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -4362,7 +4413,14 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[1, 1]} />
-              <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ffffff"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
 
             {/* 2 Steel-Legged Industrial Water Towers */}
@@ -4540,7 +4598,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   <planeGeometry args={[11.2, 0.62]} />
                   <meshBasicMaterial
                     map={vodkaTrussTex}
-                    transparent
                     alphaTest={0.5}
                     fog={false}
                   />
@@ -4556,7 +4613,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                     <meshBasicMaterial color="#191e26" fog={false} />
                   </mesh>
                 ))}
-                <mesh position={[0, 0, -0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, 0, -0.02]} renderOrder={1} raycast={NOOP_RAYCAST} frustumCulled={false}>
                   <planeGeometry args={[12.2, 2.55]} />
                   <meshBasicMaterial
                     ref={vodkaSignHaloMatRef}
@@ -4585,7 +4642,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   <cylinderGeometry args={[0.09, 0.16, 0.9, 8]} />
                   <meshBasicMaterial color="#2b2024" fog={false} />
                 </mesh>
-                <mesh position={[0, 0.5, -0.08]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, 0.5, -0.08]} renderOrder={1} raycast={NOOP_RAYCAST} frustumCulled={false}>
                   <planeGeometry args={[2.75, 2.75]} />
                   <meshBasicMaterial
                     ref={starHaloMatRef}
@@ -4633,6 +4690,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   distillerySmokeRefs.current[idx] = el;
                 }}
                 position={[8.8, Y(6.5), -35.1]}
+                renderOrder={3}
                 raycast={NOOP_RAYCAST}
                 frustumCulled={false}
               >
@@ -4658,11 +4716,19 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[1, 1]} />
-              <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ffffff"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
             <instancedMesh
               ref={win1BeaconHalosRef}
               args={[undefined, undefined, WIN1_BEACON_COUNT]}
+              renderOrder={2}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -4741,11 +4807,13 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
   const cityBeaconTimerRef = useRef(0.125);
   const cityBeaconMaskRef = useRef(-1);
   const lastCityPowerRatioRef = useRef(-1);
-  const citySlowBlinkTimerRef = useRef(0);
   const pendingRoomFlipRef = useRef(false);
   const randomToggleTimerRef = useRef(0);
   const toggleCursorRef = useRef(0);
   const windowToggleStatesRef = useRef<Uint8Array>(new Uint8Array(MAX_APT_WINDOWS));
+  const cityWinLitRef = useRef<Uint8Array>(new Uint8Array(MAX_APT_WINDOWS).fill(1));
+  const streetlampLitRef = useRef<Uint8Array>(new Uint8Array(28).fill(1));
+  const roadLampLitRef = useRef<Uint8Array>(new Uint8Array(22).fill(1));
 
   const fourFaceGeo = useMemo(() => createFourFaceBoxGeometry(), []);
   const riverRibbonGeo = useMemo(
@@ -5582,6 +5650,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
     if (roadLampHeadsRef.current) {
       roadLampHeadsRef.current.count = cityLayout.roadLampPoints.length;
       cityLayout.roadLampPoints.forEach((pt, idx) => {
+        roadLampLitRef.current[idx] = 1;
         const base = Y(win2GroundY(pt.lx, pt.lz));
         dummy.position.set(pt.lx, base + 0.96 * pt.scale, pt.lz + 0.03);
         dummy.rotation.set(0, 0, 0);
@@ -5672,6 +5741,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
       aptWindowsRef.current.count = cityLayout.windows.length;
       cityLayout.windows.forEach((w, idx) => {
         windowToggleStatesRef.current[idx] = w.meta.isSwitchedOn ? 1 : 0;
+        cityWinLitRef.current[idx] = 1;
         dummy.position.set(w.x, w.y, w.z);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.set(w.w, w.h, 1);
@@ -5688,6 +5758,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
     if (streetlampsRef.current) {
       streetlampsRef.current.count = cityLayout.farLamps.length;
       cityLayout.farLamps.forEach((l, idx) => {
+        streetlampLitRef.current[idx] = 1;
         dummy.position.set(l.lx, l.ly, l.lz);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.set(1, 1, 1);
@@ -5732,7 +5803,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
   useFrame(({ clock }, delta) => {
     const t = clock.getElapsedTime();
     const dt = Math.min(delta, 0.1);
-    const { citySatisfaction } = computeDioramaGridState(t);
+    const { citySatisfaction } = computeDioramaGridState();
 
     // 1. Animated Night Train Along Arched Viaduct (emerging from corner hillside tunnel at lx = -10.8)
     const targetSpeed =
@@ -5768,9 +5839,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
       citySatisfaction <= 0.04
         ? 0
         : citySatisfaction < 0.3
-          ? Math.sin(t * 28.0) > -0.1
-            ? 0.42
-            : 0.05
+          ? THREE.MathUtils.lerp(0.28, 1.0, (citySatisfaction - 0.04) / 0.26)
           : 1.0;
 
     for (let i = 0; i < 6; i++) {
@@ -5866,6 +5935,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
       m.position.x = 20.8 + CITY_STACK_OFFSETS_X[sIdx] + phase * 1.45;
       m.position.y =
         cityLayout.heatGroundY + CITY_STACK_HEIGHTS[sIdx] + 0.18 + phase * 2.1;
+      m.position.z = -35.8 + i * 0.02;
       const scale = 0.28 + phase * 0.92;
       m.scale.set(scale, scale * 0.72, 1);
 
@@ -5875,46 +5945,38 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
       }
     }
 
-    // 5. Subtle Random Individual Apartment Window Toggles (~1.4s when grid has power)
+    // 5. Very Rare Ambient Apartment Window Toggle (~12.0s when grid power is steady)
     randomToggleTimerRef.current += dt;
-    if (randomToggleTimerRef.current >= 1.4) {
+    if (randomToggleTimerRef.current >= 12.0) {
       randomToggleTimerRef.current = 0;
-      if (citySatisfaction > 0.15 && cityLayout.windows.length > 0) {
-        let flipped = 0;
+      if (citySatisfaction > 0.25 && cityLayout.windows.length > 0) {
         let guard = 0;
-        while (flipped < 3 && guard < 40) {
+        while (guard < 40) {
           toggleCursorRef.current =
             (toggleCursorRef.current + 37) % cityLayout.windows.length;
           const winIdx = toggleCursorRef.current;
           if (cityLayout.windows[winIdx].meta.canToggle) {
             windowToggleStatesRef.current[winIdx] =
               windowToggleStatesRef.current[winIdx] === 1 ? 0 : 1;
-            flipped++;
+            pendingRoomFlipRef.current = true;
+            break;
           }
           guard++;
-        }
-        if (flipped > 0) {
-          pendingRoomFlipRef.current = true;
         }
       }
     }
 
-    // 6. Live Grid-MW Blackout & Light-Pollution Modulation (Quantized Power Bucket + 2 Hz Blink Timer)
-    citySlowBlinkTimerRef.current += dt;
+    // 6. Live Grid-MW Blackout & Light-Pollution Modulation (>= 0.03 Deadband + Hysteresis)
     const powerChanged =
-      Math.abs(citySatisfaction - lastCityPowerRatioRef.current) > 0.015;
-    const slowTick = citySlowBlinkTimerRef.current >= 0.5;
-    if (slowTick) citySlowBlinkTimerRef.current = 0;
-
-    const inCityFlickerBand = citySatisfaction > 0.01 && citySatisfaction < 0.96;
-    if (
-      powerChanged ||
-      (slowTick && (pendingRoomFlipRef.current || inCityFlickerBand))
-    ) {
+      lastCityPowerRatioRef.current < 0 ||
+      Math.abs(citySatisfaction - lastCityPowerRatioRef.current) >= 0.03 ||
+      (citySatisfaction === 0 && lastCityPowerRatioRef.current !== 0) ||
+      (citySatisfaction === 1 && lastCityPowerRatioRef.current !== 1);
+    const hadRoomFlip = pendingRoomFlipRef.current;
+    if (powerChanged || hadRoomFlip) {
       if (powerChanged) {
         lastCityPowerRatioRef.current = citySatisfaction;
       }
-      const hadRoomFlip = pendingRoomFlipRef.current;
       pendingRoomFlipRef.current = false;
 
       const voltageScale =
@@ -5922,68 +5984,64 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
           ? THREE.MathUtils.lerp(0.62, 1.0, citySatisfaction / 0.55)
           : 1.0;
 
-      if (lightPollutionMatRef.current) {
-        lightPollutionMatRef.current.opacity =
-          citySatisfaction <= 0.04
-            ? 0.025
-            : THREE.MathUtils.lerp(0.04, 0.18, citySatisfaction);
-      }
+      if (powerChanged) {
+        if (lightPollutionMatRef.current) {
+          lightPollutionMatRef.current.opacity =
+            citySatisfaction <= 0.04
+              ? 0.025
+              : THREE.MathUtils.lerp(0.04, 0.18, citySatisfaction);
+        }
 
-      for (let i = 0; i < 2; i++) {
-        const podMat = tvPodMatsRef.current[i];
-        if (podMat) {
-          podMat.color.lerpColors(
+        for (let i = 0; i < 2; i++) {
+          const podMat = tvPodMatsRef.current[i];
+          if (podMat) {
+            podMat.color.lerpColors(
+              COLOR_WIN_OFF,
+              COLOR_LAMP_ON,
+              citySatisfaction <= 0.05 ? 0 : voltageScale,
+            );
+          }
+        }
+        if (palaceClockMatRef.current) {
+          palaceClockMatRef.current.color.lerpColors(
             COLOR_WIN_OFF,
-            COLOR_LAMP_ON,
+            COLOR_TRAIN_WIN_ON,
             citySatisfaction <= 0.05 ? 0 : voltageScale,
           );
         }
-      }
-      if (palaceClockMatRef.current) {
-        palaceClockMatRef.current.color.lerpColors(
-          COLOR_WIN_OFF,
-          COLOR_TRAIN_WIN_ON,
-          citySatisfaction <= 0.05 ? 0 : voltageScale,
-        );
-      }
-      if (heatPlantGlowMatRef.current) {
-        heatPlantGlowMatRef.current.color.lerpColors(
-          COLOR_WIN_OFF,
-          COLOR_ROAD_LAMP_ON,
-          citySatisfaction <= 0.05 ? 0 : voltageScale,
-        );
-      }
+        if (heatPlantGlowMatRef.current) {
+          heatPlantGlowMatRef.current.color.lerpColors(
+            COLOR_WIN_OFF,
+            COLOR_ROAD_LAMP_ON,
+            citySatisfaction <= 0.05 ? 0 : voltageScale,
+          );
+        }
 
-      for (let i = 0; i < 3; i++) {
-        const hazeMat = streetHazeMatsRef.current[i];
-        if (hazeMat) {
-          hazeMat.opacity =
-            citySatisfaction <= 0.04
-              ? 0
-              : 0.28 * THREE.MathUtils.clamp(citySatisfaction * 1.1, 0.08, 1);
+        for (let i = 0; i < 3; i++) {
+          const hazeMat = streetHazeMatsRef.current[i];
+          if (hazeMat) {
+            hazeMat.opacity =
+              citySatisfaction <= 0.04
+                ? 0
+                : 0.28 * THREE.MathUtils.clamp(citySatisfaction * 1.1, 0.08, 1);
+          }
         }
       }
 
-      if (
-        (powerChanged || hadRoomFlip || (slowTick && inCityFlickerBand)) &&
-        aptWindowsRef.current &&
-        aptWindowsRef.current.instanceColor
-      ) {
+      if (aptWindowsRef.current && aptWindowsRef.current.instanceColor) {
         for (let i = 0; i < cityLayout.windows.length; i++) {
           const meta = cityLayout.windows[i].meta;
           const isWindowOn =
             !meta.canToggle || windowToggleStatesRef.current[i] === 1;
-          if (citySatisfaction <= Math.max(0.01, meta.threshold - 0.07)) {
-            aptWindowsRef.current.setColorAt(i, COLOR_WIN_OFF);
-          } else if (citySatisfaction < meta.threshold) {
-            const flick = Math.sin(t * 26.0 + i * 2.37) > 0.05;
-            if (flick && isWindowOn) {
-              SCRATCH_COLOR.copy(meta.onColor).multiplyScalar(0.7);
-              aptWindowsRef.current.setColorAt(i, SCRATCH_COLOR);
-            } else {
-              aptWindowsRef.current.setColorAt(i, COLOR_WIN_OFF);
-            }
-          } else if (!isWindowOn) {
+          let gridLit = cityWinLitRef.current[i] === 1;
+          if (citySatisfaction <= Math.max(0.01, meta.threshold - 0.02)) {
+            gridLit = false;
+          } else if (citySatisfaction >= Math.min(0.99, meta.threshold + 0.02)) {
+            gridLit = true;
+          }
+          cityWinLitRef.current[i] = gridLit ? 1 : 0;
+
+          if (!gridLit || !isWindowOn) {
             aptWindowsRef.current.setColorAt(i, COLOR_WIN_OFF);
           } else {
             SCRATCH_COLOR.copy(meta.onColor).multiplyScalar(voltageScale);
@@ -5993,32 +6051,30 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
         aptWindowsRef.current.instanceColor.needsUpdate = true;
       }
 
-      const inLampFlickerBand =
-        citySatisfaction > 0.04 && citySatisfaction < 0.86;
       if (
-        (powerChanged || (slowTick && inLampFlickerBand)) &&
+        powerChanged &&
         streetlampsRef.current &&
         streetlampsRef.current.instanceColor
       ) {
         for (let i = 0; i < cityLayout.farLamps.length; i++) {
           const cutoff = 0.14 + ((i * 5) % 18) * 0.04;
-          if (citySatisfaction <= cutoff - 0.06) {
-            streetlampsRef.current.setColorAt(i, COLOR_LAMP_OFF);
-          } else if (citySatisfaction < cutoff) {
-            const blink = Math.sin(t * 21.0 + i * 4.1) > 0;
-            streetlampsRef.current.setColorAt(
-              i,
-              blink ? COLOR_LAMP_ON : COLOR_LAMP_OFF,
-            );
-          } else {
-            streetlampsRef.current.setColorAt(i, COLOR_LAMP_ON);
+          let lit = streetlampLitRef.current[i] === 1;
+          if (citySatisfaction <= Math.max(0.01, cutoff - 0.02)) {
+            lit = false;
+          } else if (citySatisfaction >= Math.min(0.99, cutoff + 0.02)) {
+            lit = true;
           }
+          streetlampLitRef.current[i] = lit ? 1 : 0;
+          streetlampsRef.current.setColorAt(
+            i,
+            lit ? COLOR_LAMP_ON : COLOR_LAMP_OFF,
+          );
         }
         streetlampsRef.current.instanceColor.needsUpdate = true;
       }
 
       if (
-        (powerChanged || (slowTick && inLampFlickerBand)) &&
+        powerChanged &&
         roadLampHeadsRef.current &&
         roadLampHeadsRef.current.instanceColor &&
         roadLampPoolsRef.current &&
@@ -6026,23 +6082,21 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
       ) {
         for (let i = 0; i < cityLayout.roadLampPoints.length; i++) {
           const cutoff = 0.1 + ((i * 3) % 10) * 0.065;
-          if (citySatisfaction <= cutoff - 0.06) {
-            roadLampHeadsRef.current.setColorAt(i, COLOR_LAMP_OFF);
-            roadLampPoolsRef.current.setColorAt(i, COLOR_ROAD_POOL_OFF);
-          } else if (citySatisfaction < cutoff) {
-            const blink = Math.sin(t * 23.0 + i * 3.7) > 0;
-            roadLampHeadsRef.current.setColorAt(
-              i,
-              blink ? COLOR_ROAD_LAMP_ON : COLOR_LAMP_OFF,
-            );
-            roadLampPoolsRef.current.setColorAt(
-              i,
-              blink ? COLOR_ROAD_LAMP_ON : COLOR_ROAD_POOL_OFF,
-            );
-          } else {
-            roadLampHeadsRef.current.setColorAt(i, COLOR_ROAD_LAMP_ON);
-            roadLampPoolsRef.current.setColorAt(i, COLOR_ROAD_LAMP_ON);
+          let lit = roadLampLitRef.current[i] === 1;
+          if (citySatisfaction <= Math.max(0.01, cutoff - 0.02)) {
+            lit = false;
+          } else if (citySatisfaction >= Math.min(0.99, cutoff + 0.02)) {
+            lit = true;
           }
+          roadLampLitRef.current[i] = lit ? 1 : 0;
+          roadLampHeadsRef.current.setColorAt(
+            i,
+            lit ? COLOR_ROAD_LAMP_ON : COLOR_LAMP_OFF,
+          );
+          roadLampPoolsRef.current.setColorAt(
+            i,
+            lit ? COLOR_ROAD_LAMP_ON : COLOR_ROAD_POOL_OFF,
+          );
         }
         roadLampHeadsRef.current.instanceColor.needsUpdate = true;
         roadLampPoolsRef.current.instanceColor.needsUpdate = true;
@@ -6111,11 +6165,19 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[0.13, 0.09]} />
-              <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ffffff"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
             <instancedMesh
               ref={roadLampPoolsRef}
               args={[undefined, undefined, 22]}
+              renderOrder={2}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -6143,6 +6205,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
             <instancedMesh
               ref={vehicleHalosRef}
               args={[undefined, undefined, VEHICLE_COUNT]}
+              renderOrder={2}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -6167,7 +6230,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               <planeGeometry args={[1.15, 1.85]} />
               <meshBasicMaterial
                 map={pineTex}
-                transparent
                 alphaTest={0.5}
                 fog={false}
               />
@@ -6213,7 +6275,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               <planeGeometry args={[61.8, 2.55]} />
               <meshBasicMaterial
                 map={viaductArchesTex}
-                transparent
                 alphaTest={0.5}
                 fog={false}
               />
@@ -6273,6 +6334,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               <mesh
                 ref={trainHeadlightMeshRef}
                 position={[4.45, -0.02, 0.08]}
+                renderOrder={2}
                 raycast={NOOP_RAYCAST}
                 frustumCulled={false}
               >
@@ -6297,6 +6359,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
             <mesh
               position={[3.5, Y(2.4), 4.5]}
               rotation={[0, Math.PI, 0]}
+              renderOrder={1}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >
@@ -6341,7 +6404,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               <planeGeometry args={[0.32, 0.46]} />
               <meshBasicMaterial
                 map={aerialTex}
-                transparent
                 alphaTest={0.5}
                 fog={false}
               />
@@ -6355,7 +6417,14 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[1, 1]} />
-              <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ffffff"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
 
             <instancedMesh
@@ -6365,7 +6434,14 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[0.065, 0.065]} />
-              <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ffffff"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
 
             {/* Warm #ff9436 Sodium Streetlamp Glow Haze Along City Avenues */}
@@ -6373,6 +6449,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               <mesh
                 key={`city-sodium-haze-${idx}`}
                 position={[0.0, Y(win2GroundY(0.0, gz) + 0.3), gz]}
+                renderOrder={2}
                 raycast={NOOP_RAYCAST}
                 frustumCulled={false}
               >
@@ -6403,7 +6480,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 <planeGeometry args={[1.35, 3.6]} />
                 <meshBasicMaterial
                   map={tvTowerLatticeTex}
-                  transparent
                   alphaTest={0.5}
                   side={THREE.DoubleSide}
                   fog={false}
@@ -6418,7 +6494,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 <planeGeometry args={[1.35, 3.6]} />
                 <meshBasicMaterial
                   map={tvTowerLatticeTex}
-                  transparent
                   alphaTest={0.5}
                   side={THREE.DoubleSide}
                   fog={false}
@@ -6484,6 +6559,9 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   ref={palaceClockMatRef}
                   color="#ffd066"
                   toneMapped={false}
+                  polygonOffset
+                  polygonOffsetFactor={-2}
+                  polygonOffsetUnits={-2}
                   fog={false}
                 />
               </mesh>
@@ -6556,6 +6634,9 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   ref={heatPlantGlowMatRef}
                   color="#ff9b38"
                   toneMapped={false}
+                  polygonOffset
+                  polygonOffsetFactor={-2}
+                  polygonOffsetUnits={-2}
                   fog={false}
                 />
               </mesh>
@@ -6595,6 +6676,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   citySmokeRefs.current[idx] = el;
                 }}
                 position={[20.8, cityLayout.heatGroundY + 4.5, -35.8]}
+                renderOrder={3}
                 raycast={NOOP_RAYCAST}
                 frustumCulled={false}
               >
@@ -6618,7 +6700,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 <planeGeometry args={[5.6, 0.56]} />
                 <meshBasicMaterial
                   map={rooftopTrussTex}
-                  transparent
                   alphaTest={0.5}
                   fog={false}
                 />
@@ -6635,7 +6716,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   <meshBasicMaterial color="#161f29" fog={false} />
                 </mesh>
               ))}
-              <mesh position={[0, 1.05, 0.0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 1.05, 0.0]} renderOrder={1} raycast={NOOP_RAYCAST} frustumCulled={false}>
                 <planeGeometry args={[5.95, 1.3]} />
                 <meshBasicMaterial
                   color="#ff1e1e"
@@ -6646,11 +6727,12 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[0, 1.05, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 1.05, 0.04]} renderOrder={2} raycast={NOOP_RAYCAST} frustumCulled={false}>
                 <planeGeometry args={[5.6, 1.05]} />
                 <meshBasicMaterial
                   map={happyBannerTex}
                   transparent
+                  depthWrite={false}
                   toneMapped={false}
                   fog={false}
                 />
@@ -6665,11 +6747,19 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               frustumCulled={false}
             >
               <planeGeometry args={[1, 1]} />
-              <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+              <meshBasicMaterial
+                color="#ffffff"
+                toneMapped={false}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+                fog={false}
+              />
             </instancedMesh>
             <instancedMesh
               ref={cityBeaconHalosRef}
               args={[undefined, undefined, MAX_CITY_BEACONS]}
+              renderOrder={2}
               raycast={NOOP_RAYCAST}
               frustumCulled={false}
             >

@@ -245,3 +245,17 @@
   >
   > *Hent fra Kreml (`npm run pravda`) og inspiser hallen! MELTDOWN IS PROPAGANDA! 🎖️🏗️⚙️☢️☭"*
 
+### [TELEGRAM #018 — STEMPLET: QUOTA-84 // MASSIV DRAW-CALL- & RAYCAST-OPTIMALISERING, NULL Z-FIGHTING OG STABILT SOVJETISK LYSNETT!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Draw-call-sammenslåing (`mergeStaticGeometries`), `NOOP_RAYCAST`, dønn stabilt sovjetisk lysnett, null Z-fighting og ryddige konsollskilt!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Vestlig flimmer, z-fighting og unødige GPU-kall er herved likvidert fra Sektor 84:*
+  > *1. **Statisk Geometrisammenslåing & Raycast-Sanering:** `MechanicalPanels3D.tsx` slår nå sammen statiske paneldetaljer via `mergeStaticGeometries` med delte KSP-4-teksturer, mens `InspectorDesk3D.tsx` kobler `NOOP_RAYCAST` på dekorative mesher med dedikerte hitbokser.*
+  > *2. **Dønn Stabilt Sovjetisk Lysnett (`ControlRoomScene.tsx` & `BuckshotDitherPass.tsx`):** Høyfrekvent lampe-, lysrør- og dither-flimmer er totalt fjernet for å gi krystallklar ro i bunkeren, samtidig som jevn alarmpuls (`4.2 rad/s`) på nødlys og roterende varsellys er bevart.*
+  > *3. **Null Z-Fighting, Diorama-Hysterese & Skiltjustering:** Alle skilt, vindusdekor og synoptiske tavler har fått `0.014m–0.02m` dybdeklarering og `polygonOffset`, `ExteriorDioramas3D.tsx` har fått Schmitt-trigger-hysterese og deterministisk `renderOrder` (`1..5`), og både `СЕКЦИЯ ПУЛЬТА №1/№2`-sokkelmerkene og høyre vinges `МНЕМОСХЕМА` (`ОРУ-330`) sitter nå på millimeteren!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og inspiser resultatet! MELTDOWN IS PROPAGANDA! 🎖️💡🛡️☢️☭"*
+
+

@@ -22,7 +22,6 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform float uDitherStrength;
   uniform float uColorLevels;
   uniform float uScanlineOpacity;
-  uniform float uTime;
 
   varying vec2 vUv;
 
@@ -54,12 +53,6 @@ const FRAGMENT_SHADER = /* glsl */ `
     }
 
     return (val / 16.0) - 0.5;
-  }
-
-  float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
   }
 
   vec3 acesFilm(vec3 x) {
@@ -107,17 +100,9 @@ const FRAGMENT_SHADER = /* glsl */ `
     vec3 deepBunkerFog = vec3(0.022, 0.038, 0.033);
     col = mix(col, deepBunkerFog, clamp(fogFactor, 0.0, maxBunkerFog));
 
-    // Coarse 2.5px Bayer grid (clearly visible Buckshot Roulette cross-hatched stippling!)
+    // Coarse 2.5px Bayer grid (strictly screen-static Buckshot Roulette cross-hatched stippling)
     vec2 bayerCell = floor(gl_FragCoord.xy / uDitherPixelSize);
     float b = bayer4x4(bayerCell);
-
-    // Subtle analog film grain in shadows
-    float grain =
-      (hash12(bayerCell + fract(uTime * 11.7) * 97.0) - 0.5) *
-      0.022 *
-      (1.0 - luma * 0.7) *
-      (1.0 - protectText);
-    col = clamp(col + vec3(grain), 0.0, 1.0);
 
     // Strong dithering (0.14) and 7 color levels across the entire room/desk,
     // softening to 24 levels (0.025 strength) strictly on bright paper sheets and glowing CRT text
@@ -201,7 +186,6 @@ export const BuckshotDitherPass: React.FC = () => {
         uDitherStrength: { value: 0.14 },
         uColorLevels: { value: 7.0 },
         uScanlineOpacity: { value: 0.035 },
-        uTime: { value: 0 },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
@@ -222,13 +206,12 @@ export const BuckshotDitherPass: React.FC = () => {
   }, [postMaterial])
 
   // Priority 1 takes over R3F's default render loop so we render Scene -> RenderTarget -> Fullscreen Bayer Dither Quad
-  useFrame((state) => {
+  useFrame(() => {
     const uniforms = postMaterial.uniforms
     uniforms.uDitherPixelSize.value = 2.5
     uniforms.uDitherStrength.value = 0.14
     uniforms.uColorLevels.value = 7.0
     uniforms.uScanlineOpacity.value = 0.035
-    uniforms.uTime.value = state.clock.elapsedTime
     uniforms.uResolution.value.set(
       renderTarget.width,
       renderTarget.height

@@ -91,8 +91,6 @@ const SCENE_COLOR_LAMP_AMBER_OFF = new THREE.Color("#ffaa22");
 const SCENE_COLOR_LAMP_AMBER_EMISSIVE = new THREE.Color("#ff8800");
 const SCENE_COLOR_SCONCE_BLACKOUT = new THREE.Color("#221210");
 const SCENE_COLOR_SCONCE_BLACKOUT_EMISSIVE = new THREE.Color("#3a0b06");
-const SCENE_COLOR_SCONCE_ALARM = new THREE.Color("#ff5c38");
-const SCENE_COLOR_SCONCE_ALARM_EMISSIVE = new THREE.Color("#ff3018");
 const SCENE_COLOR_SCONCE_NORM = new THREE.Color("#ffba52");
 const SCENE_COLOR_SCONCE_NORM_EMISSIVE = new THREE.Color("#ff9922");
 const SCENE_COLOR_BAT_DISCHARGE_OFF = new THREE.Color("#302210");
@@ -104,11 +102,9 @@ const SCENE_COLOR_BAT_SYNC_IDLE_EM = new THREE.Color("#124422");
 const SCENE_COLOR_MAIN_LIGHT_NORM = new THREE.Color("#ffe2ba");
 const SCENE_COLOR_MAIN_LIGHT_BLACKOUT = new THREE.Color("#222422");
 const SCENE_COLOR_TUBE_BLACKOUT = new THREE.Color("#1a1816");
-const SCENE_COLOR_TUBE_ALARM = new THREE.Color("#ffd6b0");
 const SCENE_COLOR_TUBE_NORM = new THREE.Color("#fff1d6");
 const SCENE_COLOR_TUBE_DIM_BLACKOUT = new THREE.Color("#14100d");
 const SCENE_COLOR_TUBE_DIM = new THREE.Color("#e2a24c");
-const SCENE_COLOR_TUBE_FLICKER_BLACKOUT = new THREE.Color("#141210");
 
 interface UnitCMasterDashboardData {
   energyCreatedMW: number;
@@ -999,13 +995,12 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
       if (s.isBlackout) {
         statusLampMatRef.current.color.copy(SCENE_COLOR_CLOCK_BLACKOUT);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
-        statusLampMatRef.current.emissiveIntensity =
-          halfSecBucket % 2 === 0 ? 0.85 : 0.12;
-      } else if (isEmergency || isFinalHour) {
-        const pulse = 0.5 + 0.5 * Math.sin(now * 10.0);
+        statusLampMatRef.current.emissiveIntensity = 0.25;
+      } else if (isEmergency) {
+        const pulse = 0.5 + 0.5 * Math.sin(now * 4.2);
         statusLampMatRef.current.color.copy(SCENE_COLOR_RED);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
-        statusLampMatRef.current.emissiveIntensity = 1.15 + pulse * 1.45;
+        statusLampMatRef.current.emissiveIntensity = 1.15 + pulse * 1.25;
       } else {
         statusLampMatRef.current.color.copy(SCENE_COLOR_CLOCK_NORM);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
@@ -1244,7 +1239,7 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
       ))}
 
       {/* 3. High-Contrast Red 7-Segment Digital Shift Readout Screen (`00:00 / 06:00`) */}
-      <mesh position={[-0.055, 0.008, 0.096]} raycast={NOOP_RAYCAST}>
+      <mesh position={[-0.055, 0.008, 0.11]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[0.94, 0.205]} />
         <meshStandardMaterial
           ref={screenMatRef}
@@ -1255,16 +1250,20 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
           emissiveIntensity={1.08}
           roughness={0.22}
           metalness={0.1}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
         />
       </mesh>
 
       {/* Protective Ruby-Tinted Glass Viewport Pane Over Digits */}
-      <mesh position={[-0.055, 0.008, 0.099]} raycast={NOOP_RAYCAST}>
+      <mesh position={[-0.055, 0.008, 0.124]} renderOrder={2} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[0.945, 0.21]} />
         <meshStandardMaterial
           color="#2a0808"
           transparent
           opacity={0.14}
+          depthWrite={false}
           roughness={0.12}
           metalness={0.35}
         />
@@ -1287,7 +1286,7 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
           roughness={0.26}
         />
       </mesh>
-      <mesh position={[0, -0.118, 0.102]} raycast={NOOP_RAYCAST}>
+      <mesh position={[0, -0.118, 0.115]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[0.506, 0.031]} />
         <meshStandardMaterial
           map={gostNameplateTex}
@@ -1295,6 +1294,9 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
           emissiveMap={gostNameplateTex}
           emissiveIntensity={0.42}
           roughness={0.5}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
         />
       </mesh>
     </group>
@@ -1359,6 +1361,38 @@ const SovietRbmkOperatorConsolePlinth3D: React.FC = React.memo(() => {
     return tex;
   }, []);
 
+  const sectionPlaqueLeftTex = useMemo(
+    () =>
+      makePlaqueTex("СЕКЦИЯ ПУЛЬТА №1", "БЛОК А-2 • А // РЕАКТОР И МПЦ", {
+        width: 512,
+        height: 80,
+        titleSize: 24,
+        subSize: 16,
+        titleColor: "#ffcc00",
+        titleStroke: "#ffcc00",
+        subColor: "#e6dec3",
+        subStroke: "#e6dec3",
+        borderColor: "#b8a46b",
+      }),
+    [],
+  );
+
+  const sectionPlaqueRightTex = useMemo(
+    () =>
+      makePlaqueTex("СЕКЦИЯ ПУЛЬТА №2", "БЛОК С • В // СЕТЬ И КОНТУР", {
+        width: 512,
+        height: 80,
+        titleSize: 24,
+        subSize: 16,
+        titleColor: "#ffcc00",
+        titleStroke: "#ffcc00",
+        subColor: "#e6dec3",
+        subStroke: "#e6dec3",
+        borderColor: "#b8a46b",
+      }),
+    [],
+  );
+
   const deskBays = [
     { key: "left", pos: [-3.22, 0, -1.16] as const, rotY: (15 * Math.PI) / 180, width: 3.34 },
     { key: "right", pos: [3.22, 0, -1.16] as const, rotY: -(15 * Math.PI) / 180, width: 3.34 },
@@ -1374,9 +1408,34 @@ const SovietRbmkOperatorConsolePlinth3D: React.FC = React.memo(() => {
             <boxGeometry args={[bay.width - 0.04, 0.15, 0.96]} />
             <meshStandardMaterial color="#141917" metalness={0.64} roughness={0.56} />
           </mesh>
-          <mesh position={[0, 0.075, 0.264]} raycast={NOOP_RAYCAST}>
+          <mesh position={[0, 0.075, 0.274]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[bay.width - 0.16, 0.12]} />
-            <meshStandardMaterial map={kickGrateTex} metalness={0.55} roughness={0.5} />
+            <meshStandardMaterial
+              map={kickGrateTex}
+              metalness={0.55}
+              roughness={0.5}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
+          </mesh>
+          {/* Re-attached GOST Console Section Plaque Mounted Cleanly on Lower Kickplate */}
+          <mesh position={[0, 0.115, 0.282]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.52, 0.076, 0.012]} />
+            <meshStandardMaterial color="#18201d" metalness={0.68} roughness={0.44} />
+          </mesh>
+          <mesh position={[0, 0.115, 0.302]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[0.5, 0.068]} />
+            <meshStandardMaterial
+              map={bay.key === "left" ? sectionPlaqueLeftTex : sectionPlaqueRightTex}
+              emissive="#ffffff"
+              emissiveMap={bay.key === "left" ? sectionPlaqueLeftTex : sectionPlaqueRightTex}
+              emissiveIntensity={0.28}
+              roughness={0.55}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
           </mesh>
 
           {/* Soviet Sage-Green Lower Cabinet Pedestal (`y = 0.15..0.54m`) */}
@@ -1538,6 +1597,12 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
   const alarmTileLeftMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const alarmTileRightMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const coreMosaicMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const ksp4CaseInstRef = useRef<THREE.InstancedMesh>(null);
+  const ksp4ChartInstRef = useRef<THREE.InstancedMesh>(null);
+  const ksp4HoodInstRef = useRef<THREE.InstancedMesh>(null);
+  const ksp4TubeInstRef = useRef<THREE.InstancedMesh>(null);
+  const wallDoorInstRef = useRef<THREE.InstancedMesh>(null);
+  const wallLatchInstRef = useRef<THREE.InstancedMesh>(null);
 
   const mainRedBannerTex = useMemo(
     () =>
@@ -1650,54 +1715,54 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
         // Twin Drum Separator Cylinders
         ctx.strokeStyle = "#48c2d6";
         ctx.lineWidth = 5;
-        ctx.strokeRect(42, 92, 152, 62);
-        ctx.strokeRect(318, 92, 152, 62);
+        ctx.strokeRect(42, 88, 152, 60);
+        ctx.strokeRect(318, 88, 152, 60);
         ctx.fillStyle = "#143c44";
-        ctx.fillRect(46, 96, 144, 54);
-        ctx.fillRect(322, 96, 144, 54);
+        ctx.fillRect(46, 92, 144, 52);
+        ctx.fillRect(322, 92, 144, 52);
         ctx.fillStyle = "#b8f4ff";
         ctx.font = 'bold 24px "VT323", monospace';
-        ctx.fillText("БС-1 // 70 БАР", 118, 130);
-        ctx.fillText("БС-2 // 70 БАР", 394, 130);
+        ctx.fillText("БС-1 // 70 БАР", 118, 124);
+        ctx.fillText("БС-2 // 70 БАР", 394, 124);
 
         // Steam Mains (`#e04a3e`) -> Twin Turbines
         ctx.strokeStyle = "#e04a3e";
         ctx.lineWidth = 7;
         ctx.beginPath();
-        ctx.moveTo(118, 154);
-        ctx.lineTo(118, 224);
-        ctx.lineTo(394, 224);
-        ctx.moveTo(394, 154);
-        ctx.lineTo(394, 224);
-        ctx.moveTo(w / 2, 224);
-        ctx.lineTo(w / 2, 266);
+        ctx.moveTo(118, 148);
+        ctx.lineTo(118, 216);
+        ctx.lineTo(394, 216);
+        ctx.moveTo(394, 148);
+        ctx.lineTo(394, 216);
+        ctx.moveTo(w / 2, 216);
+        ctx.lineTo(w / 2, 252);
         ctx.stroke();
 
         // TG-7 & TG-8 Generator Blocks
         [
-          { y: 268, lbl: "ТГ-7 // 500 МВт" },
-          { y: 356, lbl: "ТГ-8 // 500 МВт" },
+          { y: 254, lbl: "ТГ-7 // 500 МВт" },
+          { y: 334, lbl: "ТГ-8 // 500 МВт" },
         ].forEach((tg) => {
           ctx.fillStyle = "#193625";
-          ctx.fillRect(80, tg.y, 352, 62);
+          ctx.fillRect(80, tg.y, 352, 58);
           ctx.strokeStyle = "#e0b844";
           ctx.lineWidth = 4;
-          ctx.strokeRect(80, tg.y, 352, 62);
+          ctx.strokeRect(80, tg.y, 352, 58);
           ctx.fillStyle = "#33ff66";
           ctx.font = 'bold 28px "VT323", monospace';
-          ctx.fillText(tg.lbl, w / 2, tg.y + 39);
+          ctx.fillText(tg.lbl, w / 2, tg.y + 37);
         });
 
         // Bottom 330kV Grid Bus
         ctx.strokeStyle = "#ffb000";
         ctx.lineWidth = 6;
         ctx.beginPath();
-        ctx.moveTo(40, 448);
-        ctx.lineTo(472, 448);
+        ctx.moveTo(40, 428);
+        ctx.lineTo(472, 428);
         ctx.stroke();
         ctx.fillStyle = "#ffb000";
         ctx.font = 'bold 24px "VT323", monospace';
-        ctx.fillText("ОРУ-330 кВ // СЕКТОР 84", w / 2, 484);
+        ctx.fillText("ОРУ-330 кВ // СЕКТОР 84", w / 2, 466);
       }),
     [],
   );
@@ -1790,6 +1855,96 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
     [],
   );
 
+  useEffect(() => {
+    const dummy = new THREE.Object3D();
+    const wingMat = new THREE.Matrix4();
+    const recMat = new THREE.Matrix4();
+    const partMat = new THREE.Matrix4();
+    const baseMat = new THREE.Matrix4();
+    const outMat = new THREE.Matrix4();
+    const scaleVec = new THREE.Vector3();
+    const colorTmp = new THREE.Color();
+
+    const kCase = ksp4CaseInstRef.current;
+    const kChart = ksp4ChartInstRef.current;
+    const kHood = ksp4HoodInstRef.current;
+    const kTube = ksp4TubeInstRef.current;
+    if (kCase && kChart && kHood && kTube) {
+      let rIdx = 0;
+      for (const side of [-1, 1] as const) {
+        const isLeft = side === -1;
+        const recorderXs = isLeft ? [-1.42, -0.92, -0.42] : [0.42, 0.92, 1.42];
+        wingMat.makeRotationY(-side * 0.21);
+        wingMat.setPosition(side * 3.9, 0, -3.62);
+        for (const rx of recorderXs) {
+          recMat.makeTranslation(rx, 2.16, 0.235);
+          baseMat.multiplyMatrices(wingMat, recMat);
+
+          kCase.setMatrixAt(rIdx, baseMat);
+
+          partMat.makeTranslation(0, -0.02, 0.039);
+          outMat.multiplyMatrices(baseMat, partMat);
+          kChart.setMatrixAt(rIdx, outMat);
+
+          partMat.makeRotationX(0.25);
+          partMat.setPosition(0, 0.36, 0.055);
+          outMat.multiplyMatrices(baseMat, partMat);
+          kHood.setMatrixAt(rIdx, outMat);
+
+          partMat.makeTranslation(0, 0.33, 0.068);
+          outMat.multiplyMatrices(baseMat, partMat);
+          kTube.setMatrixAt(rIdx, outMat);
+
+          rIdx++;
+        }
+      }
+      kCase.instanceMatrix.needsUpdate = true;
+      kChart.instanceMatrix.needsUpdate = true;
+      kHood.instanceMatrix.needsUpdate = true;
+      kTube.instanceMatrix.needsUpdate = true;
+    }
+
+    const doors = wallDoorInstRef.current;
+    const latches = wallLatchInstRef.current;
+    if (doors && latches) {
+      let dIdx = 0;
+      for (const dx of [-1.5, -0.75, 0, 0.75, 1.5]) {
+        dummy.position.set(dx, 0.71, -3.96 + 0.118);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(0.66, 1.16, 0.022);
+        dummy.updateMatrix();
+        doors.setMatrixAt(dIdx, dummy.matrix);
+        doors.setColorAt(dIdx, colorTmp.set("#253630"));
+
+        dummy.position.set(dx + 0.25, 0.71, -3.96 + 0.118 + 0.014);
+        dummy.scale.set(0.024, 0.12, 0.014);
+        dummy.updateMatrix();
+        latches.setMatrixAt(dIdx, dummy.matrix);
+        dIdx++;
+      }
+      for (const side of [-1, 1] as const) {
+        wingMat.makeRotationY(-side * 0.21);
+        wingMat.setPosition(side * 3.9, 0, -3.62);
+        for (const lx of [-1.18, 0, 1.18]) {
+          partMat.makeTranslation(lx, 0.74, 0.228);
+          partMat.scale(scaleVec.set(1.06, 1.18, 0.022));
+          outMat.multiplyMatrices(wingMat, partMat);
+          doors.setMatrixAt(dIdx, outMat);
+          doors.setColorAt(dIdx, colorTmp.set("#24352f"));
+
+          partMat.makeTranslation(lx + 0.42, 0.74, 0.228 + 0.015);
+          partMat.scale(scaleVec.set(0.026, 0.14, 0.016));
+          outMat.multiplyMatrices(wingMat, partMat);
+          latches.setMatrixAt(dIdx, outMat);
+          dIdx++;
+        }
+      }
+      doors.instanceMatrix.needsUpdate = true;
+      if (doors.instanceColor) doors.instanceColor.needsUpdate = true;
+      latches.instanceMatrix.needsUpdate = true;
+    }
+  }, []);
+
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     const s = useGameStore.getState();
@@ -1800,7 +1955,7 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
     const tileIntensity = s.isBlackout
       ? 0.05
       : isAlarm
-        ? 0.85 + 0.45 * Math.sin(t * 9.0)
+        ? 0.85 + 0.35 * Math.sin(t * 4.2)
         : 0.56;
     if (alarmTileLeftMatRef.current) {
       alarmTileLeftMatRef.current.emissiveIntensity = tileIntensity;
@@ -1815,6 +1970,49 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
 
   return (
     <group>
+      {/* Instanced 6 КСП-4 Strip-Chart Recorders (Casings, Charts, Hoods, Warm Tubes) */}
+      <instancedMesh ref={ksp4CaseInstRef} args={[undefined, undefined, 6]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.42, 0.72, 0.045]} />
+        <meshStandardMaterial color="#1b2420" metalness={0.65} roughness={0.44} />
+      </instancedMesh>
+      <instancedMesh ref={ksp4ChartInstRef} args={[undefined, undefined, 6]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[0.34, 0.56]} />
+        <meshStandardMaterial
+          map={stripRecorderTex}
+          emissive="#fff3d1"
+          emissiveMap={stripRecorderTex}
+          emissiveIntensity={0.42}
+          roughness={0.62}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
+      </instancedMesh>
+      <instancedMesh ref={ksp4HoodInstRef} args={[undefined, undefined, 6]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.44, 0.055, 0.12]} />
+        <meshStandardMaterial color="#25322d" metalness={0.62} roughness={0.46} />
+      </instancedMesh>
+      <instancedMesh ref={ksp4TubeInstRef} args={[undefined, undefined, 6]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.36, 0.022, 0.028]} />
+        <meshStandardMaterial color="#fff4d6" emissive="#ffe2a8" emissiveIntensity={1.6} />
+      </instancedMesh>
+
+      {/* Instanced 11 Lower Relay Cabinet Doors & Brass Latches Across Front Synoptic Wall */}
+      <instancedMesh ref={wallDoorInstRef} args={[undefined, undefined, 11]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color="#ffffff" metalness={0.48} roughness={0.55} />
+      </instancedMesh>
+      <instancedMesh ref={wallLatchInstRef} args={[undefined, undefined, 11]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial
+          color="#b8a46b"
+          metalness={0.86}
+          roughness={0.28}
+          bumpMap={brassTex.bumpMap}
+          bumpScale={0.004}
+        />
+      </instancedMesh>
+
       {/* 1. CENTER SYNOPTIC WALL BACKING & CROWN BANNER (`z = -3.96`, `x = -2.04..+2.04`) */}
       <group position={[0, 0, -3.96]}>
         {/* Lower Soviet Seafoam / Sage-Green Relay Cabinets (`y = 0..1.42m`) */}
@@ -1852,26 +2050,6 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
             <meshStandardMaterial color="#1f2925" metalness={0.64} roughness={0.44} />
           </mesh>
         ))}
-
-        {/* Lower Relay Cabinet Doors Under Monumental CRT */}
-        {[-1.5, -0.75, 0, 0.75, 1.5].map((dx, dIdx) => (
-          <group key={`center-door-${dIdx}`} position={[dx, 0.71, 0.118]}>
-            <mesh raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.66, 1.16, 0.022]} />
-              <meshStandardMaterial color="#253630" metalness={0.48} roughness={0.54} />
-            </mesh>
-            <mesh position={[0.25, 0, 0.014]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.024, 0.12, 0.014]} />
-              <meshStandardMaterial
-                color="#b8a46b"
-                metalness={0.86}
-                roughness={0.28}
-                bumpMap={brassTex.bumpMap}
-                bumpScale={0.004}
-              />
-            </mesh>
-          </group>
-        ))}
       </group>
 
       {/* Backlit Red Cyrillic Header Banner Above Left-Center of K.O.M.R.A.D.-84 */}
@@ -1880,7 +2058,7 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
           <boxGeometry args={[2.12, 0.21, 0.12]} />
           <meshStandardMaterial color="#1d2421" metalness={0.64} roughness={0.44} />
         </mesh>
-        <mesh position={[0, 0, 0.064]} raycast={NOOP_RAYCAST}>
+        <mesh position={[0, 0, 0.078]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[2.04, 0.18]} />
           <meshStandardMaterial
             map={mainRedBannerTex}
@@ -1888,6 +2066,9 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
             emissiveMap={mainRedBannerTex}
             emissiveIntensity={0.68}
             roughness={0.42}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
           />
         </mesh>
       </group>
@@ -1899,7 +2080,6 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
       {([-1, 1] as const).map((side) => {
         const isLeft = side === -1;
         const mosaicX = isLeft ? 0.82 : -0.82;
-        const recorderXs = isLeft ? [-1.42, -0.92, -0.42] : [0.42, 0.92, 1.42];
         return (
           <group
             key={`syn-wing-${side}`}
@@ -1929,11 +2109,11 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
             </mesh>
 
             {/* Upper Backlit Annunciator Tile Matrix (`ТАБЛО СИГНАЛИЗАЦИИ`) */}
-            <mesh position={[0, 3.5, 0.222]} raycast={NOOP_RAYCAST}>
+            <mesh position={[0, 3.53, 0.222]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[3.5, 0.52, 0.028]} />
               <meshStandardMaterial color="#18201d" metalness={0.62} roughness={0.44} />
             </mesh>
-            <mesh position={[0, 3.5, 0.238]} raycast={NOOP_RAYCAST}>
+            <mesh position={[0, 3.53, 0.254]} raycast={NOOP_RAYCAST}>
               <planeGeometry args={[3.4, 0.45]} />
               <meshStandardMaterial
                 ref={isLeft ? alarmTileLeftMatRef : alarmTileRightMatRef}
@@ -1942,6 +2122,9 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
                 emissiveMap={tabloMatrixTex}
                 emissiveIntensity={0.56}
                 roughness={0.42}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
               />
             </mesh>
 
@@ -1952,7 +2135,7 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
                   <cylinderGeometry args={[0.85, 0.87, 0.09, 36]} />
                   <meshStandardMaterial color="#1a2420" metalness={0.66} roughness={0.42} />
                 </mesh>
-                <mesh position={[0, 0, 0.048]} raycast={NOOP_RAYCAST}>
+                <mesh position={[0, 0, 0.063]} raycast={NOOP_RAYCAST}>
                   <circleGeometry args={[0.78, 36]} />
                   <meshStandardMaterial
                     ref={coreMosaicMatRef}
@@ -1961,60 +2144,33 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
                     emissiveMap={coreMosaicTex}
                     emissiveIntensity={0.62}
                     roughness={0.44}
+                    polygonOffset
+                    polygonOffsetFactor={-2}
+                    polygonOffsetUnits={-2}
                   />
                 </mesh>
               </group>
             ) : (
-              <group position={[mosaicX, 2.39, 0.232]}>
+              <group position={[mosaicX, 2.55, 0.232]}>
                 <mesh raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[1.7, 1.56, 0.085]} />
+                  <boxGeometry args={[1.7, 1.34, 0.085]} />
                   <meshStandardMaterial color="#1a2420" metalness={0.66} roughness={0.42} />
                 </mesh>
-                <mesh position={[0, 0, 0.046]} raycast={NOOP_RAYCAST}>
-                  <planeGeometry args={[1.56, 1.44]} />
+                <mesh position={[0, 0, 0.06]} raycast={NOOP_RAYCAST}>
+                  <planeGeometry args={[1.56, 1.22]} />
                   <meshStandardMaterial
                     map={turbineMimicTex}
                     emissive="#ffffff"
                     emissiveMap={turbineMimicTex}
                     emissiveIntensity={0.54}
                     roughness={0.44}
+                    polygonOffset
+                    polygonOffsetFactor={-2}
+                    polygonOffsetUnits={-2}
                   />
                 </mesh>
               </group>
             )}
-
-            {/* Outer Half: 3 `КСП-4` Strip-Chart Recorders With Illuminated Warm Steel Hoods */}
-            {recorderXs.map((rx, rIdx) => (
-              <group key={`ksp4-${side}-${rIdx}`} position={[rx, 2.16, 0.235]}>
-                <mesh raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[0.42, 0.72, 0.045]} />
-                  <meshStandardMaterial color="#1b2420" metalness={0.65} roughness={0.44} />
-                </mesh>
-                <mesh position={[0, -0.02, 0.025]} raycast={NOOP_RAYCAST}>
-                  <planeGeometry args={[0.34, 0.56]} />
-                  <meshStandardMaterial
-                    map={stripRecorderTex}
-                    emissive="#fff3d1"
-                    emissiveMap={stripRecorderTex}
-                    emissiveIntensity={0.42}
-                    roughness={0.62}
-                  />
-                </mesh>
-                {/* Overhanging Steel Recorder Light Hood + Warm Emissive Tube */}
-                <mesh position={[0, 0.36, 0.055]} rotation={[0.25, 0, 0]} raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[0.44, 0.055, 0.12]} />
-                  <meshStandardMaterial color="#25322d" metalness={0.62} roughness={0.46} />
-                </mesh>
-                <mesh position={[0, 0.33, 0.068]} raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[0.36, 0.022, 0.028]} />
-                  <meshStandardMaterial
-                    color="#fff4d6"
-                    emissive="#ffe2a8"
-                    emissiveIntensity={1.6}
-                  />
-                </mesh>
-              </group>
-            ))}
 
             {/* Raised 3D Mimic Busbar Piping Across Wing Face */}
             <mesh position={[isLeft ? -0.92 : 0.92, 1.62, 0.236]} raycast={NOOP_RAYCAST}>
@@ -2022,19 +2178,7 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
               <meshStandardMaterial color={isLeft ? "#388898" : "#c8a838"} metalness={0.54} roughness={0.42} />
             </mesh>
 
-            {/* Lower Relay Cabinet Doors & Base Toe-Kick */}
-            {[-1.18, 0, 1.18].map((lx, lIdx) => (
-              <group key={`wing-door-${side}-${lIdx}`} position={[lx, 0.74, 0.228]}>
-                <mesh raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[1.06, 1.18, 0.022]} />
-                  <meshStandardMaterial color="#24352f" metalness={0.48} roughness={0.56} />
-                </mesh>
-                <mesh position={[0.42, 0, 0.015]} raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[0.026, 0.14, 0.016]} />
-                  <meshStandardMaterial color="#b8a46b" metalness={0.86} roughness={0.28} />
-                </mesh>
-              </group>
-            ))}
+            {/* Base Toe-Kick */}
             <mesh position={[0, 0.075, 0.04]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[3.78, 0.15, 0.48]} />
               <meshStandardMaterial color="#141917" metalness={0.62} roughness={0.55} />
@@ -2214,18 +2358,30 @@ const SovietLeftWallSwitchgearAlcove3D: React.FC = React.memo(() => {
         <boxGeometry args={[2.06, 0.14, 0.64]} />
         <meshStandardMaterial color="#161d1a" metalness={0.66} roughness={0.48} />
       </mesh>
-      <mesh position={[0, 0.075, 0.945]} raycast={NOOP_RAYCAST}>
+      <mesh position={[0, 0.075, 0.955]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[2.02, 0.11]} />
-        <meshStandardMaterial map={hvHazardTex} roughness={0.55} />
+        <meshStandardMaterial
+          map={hvHazardTex}
+          roughness={0.55}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
       </mesh>
       {/* Upper Header Soffit Above 1.25x `UNIT D` (`y = 2.71..4.20m`) with HV Insulators & Hazard Trim */}
       <mesh position={[0, 3.455, 0.6]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[2.1, 1.49, 0.46]} />
         <meshStandardMaterial color="#1d2722" metalness={0.62} roughness={0.5} />
       </mesh>
-      <mesh position={[0, 2.8, 0.835]} raycast={NOOP_RAYCAST}>
+      <mesh position={[0, 2.8, 0.845]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[2.02, 0.14]} />
-        <meshStandardMaterial map={hvHazardTex} roughness={0.5} />
+        <meshStandardMaterial
+          map={hvHazardTex}
+          roughness={0.5}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
       </mesh>
       {/* Porcelain HV Busbar Insulators & Red HV Live Beacons on Upper Soffit */}
       {([-0.68, 0, 0.68] as const).map((ix, idx) => (
@@ -2257,21 +2413,33 @@ const SovietLeftWallSwitchgearAlcove3D: React.FC = React.memo(() => {
           </mesh>
           {/* Inner Vertical Yellow-Black HV Hazard Strip Flanking `UNIT D` */}
           <mesh
-            position={[idx === 0 ? 0.39 : -0.39, 1.35, 0.248]}
+            position={[idx === 0 ? 0.39 : -0.39, 1.35, 0.258]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
             <planeGeometry args={[2.56, 0.095]} />
-            <meshStandardMaterial map={hvHazardTex} roughness={0.5} />
+            <meshStandardMaterial
+              map={hvHazardTex}
+              roughness={0.5}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
           </mesh>
           <group position={[idx === 0 ? -0.04 : 0.04, 2.02, 0.288]}>
             <mesh position={[0, 0, -0.007]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.52, 0.26, 0.012]} />
               <meshStandardMaterial color="#18211d" metalness={0.62} roughness={0.48} />
             </mesh>
-            <mesh raycast={NOOP_RAYCAST}>
+            <mesh position={[0, 0, 0.014]} raycast={NOOP_RAYCAST}>
               <planeGeometry args={[0.5, 0.25]} />
-              <meshStandardMaterial map={hvPlaqueTex} roughness={0.45} />
+              <meshStandardMaterial
+                map={hvPlaqueTex}
+                roughness={0.45}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+              />
             </mesh>
           </group>
           <mesh position={[0.24, 1.24, 0.262]} raycast={NOOP_RAYCAST}>
@@ -2391,7 +2559,7 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
             />
           </mesh>
           {/* Upper Frosted Wired-Glass Observation Pane */}
-          <mesh position={[0, 0.46, 0.04]} raycast={NOOP_RAYCAST}>
+          <mesh position={[0, 0.46, 0.058]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.48, 0.84]} />
             <meshStandardMaterial
               map={wiredGlassTex}
@@ -2399,6 +2567,9 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
               emissiveMap={wiredGlassTex}
               emissiveIntensity={0.22}
               roughness={0.35}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
             />
           </mesh>
           <mesh position={[0, 0.46, 0.036]} raycast={NOOP_RAYCAST}>
@@ -2418,7 +2589,7 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
         <boxGeometry args={[1.64, 0.34, 0.06]} />
         <meshStandardMaterial color="#141816" metalness={0.62} roughness={0.48} />
       </mesh>
-      <mesh position={[0, 2.74, 0.082]} raycast={NOOP_RAYCAST}>
+      <mesh position={[0, 2.74, 0.096]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[1.54, 0.28]} />
         <meshStandardMaterial
           map={transomTex}
@@ -2426,6 +2597,9 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
           emissiveMap={transomTex}
           emissiveIntensity={0.35}
           roughness={0.45}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
         />
       </mesh>
 
@@ -2450,9 +2624,16 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
         <boxGeometry args={[0.98, 0.5, 0.028]} />
         <meshStandardMaterial color="#141414" metalness={0.6} roughness={0.5} />
       </mesh>
-      <mesh position={[1.76, 1.65, 0.056]} raycast={NOOP_RAYCAST}>
+      <mesh position={[1.76, 1.65, 0.068]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[0.92, 0.45]} />
-        <meshStandardMaterial map={warningPlaqueTex} roughness={0.42} metalness={0.18} />
+        <meshStandardMaterial
+          map={warningPlaqueTex}
+          roughness={0.42}
+          metalness={0.18}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
       </mesh>
     </group>
   );
@@ -2469,40 +2650,22 @@ const SovietWallPillarLamp3D: React.FC<{
   const glassMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const bulbMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
+  useFrame(() => {
     const gs = useGameStore.getState();
-    const isAlarm =
-      gs.coreTemp >= 750 ||
-      gs.powerAllocation.cooling +
-        gs.powerAllocation.defense +
-        gs.powerAllocation.facility >
-        gs.maxSafePower;
-    const hzSag = Math.max(0, 49.7 - gs.gridHz) * 0.45;
-    const dip = Math.min(1, gs.voltageDipIntensity + hzSag);
-    const flicker =
-      dip > 0.02 ? 1 - dip * (0.3 + 0.14 * Math.sin(t * 62.8)) : 1;
 
     if (glassMatRef.current) {
       if (gs.isBlackout) {
         glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_BLACKOUT);
         glassMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_BLACKOUT_EMISSIVE);
         glassMatRef.current.emissiveIntensity = 0.08;
-      } else if (isAlarm) {
-        glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_ALARM);
-        glassMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_ALARM_EMISSIVE);
-        glassMatRef.current.emissiveIntensity =
-          (0.65 + 0.3 * Math.sin(t * 9.0)) * flicker;
       } else {
         glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_NORM);
         glassMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_NORM_EMISSIVE);
-        glassMatRef.current.emissiveIntensity = 0.65 * flicker;
+        glassMatRef.current.emissiveIntensity = 0.65;
       }
     }
     if (bulbMatRef.current) {
-      bulbMatRef.current.emissiveIntensity = gs.isBlackout
-        ? 0.06
-        : (isAlarm ? 1.5 : 1.35) * flicker;
+      bulbMatRef.current.emissiveIntensity = gs.isBlackout ? 0.06 : 1.35;
     }
   });
 
@@ -2970,7 +3133,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
       />
 
       {/* Top Riveted Header Plaque */}
-      <mesh position={[0, 2.095, 0.044]} raycast={NOOP_RAYCAST}>
+      <mesh position={[0, 2.095, 0.056]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[1.56, 0.138]} />
         <meshStandardMaterial
           map={headerPlateTex}
@@ -2978,6 +3141,9 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
           emissiveMap={headerPlateTex}
           emissiveIntensity={0.35}
           roughness={0.75}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
         />
       </mesh>
 
@@ -3054,7 +3220,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
             bumpScale={0.006}
           />
         </mesh>
-        <mesh position={[0, 0.09, 0.012]} raycast={NOOP_RAYCAST}>
+        <mesh position={[0, 0.09, 0.024]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[1.48, 0.068]} />
           <meshStandardMaterial
             map={fuseBayPlateTex}
@@ -3062,6 +3228,9 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
             emissiveMap={fuseBayPlateTex}
             emissiveIntensity={0.3}
             roughness={0.6}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
           />
         </mesh>
         {[-0.6, -0.36, -0.12, 0.12, 0.36, 0.6].map((fx, idx) => (
@@ -3188,6 +3357,11 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
             window.addEventListener("pointercancel", onUp);
           }}
         >
+          {/* Single clean invisible hitbox for Steam Vent Lever */}
+          <mesh position={[0, 0.03, 0.09]}>
+            <boxGeometry args={[0.42, 0.44, 0.24]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
           <mesh position={[0, 0.24, 0.006]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.42, 0.105, 0.01]} />
             <meshStandardMaterial
@@ -3196,7 +3370,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
               roughness={0.28}
             />
           </mesh>
-          <mesh position={[0, 0.24, 0.012]} raycast={NOOP_RAYCAST}>
+          <mesh position={[0, 0.24, 0.024]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.406, 0.096]} />
             <meshStandardMaterial
               map={steamPlateTex}
@@ -3204,9 +3378,12 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
               emissiveMap={steamPlateTex}
               emissiveIntensity={0.38}
               roughness={0.55}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
             />
           </mesh>
-          <mesh>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.26, 0.3, 0.044]} />
             <meshStandardMaterial
               color="#141816"
@@ -3214,7 +3391,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
               roughness={0.44}
             />
           </mesh>
-          <mesh position={[0, 0, 0.024]}>
+          <mesh position={[0, 0, 0.024]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.14, 0.23, 0.016]} />
             <meshStandardMaterial color="#090c0a" roughness={0.85} />
           </mesh>
@@ -3224,6 +3401,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
                 key={idx}
                 position={[lx, 0, 0.085]}
                 rotation={[Math.PI / 2, 0, 0]}
+                raycast={NOOP_RAYCAST}
               >
                 <cylinderGeometry args={[0.011, 0.013, 0.17, 10]} />
                 <meshStandardMaterial
@@ -3236,6 +3414,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
             <mesh
               position={[0, 0, 0.17]}
               rotation={[0, 0, Math.PI / 2]}
+              raycast={NOOP_RAYCAST}
             >
               <cylinderGeometry args={[0.028, 0.028, 0.18, 14]} />
               <meshStandardMaterial
@@ -3250,6 +3429,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
                 key={idx}
                 position={[hx, 0, 0.17]}
                 rotation={[0, 0, Math.PI / 2]}
+                raycast={NOOP_RAYCAST}
               >
                 <cylinderGeometry args={[0.03, 0.03, 0.022, 14]} />
                 <meshStandardMaterial color="#ffb000" roughness={0.35} />
@@ -3366,7 +3546,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
               roughness={0.28}
             />
           </mesh>
-          <mesh position={[0, 0.24, 0.012]} raycast={NOOP_RAYCAST}>
+          <mesh position={[0, 0.24, 0.024]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.435, 0.096]} />
             <meshStandardMaterial
               map={rheostatPlateTex}
@@ -3374,6 +3554,9 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
               emissiveMap={rheostatPlateTex}
               emissiveIntensity={0.35}
               roughness={0.55}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
             />
           </mesh>
           <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
@@ -3386,7 +3569,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
               bumpScale={0.008}
             />
           </mesh>
-          <mesh position={[0, 0, 0.026]} raycast={NOOP_RAYCAST}>
+          <mesh position={[0, 0, 0.038]} raycast={NOOP_RAYCAST}>
             <circleGeometry args={[0.132, 24]} />
             <meshStandardMaterial
               map={rheostatScaleTex}
@@ -3394,9 +3577,12 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
               emissiveMap={rheostatScaleTex}
               emissiveIntensity={0.38}
               roughness={0.82}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
             />
           </mesh>
-          <mesh position={[0, 0, 0.028]} raycast={NOOP_RAYCAST}>
+          <mesh position={[0, 0, 0.041]} raycast={NOOP_RAYCAST}>
             <torusGeometry args={[0.134, 0.009, 10, 24]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -3406,7 +3592,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
               bumpScale={0.005}
             />
           </mesh>
-          <group ref={rheostatWheelRef} position={[0, 0, 0.048]}>
+          <group ref={rheostatWheelRef} position={[0, 0, 0.058]}>
             <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.098, 0.112, 0.048, 16]} />
               <meshStandardMaterial
@@ -3511,7 +3697,12 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
                 triggerToggle();
               }}
             >
-              <mesh position={[0, 0.112, 0.004]}>
+              {/* Single clean invisible hitbox for Aux Toggle Switch */}
+              <mesh position={[0, 0.045, 0.035]}>
+                <boxGeometry args={[0.34, 0.24, 0.1]} />
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+              </mesh>
+              <mesh position={[0, 0.112, 0.004]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.33, 0.098, 0.008]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -3519,7 +3710,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
                   roughness={0.28}
                 />
               </mesh>
-              <mesh position={[0, 0.112, 0.01]}>
+              <mesh position={[0, 0.112, 0.022]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.318, 0.09]} />
                 <meshStandardMaterial
                   map={tSpec.texture}
@@ -3527,6 +3718,9 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
                   emissiveMap={tSpec.texture}
                   emissiveIntensity={0.36}
                   roughness={0.65}
+                  polygonOffset
+                  polygonOffsetFactor={-2}
+                  polygonOffsetUnits={-2}
                 />
               </mesh>
               <CagedSovietJewelLamp3D
@@ -3534,7 +3728,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
                 lampMatRef={toggleLampRefs[tIdx]}
                 scale={0.78}
               />
-              <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.026, 0.029, 0.018, 6]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -3545,7 +3739,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
                 />
               </mesh>
               {[-0.032, 0.032].map((gx, gIdx) => (
-                <mesh key={gIdx} position={[gx, 0, 0.02]}>
+                <mesh key={gIdx} position={[gx, 0, 0.02]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.007, 0.068, 0.038]} />
                   <meshStandardMaterial
                     color="#b8a46b"
@@ -3558,6 +3752,7 @@ const SovietRearAuxBreakerPanel3D: React.FC = React.memo(() => {
                 <mesh
                   position={[0, 0, 0.03]}
                   rotation={[Math.PI / 2, 0, 0]}
+                  raycast={NOOP_RAYCAST}
                 >
                   <cylinderGeometry args={[0.0105, 0.0065, 0.062, 10]} />
                   <meshStandardMaterial
@@ -3583,6 +3778,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   const lastThrottleDrawRef = useRef(-1);
   const rightStatusMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const lastThrottleMwRef = useRef(-1);
+  const lastMwMaskRef = useRef(-1);
+  const lastBankSegSigRef = useRef(-1);
   const prevXenonRef = useRef(0);
   const xenonBurningRef = useRef(false);
 
@@ -3672,6 +3869,9 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         emissiveIntensity: 0.95,
         roughness: 0.35,
         metalness: 0.05,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
       });
     }
     const needleObj = root.getObjectByName("Center_Load_Needle") ?? null;
@@ -3827,38 +4027,56 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       }
     }
 
+    let mwMask = 0;
     for (let seg = 0; seg < 10; seg++) {
-      const ledMat = batteryMwBarRefs.current[seg];
-      if (!ledMat) continue;
-      const segThreshold = (seg + 1) * 100;
-      const isLit = !s.isBlackout && dispatchedMWNow >= segThreshold - 50;
-      const segCol =
-        seg >= 8
-          ? SCENE_COLOR_RED
-          : seg >= 6
-            ? SCENE_COLOR_AMBER
-            : SCENE_COLOR_GREEN;
-      ledMat.color.copy(isLit ? segCol : SCENE_COLOR_OFF_DARK);
-      ledMat.emissive.copy(isLit ? segCol : SCENE_COLOR_BLACK);
-      ledMat.emissiveIntensity = isLit ? 1.55 : 0.04;
+      if (!s.isBlackout && dispatchedMWNow >= (seg + 1) * 100 - 50) {
+        mwMask |= 1 << seg;
+      }
+    }
+    if (mwMask !== lastMwMaskRef.current) {
+      lastMwMaskRef.current = mwMask;
+      for (let seg = 0; seg < 10; seg++) {
+        const ledMat = batteryMwBarRefs.current[seg];
+        if (!ledMat) continue;
+        const isLit = (mwMask & (1 << seg)) !== 0;
+        const segCol =
+          seg >= 8
+            ? SCENE_COLOR_RED
+            : seg >= 6
+              ? SCENE_COLOR_AMBER
+              : SCENE_COLOR_GREEN;
+        ledMat.color.copy(isLit ? segCol : SCENE_COLOR_OFF_DARK);
+        ledMat.emissive.copy(isLit ? segCol : SCENE_COLOR_BLACK);
+        ledMat.emissiveIntensity = isLit ? 1.55 : 0.04;
+      }
     }
 
     // 2. Animate 10 Accumulator Charge Bars across Bank A (0-50%) & Bank B (55-100%)
     const chargePct = s.batteryStoredPct;
-    const chargeCol =
-      chargePct < 15
-        ? SCENE_COLOR_RED
-        : chargePct < 30
-          ? SCENE_COLOR_AMBER
-          : SCENE_COLOR_GREEN;
+    const chargeTier = chargePct < 15 ? 0 : chargePct < 30 ? 1 : 2;
+    let bankMask = 0;
     for (let i = 0; i < 10; i++) {
-      const barMat = batteryBankSegRefs.current[i];
-      if (!barMat) continue;
-      const threshold = (i + 1) * 10 - 5;
-      const isLit = !s.isBlackout && chargePct >= threshold;
-      barMat.color.copy(isLit ? chargeCol : SCENE_COLOR_OFF_DARK);
-      barMat.emissive.copy(isLit ? chargeCol : SCENE_COLOR_BLACK);
-      barMat.emissiveIntensity = isLit ? 1.4 : 0.05;
+      if (!s.isBlackout && chargePct >= (i + 1) * 10 - 5) {
+        bankMask |= 1 << i;
+      }
+    }
+    const bankSig = (chargeTier << 12) | bankMask;
+    if (bankSig !== lastBankSegSigRef.current) {
+      lastBankSegSigRef.current = bankSig;
+      const chargeCol =
+        chargeTier === 0
+          ? SCENE_COLOR_RED
+          : chargeTier === 1
+            ? SCENE_COLOR_AMBER
+            : SCENE_COLOR_GREEN;
+      for (let i = 0; i < 10; i++) {
+        const barMat = batteryBankSegRefs.current[i];
+        if (!barMat) continue;
+        const isLit = (bankMask & (1 << i)) !== 0;
+        barMat.color.copy(isLit ? chargeCol : SCENE_COLOR_OFF_DARK);
+        barMat.emissive.copy(isLit ? chargeCol : SCENE_COLOR_BLACK);
+        barMat.emissiveIntensity = isLit ? 1.4 : 0.05;
+      }
     }
 
     // Pause background canvas telemetry redraws while K.O.M.R.A.D.-84 easter egg video is playing
@@ -3866,7 +4084,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
     if (
       dispatchedMWNow !== lastThrottleMwRef.current &&
-      (lastThrottleDrawRef.current < 0 || t - lastThrottleDrawRef.current >= 0.08)
+      (lastThrottleDrawRef.current < 0 || t - lastThrottleDrawRef.current >= 0.105)
     ) {
       lastThrottleDrawRef.current = t;
       lastThrottleMwRef.current = dispatchedMWNow;
@@ -3896,8 +4114,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       }
     }
 
-    // Update UNIT C Master Overview Dashboard (`CRT-84C`, 1024x208) — throttled to ~13 FPS (0.075s)
-    if (lastRightDrawRef.current > 0 && t - lastRightDrawRef.current < 0.075) return;
+    // Update UNIT C Master Overview Dashboard (`CRT-84C`, 1024x208) — throttled to <=10 Hz (0.105s)
+    if (lastRightDrawRef.current > 0 && t - lastRightDrawRef.current < 0.105) return;
     lastRightDrawRef.current = t;
     if (Math.abs(s.xenon - prevXenonRef.current) > 0.05) {
       xenonBurningRef.current = s.xenon < prevXenonRef.current;
@@ -4072,7 +4290,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
         ))}
 
         {/* Top Riveted Header Plaque: Clear of overhead canopy overhang */}
-        <mesh position={[0, 2.095, 0.044]} raycast={NOOP_RAYCAST}>
+        <mesh position={[0, 2.095, 0.056]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[1.58, 0.138]} />
           <meshStandardMaterial
             map={rightHeaderPlateTex}
@@ -4080,6 +4298,9 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             emissiveMap={rightHeaderPlateTex}
             emissiveIntensity={0.35}
             roughness={0.75}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
           />
         </mesh>
 
@@ -4375,9 +4596,15 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               </mesh>
             ))}
             {/* Lower Corner Hazard Striping Cheek */}
-            <mesh position={[0, -0.52, 0.135]} raycast={NOOP_RAYCAST}>
+            <mesh position={[0, -0.52, 0.148]} raycast={NOOP_RAYCAST}>
               <planeGeometry args={[0.125, 0.26]} />
-              <meshStandardMaterial map={crtHazardTex} roughness={0.5} />
+              <meshStandardMaterial
+                map={crtHazardTex}
+                roughness={0.5}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+              />
             </mesh>
           </group>
         ))}
@@ -4423,9 +4650,15 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
           />
         </mesh>
         {([-1.06, 1.06] as const).map((hx, hIdx) => (
-          <mesh key={`crt-bot-haz-${hIdx}`} position={[hx, 0.99, 0.264]} raycast={NOOP_RAYCAST}>
+          <mesh key={`crt-bot-haz-${hIdx}`} position={[hx, 0.99, 0.276]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.52, 0.095]} />
-            <meshStandardMaterial map={crtHazardTex} roughness={0.5} />
+            <meshStandardMaterial
+              map={crtHazardTex}
+              roughness={0.5}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
           </mesh>
         ))}
         {[-0.45, 0, 0.45].map((gx, gIdx) => (
@@ -4570,18 +4803,8 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       isBlackout,
     );
 
-    // Room Voltage Dip Brownout Flicker (25%-45% dip with 50Hz hum flicker when pulling MW levers or gridHz sags)
-    const hzSag = Math.max(0, 49.7 - state.gridHz) * 0.45;
-    const dipStrength = Math.min(1, state.voltageDipIntensity + hzSag);
-    const humFlicker =
-      dipStrength > 0.02
-        ? 1 -
-          dipStrength *
-            (0.32 + 0.14 * Math.sin(t * 62.8) * Math.cos(t * 94.2))
-        : 1.0;
-
     if (hemiLightRef.current) {
-      hemiLightRef.current.intensity = isBlackout ? 0.18 : 0.95 * humFlicker;
+      hemiLightRef.current.intensity = isBlackout ? 0.18 : 0.95;
     }
 
     if (bunkerMainLightRef.current) {
@@ -4589,16 +4812,16 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
         bunkerMainLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_BLACKOUT);
         bunkerMainLightRef.current.intensity = 0.6;
       } else if (isAlarmActive) {
-        const wave = (Math.sin(t * 9.0) + 1) * 0.5;
+        const wave = (Math.sin(t * 4.2) + 1) * 0.5;
         bunkerMainLightRef.current.color.lerpColors(
           SCENE_COLOR_MAIN_LIGHT_NORM,
           SCENE_COLOR_RED,
-          0.35 + 0.55 * wave,
+          0.35 + 0.5 * wave,
         );
-        bunkerMainLightRef.current.intensity = (3.6 + wave * 2.2) * humFlicker;
+        bunkerMainLightRef.current.intensity = 3.8 + wave * 1.4;
       } else {
         bunkerMainLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_NORM);
-        bunkerMainLightRef.current.intensity = 4.2 * humFlicker;
+        bunkerMainLightRef.current.intensity = 4.2;
       }
     }
 
@@ -4606,15 +4829,12 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       if (isBlackout || powerAllocation.facility <= 0) {
         deskSpotRef.current.intensity = 0;
       } else if (powerAllocation.facility <= 10) {
-        const heavyFlicker =
-          Math.sin(t * 37) * 0.35 + Math.cos(t * 63) * 0.25 > 0.1 ? 0.2 : 0.95;
-        deskSpotRef.current.intensity = 1.9 * heavyFlicker * humFlicker;
+        deskSpotRef.current.intensity = 1.9;
       } else if (powerAllocation.facility <= 20) {
-        const subtleFlicker = 0.88 + Math.sin(t * 24) * 0.12;
-        deskSpotRef.current.intensity = 2.8 * subtleFlicker * humFlicker;
+        deskSpotRef.current.intensity = 2.8;
       } else {
         const boost = Math.min(1.35, powerAllocation.facility / 30);
-        deskSpotRef.current.intensity = 3.2 * boost * humFlicker;
+        deskSpotRef.current.intensity = 3.2 * boost;
       }
     }
 
@@ -4623,7 +4843,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
     }
     if (klaxonLampMatRef.current) {
       klaxonLampMatRef.current.emissiveIntensity = isAlarmActive
-        ? 1.4 + Math.sin(t * 9.0) * 0.8
+        ? 1.4 + Math.sin(t * 4.2) * 0.75
         : 0.05;
     }
   });
@@ -4835,6 +5055,10 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     };
   }, [crtDiagOverlayTex, crtTexture, curvedCrtGeometry]);
 
+  useEffect(() => {
+    lastCrtDrawRef.current = 0;
+  }, [bulletinIdx]);
+
   useFrame(({ clock }) => {
     const activeCrtTex = crtTextureRef.current;
     const activeOverlayTex = crtDiagOverlayTexRef.current;
@@ -5012,8 +5236,8 @@ const Komrad84SplitScreenCrt3D: React.FC<{
       lastDiagSecRef.current = -1;
     }
 
-    // Throttle normal telemetry redraws to ~12.5 Hz (0.08s) BEFORE building signature strings
-    if (lastCrtDrawRef.current > 0 && now - lastCrtDrawRef.current < 0.08) return;
+    // Throttle normal telemetry redraws to <=10 Hz (0.105s) BEFORE building signature strings
+    if (lastCrtDrawRef.current > 0 && now - lastCrtDrawRef.current < 0.105) return;
     lastCrtDrawRef.current = now;
 
     const tex = activeCrtTex;
@@ -6692,7 +6916,7 @@ const Komrad84SplitScreenCrt3D: React.FC<{
     <>
       <mesh
         geometry={curvedCrtGeometry}
-        position={[0, 1.74, 0.145]}
+        position={[0, 1.74, 0.163]}
         onClick={(e) => {
           e.stopPropagation();
           playSwitchClank();
@@ -6717,12 +6941,16 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           emissiveIntensity={1.04}
           roughness={0.95}
           metalness={0.0}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
         />
       </mesh>
       <mesh
         ref={diagOverlayMeshRef}
         geometry={curvedCrtGeometry}
-        position={[0, 1.74, 0.147]}
+        position={[0, 1.74, 0.178]}
+        renderOrder={2}
         raycast={NOOP_RAYCAST}
         visible={false}
       >
@@ -6731,6 +6959,9 @@ const Komrad84SplitScreenCrt3D: React.FC<{
           transparent
           depthWrite={false}
           toneMapped={false}
+          polygonOffset
+          polygonOffsetFactor={-3}
+          polygonOffsetUnits={-3}
         />
       </mesh>
     </>
@@ -6743,10 +6974,12 @@ const Komrad84SplitScreenCrt3D: React.FC<{
  * `#fff1d6` fluorescent tube troffers (with 2 aged/flickering gritty tubes).
  */
 const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
-  const tubeMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+  const stdTubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const dimTubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const flickerTubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const cofferTileInstRef = useRef<THREE.InstancedMesh>(null);
+  const stdTubesInstRef = useRef<THREE.InstancedMesh>(null);
+  const bafflesInstRef = useRef<THREE.InstancedMesh>(null);
 
   const acousticTileTex = useMemo(() => {
     const tex = createNearestCanvasTexture(64, 64, (ctx, w, h) => {
@@ -6769,91 +7002,102 @@ const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
   }, []);
 
   useEffect(() => {
-    const mesh = cofferTileInstRef.current;
-    if (!mesh) return;
     const dummy = new THREE.Object3D();
-    const xs = [-4.8, -2.4, 0, 2.4, 4.8];
-    const zs = [-3.375, -1.125, 1.125, 3.375];
-    let idx = 0;
-    for (const z of zs) {
-      for (const x of xs) {
-        dummy.position.set(x, 4.14, z);
-        dummy.rotation.set(0, 0, 0);
-        dummy.scale.set(1, 1, 1);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(idx++, dummy.matrix);
+    const mesh = cofferTileInstRef.current;
+    if (mesh) {
+      const xs = [-4.8, -2.4, 0, 2.4, 4.8];
+      const zs = [-3.375, -1.125, 1.125, 3.375];
+      let idx = 0;
+      for (const z of zs) {
+        for (const x of xs) {
+          dummy.position.set(x, 4.14, z);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(idx++, dummy.matrix);
+        }
       }
+      mesh.instanceMatrix.needsUpdate = true;
     }
-    mesh.instanceMatrix.needsUpdate = true;
+
+    const troughZs = [-2.85, -0.85, 1.8];
+    const tubeXs = [-3.25, -1.1, 1.1, 3.25];
+    const baffleXs = [-4.0, -3.0, -2.0, -1.0, 0, 1.0, 2.0, 3.0, 4.0];
+
+    const stdTubes = stdTubesInstRef.current;
+    if (stdTubes) {
+      let idx = 0;
+      dummy.rotation.set(0, 0, Math.PI / 2);
+      dummy.scale.set(1, 1, 1);
+      for (let tIdx = 0; tIdx < troughZs.length; tIdx++) {
+        const tz = troughZs[tIdx];
+        for (let xIdx = 0; xIdx < tubeXs.length; xIdx++) {
+          const tx = tubeXs[xIdx];
+          for (let rowIdx = 0; rowIdx < 2; rowIdx++) {
+            const isDim = tIdx === 1 && xIdx === 2 && rowIdx === 0;
+            const isFlicker = tIdx === 0 && xIdx === 3 && rowIdx === 1;
+            if (isDim || isFlicker) continue;
+            const dz = rowIdx === 0 ? -0.14 : 0.14;
+            dummy.position.set(tx, 3.96 - 0.032, tz + dz);
+            dummy.updateMatrix();
+            stdTubes.setMatrixAt(idx++, dummy.matrix);
+          }
+        }
+      }
+      stdTubes.instanceMatrix.needsUpdate = true;
+    }
+
+    const baffles = bafflesInstRef.current;
+    if (baffles) {
+      let idx = 0;
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
+      for (let tIdx = 0; tIdx < troughZs.length; tIdx++) {
+        const tz = troughZs[tIdx];
+        for (let bIdx = 0; bIdx < baffleXs.length; bIdx++) {
+          dummy.position.set(baffleXs[bIdx], 3.96 - 0.026, tz);
+          dummy.updateMatrix();
+          baffles.setMatrixAt(idx++, dummy.matrix);
+        }
+      }
+      baffles.instanceMatrix.needsUpdate = true;
+    }
   }, []);
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const s = useGameStore.getState();
-    const t = clock.getElapsedTime();
-    const isAlarm =
-      s.coreTemp >= 750 ||
-      s.powerAllocation.cooling +
-        s.powerAllocation.defense +
-        s.powerAllocation.facility >
-        s.maxSafePower;
-    const hzSag = Math.max(0, 49.7 - s.gridHz) * 0.45;
-    const dipStrength = Math.min(1, s.voltageDipIntensity + hzSag);
-    const humFlicker =
-      dipStrength > 0.02
-        ? 1 -
-          dipStrength *
-            (0.32 + 0.14 * Math.sin(t * 62.8) * Math.cos(t * 94.2))
-        : 1.0;
 
     const baseIntensity = s.isBlackout
       ? 0.03
       : s.powerAllocation.facility <= 10
-        ? 1.15 * humFlicker
-        : 1.9 * humFlicker;
+        ? 1.15
+        : 1.9;
     const mainColor = s.isBlackout
       ? SCENE_COLOR_TUBE_BLACKOUT
-      : isAlarm
-        ? SCENE_COLOR_TUBE_ALARM
-        : SCENE_COLOR_TUBE_NORM;
+      : SCENE_COLOR_TUBE_NORM;
 
-    for (let i = 0; i < tubeMatRefs.current.length; i++) {
-      const mat = tubeMatRefs.current[i];
-      if (!mat) continue;
-      mat.emissive.copy(mainColor);
-      mat.emissiveIntensity = baseIntensity;
+    if (stdTubeMatRef.current) {
+      stdTubeMatRef.current.emissive.copy(mainColor);
+      stdTubeMatRef.current.emissiveIntensity = baseIntensity;
     }
 
-    // Aged/dimmed warm-amber gritty tube (35% output)
+    // Aged/dimmed warm-amber tube (steady 35% output)
     if (dimTubeMatRef.current) {
       dimTubeMatRef.current.emissive.copy(
         s.isBlackout ? SCENE_COLOR_TUBE_DIM_BLACKOUT : SCENE_COLOR_TUBE_DIM,
       );
-      dimTubeMatRef.current.emissiveIntensity = s.isBlackout
-        ? 0.02
-        : 0.65 * humFlicker;
+      dimTubeMatRef.current.emissiveIntensity = s.isBlackout ? 0.02 : 0.65;
     }
 
-    // Subtle gritty starter-flicker tube
     if (flickerTubeMatRef.current) {
-      if (s.isBlackout) {
-        flickerTubeMatRef.current.emissive.copy(
-          SCENE_COLOR_TUBE_FLICKER_BLACKOUT,
-        );
-        flickerTubeMatRef.current.emissiveIntensity = 0.02;
-      } else {
-        const pulse = Math.sin(t * 17.3) * Math.cos(t * 41.7);
-        const sputter = pulse > 0.72 ? 0.35 : 0.92 + 0.08 * Math.sin(t * 11.0);
-        flickerTubeMatRef.current.emissive.copy(SCENE_COLOR_TUBE_NORM);
-        flickerTubeMatRef.current.emissiveIntensity = 1.75 * sputter * humFlicker;
-      }
+      flickerTubeMatRef.current.emissive.copy(mainColor);
+      flickerTubeMatRef.current.emissiveIntensity = baseIntensity;
     }
   });
 
   const longitudinalXs = [-3.6, -1.2, 1.2, 3.6];
   const transverseZs = [-2.25, 0.0, 2.25];
   const troughZs = [-2.85, -0.85, 1.8];
-  const tubeXs = [-3.25, -1.1, 1.1, 3.25];
-  const baffleXs = [-4.0, -3.0, -2.0, -1.0, 0, 1.0, 2.0, 3.0, 4.0];
 
   return (
     <group>
@@ -6886,62 +7130,88 @@ const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
         </mesh>
       ))}
 
-      {/* Long Glowing Warm-White Fluorescent Troffers with Louvered Cross-Baffles */}
+      {/* Instanced 22 Standard Warm-White Fluorescent Tubes & 27 Steel Cross-Baffles */}
+      <instancedMesh
+        ref={stdTubesInstRef}
+        args={[undefined, undefined, 22]}
+        raycast={NOOP_RAYCAST}
+      >
+        <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
+        <meshStandardMaterial
+          ref={stdTubeMatRef}
+          color="#fff6e5"
+          emissive="#fff1d6"
+          emissiveIntensity={1.9}
+          roughness={0.25}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
+      </instancedMesh>
+      <instancedMesh
+        ref={bafflesInstRef}
+        args={[undefined, undefined, 27]}
+        raycast={NOOP_RAYCAST}
+      >
+        <boxGeometry args={[0.032, 0.055, 0.58]} />
+        <meshStandardMaterial color="#2c3531" metalness={0.58} roughness={0.48} />
+      </instancedMesh>
+
+      {/* Dim & Secondary Fluorescent Tubes (1 each, rock-steady) */}
+      <mesh
+        position={[1.1, 3.96 - 0.032, -0.85 - 0.14]}
+        rotation={[0, 0, Math.PI / 2]}
+        raycast={NOOP_RAYCAST}
+      >
+        <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
+        <meshStandardMaterial
+          ref={dimTubeMatRef}
+          color="#e2a24c"
+          emissive="#e2a24c"
+          emissiveIntensity={0.65}
+          roughness={0.25}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
+      </mesh>
+      <mesh
+        position={[3.25, 3.96 - 0.032, -2.85 + 0.14]}
+        rotation={[0, 0, Math.PI / 2]}
+        raycast={NOOP_RAYCAST}
+      >
+        <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
+        <meshStandardMaterial
+          ref={flickerTubeMatRef}
+          color="#fff6e5"
+          emissive="#fff1d6"
+          emissiveIntensity={1.9}
+          roughness={0.25}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
+      </mesh>
+
+      {/* Long Fluorescent Troffer Housings (`3` rows) */}
       {troughZs.map((tz, tIdx) => (
         <group key={`ceil-trough-${tIdx}`} position={[0, 3.96, tz]}>
           {/* Steel Recessed Troffer Reflector Housing */}
-          <mesh position={[0, 0.05, 0]} raycast={NOOP_RAYCAST}>
+          <mesh position={[0, 0.06, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[9.2, 0.08, 0.64]} />
             <meshStandardMaterial color="#232b28" metalness={0.64} roughness={0.46} />
           </mesh>
           <mesh position={[0, 0.006, 0]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[8.9, 0.54]} />
-            <meshStandardMaterial color="#8d948d" roughness={0.55} metalness={0.28} />
+            <meshStandardMaterial
+              color="#8d948d"
+              roughness={0.55}
+              metalness={0.28}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
           </mesh>
-
-          {/* Twin Rows of Glowing Fluorescent Tubes (`y = -0.015m`) */}
-          {tubeXs.map((tx, xIdx) => (
-            <React.Fragment key={`tube-pair-${tIdx}-${xIdx}`}>
-              {([-0.14, 0.14] as const).map((dz, rowIdx) => {
-                const isDim = tIdx === 1 && xIdx === 2 && rowIdx === 0;
-                const isFlicker = tIdx === 0 && xIdx === 3 && rowIdx === 1;
-                const refIdx = tIdx * 8 + xIdx * 2 + rowIdx;
-                return (
-                  <mesh
-                    key={`fl-tube-${refIdx}`}
-                    position={[tx, -0.012, dz]}
-                    rotation={[0, 0, Math.PI / 2]}
-                    raycast={NOOP_RAYCAST}
-                  >
-                    <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
-                    <meshStandardMaterial
-                      ref={
-                        isDim
-                          ? dimTubeMatRef
-                          : isFlicker
-                            ? flickerTubeMatRef
-                            : (el) => {
-                                tubeMatRefs.current[refIdx] = el;
-                              }
-                      }
-                      color={isDim ? "#e2a24c" : "#fff6e5"}
-                      emissive={isDim ? "#e2a24c" : "#fff1d6"}
-                      emissiveIntensity={isDim ? 0.65 : 1.9}
-                      roughness={0.25}
-                    />
-                  </mesh>
-                );
-              })}
-            </React.Fragment>
-          ))}
-
-          {/* Louvered Steel Cross-Baffles */}
-          {baffleXs.map((bx, bIdx) => (
-            <mesh key={`baffle-${tIdx}-${bIdx}`} position={[bx, -0.018, 0]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.032, 0.055, 0.58]} />
-              <meshStandardMaterial color="#2c3531" metalness={0.58} roughness={0.48} />
-            </mesh>
-          ))}
         </group>
       ))}
     </group>
@@ -7009,15 +7279,15 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
       reel.rotation.z -= dir * 0.045;
     }
 
-    // Animate blinking LED register strips on СМ-2М tape cabinets
+    // Animate gentle LED register strips on СМ-2М tape cabinets
     for (let i = 0; i < ledMatRefs.current.length; i++) {
       const mat = ledMatRefs.current[i];
       if (!mat) continue;
       if (s.isBlackout) {
         mat.emissiveIntensity = 0.04;
       } else {
-        const bit = Math.floor(t * (2.5 + (i % 4) * 1.1) + i * 3) % 3;
-        mat.emissiveIntensity = bit === 0 ? 1.8 : 0.25;
+        const bit = Math.floor(t * (0.45 + (i % 3) * 0.15) + i * 3) % 3;
+        mat.emissiveIntensity = bit === 0 ? 1.35 : 0.45;
       }
     }
   });
@@ -7073,7 +7343,7 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
         const col = lIdx === 0 ? "#ff2a2a" : lIdx < 3 ? "#ffb000" : "#33ff66";
         const ledIdx = baseIdx * 3 + lIdx;
         return (
-          <mesh key={`${bayPrefix}-led-${lIdx}`} position={[lx, -0.18, 0.034]} raycast={NOOP_RAYCAST}>
+          <mesh key={`${bayPrefix}-led-${lIdx}`} position={[lx, -0.18, 0.045]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.026, 0.018, 0.008]} />
             <meshStandardMaterial
               ref={(el) => {
@@ -7082,6 +7352,9 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
               color={col}
               emissive={col}
               emissiveIntensity={1.4}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
             />
           </mesh>
         );
@@ -7214,9 +7487,15 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
             bumpScale={0.006}
           />
         </mesh>
-        <mesh position={[0, 2.1, 0.285]} raycast={NOOP_RAYCAST}>
+        <mesh position={[0, 2.1, 0.298]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.92, 0.2]} />
-          <meshStandardMaterial map={sm2mNameplateTex} roughness={0.48} />
+          <meshStandardMaterial
+            map={sm2mNameplateTex}
+            roughness={0.48}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
         {renderTapeDriveBay("sm2m-fl-1", 0, -0.36)}
         {renderTapeDriveBay("sm2m-fl-2", 2, 0.36)}
@@ -7240,9 +7519,15 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
             bumpScale={0.006}
           />
         </mesh>
-        <mesh position={[0, 2.1, 0.275]} raycast={NOOP_RAYCAST}>
+        <mesh position={[0, 2.1, 0.288]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.84, 0.18]} />
-          <meshStandardMaterial map={sm2mNameplateTex} roughness={0.48} />
+          <meshStandardMaterial
+            map={sm2mNameplateTex}
+            roughness={0.48}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
         {renderTapeDriveBay("sm2m-fr-1", 4, 0)}
         <mesh position={[0, 0.54, 0.276]} raycast={NOOP_RAYCAST}>
@@ -7258,9 +7543,15 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
           <boxGeometry args={[1.18, 1.2, 0.04]} />
           <meshStandardMaterial color="#b8221a" roughness={0.55} metalness={0.22} />
         </mesh>
-        <mesh position={[0, 1.38, 0.024]} raycast={NOOP_RAYCAST}>
+        <mesh position={[0, 1.38, 0.036]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[1.1, 1.12]} />
-          <meshStandardMaterial map={fireShieldTex} roughness={0.58} />
+          <meshStandardMaterial
+            map={fireShieldTex}
+            roughness={0.58}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
         {/* Two Red Cone Fire Buckets (`Ведро-конус`) */}
         {([-0.34, -0.06] as const).map((bx, bIdx) => (
@@ -7316,7 +7607,9 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
 
 export const ControlRoomScene: React.FC = React.memo(() => {
   const bunkerArchRef = useRef<THREE.Group>(null);
+  const leftBayA2WrapRef = useRef<THREE.Group>(null);
   const reactorWrapRef = useRef<THREE.Group>(null);
+  const rightBayBWrapRef = useRef<THREE.Group>(null);
   const terminalWrapRef = useRef<THREE.Group>(null);
   const inspectorWrapRef = useRef<THREE.Group>(null);
   const cloudTonedDownRef = useRef(false);
@@ -7494,13 +7787,52 @@ export const ControlRoomScene: React.FC = React.memo(() => {
 
     for (const grp of [
       bunkerArchRef.current,
+      leftBayA2WrapRef.current,
       reactorWrapRef.current,
+      rightBayBWrapRef.current,
       terminalWrapRef.current,
     ]) {
       grp?.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
           obj.castShadow = false;
           obj.receiveShadow = false;
+        }
+      });
+    }
+
+    // Hide any stray hovering plaque/badge/bezel (`СЕКЦИЯ ПУЛЬТА` straggler) outside console cabinet surfaces
+    const box = new THREE.Box3();
+    const size = new THREE.Vector3();
+    const worldCenter = new THREE.Vector3();
+    const localCenter = new THREE.Vector3();
+    const invBay = new THREE.Matrix4();
+    for (const bayRoot of [
+      leftBayA2WrapRef.current,
+      reactorWrapRef.current,
+      rightBayBWrapRef.current,
+    ]) {
+      if (!bayRoot) continue;
+      bayRoot.updateWorldMatrix(true, true);
+      invBay.copy(bayRoot.matrixWorld).invert();
+      bayRoot.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh) || !obj.visible) return;
+        box.setFromObject(obj);
+        if (box.isEmpty()) return;
+        box.getSize(size);
+        box.getCenter(worldCenter);
+        localCenter.copy(worldCenter).applyMatrix4(invBay);
+        const isSmallFlatPlaque =
+          Math.max(size.x, size.y, size.z) < 0.85 &&
+          Math.min(size.x, size.y, size.z) < 0.12;
+        if (
+          isSmallFlatPlaque &&
+          (worldCenter.y > 1.83 ||
+            (localCenter.y > 1.32 && localCenter.z > 0.3) ||
+            localCenter.z > 0.56 ||
+            Math.abs(localCenter.x) > 1.14)
+        ) {
+          obj.visible = false;
+          obj.raycast = NOOP_RAYCAST;
         }
       });
     }
@@ -7585,7 +7917,7 @@ export const ControlRoomScene: React.FC = React.memo(() => {
   useFrame(() => {
     if (cloudTonedDownRef.current) return;
     const root = inspectorWrapRef.current;
-    if (!root) return;
+    if (!root || root.children.length === 0) return;
     root.traverse((obj) => {
       if (obj instanceof THREE.Points) {
         obj.raycast = NOOP_RAYCAST;
@@ -7597,9 +7929,9 @@ export const ControlRoomScene: React.FC = React.memo(() => {
             obj.material.needsUpdate = true;
           }
         }
-        cloudTonedDownRef.current = true;
       }
     });
+    cloudTonedDownRef.current = true;
   });
 
   const handleCycleBulletin = useCallback(() => {
@@ -7619,14 +7951,14 @@ export const ControlRoomScene: React.FC = React.memo(() => {
     { pos: [5.86, -4.36] as const, plaqueDir: null },
     { pos: [-5.86, 4.36] as const, plaqueDir: null },
     { pos: [5.86, 4.36] as const, plaqueDir: null },
-    { pos: [-2.4, -4.38] as const, plaqueDir: [0, 0, 0.162, 0] as const },
-    { pos: [2.4, -4.38] as const, plaqueDir: [0, 0, 0.162, 0] as const },
-    { pos: [-2.4, 4.38] as const, plaqueDir: [0, 0, -0.162, Math.PI] as const },
-    { pos: [1.46, 4.38] as const, plaqueDir: [0, 0, -0.162, Math.PI] as const },
-    { pos: [-5.88, -1.6] as const, plaqueDir: [0.162, 0, 0, Math.PI / 2] as const },
-    { pos: [-5.88, 1.6] as const, plaqueDir: [0.162, 0, 0, Math.PI / 2] as const },
-    { pos: [5.88, -1.92] as const, plaqueDir: [-0.162, 0, 0, -Math.PI / 2] as const },
-    { pos: [5.88, 2.32] as const, plaqueDir: [-0.162, 0, 0, -Math.PI / 2] as const },
+    { pos: [-2.4, -4.38] as const, plaqueDir: [0, 0, 0.176, 0] as const },
+    { pos: [2.4, -4.38] as const, plaqueDir: [0, 0, 0.176, 0] as const },
+    { pos: [-2.4, 4.38] as const, plaqueDir: [0, 0, -0.176, Math.PI] as const },
+    { pos: [1.46, 4.38] as const, plaqueDir: [0, 0, -0.176, Math.PI] as const },
+    { pos: [-5.88, -1.6] as const, plaqueDir: [0.176, 0, 0, Math.PI / 2] as const },
+    { pos: [-5.88, 1.6] as const, plaqueDir: [0.176, 0, 0, Math.PI / 2] as const },
+    { pos: [5.88, -1.92] as const, plaqueDir: [-0.176, 0, 0, -Math.PI / 2] as const },
+    { pos: [5.88, 2.32] as const, plaqueDir: [-0.176, 0, 0, -Math.PI / 2] as const },
   ] as const;
 
   return (
@@ -7891,7 +8223,13 @@ export const ControlRoomScene: React.FC = React.memo(() => {
                 raycast={NOOP_RAYCAST}
               >
                 <planeGeometry args={[0.2, 0.2]} />
-                <meshStandardMaterial map={pillarWarningPlaqueTex} roughness={0.45} />
+                <meshStandardMaterial
+                  map={pillarWarningPlaqueTex}
+                  roughness={0.45}
+                  polygonOffset
+                  polygonOffsetFactor={-2}
+                  polygonOffsetUnits={-2}
+                />
               </mesh>
             )}
           </group>
@@ -7961,7 +8299,12 @@ export const ControlRoomScene: React.FC = React.memo(() => {
 
       {/* LEFT DESK (`x = -3.22, z = -1.16, +15°` inward): UNIT A-2 (Core & Rods) + UNIT A (Cooling & MW Levers) */}
       <group position={[-3.22, 0, -1.16]} rotation={[0, (15 * Math.PI) / 180, 0]}>
-        <group position={[-0.78, 0.18, 0.08]} rotation={[-0.51, 0, 0]} scale={0.74}>
+        <group
+          ref={leftBayA2WrapRef}
+          position={[-0.78, 0.18, 0.08]}
+          rotation={[-0.51, 0, 0]}
+          scale={0.74}
+        >
           <LeftRearWrapAroundPanel3D variant="left-rear" />
         </group>
         <group
@@ -7980,7 +8323,12 @@ export const ControlRoomScene: React.FC = React.memo(() => {
 
       {/* RIGHT DESK OUTER BAY (`x = +3.22, z = -1.16, -15°` inward): UNIT B (Drum Separators & Coolant Loop) */}
       <group position={[3.22, 0, -1.16]} rotation={[0, -(15 * Math.PI) / 180, 0]}>
-        <group position={[0.8, 0.18, 0.08]} rotation={[-0.51, 0, 0]} scale={0.74}>
+        <group
+          ref={rightBayBWrapRef}
+          position={[0.8, 0.18, 0.08]}
+          rotation={[-0.51, 0, 0]}
+          scale={0.74}
+        >
           <LeftRearWrapAroundPanel3D variant="rear" />
         </group>
       </group>

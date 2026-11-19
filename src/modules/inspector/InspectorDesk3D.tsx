@@ -77,6 +77,9 @@ import {
   type WePadTelemetryPayload,
 } from './inspectorCanvas'
 
+const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => null
+const _lensWorldPos = new THREE.Vector3()
+
 const BASE_MAT_Y = 0.924
 
 function createNearestCanvasTexture(
@@ -323,8 +326,12 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
         scale={0.86}
         onPointerDown={(e) => pokeBobblehead('kristianov', e)}
       >
+        <mesh position={[0, 0.12, 0]}>
+          <cylinderGeometry args={[0.075, 0.075, 0.24, 10]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
         {/* Cast-Iron Stepped Pedestal Base */}
-        <mesh position={[0, 0.012, 0]}>
+        <mesh position={[0, 0.012, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.062, 0.072, 0.024, 14]} />
           <meshStandardMaterial
             color="#18211b"
@@ -332,7 +339,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             metalness={0.55}
           />
         </mesh>
-        <mesh position={[0, 0.026, 0]}>
+        <mesh position={[0, 0.026, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.052, 0.058, 0.008, 14]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -341,7 +348,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
           />
         </mesh>
         {/* Bright Brass Pedestal Nameplate ("КРИСТИАНОВ") */}
-        <mesh position={[0, 0.017, 0.072]} rotation={[-0.28, 0, 0]}>
+        <mesh position={[0, 0.017, 0.072]} rotation={[-0.28, 0, 0]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.118, 0.036]} />
           <meshStandardMaterial
             map={kristianovPlateTex}
@@ -353,24 +360,24 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
         </mesh>
 
         {/* Soviet Nuclear Engineer Lab Coat Torso & Dark Trousers */}
-        <mesh position={[-0.016, 0.048, 0]}>
+        <mesh position={[-0.016, 0.048, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.013, 0.015, 0.04, 8]} />
           <meshStandardMaterial color="#18211b" roughness={0.8} />
         </mesh>
-        <mesh position={[0.016, 0.048, 0]}>
+        <mesh position={[0.016, 0.048, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.013, 0.015, 0.04, 8]} />
           <meshStandardMaterial color="#18211b" roughness={0.8} />
         </mesh>
-        <mesh position={[0, 0.098, 0]}>
+        <mesh position={[0, 0.098, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.036, 0.044, 0.078, 12]} />
           <meshStandardMaterial color="#cfc6b0" roughness={0.75} />
         </mesh>
         {/* Dark tie & Radiation Dosimeter Badge on Chest */}
-        <mesh position={[0, 0.106, 0.038]}>
+        <mesh position={[0, 0.106, 0.038]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.01, 0.042, 0.006]} />
           <meshStandardMaterial color="#8b1e1e" roughness={0.6} />
         </mesh>
-        <mesh position={[0.018, 0.114, 0.038]}>
+        <mesh position={[0.018, 0.114, 0.038]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.016, 0.012, 0.006]} />
           <meshStandardMaterial
             color="#b8a46b"
@@ -381,11 +388,11 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
 
         {/* Left Arm holding a Glowing Cherenkov Fuel Rod */}
         <group position={[-0.046, 0.102, 0.01]} rotation={[0.45, 0, 0.28]}>
-          <mesh>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.01, 0.011, 0.052, 8]} />
             <meshStandardMaterial color="#cfc6b0" roughness={0.75} />
           </mesh>
-          <mesh position={[0, -0.028, 0.018]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh position={[0, -0.028, 0.018]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.007, 0.007, 0.068, 8]} />
             <meshStandardMaterial
               color="#33ff66"
@@ -398,11 +405,11 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
 
         {/* Right Arm holding a Heavy Steel Reactor Wrench */}
         <group position={[0.046, 0.102, 0.01]} rotation={[-0.35, 0, -0.28]}>
-          <mesh>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.01, 0.011, 0.052, 8]} />
             <meshStandardMaterial color="#cfc6b0" roughness={0.75} />
           </mesh>
-          <mesh position={[0, -0.025, 0.016]} rotation={[Math.PI / 3, 0, 0]}>
+          <mesh position={[0, -0.025, 0.016]} rotation={[Math.PI / 3, 0, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.008, 0.056, 0.014]} />
             <meshStandardMaterial
               color="#778472"
@@ -418,6 +425,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             key={ringIdx}
             position={[0, 0.142 + ringIdx * 0.007, 0]}
             rotation={[Math.PI / 2, 0.1 * ringIdx, 0]}
+            raycast={NOOP_RAYCAST}
           >
             <torusGeometry args={[0.014, 0.0032, 6, 12]} />
             <meshStandardMaterial
@@ -430,34 +438,34 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
 
         {/* Spring-Mounted Oversized Bobble Head ("КРИСТИАНОВ") */}
         <group ref={kristianovHeadRef} position={[0, 0.172, 0]}>
-          <mesh position={[0, 0.036, 0]}>
+          <mesh position={[0, 0.036, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.076, 0.074, 0.072]} />
             <meshStandardMaterial color="#cfc6b0" roughness={0.75} />
           </mesh>
           {/* 16-Color Bayer-Dithered Face Portrait on Front */}
-          <mesh position={[0, 0.036, 0.037]}>
+          <mesh position={[0, 0.036, 0.037]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.072, 0.07]} />
             <meshStandardMaterial map={kristianovFaceTex} roughness={0.65} />
           </mesh>
           {/* Soviet Winter Ushanka Hat with Ear Flaps & Red Enamel Star */}
-          <mesh position={[0, 0.078, 0]}>
+          <mesh position={[0, 0.078, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.086, 0.032, 0.082]} />
             <meshStandardMaterial color="#23312b" roughness={0.9} />
           </mesh>
-          <mesh position={[0, 0.076, 0.041]}>
+          <mesh position={[0, 0.076, 0.041]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.076, 0.024, 0.008]} />
             <meshStandardMaterial color="#18211b" roughness={0.92} />
           </mesh>
-          <mesh position={[-0.044, 0.052, 0]} rotation={[0, 0, 0.12]}>
+          <mesh position={[-0.044, 0.052, 0]} rotation={[0, 0, 0.12]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.012, 0.042, 0.046]} />
             <meshStandardMaterial color="#18211b" roughness={0.9} />
           </mesh>
-          <mesh position={[0.044, 0.052, 0]} rotation={[0, 0, -0.12]}>
+          <mesh position={[0.044, 0.052, 0]} rotation={[0, 0, -0.12]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.012, 0.042, 0.046]} />
             <meshStandardMaterial color="#18211b" roughness={0.9} />
           </mesh>
           {/* Red Star Cockade on Ushanka */}
-          <mesh position={[0, 0.078, 0.047]}>
+          <mesh position={[0, 0.078, 0.047]} raycast={NOOP_RAYCAST}>
             <circleGeometry args={[0.01, 5]} />
             <meshStandardMaterial
               color="#ff2a2a"
@@ -479,8 +487,12 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
         scale={0.86}
         onPointerDown={(e) => pokeBobblehead('oleg', e)}
       >
+        <mesh position={[0, 0.12, 0]}>
+          <cylinderGeometry args={[0.075, 0.075, 0.24, 10]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
         {/* Cast-Iron Stepped Pedestal Base */}
-        <mesh position={[0, 0.012, 0]}>
+        <mesh position={[0, 0.012, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.062, 0.072, 0.024, 14]} />
           <meshStandardMaterial
             color="#18211b"
@@ -488,7 +500,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             metalness={0.55}
           />
         </mesh>
-        <mesh position={[0, 0.026, 0]}>
+        <mesh position={[0, 0.026, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.052, 0.058, 0.008, 14]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -497,7 +509,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
           />
         </mesh>
         {/* Bright Brass Pedestal Nameplate ("ОЛЕГ") */}
-        <mesh position={[0, 0.017, 0.072]} rotation={[-0.28, 0, 0]}>
+        <mesh position={[0, 0.017, 0.072]} rotation={[-0.28, 0, 0]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.118, 0.036]} />
           <meshStandardMaterial
             map={olegPlateTex}
@@ -509,20 +521,20 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
         </mesh>
 
         {/* Olive-Drab KGB Senior Officer Tunic, Gold Epaulets & Red Collar Tabs */}
-        <mesh position={[-0.016, 0.048, 0]}>
+        <mesh position={[-0.016, 0.048, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.013, 0.015, 0.04, 8]} />
           <meshStandardMaterial color="#18211b" roughness={0.8} />
         </mesh>
-        <mesh position={[0.016, 0.048, 0]}>
+        <mesh position={[0.016, 0.048, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.013, 0.015, 0.04, 8]} />
           <meshStandardMaterial color="#18211b" roughness={0.8} />
         </mesh>
-        <mesh position={[0, 0.098, 0]}>
+        <mesh position={[0, 0.098, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.036, 0.044, 0.078, 12]} />
           <meshStandardMaterial color="#2a362b" roughness={0.7} />
         </mesh>
         {/* Gold Shoulder Epaulets & Order of the Red Banner of Labor Medal */}
-        <mesh position={[-0.032, 0.134, 0]} rotation={[0, 0, 0.15]}>
+        <mesh position={[-0.032, 0.134, 0]} rotation={[0, 0, 0.15]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.026, 0.006, 0.022]} />
           <meshStandardMaterial
             color="#b8a46b"
@@ -530,7 +542,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             roughness={0.25}
           />
         </mesh>
-        <mesh position={[0.032, 0.134, 0]} rotation={[0, 0, -0.15]}>
+        <mesh position={[0.032, 0.134, 0]} rotation={[0, 0, -0.15]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.026, 0.006, 0.022]} />
           <meshStandardMaterial
             color="#b8a46b"
@@ -538,7 +550,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             roughness={0.25}
           />
         </mesh>
-        <mesh position={[-0.016, 0.114, 0.038]}>
+        <mesh position={[-0.016, 0.114, 0.038]} raycast={NOOP_RAYCAST}>
           <circleGeometry args={[0.009, 8]} />
           <meshStandardMaterial
             color="#ff2a2a"
@@ -549,11 +561,11 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
 
         {/* Left Arm holding a Miniature Brass 2x Loupe */}
         <group position={[-0.046, 0.102, 0.01]} rotation={[-0.4, 0, 0.26]}>
-          <mesh>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.01, 0.011, 0.052, 8]} />
             <meshStandardMaterial color="#2a362b" roughness={0.7} />
           </mesh>
-          <mesh position={[0, -0.028, 0.016]}>
+          <mesh position={[0, -0.028, 0.016]} raycast={NOOP_RAYCAST}>
             <torusGeometry args={[0.014, 0.003, 6, 12]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -565,11 +577,11 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
 
         {/* Right Arm holding a Miniature Red УНИЧТОЖЕНО Rubber Stamp */}
         <group position={[0.046, 0.102, 0.01]} rotation={[-0.48, 0, -0.26]}>
-          <mesh>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.01, 0.011, 0.052, 8]} />
             <meshStandardMaterial color="#2a362b" roughness={0.7} />
           </mesh>
-          <mesh position={[0, -0.026, 0.014]}>
+          <mesh position={[0, -0.026, 0.014]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.022, 0.012, 0.016]} />
             <meshStandardMaterial color="#8b1e1e" roughness={0.5} />
           </mesh>
@@ -581,6 +593,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             key={ringIdx}
             position={[0, 0.142 + ringIdx * 0.007, 0]}
             rotation={[Math.PI / 2, 0.1 * ringIdx, 0]}
+            raycast={NOOP_RAYCAST}
           >
             <torusGeometry args={[0.014, 0.0032, 6, 12]} />
             <meshStandardMaterial
@@ -593,32 +606,32 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
 
         {/* Spring-Mounted Oversized Bobble Head ("ОЛЕГ") */}
         <group ref={olegHeadRef} position={[0, 0.172, 0]}>
-          <mesh position={[0, 0.036, 0]}>
+          <mesh position={[0, 0.036, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.076, 0.074, 0.072]} />
             <meshStandardMaterial color="#cfc6b0" roughness={0.75} />
           </mesh>
           {/* 16-Color Bayer-Dithered Face Portrait with Glorious Soviet Mustache */}
-          <mesh position={[0, 0.036, 0.037]}>
+          <mesh position={[0, 0.036, 0.037]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.072, 0.07]} />
             <meshStandardMaterial map={olegFaceTex} roughness={0.65} />
           </mesh>
           {/* Sculpted 3D Mustache Relief Bar for Extra Depth */}
-          <mesh position={[0, 0.022, 0.04]}>
+          <mesh position={[0, 0.022, 0.04]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.048, 0.01, 0.008]} />
             <meshStandardMaterial color="#2b1a12" roughness={0.85} />
           </mesh>
 
           {/* KGB Officer Peaked Visor Cap (Furazhka) with Crimson Band & Gold Cockade */}
-          <mesh position={[0, 0.074, 0]}>
+          <mesh position={[0, 0.074, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.046, 0.044, 0.014, 14]} />
             <meshStandardMaterial color="#8b1e1e" roughness={0.6} />
           </mesh>
-          <mesh position={[0, 0.088, -0.004]} rotation={[-0.12, 0, 0]}>
+          <mesh position={[0, 0.088, -0.004]} rotation={[-0.12, 0, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.062, 0.046, 0.018, 16]} />
             <meshStandardMaterial color="#2a362b" roughness={0.7} />
           </mesh>
           {/* Glossy Black Visor Brim */}
-          <mesh position={[0, 0.068, 0.036]} rotation={[0.28, 0, 0]}>
+          <mesh position={[0, 0.068, 0.036]} rotation={[0.28, 0, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.068, 0.004, 0.028]} />
             <meshStandardMaterial
               color="#0d110f"
@@ -627,7 +640,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             />
           </mesh>
           {/* Golden Star Cockade on KGB Cap */}
-          <mesh position={[0, 0.076, 0.045]}>
+          <mesh position={[0, 0.076, 0.045]} raycast={NOOP_RAYCAST}>
             <circleGeometry args={[0.009, 5]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -1300,6 +1313,7 @@ function DraggablePaper3D({
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0.004, -0.0018, 0.005]}
+        raycast={NOOP_RAYCAST}
       >
         <planeGeometry args={[width + 0.008, height + 0.008]} />
         <meshBasicMaterial
@@ -1315,8 +1329,6 @@ function DraggablePaper3D({
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, 0.0005, 0]}
-        castShadow
-        receiveShadow
       >
         <planeGeometry ref={planeGeoRef} args={[width, height, 16, 20]} />
         <meshStandardMaterial
@@ -1789,16 +1801,32 @@ export function InspectorDesk3D() {
   const manometerNeedleRef = useRef<THREE.Group | null>(null)
   const lastStripDeformSigRef = useRef<string>('')
   const lastLensDrawTimeRef = useRef<number>(0)
+  const initialLensDrawnRef = useRef(false)
+  const shredStripsInstRef = useRef<THREE.InstancedMesh | null>(null)
 
   const teletypeModel = useMemo(() => {
     const cloned = teletypeGltf.scene.clone(true)
     applySovietPBRToHierarchy(cloned)
+    cloned.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.raycast = NOOP_RAYCAST
+        obj.castShadow = false
+        obj.receiveShadow = false
+      }
+    })
     return cloned
   }, [teletypeGltf.scene])
 
   const shredderModel = useMemo(() => {
     const cloned = shredderGltf.scene.clone(true)
     applySovietPBRToHierarchy(cloned)
+    cloned.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.raycast = NOOP_RAYCAST
+        obj.castShadow = false
+        obj.receiveShadow = false
+      }
+    })
     return cloned
   }, [shredderGltf.scene])
 
@@ -1806,11 +1834,17 @@ export function InspectorDesk3D() {
     const getCloned = (name: string) => {
       const node = deskPropsGltf.scene.getObjectByName(name)?.clone(true) ?? null
       applySovietPBRToHierarchy(node)
+      node?.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.raycast = NOOP_RAYCAST
+          obj.castShadow = false
+          obj.receiveShadow = false
+        }
+      })
       return node
     }
     return {
       bankersLamp: getCloned('bankers_lamp'),
-      pneumaticTube: getCloned('pneumatic_tube'),
       inkPadApprove: getCloned('ink_pad_tin'),
       inkPadShred: getCloned('ink_pad_tin'),
       stampBodyApprove: getCloned('stamp_body'),
@@ -3493,18 +3527,19 @@ export function InspectorDesk3D() {
       }
     }
 
-    // 3B. Refresh WE-PAD 84 Live Screen CanvasTexture when telemetry or chat updates (12.5 Hz background throttle, paused during diagFeed unless inspecting)
+    // 3B. Refresh WE-PAD 84 Live Screen CanvasTexture when telemetry or chat updates (throttled: 8.3 Hz held, 4 Hz docked)
     const gsNow = useGameStore.getState()
     const uiKey = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${manualScrollY}|${gsNow.wePadChatLog.length}`
     const uiChanged = uiKey !== lastWePadUiKeyRef.current
     if (uiChanged) {
       lastWePadUiKeyRef.current = uiKey
     }
+    const wePadInterval = gsNow.wePadHeld ? 0.12 : 0.25
     if (
       uiChanged ||
       ((!gsNow.diagFeedActive || gsNow.wePadInspecting) &&
         (lastWePadDrawTimeRef.current < 0 ||
-          t - lastWePadDrawTimeRef.current >= 0.08))
+          t - lastWePadDrawTimeRef.current >= wePadInterval))
     ) {
       lastWePadDrawTimeRef.current = t
       const wePadSig = `${gsNow.wePadActiveTab}|${gsNow.wePadHeld}|${gsNow.wePadInspecting}|${gsNow.tutorialPhase}|${gsNow.tutorialPrompt.actionLine}|${gsNow.wePadChatLog.length}|${manualScrollY}|${Math.round(gsNow.thermalPower / 10)}|${Math.round(gsNow.drumPressure)}|${Math.round(gsNow.drumWaterLevel / 5)}|${Math.round(gsNow.energyCreatedMW / 5)}|${Math.round(gsNow.batteryStoredPct)}|${Math.round(gsNow.energyDemandMW)}|${Math.round(gsNow.batteryOutputValve * 100)}|${Math.round(gsNow.totalElectricalMW / 5)}|${Math.round(gsNow.xenon)}|${Math.round(gsNow.voidFraction * 100)}|${gsNow.plantWaterDrainPct}`
@@ -3749,47 +3784,64 @@ export function InspectorDesk3D() {
       shredPlungerRef.current.position.y = -stShr.plungerStep * 0.011
     }
 
-    // 5. Guardrail 4: True 2x Straight Optical Magnifier Lens Refresh (Throttled to ~15 FPS when dragging, immediate on dirty flag)
+    // 5. Guardrail 4: True 2x Straight Optical Magnifier Lens Refresh (Throttled to ~15 FPS when dragging/close, immediate on initial/dirty)
     const lTex = lensMatRef.current?.map as THREE.CanvasTexture | undefined
-    if (lTex && (lensDirtyRef.current || t - lastLensDrawTimeRef.current >= 0.065)) {
-      const liveDocs = useDeskStore.getState().documents.map((d) => {
-        const livePos = liveDocPosMapRef.current[d.id]
-        return livePos
-          ? { ...d, x: livePos.x, z: livePos.z, isExpanded: livePos.isExpanded }
-          : d
-      })
-      const liveManualBounds = {
-        x: isManualHeldRef.current ? 99 : manualPosRef.current.x,
-        z: manualPosRef.current.z,
-        width: MANUAL_BOUNDS_3D.width,
-        height: MANUAL_BOUNDS_3D.height,
-      }
-      const docsSig = liveDocs
-        .map(
-          (d) =>
-            `${d.id}:${d.x.toFixed(2)}:${d.z.toFixed(2)}:${d.isExpanded}:${d.stamps.length}`
-        )
-        .join('|')
-      const lensSig = `${lensPosRef.current.x.toFixed(2)}|${lensPosRef.current.z.toFixed(2)}|${liveManualBounds.x.toFixed(2)}|${liveManualBounds.z.toFixed(2)}|${manualPage}|${manualScrollY}|${docsSig}`
-      if (lensDirtyRef.current || lTex.userData.lastSig !== lensSig) {
-        lensDirtyRef.current = false
-        lastLensDrawTimeRef.current = t
-        lTex.userData.lastSig = lensSig
-        const canvas = lTex.image as HTMLCanvasElement
-        const ctx = canvas.getContext('2d')
-        if (ctx) {
-          drawTrue2xOpticalLensCanvas(
-            ctx,
-            canvas.width,
-            canvas.height,
-            lensPosRef.current.x,
-            lensPosRef.current.z,
-            liveDocs,
-            manualPage,
-            manualScrollY,
-            liveManualBounds
-          )
-          lTex.needsUpdate = true
+    if (lTex) {
+      const isInitialDraw = !initialLensDrawnRef.current
+      const isDraggingLens = lensPosRef.current.dragging
+      if (isInitialDraw || lensDirtyRef.current || isDraggingLens) {
+        let withinRange = isInitialDraw || isDraggingLens
+        if (!withinRange && magnifierGroupRef.current) {
+          magnifierGroupRef.current.getWorldPosition(_lensWorldPos)
+          withinRange = camera.position.distanceToSquared(_lensWorldPos) <= 2.7225
+        }
+        if (
+          withinRange &&
+          (isInitialDraw ||
+            lensDirtyRef.current ||
+            t - lastLensDrawTimeRef.current >= 0.066)
+        ) {
+          const liveDocs = useDeskStore.getState().documents.map((d) => {
+            const livePos = liveDocPosMapRef.current[d.id]
+            return livePos
+              ? { ...d, x: livePos.x, z: livePos.z, isExpanded: livePos.isExpanded }
+              : d
+          })
+          const liveManualBounds = {
+            x: isManualHeldRef.current ? 99 : manualPosRef.current.x,
+            z: manualPosRef.current.z,
+            width: MANUAL_BOUNDS_3D.width,
+            height: MANUAL_BOUNDS_3D.height,
+          }
+          const docsSig = liveDocs
+            .map(
+              (d) =>
+                `${d.id}:${d.x.toFixed(2)}:${d.z.toFixed(2)}:${d.isExpanded}:${d.stamps.length}`
+            )
+            .join('|')
+          const lensSig = `${lensPosRef.current.x.toFixed(2)}|${lensPosRef.current.z.toFixed(2)}|${liveManualBounds.x.toFixed(2)}|${liveManualBounds.z.toFixed(2)}|${manualPage}|${manualScrollY}|${docsSig}`
+          if (isInitialDraw || lensDirtyRef.current || lTex.userData.lastSig !== lensSig) {
+            initialLensDrawnRef.current = true
+            lensDirtyRef.current = false
+            lastLensDrawTimeRef.current = t
+            lTex.userData.lastSig = lensSig
+            const canvas = lTex.image as HTMLCanvasElement
+            const ctx = canvas.getContext('2d')
+            if (ctx) {
+              drawTrue2xOpticalLensCanvas(
+                ctx,
+                canvas.width,
+                canvas.height,
+                lensPosRef.current.x,
+                lensPosRef.current.z,
+                liveDocs,
+                manualPage,
+                manualScrollY,
+                liveManualBounds
+              )
+              lTex.needsUpdate = true
+            }
+          }
         }
       }
     }
@@ -4441,6 +4493,29 @@ export function InspectorDesk3D() {
         }
       : null
 
+  useEffect(() => {
+    const inst = shredStripsInstRef.current
+    if (!inst || !stripSource) return
+    const dummy = new THREE.Object3D()
+    const col = new THREE.Color()
+    for (let i = 0; i < 15; i++) {
+      const h =
+        0.015 +
+        (stripSource.progress / 100) *
+          0.065 *
+          STRIP_VARIANCE[i % STRIP_VARIANCE.length]
+      dummy.position.set(-0.16 + i * 0.019, -0.03 - h / 2, 0.148)
+      dummy.rotation.set(0, 0, 0)
+      dummy.scale.set(1, h, 1)
+      dummy.updateMatrix()
+      inst.setMatrixAt(i, dummy.matrix)
+      col.set(i % 3 === 0 ? stripSource.inkHex : stripSource.paperHex)
+      inst.setColorAt(i, col)
+    }
+    inst.instanceMatrix.needsUpdate = true
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true
+  }, [stripSource?.progress, stripSource?.paperHex, stripSource?.inkHex])
+
   // Positioned directly in front of the central swivel chair ([0, 1.36, 0])
   // inside the 360-degree cockpit ring with uniform scale for distortion-free optics.
   return (
@@ -4451,7 +4526,7 @@ export function InspectorDesk3D() {
       scale={DESK_ROOT_SCALE}
     >
       {/* Heavy Hammered-Iron Sub-Desk Plinth Anchored to Capsule Floor */}
-      <mesh position={[0, -0.042, 0]} castShadow receiveShadow>
+      <mesh position={[0, -0.042, 0]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[3.04, 0.09, 1.3]} />
         <meshStandardMaterial
           color="#18211b"
@@ -4480,7 +4555,7 @@ export function InspectorDesk3D() {
           WITH WEATHERED MAHOGANY TRIM, WORN BAIZE MAT (#16241f), BRASS CORNER BRACKETS,
           NKVD GREEN-GLASS BANKER'S LAMP SPOTLIGHT, 4 GLOWING ИН-14 NIXIE TUBES & BRAIDED CABLES
          ============================================================ */}
-      <mesh position={[0, 0.44, 0]} castShadow receiveShadow>
+      <mesh position={[0, 0.44, 0]}>
         <boxGeometry args={[2.36, 0.88, 1.26]} />
         <meshStandardMaterial
           color="#23312b"
@@ -4491,7 +4566,7 @@ export function InspectorDesk3D() {
           roughnessMap={ironTex.roughnessMap}
         />
       </mesh>
-      <mesh position={[0, 0.89, 0]} castShadow receiveShadow>
+      <mesh position={[0, 0.89, 0]}>
         <boxGeometry args={[2.48, 0.055, 1.36]} />
         <meshStandardMaterial
           color="#6b3e28"
@@ -4504,7 +4579,7 @@ export function InspectorDesk3D() {
         />
       </mesh>
       {/* Stepped Carved Mahogany Perimeter Molding Rails */}
-      <mesh position={[0, 0.922, -0.66]} castShadow receiveShadow>
+      <mesh position={[0, 0.922, -0.66]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[2.48, 0.022, 0.04]} />
         <meshStandardMaterial
           color="#5c3422"
@@ -4515,7 +4590,7 @@ export function InspectorDesk3D() {
           roughness={0.52}
         />
       </mesh>
-      <mesh position={[0, 0.92, 0.66]} castShadow receiveShadow>
+      <mesh position={[0, 0.92, 0.66]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[2.48, 0.016, 0.04]} />
         <meshStandardMaterial
           color="#5c3422"
@@ -4526,7 +4601,7 @@ export function InspectorDesk3D() {
           roughness={0.52}
         />
       </mesh>
-      <mesh position={[-1.22, 0.922, 0]} castShadow receiveShadow>
+      <mesh position={[-1.22, 0.922, 0]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[0.04, 0.022, 1.32]} />
         <meshStandardMaterial
           color="#5c3422"
@@ -4537,7 +4612,7 @@ export function InspectorDesk3D() {
           roughness={0.52}
         />
       </mesh>
-      <mesh position={[1.22, 0.922, 0]} castShadow receiveShadow>
+      <mesh position={[1.22, 0.922, 0]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[0.04, 0.022, 1.32]} />
         <meshStandardMaterial
           color="#5c3422"
@@ -4551,7 +4626,7 @@ export function InspectorDesk3D() {
       {/* Solid Side Desk Wing Bolsters Extending Outward to Meet the Wraparound Soviet Console Collar */}
       {([-1, 1] as const).map((side) => (
         <group key={`desk-wing-bolster-${side}`}>
-          <mesh position={[side * 1.38, 0.44, 0]} castShadow receiveShadow>
+          <mesh position={[side * 1.38, 0.44, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.42, 0.88, 1.24]} />
             <meshStandardMaterial
               color="#202c26"
@@ -4562,7 +4637,7 @@ export function InspectorDesk3D() {
               roughnessMap={ironTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[side * 1.415, 0.89, 0]} castShadow receiveShadow>
+          <mesh position={[side * 1.415, 0.89, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.35, 0.055, 1.34]} />
             <meshStandardMaterial
               color="#3a281d"
@@ -4574,7 +4649,7 @@ export function InspectorDesk3D() {
               metalness={0.18}
             />
           </mesh>
-          <mesh position={[side * 1.595, 0.46, 0]} castShadow receiveShadow>
+          <mesh position={[side * 1.595, 0.46, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.03, 0.92, 1.28]} />
             <meshStandardMaterial
               color="#18211b"
@@ -4589,7 +4664,7 @@ export function InspectorDesk3D() {
       ))}
 
       {/* Worn Soviet Inspection Mat (#16241f with cross-grain leather, coffee-mug rings & scuffs) */}
-      <mesh position={[0, 0.92, 0.02]} receiveShadow>
+      <mesh position={[0, 0.92, 0.02]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[2.28, 0.008, 1.2]} />
         <meshStandardMaterial
           color="#ffffff"
@@ -4602,7 +4677,7 @@ export function InspectorDesk3D() {
       </mesh>
 
       {/* Inlaid Double-Brass Pinstripe Border on the Green Mat */}
-      <mesh position={[0, 0.9245, -0.56]} receiveShadow>
+      <mesh position={[0, 0.9245, -0.56]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[2.24, 0.002, 0.006]} />
         <meshStandardMaterial
           color="#b8a46b"
@@ -4612,7 +4687,7 @@ export function InspectorDesk3D() {
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[0, 0.9245, 0.6]} receiveShadow>
+      <mesh position={[0, 0.9245, 0.6]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[2.24, 0.002, 0.006]} />
         <meshStandardMaterial
           color="#b8a46b"
@@ -4622,7 +4697,7 @@ export function InspectorDesk3D() {
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[-1.12, 0.9245, 0.02]} receiveShadow>
+      <mesh position={[-1.12, 0.9245, 0.02]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[0.006, 0.002, 1.16]} />
         <meshStandardMaterial
           color="#b8a46b"
@@ -4632,7 +4707,7 @@ export function InspectorDesk3D() {
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[1.12, 0.9245, 0.02]} receiveShadow>
+      <mesh position={[1.12, 0.9245, 0.02]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[0.006, 0.002, 1.16]} />
         <meshStandardMaterial
           color="#b8a46b"
@@ -4653,7 +4728,7 @@ export function InspectorDesk3D() {
         ] as const
       ).map(([cx, cz], idx) => (
         <group key={idx} position={[cx, 0.926, cz]}>
-          <mesh castShadow receiveShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.08, 0.005, 0.08]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -4664,7 +4739,7 @@ export function InspectorDesk3D() {
               roughnessMap={brassTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[0, 0.004, 0]} castShadow>
+          <mesh position={[0, 0.004, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.008, 0.008, 0.006, 8]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -4679,7 +4754,7 @@ export function InspectorDesk3D() {
 
       {/* Heavy Ribbed Rubber/Braided Power Cables snaking across the back of the desk into Brass Deck Grommets */}
       <group>
-        <mesh geometry={deskCableGeometries.teletypeCable} castShadow receiveShadow>
+        <mesh geometry={deskCableGeometries.teletypeCable} raycast={NOOP_RAYCAST}>
           <meshStandardMaterial
             color="#151917"
             roughness={0.68}
@@ -4688,7 +4763,7 @@ export function InspectorDesk3D() {
             bumpScale={0.006}
           />
         </mesh>
-        <mesh geometry={deskCableGeometries.lampCable} castShadow receiveShadow>
+        <mesh geometry={deskCableGeometries.lampCable} raycast={NOOP_RAYCAST}>
           <meshStandardMaterial
             color="#1c1612"
             roughness={0.72}
@@ -4697,7 +4772,7 @@ export function InspectorDesk3D() {
             bumpScale={0.006}
           />
         </mesh>
-        <mesh geometry={deskCableGeometries.shredderCable} castShadow receiveShadow>
+        <mesh geometry={deskCableGeometries.shredderCable} raycast={NOOP_RAYCAST}>
           <meshStandardMaterial
             color="#151917"
             roughness={0.68}
@@ -4715,7 +4790,7 @@ export function InspectorDesk3D() {
           ] as const
         ).map(([gx, gz], gIdx) => (
           <group key={gIdx} position={[gx, 0.925, gz]}>
-            <mesh castShadow receiveShadow>
+            <mesh raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.022, 0.026, 0.008, 12]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -4725,7 +4800,7 @@ export function InspectorDesk3D() {
                 bumpScale={0.005}
               />
             </mesh>
-            <mesh position={[0, 0.004, 0]}>
+            <mesh position={[0, 0.004, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.014, 0.014, 0.006, 10]} />
               <meshStandardMaterial color="#0d110f" roughness={0.9} />
             </mesh>
@@ -4736,7 +4811,7 @@ export function InspectorDesk3D() {
       {/* Row of 4 Glowing Orange Glass ИН-14 Nixie-Style Indicator Tubes on Rear Console Riser next to ПУНКТ №4 */}
       <group position={[-0.76, 0.926, -0.49]} rotation={[0, 0.16, 0]}>
         {/* Bolted Cast-Iron & Brass Nixie Manifold Base */}
-        <mesh position={[0, 0.014, 0]} castShadow receiveShadow>
+        <mesh position={[0, 0.014, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.24, 0.028, 0.072]} />
           <meshStandardMaterial
             color="#18211b"
@@ -4747,7 +4822,7 @@ export function InspectorDesk3D() {
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        <mesh position={[0, 0.029, 0]} castShadow>
+        <mesh position={[0, 0.029, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.22, 0.006, 0.056]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -4762,7 +4837,7 @@ export function InspectorDesk3D() {
           return (
             <group key={tIdx} position={[tx, 0.032, 0]}>
               {/* Ceramic & Brass Tube Socket Collar */}
-              <mesh position={[0, 0.008, 0]} castShadow>
+              <mesh position={[0, 0.008, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.018, 0.02, 0.016, 12]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -4773,7 +4848,7 @@ export function InspectorDesk3D() {
                 />
               </mesh>
               {/* Glowing Internal Orange Cathode Digit Plane */}
-              <mesh position={[0, 0.044, 0.002]}>
+              <mesh position={[0, 0.044, 0.002]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.026, 0.044]} />
                 <meshBasicMaterial
                   map={nixieDigitTextures[tIdx]}
@@ -4782,7 +4857,11 @@ export function InspectorDesk3D() {
                 />
               </mesh>
               {/* Internal Anode Wire Cage Ring */}
-              <mesh position={[0, 0.044, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <mesh
+                position={[0, 0.044, 0]}
+                rotation={[Math.PI / 2, 0, 0]}
+                raycast={NOOP_RAYCAST}
+              >
                 <torusGeometry args={[0.013, 0.0012, 6, 10]} />
                 <meshStandardMaterial
                   color="#ff8c24"
@@ -4792,7 +4871,7 @@ export function InspectorDesk3D() {
                 />
               </mesh>
               {/* Cylindrical ИН-14 Glass Envelope & Top Exhaust Pip */}
-              <mesh position={[0, 0.044, 0]}>
+              <mesh position={[0, 0.044, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.017, 0.017, 0.058, 12]} />
                 <meshStandardMaterial
                   color="#ffd8b0"
@@ -4800,11 +4879,12 @@ export function InspectorDesk3D() {
                   emissiveIntensity={0.28}
                   transparent
                   opacity={0.32}
+                  depthWrite={false}
                   roughness={0.12}
                   metalness={0.1}
                 />
               </mesh>
-              <mesh position={[0, 0.075, 0]}>
+              <mesh position={[0, 0.075, 0]} raycast={NOOP_RAYCAST}>
                 <sphereGeometry args={[0.014, 10, 8]} />
                 <meshStandardMaterial
                   color="#ffd8b0"
@@ -4812,6 +4892,7 @@ export function InspectorDesk3D() {
                   emissiveIntensity={0.22}
                   transparent
                   opacity={0.35}
+                  depthWrite={false}
                   roughness={0.12}
                 />
               </mesh>
@@ -4826,7 +4907,7 @@ export function InspectorDesk3D() {
           <primitive object={deskPropNodes.bankersLamp} />
         )}
         {/* Heavy Cast-Brass Stepped Lamp Base */}
-        <mesh position={[0, 0.014, 0]} castShadow receiveShadow>
+        <mesh position={[0, 0.014, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.075, 0.09, 0.028, 16]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -4837,7 +4918,7 @@ export function InspectorDesk3D() {
             roughnessMap={brassTex.roughnessMap}
           />
         </mesh>
-        <mesh position={[0, 0.034, 0]} castShadow receiveShadow>
+        <mesh position={[0, 0.034, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.048, 0.062, 0.016, 14]} />
           <meshStandardMaterial
             color="#b8a46b"
@@ -4848,7 +4929,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Pull-chain toggle switch on base */}
-        <mesh position={[0.045, 0.028, 0.03]} castShadow>
+        <mesh position={[0.045, 0.028, 0.03]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.006, 0.006, 0.018, 8]} />
           <meshStandardMaterial color="#0d110f" roughness={0.6} />
         </mesh>
@@ -4856,7 +4937,7 @@ export function InspectorDesk3D() {
         <mesh
           position={[0, 0.11, -0.02]}
           rotation={[-0.18, 0, 0]}
-          castShadow
+          raycast={NOOP_RAYCAST}
         >
           <cylinderGeometry args={[0.011, 0.013, 0.16, 10]} />
           <meshStandardMaterial
@@ -4870,7 +4951,7 @@ export function InspectorDesk3D() {
         <mesh
           position={[0, 0.19, 0.02]}
           rotation={[0.68, 0, 0]}
-          castShadow
+          raycast={NOOP_RAYCAST}
         >
           <cylinderGeometry args={[0.01, 0.011, 0.11, 10]} />
           <meshStandardMaterial
@@ -4883,7 +4964,7 @@ export function InspectorDesk3D() {
         </mesh>
         {/* Emerald-Green Banker's Glass Shade + Focused Shadow-Casting Warm-Emerald SpotLight Pool */}
         <group position={[0, 0.215, 0.08]} rotation={[0.32, 0, 0]}>
-          <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+          <mesh rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry
               args={[0.048, 0.056, 0.18, 12, 1, false, 0, Math.PI]}
             />
@@ -4895,7 +4976,7 @@ export function InspectorDesk3D() {
               metalness={0.1}
             />
           </mesh>
-          <mesh position={[0, -0.012, 0]}>
+          <mesh position={[0, -0.012, 0]} raycast={NOOP_RAYCAST}>
             <sphereGeometry args={[0.022, 10, 10]} />
             <meshStandardMaterial
               color="#ffdf9e"
@@ -4909,7 +4990,7 @@ export function InspectorDesk3D() {
       {/* Soviet Bureaucracy Props: Cast-Iron Pen Holder with 2 Brass Fountain Pens & Red Soviet Desk Flag */}
       <group position={[0.56, 0.926, -0.45]}>
         {/* Cast-iron inkwell & pen stand */}
-        <mesh position={[0, 0.014, 0]} castShadow receiveShadow>
+        <mesh position={[0, 0.014, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.11, 0.028, 0.075]} />
           <meshStandardMaterial
             color="#18211b"
@@ -4924,7 +5005,7 @@ export function InspectorDesk3D() {
         <mesh
           position={[-0.024, 0.055, 0]}
           rotation={[0.28, 0, -0.22]}
-          castShadow
+          raycast={NOOP_RAYCAST}
         >
           <cylinderGeometry args={[0.005, 0.003, 0.095, 8]} />
           <meshStandardMaterial
@@ -4936,14 +5017,14 @@ export function InspectorDesk3D() {
         <mesh
           position={[0.018, 0.055, 0]}
           rotation={[0.24, 0, 0.2]}
-          castShadow
+          raycast={NOOP_RAYCAST}
         >
           <cylinderGeometry args={[0.005, 0.003, 0.095, 8]} />
           <meshStandardMaterial color="#2b1a12" roughness={0.45} />
         </mesh>
         {/* Miniature Red Enamel Soviet Desk Flag on Brass Pole */}
         <group position={[0.08, 0, 0.01]}>
-          <mesh position={[0, 0.008, 0]} castShadow receiveShadow>
+          <mesh position={[0, 0.008, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.024, 0.028, 0.016, 12]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -4953,7 +5034,7 @@ export function InspectorDesk3D() {
               bumpScale={0.005}
             />
           </mesh>
-          <mesh position={[0, 0.095, 0]} castShadow>
+          <mesh position={[0, 0.095, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.003, 0.0035, 0.17, 8]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -4961,7 +5042,7 @@ export function InspectorDesk3D() {
               roughness={0.2}
             />
           </mesh>
-          <mesh position={[0, 0.185, 0]} castShadow>
+          <mesh position={[0, 0.185, 0]} raycast={NOOP_RAYCAST}>
             <sphereGeometry args={[0.007, 8, 8]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -4972,7 +5053,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0.032, 0.145, 0]}
             rotation={[0, -0.15, 0]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <boxGeometry args={[0.062, 0.042, 0.004]} />
             <meshStandardMaterial
@@ -4991,7 +5072,7 @@ export function InspectorDesk3D() {
       {/* 3D Illuminated 6-Lamp Master Annunciator Strip (`ТАБЛО ТРЕВОГИ`) Mounted Above the Rear Desk Console in Peripheral View */}
       <group position={[-0.07, 1.036, -0.562]} rotation={[-0.58, 0, 0]}>
         {/* Heavy Cast-Iron & Brushed-Brass Annunciator Housing Bar */}
-        <mesh castShadow receiveShadow>
+        <mesh raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.92, 0.068, 0.028]} />
           <meshStandardMaterial
             color="#121815"
@@ -5002,7 +5083,7 @@ export function InspectorDesk3D() {
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        <mesh position={[0, 0, 0.004]} castShadow>
+        <mesh position={[0, 0, 0.004]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.904, 0.058, 0.024]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -5053,7 +5134,7 @@ export function InspectorDesk3D() {
 
       {/* Tilted Status & Verdict Header Console Bar with Cast-Brass USSR State Emblem Medallion (Framed cleanly between x: -0.58 and x: +0.44!) */}
       <group position={[-0.07, 0.946, -0.51]} rotation={[-0.82, 0, 0]}>
-        <mesh castShadow receiveShadow>
+        <mesh raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.88, 0.12, 0.032]} />
           <meshStandardMaterial
             color="#0d110f"
@@ -5066,7 +5147,7 @@ export function InspectorDesk3D() {
         </mesh>
         {/* Cast-Brass USSR State Emblem Medallion on Top Center of Status Console */}
         <group position={[0, 0.072, 0.012]}>
-          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.028, 0.032, 0.012, 16]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -5076,7 +5157,7 @@ export function InspectorDesk3D() {
               bumpScale={0.005}
             />
           </mesh>
-          <mesh position={[0, 0, 0.008]}>
+          <mesh position={[0, 0, 0.008]} raycast={NOOP_RAYCAST}>
             <circleGeometry args={[0.016, 5]} />
             <meshStandardMaterial
               color="#ff2a2a"
@@ -5086,7 +5167,7 @@ export function InspectorDesk3D() {
             />
           </mesh>
         </group>
-        <mesh position={[0, 0, 0.018]}>
+        <mesh position={[0, 0, 0.018]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.85, 0.108]} />
           <meshStandardMaterial
             ref={headerTickerMatRef}
@@ -5102,7 +5183,7 @@ export function InspectorDesk3D() {
       </group>
 
       {/* Printer Tray Boundary Brass Divider Line (`PRINTER_TRAY_BOUNDARY_X_3D = -0.62` -> >80% open mat!) */}
-      <mesh position={[PRINTER_TRAY_BOUNDARY_X_3D, 0.925, 0.02]} receiveShadow>
+      <mesh position={[PRINTER_TRAY_BOUNDARY_X_3D, 0.925, 0.02]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[0.01, 0.004, 1.18]} />
         <meshStandardMaterial
           color="#8c7a4b"
@@ -5155,11 +5236,12 @@ export function InspectorDesk3D() {
         }}
       >
         <primitive object={teletypeModel} />
-        <mesh
-          position={[0, 0.04, 0]}
-          castShadow
-          receiveShadow
-        >
+        {/* Single clean invisible hitbox for ПРАВДА-84 printer failsafe click/hover */}
+        <mesh position={[0, 0.08, 0]}>
+          <boxGeometry args={[0.6, 0.24, 0.44]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+        <mesh position={[0, 0.04, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.58, 0.18, 0.42]} />
           <meshStandardMaterial
             color="#b5ad96"
@@ -5171,7 +5253,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Stepped Beveled Top Armor Plate, Welded Corner L-Angle Iron Trim & 3D Hex Bolt Rows */}
-        <mesh position={[0, 0.132, 0.05]} castShadow receiveShadow>
+        <mesh position={[0, 0.132, 0.05]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.54, 0.012, 0.24]} />
           <meshStandardMaterial
             color="#23312b"
@@ -5186,7 +5268,7 @@ export function InspectorDesk3D() {
           <mesh
             key={bIdx}
             position={[bx, 0.14, 0.15]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <cylinderGeometry args={[0.008, 0.008, 0.008, 6]} />
             <meshStandardMaterial
@@ -5201,18 +5283,18 @@ export function InspectorDesk3D() {
         {/* Recessed Side Cooling Louver Fins (Left & Right) */}
         {[-0.08, -0.02, 0.04, 0.1].map((lz, idx) => (
           <group key={idx}>
-            <mesh position={[-0.292, 0.055, lz]} castShadow>
+            <mesh position={[-0.292, 0.055, lz]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.008, 0.08, 0.028]} />
               <meshStandardMaterial color="#18211b" roughness={0.9} />
             </mesh>
-            <mesh position={[0.292, 0.055, lz]} castShadow>
+            <mesh position={[0.292, 0.055, lz]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.008, 0.08, 0.028]} />
               <meshStandardMaterial color="#18211b" roughness={0.9} />
             </mesh>
           </group>
         ))}
         {/* Riveted Brass Serial-Number Plaque on Side */}
-        <mesh position={[0.22, 0.139, 0.12]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0.22, 0.139, 0.12]} rotation={[-Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.11, 0.032]} />
           <meshStandardMaterial map={serialPlateTex} roughness={0.45} />
         </mesh>
@@ -5222,7 +5304,7 @@ export function InspectorDesk3D() {
             key={ci}
             position={[-0.18, 0.02, -0.23 - ci * 0.018]}
             rotation={[0.2, 0, 0]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <torusGeometry args={[0.018, 0.006, 6, 10]} />
             <meshStandardMaterial color="#0d110f" roughness={0.85} />
@@ -5231,8 +5313,7 @@ export function InspectorDesk3D() {
         <mesh
           position={[0, 0.03, 0.16]}
           rotation={[0.38, 0, 0]}
-          castShadow
-          receiveShadow
+          raycast={NOOP_RAYCAST}
         >
           <boxGeometry args={[0.54, 0.12, 0.16]} />
           <meshStandardMaterial
@@ -5245,20 +5326,20 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Top Dark Roller Cavity Slit & Platen Cylinder above GLB Hood */}
-        <mesh position={[0, 0.19, -0.035]}>
+        <mesh position={[0, 0.19, -0.035]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.46, 0.012, 0.068]} />
           <meshStandardMaterial color="#0d110f" roughness={0.95} />
         </mesh>
         <mesh
           position={[0, 0.188, -0.035]}
           rotation={[0, 0, Math.PI / 2]}
-          castShadow
+          raycast={NOOP_RAYCAST}
         >
           <cylinderGeometry args={[0.026, 0.026, 0.44, 12]} />
           <meshStandardMaterial color="#0d110f" roughness={0.88} />
         </mesh>
         {/* Transparent Serrated Acrylic/Steel Paper Tear-Bar Across Roller Mouth */}
-        <mesh position={[0, 0.198, -0.012]} rotation={[0.22, 0, 0]}>
+        <mesh position={[0, 0.198, -0.012]} rotation={[0.22, 0, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.45, 0.004, 0.022]} />
           <meshStandardMaterial
             color="#778472"
@@ -5266,13 +5347,14 @@ export function InspectorDesk3D() {
             roughness={0.2}
             transparent
             opacity={0.82}
+            depthWrite={false}
           />
         </mesh>
         {/* Exposed Brass Gear Teeth & Platen Handwheel on Right */}
         <mesh
           position={[0.26, 0.12, -0.05]}
           rotation={[0, 0, Math.PI / 2]}
-          castShadow
+          raycast={NOOP_RAYCAST}
         >
           <cylinderGeometry args={[0.038, 0.038, 0.016, 10]} />
           <meshStandardMaterial
@@ -5286,7 +5368,7 @@ export function InspectorDesk3D() {
         <mesh
           position={[0.31, 0.12, -0.05]}
           rotation={[0, 0, Math.PI / 2]}
-          castShadow
+          raycast={NOOP_RAYCAST}
         >
           <cylinderGeometry args={[0.045, 0.045, 0.05, 12]} />
           <meshStandardMaterial
@@ -5297,7 +5379,7 @@ export function InspectorDesk3D() {
             bumpScale={0.005}
           />
         </mesh>
-        <mesh position={[-0.2, 0.075, 0.19]} rotation={[0.38, 0, 0]}>
+        <mesh position={[-0.2, 0.075, 0.19]} rotation={[0.38, 0, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.022, 0.022, 0.03, 10]} />
           <meshStandardMaterial
             ref={printerLampMatRef}
@@ -5307,7 +5389,7 @@ export function InspectorDesk3D() {
             roughness={0.25}
           />
         </mesh>
-        <mesh position={[0.04, 0.068, 0.215]} rotation={[-0.95, 0, 0]}>
+        <mesh position={[0.04, 0.068, 0.215]} rotation={[-0.95, 0, 0]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.36, 0.085]} />
           <meshStandardMaterial map={printerNameplateTex} roughness={0.5} />
         </mesh>
@@ -5328,7 +5410,7 @@ export function InspectorDesk3D() {
               onPointerCancel={handlePrintingSlipUp}
             >
               {/* Subdivided 3D Perforated Tractor-Feed Paper Strip Backing (#d8d2c0) for Pull-Tension Bending */}
-              <mesh position={[0, 0, -0.002]} castShadow receiveShadow>
+              <mesh position={[0, 0, -0.002]} raycast={NOOP_RAYCAST}>
                 <planeGeometry
                   ref={printingBackingGeoRef}
                   args={[0.32, stripLen, 10, 14]}
@@ -5348,11 +5430,11 @@ export function InspectorDesk3D() {
                     Math.max(0.01, stripLen - 0.024)
                 return (
                   <group key={holeIdx}>
-                    <mesh position={[-0.148, hy, 0.001]}>
+                    <mesh position={[-0.148, hy, 0.001]} raycast={NOOP_RAYCAST}>
                       <circleGeometry args={[0.0045, 6]} />
                       <meshBasicMaterial color="#18211b" />
                     </mesh>
-                    <mesh position={[0.148, hy, 0.001]}>
+                    <mesh position={[0.148, hy, 0.001]} raycast={NOOP_RAYCAST}>
                       <circleGeometry args={[0.0045, 6]} />
                       <meshBasicMaterial color="#18211b" />
                     </mesh>
@@ -5401,8 +5483,13 @@ export function InspectorDesk3D() {
         onPointerUp={handleCradleCapsulePointerUp}
         onPointerCancel={handleCradleCapsulePointerUp}
       >
+        {/* Single clean invisible hitbox for Carrier Cradle */}
+        <mesh position={[0, 0.025, 0]}>
+          <boxGeometry args={[0.25, 0.075, 0.17]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
         {/* Heavy Mahogany & Brushed-Brass Carrier Cradle Base */}
-        <mesh position={[0, 0.008, 0]} castShadow receiveShadow>
+        <mesh position={[0, 0.008, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.24, 0.016, 0.14]} />
           <meshStandardMaterial
             color="#3d2216"
@@ -5413,7 +5500,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Brass Perimeter Trim Plate */}
-        <mesh position={[0, 0.017, 0]} castShadow receiveShadow>
+        <mesh position={[0, 0.017, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.22, 0.004, 0.12]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -5426,7 +5513,7 @@ export function InspectorDesk3D() {
         {/* Twin Curved Brass Saddle Supports Holding the Horizontal Carrier Cylinder */}
         {[-0.056, 0.056].map((sx, sIdx) => (
           <group key={sIdx} position={[sx, 0.028, -0.01]}>
-            <mesh castShadow receiveShadow>
+            <mesh raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.018, 0.022, 0.088]} />
               <meshStandardMaterial
                 color="#222d26"
@@ -5439,7 +5526,7 @@ export function InspectorDesk3D() {
             <mesh
               position={[0, 0.015, 0]}
               rotation={[0, Math.PI / 2, 0]}
-              castShadow
+              raycast={NOOP_RAYCAST}
             >
               <torusGeometry args={[0.044, 0.006, 8, 16, Math.PI]} />
               <meshStandardMaterial
@@ -5452,7 +5539,7 @@ export function InspectorDesk3D() {
         ))}
         {/* Angled Front Brass Instruction Plaque (`КАПСУЛА // STEP 1: PACK PAPER`) */}
         <group position={[0, 0.016, 0.068]} rotation={[-0.48, 0, 0]}>
-          <mesh castShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.22, 0.006, 0.05]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -5460,7 +5547,7 @@ export function InspectorDesk3D() {
               roughness={0.28}
             />
           </mesh>
-          <mesh position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.212, 0.045]} />
             <meshStandardMaterial
               map={capsuleCradlePlaqueTex}
@@ -5490,18 +5577,19 @@ export function InspectorDesk3D() {
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
         {/* Transparent Fluted Glass/Acrylic Carrier Body */}
-        <mesh castShadow receiveShadow>
+        <mesh raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.038, 0.038, 0.122, 18]} />
           <meshStandardMaterial
             color="#d8efe4"
             transparent
             opacity={0.52}
+            depthWrite={false}
             roughness={0.14}
             metalness={0.18}
           />
         </mesh>
         {/* Center Bakelite Grip Band & Brass Identification Ring */}
-        <mesh>
+        <mesh raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.04, 0.04, 0.024, 18]} />
           <meshStandardMaterial
             color="#1c1614"
@@ -5509,7 +5597,7 @@ export function InspectorDesk3D() {
             metalness={0.2}
           />
         </mesh>
-        <mesh>
+        <mesh raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.041, 0.041, 0.007, 18]} />
           <meshStandardMaterial
             ref={capsuleRingMatRef}
@@ -5522,7 +5610,7 @@ export function InspectorDesk3D() {
         </mesh>
         {/* Bottom Knurled Brass End-Cap & Crimson Felt Buffer Ring */}
         <group position={[0, -0.058, 0]}>
-          <mesh castShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.042, 0.042, 0.018, 18]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -5532,14 +5620,14 @@ export function InspectorDesk3D() {
               bumpScale={0.004}
             />
           </mesh>
-          <mesh position={[0, -0.01, 0]}>
+          <mesh position={[0, -0.01, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.044, 0.044, 0.007, 18]} />
             <meshStandardMaterial color="#5c1a16" roughness={0.88} />
           </mesh>
         </group>
         {/* Animated Top Brass End-Cap (Open when empty, snaps shut when paper scroll rolls inside!) */}
         <group ref={cradleTopCapRef} position={[0, 0.088, 0]} rotation={[0, 0, -0.55]}>
-          <mesh castShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.042, 0.042, 0.018, 18]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -5549,12 +5637,12 @@ export function InspectorDesk3D() {
               bumpScale={0.004}
             />
           </mesh>
-          <mesh position={[0, 0.01, 0]}>
+          <mesh position={[0, 0.01, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.044, 0.044, 0.007, 18]} />
             <meshStandardMaterial color="#5c1a16" roughness={0.88} />
           </mesh>
           {/* Knurled Brass Pull-Knob on Top Cap */}
-          <mesh position={[0, 0.018, 0]}>
+          <mesh position={[0, 0.018, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.016, 0.02, 0.012, 12]} />
             <meshStandardMaterial
               color="#d4be7f"
@@ -5565,7 +5653,7 @@ export function InspectorDesk3D() {
         </group>
         {/* Rolled Directive Paper Scroll Inside Carrier Cylinder */}
         <group ref={cradleScrollRef} visible={packedDoc !== null}>
-          <mesh>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.026, 0.026, 0.098, 16]} />
             <meshStandardMaterial
               ref={cradlePaperMatRef}
@@ -5575,7 +5663,7 @@ export function InspectorDesk3D() {
               roughness={0.85}
             />
           </mesh>
-          <mesh position={[0, 0.014, 0]}>
+          <mesh position={[0, 0.014, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.0275, 0.0275, 0.022, 16]} />
             <meshStandardMaterial color="#1b6e32" roughness={0.75} />
           </mesh>
@@ -5593,7 +5681,7 @@ export function InspectorDesk3D() {
         rotation={[0, 0.32, 0]}
       >
         {/* Heavy Cast-Iron Cantilever Side-Panel Mounting Bracket Bolted to the Outer-Left Desk Frame */}
-        <mesh position={[0.14, -0.06, -0.02]} castShadow receiveShadow>
+        <mesh position={[0.14, -0.06, -0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.28, 0.14, 0.18]} />
           <meshStandardMaterial
             color="#18211b"
@@ -5604,7 +5692,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Lower Floor-to-Breech Cast-Iron Vacuum Supply Column Rising From Behind the Desk */}
-        <mesh position={[0, -0.48, -0.025]} castShadow receiveShadow>
+        <mesh position={[0, -0.48, -0.025]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.062, 0.072, 0.96, 18]} />
           <meshStandardMaterial
             color="#1e2923"
@@ -5615,7 +5703,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Lower Flanged Cast-Iron Collar Ring */}
-        <mesh position={[0, -0.04, -0.025]} castShadow>
+        <mesh position={[0, -0.04, -0.025]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.092, 0.098, 0.036, 18]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -5629,8 +5717,6 @@ export function InspectorDesk3D() {
         {/* Main Cast-Iron Breech Base Manifold (`КАМЕРА ПУСКА`) */}
         <mesh
           position={[0, 0.032, 0]}
-          castShadow
-          receiveShadow
           onClick={handleBreechChamberClick}
         >
           <boxGeometry args={[0.3, 0.068, 0.22]} />
@@ -5652,7 +5738,7 @@ export function InspectorDesk3D() {
             [0.12, 0.08],
           ] as const
         ).map(([bx, bz], bIdx) => (
-          <mesh key={bIdx} position={[bx, 0.07, bz]} castShadow>
+          <mesh key={bIdx} position={[bx, 0.07, bz]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.008, 0.008, 0.01, 6]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -5668,7 +5754,7 @@ export function InspectorDesk3D() {
           rotation={[-0.45, 0, 0]}
           onClick={handleBreechChamberClick}
         >
-          <mesh castShadow receiveShadow>
+          <mesh>
             <boxGeometry args={[0.29, 0.008, 0.076]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -5678,7 +5764,7 @@ export function InspectorDesk3D() {
               bumpScale={0.005}
             />
           </mesh>
-          <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.278, 0.068]} />
             <meshStandardMaterial map={outboxTubeTex} roughness={0.52} />
           </mesh>
@@ -5694,7 +5780,7 @@ export function InspectorDesk3D() {
 
           {/* Bottom & Top Flanged Brass Chamber Rings */}
           {[-0.105, 0.105].map((cy, rIdx) => (
-            <mesh key={rIdx} position={[0, cy, 0]} castShadow receiveShadow>
+            <mesh key={rIdx} position={[0, cy, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.078, 0.082, 0.028, 20]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -5709,9 +5795,7 @@ export function InspectorDesk3D() {
           {/* Rear Curved Cast-Brass Chamber Wall (200° arc leaving front breech opening) */}
           <mesh
             rotation={[0, Math.PI * 0.45, 0]}
-            castShadow
-            receiveShadow
-            onClick={handleBreechChamberClick}
+            raycast={NOOP_RAYCAST}
           >
             <cylinderGeometry
               args={[0.068, 0.068, 0.19, 20, 1, true, 0, Math.PI * 1.15]}
@@ -5727,7 +5811,7 @@ export function InspectorDesk3D() {
           </mesh>
 
           {/* Dark Recessed Inner Vacuum Chamber Bore & Brass Capsule Seat */}
-          <mesh position={[0, 0, -0.004]} onClick={handleBreechChamberClick}>
+          <mesh position={[0, 0, -0.004]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry
               args={[0.056, 0.056, 0.186, 18, 1, true, Math.PI * 0.45, Math.PI * 1.15]}
             />
@@ -5737,7 +5821,7 @@ export function InspectorDesk3D() {
               side={THREE.DoubleSide}
             />
           </mesh>
-          <mesh position={[0, -0.082, 0]}>
+          <mesh position={[0, -0.082, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.048, 0.052, 0.014, 16]} />
             <meshStandardMaterial
               color="#5c1a16"
@@ -5752,19 +5836,20 @@ export function InspectorDesk3D() {
             visible={capsuleState === 'CHAMBER_LOADED'}
             onClick={handleBreechHatchClick}
           >
-            <mesh castShadow>
+            <mesh>
               <cylinderGeometry args={[0.038, 0.038, 0.122, 16]} />
               <meshStandardMaterial
                 color="#d8efe4"
                 transparent
                 opacity={0.55}
+                depthWrite={false}
                 roughness={0.14}
                 metalness={0.18}
               />
             </mesh>
             {[-0.058, 0.058].map((cy, cIdx) => (
               <group key={cIdx} position={[0, cy, 0]}>
-                <mesh castShadow>
+                <mesh raycast={NOOP_RAYCAST}>
                   <cylinderGeometry args={[0.042, 0.042, 0.018, 16]} />
                   <meshStandardMaterial
                     color="#b8a46b"
@@ -5772,13 +5857,13 @@ export function InspectorDesk3D() {
                     roughness={0.22}
                   />
                 </mesh>
-                <mesh position={[0, cIdx === 0 ? -0.01 : 0.01, 0]}>
+                <mesh position={[0, cIdx === 0 ? -0.01 : 0.01, 0]} raycast={NOOP_RAYCAST}>
                   <cylinderGeometry args={[0.044, 0.044, 0.007, 16]} />
                   <meshStandardMaterial color="#5c1a16" roughness={0.88} />
                 </mesh>
               </group>
             ))}
-            <mesh>
+            <mesh raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.026, 0.026, 0.098, 14]} />
               <meshStandardMaterial
                 ref={chamberPaperMatRef}
@@ -5788,7 +5873,7 @@ export function InspectorDesk3D() {
                 roughness={0.85}
               />
             </mesh>
-            <mesh position={[0, 0.012, 0]}>
+            <mesh position={[0, 0.012, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.0275, 0.0275, 0.022, 14]} />
               <meshStandardMaterial color="#1b6e32" roughness={0.75} />
             </mesh>
@@ -5800,9 +5885,14 @@ export function InspectorDesk3D() {
             position={[-0.066, 0, 0.024]}
             onClick={handleBreechHatchClick}
           >
+            {/* Single clean invisible hitbox for Hinged Breech Door */}
+            <mesh position={[0.066, 0, 0.025]}>
+              <boxGeometry args={[0.16, 0.19, 0.1]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
             {/* Heavy Left Vertical Brass Hinge Knuckles */}
             {[-0.065, 0.065].map((hy, hIdx) => (
-              <mesh key={hIdx} position={[0, hy, 0]} castShadow>
+              <mesh key={hIdx} position={[0, hy, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.01, 0.01, 0.028, 10]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -5814,7 +5904,7 @@ export function InspectorDesk3D() {
             {/* Door Offset Group Centered on Chamber Axis when Closed (`rotation.y = 0`) */}
             <group position={[0.066, 0, -0.024]}>
               {/* Curved Transparent Inspection Glass Door Panel */}
-              <mesh rotation={[0, -Math.PI * 0.42, 0]} castShadow>
+              <mesh rotation={[0, -Math.PI * 0.42, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry
                   args={[0.07, 0.07, 0.175, 16, 1, true, 0, Math.PI * 0.85]}
                 />
@@ -5822,6 +5912,7 @@ export function InspectorDesk3D() {
                   color="#bce6d4"
                   transparent
                   opacity={0.46}
+                  depthWrite={false}
                   roughness={0.12}
                   metalness={0.2}
                   side={THREE.DoubleSide}
@@ -5833,7 +5924,7 @@ export function InspectorDesk3D() {
                   key={sIdx}
                   position={[0, sy, 0]}
                   rotation={[0, -Math.PI * 0.42, 0]}
-                  castShadow
+                  raycast={NOOP_RAYCAST}
                 >
                   <cylinderGeometry
                     args={[0.073, 0.073, 0.016, 16, 1, true, 0, Math.PI * 0.85]}
@@ -5848,7 +5939,7 @@ export function InspectorDesk3D() {
               ))}
               {/* Right-Edge Brass Latch Bar & Knurled Crimson/Brass Cam-Latch Handle (`ОТКРЫТЬ / ЗАКРЫТЬ ЛЮК`) */}
               <group position={[0.064, 0, 0.036]}>
-                <mesh castShadow>
+                <mesh raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.016, 0.175, 0.016]} />
                   <meshStandardMaterial
                     color="#b8a46b"
@@ -5859,7 +5950,7 @@ export function InspectorDesk3D() {
                 <mesh
                   position={[0.018, 0, 0.018]}
                   rotation={[0, 0, Math.PI / 2]}
-                  castShadow
+                  raycast={NOOP_RAYCAST}
                 >
                   <cylinderGeometry args={[0.008, 0.008, 0.036, 10]} />
                   <meshStandardMaterial
@@ -5868,7 +5959,7 @@ export function InspectorDesk3D() {
                     roughness={0.2}
                   />
                 </mesh>
-                <mesh position={[0.034, 0, 0.026]} castShadow>
+                <mesh position={[0.034, 0, 0.026]} raycast={NOOP_RAYCAST}>
                   <sphereGeometry args={[0.015, 12, 12]} />
                   <meshStandardMaterial
                     ref={hatchKnobMatRef}
@@ -5883,7 +5974,7 @@ export function InspectorDesk3D() {
 
         {/* Caged Jewel Status Lamp (`ГОТОВ К ПУСКУ // SEALED & READY`: Amber when open/unsealed, Solid Emerald Green when loaded & sealed!) */}
         <group position={[0.105, 0.074, 0.035]}>
-          <mesh castShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.022, 0.026, 0.018, 12]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -5891,7 +5982,7 @@ export function InspectorDesk3D() {
               roughness={0.28}
             />
           </mesh>
-          <mesh position={[0, 0.014, 0]}>
+          <mesh position={[0, 0.014, 0]} raycast={NOOP_RAYCAST}>
             <sphereGeometry args={[0.016, 14, 12]} />
             <meshStandardMaterial
               ref={pneumaticStatusLampMatRef}
@@ -5906,6 +5997,7 @@ export function InspectorDesk3D() {
               key={cIdx}
               position={[0, 0.014, 0]}
               rotation={[0, rotY, 0]}
+              raycast={NOOP_RAYCAST}
             >
               <torusGeometry args={[0.018, 0.0022, 6, 12, Math.PI]} />
               <meshStandardMaterial
@@ -5919,7 +6011,7 @@ export function InspectorDesk3D() {
 
         {/* Left-Flank Brass Vacuum Manometer Gauge (`ВАКУУМ // КГС/СМ²`) */}
         <group position={[-0.125, 0.115, 0.03]} rotation={[-0.25, 0.2, 0]}>
-          <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.038, 0.042, 0.018, 14]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -5930,12 +6022,12 @@ export function InspectorDesk3D() {
               roughnessMap={brassTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[0, 0, 0.01]}>
+          <mesh position={[0, 0, 0.01]} raycast={NOOP_RAYCAST}>
             <circleGeometry args={[0.033, 14]} />
             <meshStandardMaterial map={manometerDialTex} roughness={0.75} />
           </mesh>
           <group ref={manometerNeedleRef} position={[0, 0, 0.012]}>
-            <mesh position={[0, 0.01, 0]}>
+            <mesh position={[0, 0.01, 0]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.0035, 0.024, 0.002]} />
               <meshStandardMaterial
                 color="#ff2a2a"
@@ -5943,7 +6035,7 @@ export function InspectorDesk3D() {
                 emissiveIntensity={0.35}
               />
             </mesh>
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.0045, 0.0045, 0.004, 8]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -5958,8 +6050,6 @@ export function InspectorDesk3D() {
         <group position={[0.168, 0.155, -0.01]}>
           {/* Cast-Brass Ratchet Quadrant Housing */}
           <mesh
-            castShadow
-            receiveShadow
             onPointerDown={handleLaunchLeverDown}
             onPointerMove={handleLaunchLeverMove}
             onPointerUp={handleLaunchLeverUp}
@@ -5974,7 +6064,7 @@ export function InspectorDesk3D() {
               bumpScale={0.005}
             />
           </mesh>
-          <mesh position={[0.016, 0.015, 0]}>
+          <mesh position={[0.016, 0.015, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.032, 0.11, 0.11]} />
             <meshStandardMaterial color="#0d110f" roughness={0.92} />
           </mesh>
@@ -5994,7 +6084,7 @@ export function InspectorDesk3D() {
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
             {/* Chrome-Steel Lever Arm */}
-            <mesh position={[0, 0.068, 0]} castShadow>
+            <mesh position={[0, 0.068, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.011, 0.014, 0.14, 10]} />
               <meshStandardMaterial
                 color="#c8d2c5"
@@ -6003,7 +6093,7 @@ export function InspectorDesk3D() {
               />
             </mesh>
             {/* Heavy Red Bakelite Ball Knob (`#b82a24`) */}
-            <mesh position={[0, 0.145, 0]} castShadow>
+            <mesh position={[0, 0.145, 0]} raycast={NOOP_RAYCAST}>
               <sphereGeometry args={[0.042, 16, 16]} />
               <meshStandardMaterial
                 ref={launchKnobMatRef}
@@ -6020,7 +6110,7 @@ export function InspectorDesk3D() {
             <mesh
               position={[0, 0.145, 0]}
               rotation={[Math.PI / 2, 0, 0]}
-              castShadow
+              raycast={NOOP_RAYCAST}
             >
               <torusGeometry args={[0.043, 0.005, 8, 16]} />
               <meshStandardMaterial
@@ -6041,7 +6131,7 @@ export function InspectorDesk3D() {
       <group>
         {/* 1. Vertical Transparent Glass/Acrylic Riser Pipe (`x = -1.468, z = -0.544`) */}
         <group position={[-1.468, 2.16, -0.544]}>
-          <mesh receiveShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.056, 0.056, 1.92, 20, 1, true]} />
             <meshStandardMaterial
               color="#bce6d4"
@@ -6053,7 +6143,7 @@ export function InspectorDesk3D() {
               depthWrite={false}
             />
           </mesh>
-          <mesh>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.05, 0.05, 1.92, 16, 1, true]} />
             <meshStandardMaterial
               color="#e6fff4"
@@ -6067,7 +6157,7 @@ export function InspectorDesk3D() {
           {/* 5 Flanged Brass Collar Rings Along Vertical Riser */}
           {[-0.84, -0.42, 0, 0.42, 0.84].map((ry, rIdx) => (
             <group key={rIdx} position={[0, ry, 0]}>
-              <mesh castShadow receiveShadow>
+              <mesh raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.068, 0.068, 0.026, 20]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -6077,7 +6167,7 @@ export function InspectorDesk3D() {
                   bumpScale={0.005}
                 />
               </mesh>
-              <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
                 <torusGeometry args={[0.069, 0.005, 8, 20]} />
                 <meshStandardMaterial
                   color="#8c7a4b"
@@ -6096,7 +6186,7 @@ export function InspectorDesk3D() {
               [0.06, 0.06],
             ] as const
           ).map(([tx, tz], tIdx) => (
-            <mesh key={tIdx} position={[tx, 0, tz]} castShadow>
+            <mesh key={tIdx} position={[tx, 0, tz]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.005, 0.005, 1.92, 8]} />
               <meshStandardMaterial
                 color="#9aa4ac"
@@ -6109,7 +6199,7 @@ export function InspectorDesk3D() {
 
         {/* 2. 90° Flanged Brass Ceiling Elbow Bend (`x = -1.468, y = 3.12 -> 3.26, z = -0.544 -> -0.684`) */}
         <group position={[-1.468, 3.12, -0.684]}>
-          <mesh rotation={[0, Math.PI / 2, 0]} castShadow receiveShadow>
+          <mesh rotation={[0, Math.PI / 2, 0]} raycast={NOOP_RAYCAST}>
             <torusGeometry args={[0.14, 0.06, 16, 24, Math.PI / 2]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -6120,7 +6210,7 @@ export function InspectorDesk3D() {
             />
           </mesh>
           {/* End Flanges on 90° Elbow */}
-          <mesh position={[0, 0, 0.14]} castShadow>
+          <mesh position={[0, 0, 0.14]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.072, 0.072, 0.024, 18]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -6131,7 +6221,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, 0.14, 0]}
             rotation={[Math.PI / 2, 0, 0]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <cylinderGeometry args={[0.072, 0.072, 0.024, 18]} />
             <meshStandardMaterial
@@ -6144,7 +6234,7 @@ export function InspectorDesk3D() {
 
         {/* 3. Extended Rearward Ceiling Glass-and-Brass Pipeline (`x = -1.468, y = 3.26, z = -0.684 .. -1.54`) Clear of Shift Clock */}
         <group position={[-1.468, 3.26, -1.112]}>
-          <mesh rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.056, 0.056, 0.86, 20, 1, true]} />
             <meshStandardMaterial
               color="#bce6d4"
@@ -6159,7 +6249,7 @@ export function InspectorDesk3D() {
           {/* Brass Collar Rings & Heavy Steel Ceiling Hanger Straps Bolted to Overhead Bunker Ceiling */}
           {[-0.32, 0.0, 0.32].map((hz, hIdx) => (
             <group key={hIdx} position={[0, 0, hz]}>
-              <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+              <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.068, 0.068, 0.026, 18]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -6170,7 +6260,7 @@ export function InspectorDesk3D() {
                 />
               </mesh>
               {/* Steel Ceiling Hanger Rod & Mounting Plate reaching hall ceiling */}
-              <mesh position={[0, 0.47, 0]}>
+              <mesh position={[0, 0.47, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.01, 0.01, 0.94, 8]} />
                 <meshStandardMaterial
                   color="#222d26"
@@ -6178,7 +6268,7 @@ export function InspectorDesk3D() {
                   roughness={0.42}
                 />
               </mesh>
-              <mesh position={[0, 0.93, 0]}>
+              <mesh position={[0, 0.93, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.08, 0.016, 0.08]} />
                 <meshStandardMaterial
                   color="#18211b"
@@ -6193,7 +6283,7 @@ export function InspectorDesk3D() {
         {/* 4. Terminal Intake Bend (`x = -0.95, z = -1.68`) & Vertical Plunge Well Left & Behind `K.O.M.R.A.D.-84` (100% Clear of Shift Clock!) */}
         {/* Rear-Left Brass Elbow */}
         <group position={[-1.328, 3.26, -1.54]}>
-          <mesh rotation={[Math.PI / 2, 0, Math.PI]} castShadow>
+          <mesh rotation={[Math.PI / 2, 0, Math.PI]} raycast={NOOP_RAYCAST}>
             <torusGeometry args={[0.14, 0.06, 14, 20, Math.PI / 2]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -6208,7 +6298,7 @@ export function InspectorDesk3D() {
         <mesh
           position={[-1.21, 3.26, -1.68]}
           rotation={[0, 0, Math.PI / 2]}
-          castShadow
+          raycast={NOOP_RAYCAST}
         >
           <cylinderGeometry args={[0.058, 0.058, 0.24, 16]} />
           <meshStandardMaterial
@@ -6221,7 +6311,7 @@ export function InspectorDesk3D() {
         </mesh>
         {/* Downward 90° Brass Elbow Plunging Behind Left Rear Corner (`x = -0.95, y = 3.12, z = -1.68`) */}
         <group position={[-1.09, 3.12, -1.68]}>
-          <mesh rotation={[0, 0, 0]} castShadow>
+          <mesh rotation={[0, 0, 0]} raycast={NOOP_RAYCAST}>
             <torusGeometry args={[0.14, 0.06, 14, 20, Math.PI / 2]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -6234,7 +6324,7 @@ export function InspectorDesk3D() {
         </group>
         {/* Vertical Intake Drop Pipe Plunging at `x = -0.95, z = -1.68` (0.95m Left & 0.52m Further Back — 100% Clear of Shift Clock!) */}
         <group position={[-0.95, 2.39, -1.68]}>
-          <mesh receiveShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.056, 0.056, 1.46, 18, 1, true]} />
             <meshStandardMaterial
               color="#bce6d4"
@@ -6247,7 +6337,7 @@ export function InspectorDesk3D() {
             />
           </mesh>
           {[-0.48, 0, 0.48].map((ry, rIdx) => (
-            <mesh key={rIdx} position={[0, ry, 0]} castShadow>
+            <mesh key={rIdx} position={[0, ry, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.068, 0.068, 0.024, 18]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -6257,7 +6347,7 @@ export function InspectorDesk3D() {
             </mesh>
           ))}
           {/* Heavy Flanged Cast-Iron Receiver Manifold Bolted to Rear Left of `K.O.M.R.A.D.-84` Mainframe */}
-          <mesh position={[0, -0.71, 0.04]} castShadow>
+          <mesh position={[0, -0.71, 0.04]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.22, 0.16, 0.18]} />
             <meshStandardMaterial
               color="#18211b"
@@ -6275,7 +6365,7 @@ export function InspectorDesk3D() {
           position={[-1.468, 1.1, -0.544]}
           visible={false}
         >
-          <mesh castShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.038, 0.038, 0.122, 16]} />
             <meshStandardMaterial
               color="#d8efe4"
@@ -6283,11 +6373,12 @@ export function InspectorDesk3D() {
               opacity={0.58}
               roughness={0.14}
               metalness={0.18}
+              depthWrite={false}
             />
           </mesh>
           {[-0.058, 0.058].map((cy, cIdx) => (
             <group key={cIdx} position={[0, cy, 0]}>
-              <mesh castShadow>
+              <mesh raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.042, 0.042, 0.018, 16]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -6295,13 +6386,16 @@ export function InspectorDesk3D() {
                   roughness={0.22}
                 />
               </mesh>
-              <mesh position={[0, cIdx === 0 ? -0.01 : 0.01, 0]}>
+              <mesh
+                position={[0, cIdx === 0 ? -0.01 : 0.01, 0]}
+                raycast={NOOP_RAYCAST}
+              >
                 <cylinderGeometry args={[0.044, 0.044, 0.007, 16]} />
                 <meshStandardMaterial color="#5c1a16" roughness={0.88} />
               </mesh>
             </group>
           ))}
-          <mesh>
+          <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.026, 0.026, 0.098, 14]} />
             <meshStandardMaterial
               ref={flightPaperMatRef}
@@ -6309,7 +6403,7 @@ export function InspectorDesk3D() {
               roughness={0.85}
             />
           </mesh>
-          <mesh position={[0, 0.012, 0]}>
+          <mesh position={[0, 0.012, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.0275, 0.0275, 0.022, 14]} />
             <meshStandardMaterial
               color="#33ff66"
@@ -6340,7 +6434,7 @@ export function InspectorDesk3D() {
           ]}
           rotation={[0, WEPAD_DOCK_YAW_Y, 0]}
         >
-          <mesh castShadow receiveShadow>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.26, 0.016, 0.28]} />
             <meshStandardMaterial
               color="#18211b"
@@ -6351,7 +6445,7 @@ export function InspectorDesk3D() {
               roughnessMap={ironTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[0, 0.026, -0.008]} castShadow receiveShadow>
+          <mesh position={[0, 0.026, -0.008]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.17, 0.044, 0.2]} />
             <meshStandardMaterial
               color="#1e2923"
@@ -6366,8 +6460,7 @@ export function InspectorDesk3D() {
             <mesh
               key={`dock-rib-${gIdx}`}
               position={[gx, 0.022, -0.006]}
-              castShadow
-              receiveShadow
+              raycast={NOOP_RAYCAST}
             >
               <boxGeometry args={[0.016, 0.036, 0.23]} />
               <meshStandardMaterial
@@ -6387,7 +6480,7 @@ export function InspectorDesk3D() {
               [0.105, 0.011, 0.115],
             ] as const
           ).map(([bx, by, bz], bIdx) => (
-            <mesh key={`dock-bolt-${bIdx}`} position={[bx, by, bz]} castShadow>
+            <mesh key={`dock-bolt-${bIdx}`} position={[bx, by, bz]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.006, 0.006, 0.007, 6]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -6401,7 +6494,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[-0.06, 0.014, -0.14]}
             rotation={[Math.PI / 2, 0, -0.25]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <cylinderGeometry args={[0.006, 0.006, 0.09, 8]} />
             <meshStandardMaterial
@@ -6421,14 +6514,14 @@ export function InspectorDesk3D() {
           ]}
           rotation={_manualDeskEuler}
         >
-          {/* Active Hitbox When Holster Is Empty (visible={isManualHeld} for Pointer Lock raycasts) */}
-          <mesh visible={isManualHeld} position={[0, 0.008, 0.012]}>
+          {/* Single clean always-active invisible hitbox for holster dock */}
+          <mesh position={[0, 0.008, 0.012]}>
             <boxGeometry args={[0.28, 0.036, 0.305]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
 
           {/* Hammered-Iron Cradle Backplate Bed */}
-          <mesh position={[0, -0.0095, 0.012]} castShadow receiveShadow>
+          <mesh position={[0, -0.0095, 0.012]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.264, 0.007, 0.276]} />
             <meshStandardMaterial
               color="#18211b"
@@ -6442,14 +6535,14 @@ export function InspectorDesk3D() {
 
           {/* 2 Vertical Dark Rubber Anti-Slip Cushion Strips */}
           {([-0.068, 0.068] as const).map((rx, rIdx) => (
-            <mesh key={rIdx} position={[rx, -0.0056, 0.012]} receiveShadow>
+            <mesh key={rIdx} position={[rx, -0.0056, 0.012]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.022, 0.0012, 0.22]} />
               <meshStandardMaterial color="#101311" roughness={0.92} />
             </mesh>
           ))}
 
           {/* Factory Serial Plate Inside Cradle Bed (Visible When WE-PAD 84 Is Held) */}
-          <mesh position={[0, -0.0054, -0.02]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[0, -0.0054, -0.02]} rotation={[-Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.095, 0.028]} />
             <meshStandardMaterial
               map={serialPlateTex}
@@ -6459,7 +6552,7 @@ export function InspectorDesk3D() {
           </mesh>
 
           {/* Lower Hammered-Iron U-Channel Lip Bracket & Front Retaining Lip */}
-          <mesh position={[0, 0.001, 0.149]} castShadow receiveShadow>
+          <mesh position={[0, 0.001, 0.149]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.268, 0.026, 0.013]} />
             <meshStandardMaterial
               color="#1e2822"
@@ -6470,7 +6563,7 @@ export function InspectorDesk3D() {
               roughnessMap={ironTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[0, 0.002, 0.158]} castShadow receiveShadow>
+          <mesh position={[0, 0.002, 0.158]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.268, 0.028, 0.009]} />
             <meshStandardMaterial
               color="#18211b"
@@ -6481,7 +6574,7 @@ export function InspectorDesk3D() {
               roughnessMap={ironTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[0, 0.0168, 0.158]} castShadow>
+          <mesh position={[0, 0.0168, 0.158]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.268, 0.0025, 0.0095]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -6494,7 +6587,7 @@ export function InspectorDesk3D() {
 
           {/* Left & Right Hammered-Iron Guide Channels */}
           {([-0.1255, 0.1255] as const).map((gx, gIdx) => (
-            <mesh key={gIdx} position={[gx, -0.001, 0.022]} castShadow receiveShadow>
+            <mesh key={gIdx} position={[gx, -0.001, 0.022]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.011, 0.022, 0.256]} />
               <meshStandardMaterial
                 color="#1f2923"
@@ -6517,7 +6610,7 @@ export function InspectorDesk3D() {
             ] as const
           ).map(([cx, cz], cIdx) => (
             <group key={cIdx} position={[cx, 0.0095, cz]}>
-              <mesh castShadow>
+              <mesh raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.013, 0.0045, 0.036]} />
                 <meshStandardMaterial
                   color="#b8a46b"
@@ -6527,7 +6620,7 @@ export function InspectorDesk3D() {
                   bumpScale={0.004}
                 />
               </mesh>
-              <mesh position={[0, 0.003, 0]} castShadow>
+              <mesh position={[0, 0.003, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.0028, 0.0028, 0.003, 8]} />
                 <meshStandardMaterial
                   color="#d4be7f"
@@ -6545,7 +6638,7 @@ export function InspectorDesk3D() {
               position={[px, 0.001, 0.138]}
               rotation={[Math.PI / 2, 0, 0]}
             >
-              <mesh>
+              <mesh raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.0038, 0.0042, 0.006, 8]} />
                 <meshStandardMaterial
                   color="#8c7a4b"
@@ -6553,7 +6646,7 @@ export function InspectorDesk3D() {
                   roughness={0.28}
                 />
               </mesh>
-              <mesh position={[0, -0.005, 0]}>
+              <mesh position={[0, -0.005, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.0022, 0.0024, 0.012, 8]} />
                 <meshStandardMaterial
                   color="#e0c679"
@@ -6566,7 +6659,7 @@ export function InspectorDesk3D() {
 
           {/* Dock Status Pilot Jewel (Emerald When Docked, Pulsing Amber When Empty) */}
           <group position={[-0.108, 0.006, 0.1635]}>
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.0065, 0.007, 0.004, 10]} />
               <meshStandardMaterial
                 color="#8c7a4b"
@@ -6574,7 +6667,7 @@ export function InspectorDesk3D() {
                 roughness={0.28}
               />
             </mesh>
-            <mesh position={[0, 0, 0.0025]}>
+            <mesh position={[0, 0, 0.0025]} raycast={NOOP_RAYCAST}>
               <sphereGeometry args={[0.0045, 8, 8]} />
               <meshStandardMaterial
                 ref={wePadDockLedMatRef}
@@ -6588,7 +6681,7 @@ export function InspectorDesk3D() {
 
           {/* Stamped Brass & Enamel Plaque (`МЫ-ПАД 84 // ДОК-ГНЕЗДО БЛ-84`) */}
           <group position={[0.01, 0.009, 0.1645]} rotation={[-0.75, 0, 0]}>
-            <mesh castShadow>
+            <mesh raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.15, 0.025, 0.002]} />
               <meshStandardMaterial
                 color="#8c7a4b"
@@ -6598,7 +6691,7 @@ export function InspectorDesk3D() {
                 bumpScale={0.004}
               />
             </mesh>
-            <mesh position={[0, 0, 0.0014]}>
+            <mesh position={[0, 0, 0.0014]} raycast={NOOP_RAYCAST}>
               <planeGeometry args={[0.146, 0.022]} />
               <meshBasicMaterial map={wePadDockPlaqueTex} toneMapped={false} />
             </mesh>
@@ -6640,8 +6733,6 @@ export function InspectorDesk3D() {
         {/* 1. MAIN CHASSIS: Heavy Beveled Cast-Iron & Brushed-Steel Cabinet (#2a3028) */}
         <mesh
           position={[0, 0, 0]}
-          castShadow={!isManualHeld}
-          receiveShadow={!isManualHeld}
           renderOrder={1}
           onWheel={handleManualWheel}
         >
@@ -6660,7 +6751,7 @@ export function InspectorDesk3D() {
         {/* Top Bezel Rail */}
         <mesh
           position={[0, 0.012, -MANUAL_BASE_H / 2 - 0.009]}
-          castShadow={!isManualHeld}
+          raycast={NOOP_RAYCAST}
           renderOrder={2}
         >
           <boxGeometry args={[MANUAL_BASE_W + 0.022, 0.006, 0.018]} />
@@ -6669,7 +6760,7 @@ export function InspectorDesk3D() {
         {/* Bottom Bezel Rail */}
         <mesh
           position={[0, 0.012, MANUAL_BASE_H / 2 + 0.012]}
-          castShadow={!isManualHeld}
+          raycast={NOOP_RAYCAST}
           renderOrder={2}
         >
           <boxGeometry args={[MANUAL_BASE_W + 0.022, 0.006, 0.024]} />
@@ -6678,7 +6769,7 @@ export function InspectorDesk3D() {
         {/* Left Bezel Rail */}
         <mesh
           position={[-MANUAL_BASE_W / 2 - 0.006, 0.012, 0]}
-          castShadow={!isManualHeld}
+          raycast={NOOP_RAYCAST}
           renderOrder={2}
         >
           <boxGeometry args={[0.01, 0.006, MANUAL_BASE_H + 0.008]} />
@@ -6687,7 +6778,7 @@ export function InspectorDesk3D() {
         {/* Right Bezel Rail */}
         <mesh
           position={[MANUAL_BASE_W / 2 + 0.006, 0.012, 0]}
-          castShadow={!isManualHeld}
+          raycast={NOOP_RAYCAST}
           renderOrder={2}
         >
           <boxGeometry args={[0.01, 0.006, MANUAL_BASE_H + 0.008]} />
@@ -6698,6 +6789,7 @@ export function InspectorDesk3D() {
         <mesh
           position={[0, 0.0155, -MANUAL_BASE_H / 2 - 0.009]}
           rotation={[-Math.PI / 2, 0, 0]}
+          raycast={NOOP_RAYCAST}
           renderOrder={3}
         >
           <planeGeometry args={[0.185, 0.016]} />
@@ -6809,10 +6901,15 @@ export function InspectorDesk3D() {
           playSwitchClank(false)
         }}
       >
+        {/* Single clean invisible hitbox for APPROVED Ink Pad Dock */}
+        <mesh position={[0, 0.02, -0.01]}>
+          <boxGeometry args={[0.2, 0.09, 0.15]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
         {deskPropNodes.inkPadApprove && (
           <primitive object={deskPropNodes.inkPadApprove} />
         )}
-        <mesh castShadow receiveShadow>
+        <mesh raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.19, 0.014, 0.13]} />
           <meshStandardMaterial
             color="#2a362b"
@@ -6824,7 +6921,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Brass-Trimmed Magnetic Cradle Rim (Raised above GLB tin so it is 100% visible) */}
-        <mesh position={[0, 0.015, 0]} receiveShadow>
+        <mesh position={[0, 0.015, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.178, 0.006, 0.118]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -6835,7 +6932,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Unmistakable Emerald-Green Felt Ink Pad Socket */}
-        <mesh position={[0, 0.018, 0]} receiveShadow>
+        <mesh position={[0, 0.018, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.162, 0.005, 0.102]} />
           <meshStandardMaterial
             color="#249e44"
@@ -6846,7 +6943,7 @@ export function InspectorDesk3D() {
         </mesh>
         {/* Hinged Metal Clamshell Lid Propped Open at 105° with ОДОБРЕНО Plaque */}
         <group position={[0, 0.014, -0.064]} rotation={[-1.83, 0, 0]}>
-          <mesh position={[0, 0, 0.062]} castShadow>
+          <mesh position={[0, 0, 0.062]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.188, 0.006, 0.124]} />
             <meshStandardMaterial
               color="#3e4d40"
@@ -6859,6 +6956,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, -0.005, 0.062]}
             rotation={[Math.PI / 2, 0, 0]}
+            raycast={NOOP_RAYCAST}
           >
             <planeGeometry args={[0.156, 0.052]} />
             <meshStandardMaterial
@@ -6885,10 +6983,15 @@ export function InspectorDesk3D() {
           playSwitchClank(false)
         }}
       >
+        {/* Single clean invisible hitbox for SHREDDED Ink Pad Dock */}
+        <mesh position={[0, 0.02, -0.01]}>
+          <boxGeometry args={[0.2, 0.09, 0.15]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
         {deskPropNodes.inkPadShred && (
           <primitive object={deskPropNodes.inkPadShred} />
         )}
-        <mesh castShadow receiveShadow>
+        <mesh raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.19, 0.014, 0.13]} />
           <meshStandardMaterial
             color="#2b1a12"
@@ -6900,7 +7003,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Brass-Trimmed Magnetic Cradle Rim (Raised above GLB tin so it is 100% visible) */}
-        <mesh position={[0, 0.015, 0]} receiveShadow>
+        <mesh position={[0, 0.015, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.178, 0.006, 0.118]} />
           <meshStandardMaterial
             color="#8c7a4b"
@@ -6911,7 +7014,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Unmistakable Crimson-Red Felt Ink Pad Socket */}
-        <mesh position={[0, 0.018, 0]} receiveShadow>
+        <mesh position={[0, 0.018, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.162, 0.005, 0.102]} />
           <meshStandardMaterial
             color="#c92828"
@@ -6922,7 +7025,7 @@ export function InspectorDesk3D() {
         </mesh>
         {/* Hinged Metal Clamshell Lid Propped Open at 105° with УНИЧТОЖЕНО Plaque */}
         <group position={[0, 0.014, -0.064]} rotation={[-1.83, 0, 0]}>
-          <mesh position={[0, 0, 0.062]} castShadow>
+          <mesh position={[0, 0, 0.062]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.188, 0.006, 0.124]} />
             <meshStandardMaterial
               color="#472b1e"
@@ -6935,6 +7038,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, -0.005, 0.062]}
             rotation={[Math.PI / 2, 0, 0]}
+            raycast={NOOP_RAYCAST}
           >
             <planeGeometry args={[0.156, 0.052]} />
             <meshStandardMaterial
@@ -6964,7 +7068,7 @@ export function InspectorDesk3D() {
           {deskPropNodes.stampBodyApprove && (
             <primitive object={deskPropNodes.stampBodyApprove} />
           )}
-          <mesh position={[0, 0.016, 0]} castShadow receiveShadow>
+          <mesh position={[0, 0.016, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.145, 0.032, 0.09]} />
             <meshStandardMaterial
               color="#233628"
@@ -6976,13 +7080,14 @@ export function InspectorDesk3D() {
             />
           </mesh>
           {/* Rubber Ink Die Pad Underneath */}
-          <mesh position={[0, 0.002, 0]} castShadow>
+          <mesh position={[0, 0.002, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.136, 0.006, 0.08]} />
             <meshStandardMaterial color="#1b6e32" roughness={0.92} />
           </mesh>
           <mesh
             position={[0, 0.034, 0.022]}
             rotation={[-Math.PI / 2 + 0.35, 0, 0]}
+            raycast={NOOP_RAYCAST}
           >
             <planeGeometry args={[0.132, 0.042]} />
             <meshStandardMaterial map={approveBadgeTex} roughness={0.6} />
@@ -6994,7 +7099,7 @@ export function InspectorDesk3D() {
             <primitive object={deskPropNodes.stampPlungerApprove} />
           )}
           {/* Knurled Brass Ferrule */}
-          <mesh position={[0, 0.044, 0]} castShadow>
+          <mesh position={[0, 0.044, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.026, 0.03, 0.024, 14]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -7004,7 +7109,7 @@ export function InspectorDesk3D() {
               bumpScale={0.005}
             />
           </mesh>
-          <mesh position={[0, 0.072, 0]} castShadow>
+          <mesh position={[0, 0.072, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.02, 0.025, 0.04, 12]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -7018,7 +7123,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, 0.094, 0]}
             rotation={[Math.PI / 2, 0, 0]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <torusGeometry args={[0.026, 0.006, 8, 14]} />
             <meshStandardMaterial
@@ -7032,7 +7137,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, 0.128, 0]}
             scale={[0.92, 1.32, 0.92]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <sphereGeometry args={[0.04, 16, 16]} />
             <meshStandardMaterial
@@ -7065,7 +7170,7 @@ export function InspectorDesk3D() {
           {deskPropNodes.stampBodyShred && (
             <primitive object={deskPropNodes.stampBodyShred} />
           )}
-          <mesh position={[0, 0.016, 0]} castShadow receiveShadow>
+          <mesh position={[0, 0.016, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.145, 0.032, 0.09]} />
             <meshStandardMaterial
               color="#3b201c"
@@ -7077,13 +7182,14 @@ export function InspectorDesk3D() {
             />
           </mesh>
           {/* Rubber Ink Die Pad Underneath */}
-          <mesh position={[0, 0.002, 0]} castShadow>
+          <mesh position={[0, 0.002, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.136, 0.006, 0.08]} />
             <meshStandardMaterial color="#8b1e1e" roughness={0.92} />
           </mesh>
           <mesh
             position={[0, 0.034, 0.022]}
             rotation={[-Math.PI / 2 + 0.35, 0, 0]}
+            raycast={NOOP_RAYCAST}
           >
             <planeGeometry args={[0.132, 0.042]} />
             <meshStandardMaterial map={shredBadgeTex} roughness={0.6} />
@@ -7095,7 +7201,7 @@ export function InspectorDesk3D() {
             <primitive object={deskPropNodes.stampPlungerShred} />
           )}
           {/* Knurled Brass Ferrule */}
-          <mesh position={[0, 0.044, 0]} castShadow>
+          <mesh position={[0, 0.044, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.026, 0.03, 0.024, 14]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -7105,7 +7211,7 @@ export function InspectorDesk3D() {
               bumpScale={0.005}
             />
           </mesh>
-          <mesh position={[0, 0.072, 0]} castShadow>
+          <mesh position={[0, 0.072, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.02, 0.025, 0.04, 12]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -7119,7 +7225,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, 0.094, 0]}
             rotation={[Math.PI / 2, 0, 0]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <torusGeometry args={[0.026, 0.006, 8, 14]} />
             <meshStandardMaterial
@@ -7133,7 +7239,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, 0.128, 0]}
             scale={[0.92, 1.32, 0.92]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <sphereGeometry args={[0.04, 16, 16]} />
             <meshStandardMaterial
@@ -7160,7 +7266,7 @@ export function InspectorDesk3D() {
       >
         <primitive object={shredderModel} />
         {/* Main Cast-Iron Shredder Body */}
-        <mesh position={[-0.03, 0.02, 0]} castShadow receiveShadow>
+        <mesh position={[-0.03, 0.02, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.38, 0.16, 0.3]} />
           <meshStandardMaterial
             color="#2a362b"
@@ -7172,7 +7278,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
         {/* Heavy Bolted Cast-Iron Side Flanges & Corner L-Angle Trim */}
-        <mesh position={[-0.228, 0.02, 0]} castShadow receiveShadow>
+        <mesh position={[-0.228, 0.02, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.024, 0.17, 0.32]} />
           <meshStandardMaterial
             color="#18211b"
@@ -7183,7 +7289,7 @@ export function InspectorDesk3D() {
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        <mesh position={[0.162, 0.02, 0]} castShadow receiveShadow>
+        <mesh position={[0.162, 0.02, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.022, 0.17, 0.32]} />
           <meshStandardMaterial
             color="#18211b"
@@ -7197,7 +7303,7 @@ export function InspectorDesk3D() {
         {/* 8 Heavy Brass 3D Hex-Head Bolts along Top Flanges */}
         {[-0.12, -0.04, 0.04, 0.12].map((bz, bIdx) => (
           <group key={bIdx}>
-            <mesh position={[-0.228, 0.11, bz]} castShadow>
+            <mesh position={[-0.228, 0.11, bz]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.009, 0.009, 0.01, 6]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -7207,7 +7313,7 @@ export function InspectorDesk3D() {
                 bumpScale={0.005}
               />
             </mesh>
-            <mesh position={[0.162, 0.11, bz]} castShadow>
+            <mesh position={[0.162, 0.11, bz]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.009, 0.009, 0.01, 6]} />
               <meshStandardMaterial
                 color="#b8a46b"
@@ -7220,7 +7326,7 @@ export function InspectorDesk3D() {
           </group>
         ))}
         {/* Perforated Metal / Wire-Frame ОТХОДЫ Waste Bin Underneath */}
-        <mesh position={[-0.03, -0.055, 0.04]} castShadow receiveShadow>
+        <mesh position={[-0.03, -0.055, 0.04]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.34, 0.04, 0.24]} />
           <meshStandardMaterial
             color="#0d110f"
@@ -7232,13 +7338,14 @@ export function InspectorDesk3D() {
         </mesh>
 
         {/* Throat Opening & Yellow/Black ОПАСНО // НОЖИ Hazard Chevron Decal */}
-        <mesh position={[-0.03, 0.102, -0.02]}>
+        <mesh position={[-0.03, 0.102, -0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.3, 0.012, 0.065]} />
           <meshStandardMaterial color="#0d110f" roughness={0.92} />
         </mesh>
         <mesh
           position={[-0.03, 0.103, 0.058]}
           rotation={[-Math.PI / 2, 0, 0]}
+          raycast={NOOP_RAYCAST}
         >
           <planeGeometry args={[0.3, 0.048]} />
           <meshStandardMaterial map={hazardChevronTex} roughness={0.5} />
@@ -7247,7 +7354,7 @@ export function InspectorDesk3D() {
         {/* 9 Interlocking Milled Steel Cutting Wheels inside the Throat */}
         {Array.from({ length: 9 }).map((_, i) => (
           <group key={i} position={[-0.15 + i * 0.03, 0.104, -0.02]}>
-            <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+            <mesh rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.015, 0.015, 0.012, 10]} />
               <meshStandardMaterial
                 color="#778472"
@@ -7258,7 +7365,7 @@ export function InspectorDesk3D() {
             <mesh
               position={[0, 0.002, (i % 2 === 0 ? 1 : -1) * 0.008]}
               rotation={[0, 0, Math.PI / 2]}
-              castShadow
+              raycast={NOOP_RAYCAST}
             >
               <cylinderGeometry args={[0.012, 0.012, 0.008, 6]} />
               <meshStandardMaterial
@@ -7280,14 +7387,14 @@ export function InspectorDesk3D() {
               rotation={[-0.58, 0, 0]}
             >
               {/* Solid 3D Paper Backing for Upright Loaded Slip */}
-              <mesh position={[0, uprightH / 2, -0.002]} castShadow>
+              <mesh position={[0, uprightH / 2, -0.002]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.23, uprightH, 0.003]} />
                 <meshStandardMaterial
                   color={PAPER_COLOR_HEX[loadedDoc.paperColor]}
                   roughness={0.88}
                 />
               </mesh>
-              <mesh position={[0, uprightH / 2, 0.001]} castShadow>
+              <mesh position={[0, uprightH / 2, 0.001]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.22, uprightH]} />
                 <meshStandardMaterial
                   ref={loadedSlipMatRef}
@@ -7303,7 +7410,7 @@ export function InspectorDesk3D() {
           )
         })()}
 
-        <mesh position={[-0.03, 0.025, 0.152]}>
+        <mesh position={[-0.03, 0.025, 0.152]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.32, 0.11]} />
           <meshStandardMaterial
             ref={shredPlateMatRef}
@@ -7312,36 +7419,23 @@ export function InspectorDesk3D() {
           />
         </mesh>
 
-        <mesh position={[-0.03, -0.055, 0.155]}>
+        <mesh position={[-0.03, -0.055, 0.155]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.32, 0.028, 0.04]} />
           <meshStandardMaterial color="#0d110f" roughness={0.9} />
         </mesh>
-        {stripSource &&
-          Array.from({ length: 15 }).map((_, i) => {
-            const h =
-              0.015 +
-              (stripSource.progress / 100) *
-                0.065 *
-                STRIP_VARIANCE[i % STRIP_VARIANCE.length]
-            return (
-              <mesh
-                key={i}
-                position={[-0.16 + i * 0.019, -0.03 - h / 2, 0.148]}
-              >
-                <boxGeometry args={[0.012, h, 0.004]} />
-                <meshStandardMaterial
-                  color={i % 3 === 0 ? stripSource.inkHex : stripSource.paperHex}
-                  roughness={0.88}
-                />
-              </mesh>
-            )
-          })}
+        <instancedMesh
+          ref={shredStripsInstRef}
+          args={[undefined, undefined, 15]}
+          visible={stripSource !== null}
+          raycast={NOOP_RAYCAST}
+        >
+          <boxGeometry args={[0.012, 1, 0.004]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.88} />
+        </instancedMesh>
 
         {/* Right-Flank Brass Ratchet Gearbox & 5-Detent Slot */}
         <mesh
           position={[0.215, 0.035, 0]}
-          castShadow
-          receiveShadow
           onPointerDown={handleShredLeverDown}
           onPointerMove={handleShredLeverMove}
           onPointerUp={handleShredLeverUp}
@@ -7357,7 +7451,7 @@ export function InspectorDesk3D() {
             roughnessMap={brassTex.roughnessMap}
           />
         </mesh>
-        <mesh position={[0.215, 0.115, 0]}>
+        <mesh position={[0.215, 0.115, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.026, 0.01, 0.21]} />
           <meshStandardMaterial color="#0d110f" roughness={0.95} />
         </mesh>
@@ -7372,8 +7466,13 @@ export function InspectorDesk3D() {
           onPointerUp={handleShredLeverUp}
           onPointerCancel={handleShredLeverUp}
         >
+          {/* Single clean invisible hitbox for 5-step shredder lever */}
+          <mesh position={[0, 0.09, 0]}>
+            <boxGeometry args={[0.13, 0.22, 0.13]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
           {/* Thick Chrome-Steel Lever Shaft */}
-          <mesh position={[0, 0.055, 0]} castShadow>
+          <mesh position={[0, 0.055, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.014, 0.016, 0.13, 10]} />
             <meshStandardMaterial
               color="#c8d2c5"
@@ -7382,7 +7481,7 @@ export function InspectorDesk3D() {
             />
           </mesh>
           {/* Prominent Crimson-Red Bakelite Ball Knob (`#b82a24`) */}
-          <mesh position={[0, 0.13, 0]} castShadow>
+          <mesh position={[0, 0.13, 0]} raycast={NOOP_RAYCAST}>
             <sphereGeometry args={[0.052, 16, 16]} />
             <meshStandardMaterial
               ref={shredLeverKnobMatRef}
@@ -7397,7 +7496,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, 0.13, 0]}
             rotation={[Math.PI / 2, 0, 0]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <torusGeometry args={[0.053, 0.006, 8, 16]} />
             <meshStandardMaterial
@@ -7424,8 +7523,14 @@ export function InspectorDesk3D() {
         onPointerUp={handleLensPointerUp}
         onPointerCancel={handleLensPointerUp}
       >
+        {/* Clean 2-part invisible raycast hitboxes (bezel ring + walnut handle) */}
+        <mesh>
+          <cylinderGeometry args={[0.176, 0.176, 0.034, 18]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+
         {/* 1. Stepped Machined Aged-Brass Outer Bezel & Gunmetal Retaining Lip */}
-        <mesh geometry={magnifierGeometries.bezelLathe} castShadow receiveShadow>
+        <mesh geometry={magnifierGeometries.bezelLathe} raycast={NOOP_RAYCAST}>
           <meshStandardMaterial
             color="#a89055"
             roughness={0.3}
@@ -7435,7 +7540,7 @@ export function InspectorDesk3D() {
             roughnessMap={brassTex.roughnessMap}
           />
         </mesh>
-        <mesh geometry={magnifierGeometries.retainerLathe} receiveShadow>
+        <mesh geometry={magnifierGeometries.retainerLathe} raycast={NOOP_RAYCAST}>
           <meshStandardMaterial
             color="#232a27"
             roughness={0.36}
@@ -7450,6 +7555,7 @@ export function InspectorDesk3D() {
             key={`spanner-${idx}`}
             position={[Math.cos(a) * 0.1482, 0.0146, Math.sin(a) * 0.1482]}
             rotation={[0, -a, 0]}
+            raycast={NOOP_RAYCAST}
           >
             <boxGeometry args={[0.005, 0.0018, 0.008]} />
             <meshStandardMaterial
@@ -7463,7 +7569,7 @@ export function InspectorDesk3D() {
           <mesh
             key={`rim-screw-${idx}`}
             position={[Math.cos(a) * 0.163, 0.018, Math.sin(a) * 0.163]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <cylinderGeometry args={[0.0038, 0.0038, 0.0026, 8]} />
             <meshStandardMaterial
@@ -7481,7 +7587,7 @@ export function InspectorDesk3D() {
           position={[Math.cos(-2.26) * 0.178, 0.002, Math.sin(-2.26) * 0.178]}
           rotation={[0, 2.26, 0]}
         >
-          <mesh position={[0, 0.0062, 0]} castShadow receiveShadow>
+          <mesh position={[0, 0.0062, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.022, 0.008, 0.022]} />
             <meshStandardMaterial
               color="#9e874e"
@@ -7491,7 +7597,7 @@ export function InspectorDesk3D() {
               bumpScale={0.005}
             />
           </mesh>
-          <mesh position={[0, -0.0062, 0]} castShadow receiveShadow>
+          <mesh position={[0, -0.0062, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.022, 0.008, 0.022]} />
             <meshStandardMaterial
               color="#9e874e"
@@ -7501,7 +7607,7 @@ export function InspectorDesk3D() {
               bumpScale={0.005}
             />
           </mesh>
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.0034, 0.0034, 0.028, 10]} />
             <meshStandardMaterial
               color="#7d6a3c"
@@ -7512,7 +7618,7 @@ export function InspectorDesk3D() {
           <mesh
             position={[0, 0, 0.0135]}
             rotation={[Math.PI / 2, 0, 0]}
-            castShadow
+            raycast={NOOP_RAYCAST}
           >
             <cylinderGeometry args={[0.0068, 0.0068, 0.005, 12]} />
             <meshStandardMaterial
@@ -7523,11 +7629,11 @@ export function InspectorDesk3D() {
               bumpScale={0.004}
             />
           </mesh>
-          <mesh position={[0, 0, 0.0162]}>
+          <mesh position={[0, 0, 0.0162]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.0115, 0.002, 0.0018]} />
             <meshStandardMaterial color="#111513" roughness={0.7} />
           </mesh>
-          <mesh position={[0, 0, -0.0135]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh position={[0, 0, -0.0135]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.0058, 0.0058, 0.0042, 6]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -7538,7 +7644,7 @@ export function InspectorDesk3D() {
         </group>
 
         {/* 3. Unobstructed 2x Optical Lens + Razor-Thin Peripheral Glass Edge Chamfer Glint */}
-        <mesh position={[0, 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 0.008, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
           <circleGeometry args={[0.145, 48]} />
           <meshBasicMaterial
             ref={lensMatRef}
@@ -7550,7 +7656,7 @@ export function InspectorDesk3D() {
             polygonOffsetUnits={-4}
           />
         </mesh>
-        <mesh position={[0, 0.0086, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 0.0086, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
           <ringGeometry args={[0.1398, 0.1445, 48]} />
           <meshBasicMaterial
             color="#7ef5d8"
@@ -7560,7 +7666,7 @@ export function InspectorDesk3D() {
             toneMapped={false}
           />
         </mesh>
-        <mesh position={[0, 0.0088, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 0.0088, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
           <ringGeometry
             args={[0.1408, 0.1438, 24, 1, Math.PI * 0.62, Math.PI * 0.52]}
           />
@@ -7578,8 +7684,12 @@ export function InspectorDesk3D() {
           position={[0.12021, 0.001, 0.12021]}
           rotation={[Math.PI / 2, 0, -Math.PI / 4]}
         >
+          <mesh position={[0, 0.095, 0]}>
+            <cylinderGeometry args={[0.026, 0.026, 0.195, 8]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
           {/* Bezel Saddle Flange & 6-Sided Hexagonal Mounting Boss */}
-          <mesh position={[0, 0.001, 0]} castShadow receiveShadow>
+          <mesh position={[0, 0.001, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.017, 0.0205, 0.007, 12]} />
             <meshStandardMaterial
               color="#9e874e"
@@ -7590,7 +7700,7 @@ export function InspectorDesk3D() {
               roughnessMap={brassTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[0, 0.0095, 0]} castShadow receiveShadow>
+          <mesh position={[0, 0.0095, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.0152, 0.0162, 0.011, 6]} />
             <meshStandardMaterial
               color="#b8a46b"
@@ -7603,7 +7713,7 @@ export function InspectorDesk3D() {
           </mesh>
 
           {/* Stepped Brass Ferrule Collar & Dark Knurled Collar Band */}
-          <mesh geometry={magnifierGeometries.ferruleLathe} castShadow receiveShadow>
+          <mesh geometry={magnifierGeometries.ferruleLathe} raycast={NOOP_RAYCAST}>
             <meshStandardMaterial
               color="#b8a46b"
               roughness={0.28}
@@ -7613,7 +7723,7 @@ export function InspectorDesk3D() {
               roughnessMap={brassTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[0, 0.03, 0]} castShadow receiveShadow>
+          <mesh position={[0, 0.03, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.0176, 0.0176, 0.0048, 20]} />
             <meshStandardMaterial
               color="#7d6a3c"
@@ -7625,7 +7735,7 @@ export function InspectorDesk3D() {
           </mesh>
 
           {/* Contoured Lathe-Turned Walnut Handle & Inlaid Brass Neck Accent Ring */}
-          <mesh geometry={magnifierGeometries.handleLathe} castShadow receiveShadow>
+          <mesh geometry={magnifierGeometries.handleLathe} raycast={NOOP_RAYCAST}>
             <meshStandardMaterial
               color="#663922"
               map={mahoganyTex.map}
@@ -7636,7 +7746,7 @@ export function InspectorDesk3D() {
               metalness={0.1}
             />
           </mesh>
-          <mesh position={[0, 0.066, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh position={[0, 0.066, 0]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <torusGeometry args={[0.0178, 0.001, 8, 24]} />
             <meshStandardMaterial
               color="#d4be7f"
@@ -7646,7 +7756,7 @@ export function InspectorDesk3D() {
           </mesh>
 
           {/* Knurled Brass Pommel Trim Ring, Turned End-Cap Bolster & Lanyard Eyelet */}
-          <mesh position={[0, 0.157, 0]} castShadow receiveShadow>
+          <mesh position={[0, 0.157, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.021, 0.021, 0.0045, 24]} />
             <meshStandardMaterial
               color="#8c7a4b"
@@ -7656,7 +7766,7 @@ export function InspectorDesk3D() {
               bumpScale={0.006}
             />
           </mesh>
-          <mesh geometry={magnifierGeometries.pommelLathe} castShadow receiveShadow>
+          <mesh geometry={magnifierGeometries.pommelLathe} raycast={NOOP_RAYCAST}>
             <meshStandardMaterial
               color="#b8a46b"
               roughness={0.28}
@@ -7666,7 +7776,7 @@ export function InspectorDesk3D() {
               roughnessMap={brassTex.roughnessMap}
             />
           </mesh>
-          <mesh position={[0, 0.1815, 0]} castShadow>
+          <mesh position={[0, 0.1815, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.0048, 0.0062, 0.006, 10]} />
             <meshStandardMaterial
               color="#9e874e"
@@ -7676,7 +7786,7 @@ export function InspectorDesk3D() {
               bumpScale={0.004}
             />
           </mesh>
-          <mesh position={[0, 0.19, 0]} rotation={[0.22, 0, 0]} castShadow>
+          <mesh position={[0, 0.19, 0]} rotation={[0.22, 0, 0]} raycast={NOOP_RAYCAST}>
             <torusGeometry args={[0.0092, 0.0023, 8, 18]} />
             <meshStandardMaterial
               color="#d4be7f"
