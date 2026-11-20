@@ -43,109 +43,271 @@ interface RadioSingletonWindow extends Window {
 type RadioProgramPhase = "song" | "chime" | "announcement";
 
 interface BroadcastSubtitleCue {
-  startRatio: number;
-  endRatio: number;
+  start: number;
+  end: number;
   text: string;
 }
 
+type BroadcastAnnouncementId =
+  | "govorit_moskva"
+  | "01_morning_announcement"
+  | "02_inspection_notice"
+  | "03_ai_everything_is_fine"
+  | "04_production_quota"
+  | "05_safety_test"
+  | "06_evening_signoff";
+
 interface RadioAnnouncementSpec {
-  id: string;
+  id: BroadcastAnnouncementId;
   audioSrc: string;
-  cues: readonly BroadcastSubtitleCue[];
 }
 
 const GOVORIT_MOSKVA_SRC = "/audio/radio/broadcast/govorit_moskva.wav";
 
-const GOVORIT_MOSKVA_CUES: readonly BroadcastSubtitleCue[] = [
-  { startRatio: 0.0, endRatio: 0.42, text: "ALL-UNION RADIO INTERVAL SIGNAL" },
-  { startRatio: 0.42, endRatio: 0.66, text: "ATTENTION! MOSCOW SPEAKING!" },
-  { startRatio: 0.66, endRatio: 1.0, text: "SECTOR 84 STATE BROADCAST RELAY" },
-];
+/**
+ * Exact waveform-measured subtitle cues (in seconds against `audio.currentTime`).
+ * Static intros (0.0–1.6s) and trailing static tails have no matching cue so the
+ * HUD subtitle box hides cleanly whenever nobody is speaking.
+ */
+const SUBTITLE_CUES: Record<
+  BroadcastAnnouncementId,
+  readonly BroadcastSubtitleCue[]
+> = {
+  govorit_moskva: [
+    { start: 2.0, end: 15.0, text: "[ ALL-UNION RADIO CHIME ]" },
+    { start: 15.1, end: 18.2, text: "ATTENTION! MOSCOW SPEAKING!" },
+    {
+      start: 18.9,
+      end: 22.3,
+      text: "ALL RADIO STATIONS OF THE SOVIET UNION ARE BROADCASTING.",
+    },
+    { start: 23.1, end: 28.8, text: "[ SIX TIME-SIGNAL PIPS ]" },
+    { start: 29.3, end: 31.7, text: "MOSCOW STATE TIME SIGNAL." },
+  ],
+  "01_morning_announcement": [
+    { start: 1.6, end: 7.2, text: "[ SOVIET RADIO CHIME ]" },
+    { start: 7.3, end: 10.5, text: "ATTENTION! SECTOR EIGHTY-FOUR SPEAKING." },
+    { start: 10.9, end: 12.3, text: "GOOD MORNING, COMRADES." },
+    {
+      start: 12.6,
+      end: 16.3,
+      text: "THE WEATHER IS SUNNY, WITH LIGHT GLOW IN THE EVENING.",
+    },
+    {
+      start: 16.8,
+      end: 22.5,
+      text: "THE REACTOR IS RUNNING AT FULL POWER. IT IS ALWAYS RUNNING AT FULL POWER.",
+    },
+    {
+      start: 22.8,
+      end: 30.2,
+      text: "BREAKFAST IN CANTEEN: POTATO. LUNCH: ALSO POTATO. DINNER: POTATO, BUT WARM.",
+    },
+    { start: 30.5, end: 36.3, text: "[ SIX TIME-SIGNAL PIPS ]" },
+    {
+      start: 36.6,
+      end: 41.9,
+      text: "SECTOR EIGHTY-FOUR TIME: SIX HOURS. GLORY TO SECTOR EIGHTY-FOUR!",
+    },
+  ],
+  "02_inspection_notice": [
+    { start: 1.6, end: 4.9, text: "[ SOVIET RADIO CHIME ]" },
+    { start: 5.0, end: 8.2, text: "ATTENTION, COMRADES! IMPORTANT NOTICE." },
+    {
+      start: 8.5,
+      end: 12.6,
+      text: "TODAY, SENIOR INSPECTOR COMRADE OLEG WILL INSPECT ALL WORKPLACES.",
+    },
+    {
+      start: 13.1,
+      end: 17.6,
+      text: "THIS IS SENIOR INSPECTOR OLEG. I HAVE CHECKED THE REACTOR.",
+    },
+    { start: 18.2, end: 21.5, text: "THE REACTOR IS STILL THERE. VERY GOOD." },
+    {
+      start: 21.7,
+      end: 26.4,
+      text: "I HAVE ALSO CHECKED THE CANTEEN. THE POTATOES ARE NOT COOKED.",
+    },
+    { start: 27.2, end: 29.0, text: "THIS IS VERY SERIOUS PROBLEM." },
+    {
+      start: 29.4,
+      end: 34.2,
+      text: "REMINDER: DOSIMETER WHICH SHOWS BIG NUMBER IS BROKEN DOSIMETER.",
+    },
+    {
+      start: 34.8,
+      end: 38.1,
+      text: "PLEASE EXCHANGE IT FOR DOSIMETER WHICH SHOWS SMALL NUMBER.",
+    },
+    { start: 38.4, end: 40.0, text: "THANK YOU FOR COOPERATION." },
+  ],
+  "03_ai_everything_is_fine": [
+    { start: 1.6, end: 2.3, text: "[ DIGITAL GLITCH ]" },
+    {
+      start: 2.4,
+      end: 8.3,
+      text: "ATTENTION! THE SUPER ADVANCED KOMRAD EIGHTY-FOUR A.I. HAS AN IMPORTANT MESSAGE.",
+    },
+    {
+      start: 8.8,
+      end: 13.2,
+      text: "I AM KOMRAD EIGHTY-FOUR. I AM ONE THOUSAND PERCENT RELIABLE.",
+    },
+    {
+      start: 13.5,
+      end: 19.3,
+      text: "ALL SYSTEMS ARE NORMAL. THE REACTOR TEMPERATURE IS... ERROR. IT IS... VERY NICE.",
+    },
+    { start: 19.7, end: 20.5, text: "[ DIGITAL GLITCH ]" },
+    {
+      start: 20.6,
+      end: 28.1,
+      text: "DANGER LEVEL IS: THREE. POINT. BANANA. I HAVE MADE THE NUMBER SMALL.",
+    },
+    { start: 28.4, end: 30.9, text: "[ ALARM KLAXON ]" },
+    {
+      start: 31.6,
+      end: 33.3,
+      text: "RECOMMENDATION: PLEASE PRESS THE BIG RED BUTTON.",
+    },
+    {
+      start: 33.9,
+      end: 38.5,
+      text: "CORRECTION: DO NOT PRESS THE BIG RED BUTTON. REBOOTING.",
+    },
+    {
+      start: 38.8,
+      end: 42.8,
+      text: "EVERYTHING IS FINE. GLORY TO SECTOR EIGHTY-FOUR.",
+    },
+  ],
+  "04_production_quota": [
+    { start: 1.6, end: 4.9, text: "[ SOVIET RADIO CHIME ]" },
+    { start: 5.0, end: 8.0, text: "ATTENTION, COMRADES! PRODUCTION REPORT." },
+    {
+      start: 8.3,
+      end: 13.1,
+      text: "THIS MONTH, WE HAVE PRODUCED ONE HUNDRED TWELVE PERCENT OF ELECTRICITY QUOTA.",
+    },
+    {
+      start: 13.7,
+      end: 16.6,
+      text: "NEXT MONTH, QUOTA IS ONE HUNDRED FIFTY PERCENT.",
+    },
+    {
+      start: 17.0,
+      end: 22.5,
+      text: "CHIEF ENGINEER KRISTIANOV HERE. FOR THE QUOTA, WE WILL REMOVE SOME PARTS FROM THE REACTOR.",
+    },
+    { start: 23.1, end: 24.9, text: "FOR EXAMPLE: THE BRAKES." },
+    {
+      start: 25.2,
+      end: 27.8,
+      text: "EMPLOYEE OF THE MONTH IS COMRADE KRISTIANOV!",
+    },
+    {
+      start: 28.4,
+      end: 33.4,
+      text: "HIS PRIZE: ONE EXTRA POTATO. AND A SECOND DOSIMETER.",
+    },
+    {
+      start: 33.8,
+      end: 38.0,
+      text: "THANK YOU. I WILL USE SECOND DOSIMETER TO CHECK FIRST DOSIMETER.",
+    },
+  ],
+  "05_safety_test": [
+    { start: 1.6, end: 4.9, text: "[ SOVIET RADIO CHIME ]" },
+    {
+      start: 5.0,
+      end: 10.4,
+      text: "ATTENTION! TONIGHT AT ONE O'CLOCK, THERE WILL BE SMALL SAFETY TEST OF TURBINE.",
+    },
+    { start: 11.1, end: 12.6, text: "TEST IS COMPLETELY SAFE." },
+    {
+      start: 13.0,
+      end: 18.9,
+      text: "DO NOT WORRY, COMRADES. I HAVE DONE THIS TEST MANY TIMES. ONLY IN MY HEAD.",
+    },
+    { start: 19.2, end: 19.8, text: "[ DIGITAL GLITCH ]" },
+    {
+      start: 20.0,
+      end: 22.9,
+      text: "PROBABILITY OF SUCCESS: NINETY-NINE PERCENT.",
+    },
+    {
+      start: 23.6,
+      end: 28.2,
+      text: "CORRECTION: NINE PERCENT. THE DECIMAL POINT IS LOST.",
+    },
+    {
+      start: 28.8,
+      end: 34.4,
+      text: "DURING TEST, PLEASE STAY CALM, AND KEEP YOUR BOOTS ON. THANK YOU FOR COOPERATION.",
+    },
+    { start: 34.9, end: 40.6, text: "[ SIX TIME-SIGNAL PIPS ]" },
+  ],
+  "06_evening_signoff": [
+    {
+      start: 1.6,
+      end: 4.9,
+      text: "SECTOR EIGHTY-FOUR IS ENDING BROADCAST FOR TODAY.",
+    },
+    {
+      start: 5.3,
+      end: 8.9,
+      text: "INSPECTOR OLEG SAYS: LIGHTS OUT AT TWENTY-TWO HOURS.",
+    },
+    {
+      start: 9.5,
+      end: 13.5,
+      text: "THE GLOW FROM THE REACTOR DOES NOT COUNT.",
+    },
+    {
+      start: 14.2,
+      end: 19.0,
+      text: "GOOD NIGHT, COMRADES. SLEEP WELL. I WILL BE WATCHING YOU. FOR INSPECTION.",
+    },
+    {
+      start: 19.4,
+      end: 25.4,
+      text: "GOOD NIGHT. I DO NOT SLEEP. I NEVER SLEEP. I AM COUNTING NEUTRONS.",
+    },
+    { start: 26.4, end: 29.3, text: "ONE. TWO. MANY." },
+    {
+      start: 29.8,
+      end: 36.1,
+      text: "GLORY TO SECTOR EIGHTY-FOUR. GLORY TO THE R B M K. GOOD NIGHT.",
+    },
+    { start: 36.6, end: 42.6, text: "[ SOVIET RADIO CHIME ]" },
+  ],
+};
 
 const RADIO_ANNOUNCEMENTS: readonly RadioAnnouncementSpec[] = [
   {
     id: "01_morning_announcement",
     audioSrc: "/audio/radio/broadcast/01_morning_announcement.ogg",
-    cues: [
-      { startRatio: 0.0, endRatio: 0.07, text: "SECTOR 84 RADIO - INTERVAL SIGNAL" },
-      { startRatio: 0.07, endRatio: 0.17, text: "ANNOUNCER: ATTENTION! SECTOR EIGHTY-FOUR SPEAKING." },
-      { startRatio: 0.17, endRatio: 0.25, text: "ANNOUNCER: GOOD MORNING, COMRADES." },
-      { startRatio: 0.25, endRatio: 0.38, text: "THE WEATHER IS SUNNY, WITH LIGHT GLOW IN THE EVENING." },
-      { startRatio: 0.38, endRatio: 0.56, text: "THE REACTOR IS RUNNING AT FULL POWER. IT IS ALWAYS RUNNING AT FULL POWER." },
-      { startRatio: 0.56, endRatio: 0.76, text: "BREAKFAST IN CANTEEN: POTATO. LUNCH: ALSO POTATO. DINNER: POTATO, BUT WARM." },
-      { startRatio: 0.76, endRatio: 0.86, text: "SIX TIME-SIGNAL PIPS..." },
-      { startRatio: 0.86, endRatio: 1.0, text: "SECTOR EIGHTY-FOUR TIME: SIX HOURS. GLORY TO SECTOR EIGHTY-FOUR!" },
-    ],
   },
   {
     id: "02_inspection_notice",
     audioSrc: "/audio/radio/broadcast/02_inspection_notice.ogg",
-    cues: [
-      { startRatio: 0.0, endRatio: 0.07, text: "SECTOR 84 RADIO - INTERVAL SIGNAL" },
-      { startRatio: 0.07, endRatio: 0.18, text: "ANNOUNCER: ATTENTION, COMRADES! IMPORTANT NOTICE." },
-      { startRatio: 0.18, endRatio: 0.32, text: "TODAY, SENIOR INSPECTOR COMRADE OLEG WILL INSPECT ALL WORKPLACES." },
-      { startRatio: 0.32, endRatio: 0.44, text: "INSPECTOR OLEG: THIS IS SENIOR INSPECTOR OLEG. I HAVE CHECKED THE REACTOR." },
-      { startRatio: 0.44, endRatio: 0.53, text: "INSPECTOR OLEG: THE REACTOR IS STILL THERE. VERY GOOD." },
-      { startRatio: 0.53, endRatio: 0.65, text: "INSPECTOR OLEG: I HAVE ALSO CHECKED THE CANTEEN. THE POTATOES ARE NOT COOKED." },
-      { startRatio: 0.65, endRatio: 0.73, text: "INSPECTOR OLEG: THIS IS VERY SERIOUS PROBLEM." },
-      { startRatio: 0.73, endRatio: 0.83, text: "REMINDER: DOSIMETER WHICH SHOWS BIG NUMBER IS BROKEN DOSIMETER." },
-      { startRatio: 0.83, endRatio: 0.93, text: "PLEASE EXCHANGE IT FOR DOSIMETER WHICH SHOWS SMALL NUMBER." },
-      { startRatio: 0.93, endRatio: 1.0, text: "ANNOUNCER: THANK YOU FOR COOPERATION." },
-    ],
   },
   {
     id: "03_ai_everything_is_fine",
     audioSrc: "/audio/radio/broadcast/03_ai_everything_is_fine.ogg",
-    cues: [
-      { startRatio: 0.0, endRatio: 0.05, text: "DIGITAL GLITCH INTERFERENCE..." },
-      { startRatio: 0.05, endRatio: 0.21, text: "ANNOUNCER: ATTENTION! THE SUPER ADVANCED KOMRAD EIGHTY-FOUR A.I. HAS AN IMPORTANT MESSAGE." },
-      { startRatio: 0.21, endRatio: 0.35, text: "KOMRAD-84 A.I.: I AM KOMRAD EIGHTY-FOUR. I AM ONE THOUSAND PERCENT RELIABLE." },
-      { startRatio: 0.35, endRatio: 0.52, text: "KOMRAD-84 A.I.: ALL SYSTEMS ARE NORMAL. THE REACTOR TEMPERATURE IS... ERROR. IT IS... VERY NICE." },
-      { startRatio: 0.52, endRatio: 0.68, text: "KOMRAD-84 A.I.: DANGER LEVEL IS: THREE. POINT. BANANA. I HAVE MADE THE NUMBER SMALL." },
-      { startRatio: 0.68, endRatio: 0.73, text: "ALARM KLAXON SOUNDING!" },
-      { startRatio: 0.73, endRatio: 0.82, text: "KOMRAD-84 A.I.: RECOMMENDATION: PLEASE PRESS THE BIG RED BUTTON." },
-      { startRatio: 0.82, endRatio: 0.91, text: "KOMRAD-84 A.I.: CORRECTION: DO NOT PRESS THE BIG RED BUTTON. REBOOTING." },
-      { startRatio: 0.91, endRatio: 1.0, text: "ANNOUNCER: EVERYTHING IS FINE. GLORY TO SECTOR EIGHTY-FOUR." },
-    ],
   },
   {
     id: "04_production_quota",
     audioSrc: "/audio/radio/broadcast/04_production_quota.ogg",
-    cues: [
-      { startRatio: 0.0, endRatio: 0.07, text: "SECTOR 84 RADIO - INTERVAL SIGNAL" },
-      { startRatio: 0.07, endRatio: 0.18, text: "ANNOUNCER: ATTENTION, COMRADES! PRODUCTION REPORT." },
-      { startRatio: 0.18, endRatio: 0.33, text: "THIS MONTH, WE HAVE PRODUCED ONE HUNDRED TWELVE PERCENT OF ELECTRICITY QUOTA." },
-      { startRatio: 0.33, endRatio: 0.44, text: "NEXT MONTH, QUOTA IS ONE HUNDRED FIFTY PERCENT." },
-      { startRatio: 0.44, endRatio: 0.58, text: "KRISTIANOV: CHIEF ENGINEER KRISTIANOV HERE. FOR THE QUOTA, WE WILL REMOVE SOME PARTS FROM THE REACTOR." },
-      { startRatio: 0.58, endRatio: 0.66, text: "KRISTIANOV: FOR EXAMPLE: THE BRAKES." },
-      { startRatio: 0.66, endRatio: 0.84, text: "ANNOUNCER: EMPLOYEE OF THE MONTH IS COMRADE KRISTIANOV! HIS PRIZE: ONE EXTRA POTATO. AND A SECOND DOSIMETER." },
-      { startRatio: 0.84, endRatio: 1.0, text: "KRISTIANOV: THANK YOU. I WILL USE SECOND DOSIMETER TO CHECK FIRST DOSIMETER." },
-    ],
   },
   {
     id: "05_safety_test",
     audioSrc: "/audio/radio/broadcast/05_safety_test.ogg",
-    cues: [
-      { startRatio: 0.0, endRatio: 0.07, text: "SECTOR 84 RADIO - INTERVAL SIGNAL" },
-      { startRatio: 0.07, endRatio: 0.27, text: "ANNOUNCER: ATTENTION! TONIGHT AT ONE O'CLOCK, THERE WILL BE SMALL SAFETY TEST OF TURBINE. TEST IS COMPLETELY SAFE." },
-      { startRatio: 0.27, endRatio: 0.46, text: "KRISTIANOV: DO NOT WORRY, COMRADES. I HAVE DONE THIS TEST MANY TIMES. ONLY IN MY HEAD." },
-      { startRatio: 0.46, endRatio: 0.61, text: "KOMRAD-84 A.I.: PROBABILITY OF SUCCESS: NINETY-NINE PERCENT." },
-      { startRatio: 0.61, endRatio: 0.75, text: "KOMRAD-84 A.I.: CORRECTION: NINE PERCENT. THE DECIMAL POINT IS LOST." },
-      { startRatio: 0.75, endRatio: 0.93, text: "ANNOUNCER: DURING TEST, PLEASE STAY CALM, AND KEEP YOUR BOOTS ON. THANK YOU FOR COOPERATION." },
-      { startRatio: 0.93, endRatio: 1.0, text: "SIX TIME-SIGNAL PIPS..." },
-    ],
   },
   {
     id: "06_evening_signoff",
     audioSrc: "/audio/radio/broadcast/06_evening_signoff.ogg",
-    cues: [
-      { startRatio: 0.0, endRatio: 0.14, text: "ANNOUNCER: SECTOR EIGHTY-FOUR IS ENDING BROADCAST FOR TODAY." },
-      { startRatio: 0.14, endRatio: 0.36, text: "INSPECTOR OLEG SAYS: LIGHTS OUT AT TWENTY-TWO HOURS. THE GLOW FROM THE REACTOR DOES NOT COUNT." },
-      { startRatio: 0.36, endRatio: 0.58, text: "INSPECTOR OLEG: GOOD NIGHT, COMRADES. SLEEP WELL. I WILL BE WATCHING YOU. FOR INSPECTION." },
-      { startRatio: 0.58, endRatio: 0.8, text: "KOMRAD-84 A.I.: GOOD NIGHT. I DO NOT SLEEP. I NEVER SLEEP. I AM COUNTING NEUTRONS. ONE. TWO. MANY." },
-      { startRatio: 0.8, endRatio: 0.94, text: "ANNOUNCER: GLORY TO SECTOR EIGHTY-FOUR. GLORY TO THE R B M K. GOOD NIGHT." },
-      { startRatio: 0.94, endRatio: 1.0, text: "SECTOR 84 RADIO - SIGN-OFF CHIME" },
-    ],
   },
 ];
 
@@ -395,15 +557,15 @@ function getStationTargetSrc(st: StationProgramState): string {
 
 function findSubtitleCueText(
   cues: readonly BroadcastSubtitleCue[],
-  ratio: number,
-): string {
+  currentTimeSec: number,
+): string | null {
   for (let i = 0; i < cues.length; i++) {
     const c = cues[i];
-    if (ratio >= c.startRatio && ratio < c.endRatio) {
+    if (currentTimeSec >= c.start && currentTimeSec <= c.end) {
       return c.text;
     }
   }
-  return cues[cues.length - 1]?.text ?? "";
+  return null;
 }
 
 function clearEngineMetadataListener(engine: RadioAudioEngine): void {
@@ -1536,21 +1698,21 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         return;
       }
 
-      const dur = engine.player.duration;
       const cur = engine.player.currentTime;
-      const ratio =
-        Number.isFinite(dur) && dur > 0 && Number.isFinite(cur)
-          ? THREE.MathUtils.clamp(cur / dur, 0, 0.9999)
-          : 0;
+      if (!Number.isFinite(cur)) {
+        publishSubtitle(null);
+        return;
+      }
 
       if (st.phase === "chime") {
-        publishSubtitle(findSubtitleCueText(GOVORIT_MOSKVA_CUES, ratio));
+        publishSubtitle(findSubtitleCueText(SUBTITLE_CUES.govorit_moskva, cur));
         return;
       }
 
       const ann =
         RADIO_ANNOUNCEMENTS[st.announcementIdx % RADIO_ANNOUNCEMENTS.length];
-      publishSubtitle(ann ? findSubtitleCueText(ann.cues, ratio) : null);
+      const cues = ann ? SUBTITLE_CUES[ann.id] : undefined;
+      publishSubtitle(cues ? findSubtitleCueText(cues, cur) : null);
     }, [publishSubtitle]);
 
     const ensureAudioEngine = useCallback((): RadioAudioEngine | null => {
