@@ -20,18 +20,18 @@ export const PAPER_COMPACT_W_3D = 0.22
 export const PAPER_COMPACT_H_3D = 0.28
 
 // Drop Zones in 3D Desk Local Coordinates (x, z)
-// Carrier Cylinder (`КАПСУЛА`) Cradle on Back-Left of Desk Mat (clear of Green Banker's Lamp at [-0.98, 0.926, -0.46])
+// Carrier Cylinder (`КАПСУЛА`) Cradle on Back-Left of Desk Mat
 export const CAPSULE_CRADLE_POS_3D = {
   x: -0.74,
   y: 0.926,
   z: -0.22,
 } as const
 
-// Outer-Left Side-Mounted Pneumatic Breech Station (`ПНЕВМОПОЧТА // КАМЕРА ПУСКА`) bolted to the Left Side-Panel of the Desk right beside the Carrier Cradle (100% clear to the left of the Green Banker's Lamp!)
+// Outer-Left Side-Mounted Pneumatic Breech Station (`ПНЕВМОПОЧТА // КАМЕРА ПУСКА`) tucked cleanly onto the left wing bolster
 export const OUTBOX_BREECH_POS_3D = {
-  x: -1.46,
-  y: 0.926,
-  z: -0.52,
+  x: -1.395,
+  y: 0.918,
+  z: -0.535,
 } as const
 
 export const OUTBOX_POS_3D = CAPSULE_CRADLE_POS_3D
@@ -45,9 +45,9 @@ export const OUTBOX_DROP_ZONE_3D = {
 
 export const BREECH_CHAMBER_DROP_ZONE_3D = {
   minX: -1.68,
-  maxX: -1.04,
+  maxX: -1.02,
   minZ: -0.78,
-  maxZ: -0.22,
+  maxZ: -0.20,
 }
 
 export type PneumaticCapsuleState =

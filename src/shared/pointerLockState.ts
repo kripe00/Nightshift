@@ -55,11 +55,11 @@ export function updatePointerLockInteraction(
 
 export function canEngageCanvasPointerLock(
   phase: string,
-  wePadInspecting: boolean,
+  isSeatedAtDesk: boolean,
 ): boolean {
   return (
     phase === 'playing' &&
-    !wePadInspecting &&
+    !isSeatedAtDesk &&
     !pointerLockInteraction.debugMenuOpen &&
     !pointerLockInteraction.mainMenuOpen
   )

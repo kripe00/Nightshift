@@ -244,8 +244,8 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           <boxGeometry args={[width + 0.18, 0.1, 0.24]} />
           <meshBasicMaterial color="#18201d" fog={false} />
         </mesh>
-        <mesh position={[0, -hh - 0.04, 0.05]} raycast={NOOP_RAYCAST} frustumCulled={false}>
-          <boxGeometry args={[width + 0.2, 0.1, 0.3]} />
+        <mesh position={[0, -hh - 0.06, 0.05]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <boxGeometry args={[width + 0.2, 0.16, 0.3]} />
           <meshBasicMaterial color="#1e2824" fog={false} />
         </mesh>
         <mesh position={[-hw - 0.04, 0, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
@@ -350,17 +350,17 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           />
         </mesh>
 
-        {/* Bolted Brass Window Sill Decree Plaque */}
-        <group position={[0.25, -hh - 0.015, 0.18]} rotation={[-0.32, 0, 0]}>
+        {/* Bolted Brass Window Sill Decree Plaque (0.02m proud of z=0.20 vertical sill apron, zero tilt clipping) */}
+        <group position={[0.25, -hh - 0.06, 0.212]} rotation={[0, 0, 0]}>
           <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
             <boxGeometry args={[1.38, 0.13, 0.016]} />
             <meshBasicMaterial color="#8c7a4b" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.022]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.011]} raycast={NOOP_RAYCAST} frustumCulled={false}>
             <planeGeometry args={[1.34, 0.115]} />
             <meshBasicMaterial
               map={plaqueTex}
-              polygonOffset
+              polygonOffset={true}
               polygonOffsetFactor={-2}
               polygonOffsetUnits={-2}
               fog={false}
@@ -505,8 +505,8 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           <boxGeometry args={[width + 0.18, 0.1, 0.24]} />
           <meshBasicMaterial color="#192126" fog={false} />
         </mesh>
-        <mesh position={[0, -hh - 0.04, 0.05]} raycast={NOOP_RAYCAST} frustumCulled={false}>
-          <boxGeometry args={[width + 0.2, 0.1, 0.22]} />
+        <mesh position={[0, -hh - 0.048, 0.05]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <boxGeometry args={[width + 0.2, 0.136, 0.22]} />
           <meshBasicMaterial color="#202a30" fog={false} />
         </mesh>
         <mesh position={[-hw - 0.04, 0, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
@@ -709,17 +709,17 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           </group>
         </group>
 
-        {/* Bolted Brass Gallery Sill Decree Plaque */}
-        <group position={[0, -hh - 0.015, 0.19]} rotation={[-0.32, 0, 0]}>
+        {/* Bolted Brass Gallery Sill Decree Plaque (0.02m proud of z=0.16 vertical sill apron, zero tilt clipping) */}
+        <group position={[0, -hh - 0.048, 0.172]} rotation={[0, 0, 0]}>
           <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
             <boxGeometry args={[1.38, 0.13, 0.016]} />
             <meshBasicMaterial color="#8c7a4b" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.022]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.011]} raycast={NOOP_RAYCAST} frustumCulled={false}>
             <planeGeometry args={[1.34, 0.115]} />
             <meshBasicMaterial
               map={plaqueTex}
-              polygonOffset
+              polygonOffset={true}
               polygonOffsetFactor={-2}
               polygonOffsetUnits={-2}
               fog={false}
@@ -770,16 +770,13 @@ function hPlantProfile(d: number): number {
   if (d <= 14.5) {
     return THREE.MathUtils.lerp(-10.95, -10.75, smoothstep01(d / 14.5));
   }
-  if (d <= 22.5) {
-    return smoothSeg(d, 14.5, 22.5, -10.75, -9.5);
+  if (d <= 24.8) {
+    return smoothSeg(d, 14.5, 24.8, -10.75, -9.85);
   }
-  if (d <= 28.5) {
-    return smoothSeg(d, 22.5, 28.5, -9.5, -3.2);
+  if (d <= 36.2) {
+    return smoothSeg(d, 24.8, 36.2, -9.85, 0.35);
   }
-  if (d <= 32.5) {
-    return smoothSeg(d, 28.5, 32.5, -3.2, 0.65);
-  }
-  return smoothSeg(d, 32.5, 48.0, 0.65, 1.25);
+  return smoothSeg(d, 36.2, 48.5, 0.35, 1.2);
 }
 
 function hCityProfile(d: number): number {
@@ -831,11 +828,20 @@ function getExteriorHeight(x: number, z: number): number {
   y += bluff * smoothstep01((x - 12.0) / 2.6);
 
   // Smooth embankment trough under Window 1's freight rail viaduct (worldX ~ 30.2) up to its tunnel portal (worldZ = 17.6)
-  const railMaskX = 1 - smoothstep01((Math.abs(x - 30.2) - 1.35) / 2.6);
-  const railMaskZ = 1 - smoothstep01((z - 15.2) / 2.2);
+  const railMaskX = 1 - smoothstep01((Math.abs(x - 30.2) - 1.2) / 5.2);
+  const railMaskZ = 1 - smoothstep01((z - 14.2) / 3.4);
   const railMask = railMaskX * railMaskZ;
   if (railMask > 0) {
     y = THREE.MathUtils.lerp(y, Math.min(y, -9.85), railMask);
+  }
+
+  // Gentle natural snowdrift swells along the distant hillside behind the cooling towers
+  const farHillMask = smoothstep01((rCorner - 25.0) / 5.5) * (1 - smoothstep01((rCorner - 44.0) / 5.0));
+  if (farHillMask > 0) {
+    y +=
+      farHillMask *
+      (0.26 * Math.sin(z * 0.12 + x * 0.06) +
+        0.16 * Math.cos(z * 0.19 - x * 0.08));
   }
 
   // Natural outer flank hills along far north (+X window left) and far west (+Z window right)
@@ -895,16 +901,6 @@ const highwayCenterX = (z: number): number => {
 const highwayHalfWidth = (z: number): number => {
   const u = THREE.MathUtils.clamp((-z - 2.5) / 30.0, 0, 1);
   return THREE.MathUtils.lerp(0.85, 0.36, u);
-};
-
-const riverCenterX = (z: number): number => {
-  const u = THREE.MathUtils.clamp((-z - 2.5) / 30.3, 0, 1);
-  return 6.4 + Math.sin(u * Math.PI * 1.9 - 0.5) * 2.2 - u * 0.4;
-};
-
-const riverHalfWidth = (z: number): number => {
-  const u = THREE.MathUtils.clamp((-z - 2.5) / 30.3, 0, 1);
-  return THREE.MathUtils.lerp(1.35, 0.62, u);
 };
 
 function createSnowPineTexture(): THREE.CanvasTexture {
@@ -1042,55 +1038,70 @@ function createUnifiedNightSkyTexture(): THREE.CanvasTexture {
 }
 
 function createUnifiedSnowDetailTexture(): THREE.CanvasTexture {
-  const tex = createNearestCanvasTexture(512, 512, (ctx, w, h) => {
-    // Smooth muted snow/drift detail map multiplied by terrain vertex colors
-    ctx.fillStyle = "#b8c7d8";
-    ctx.fillRect(0, 0, w, h);
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.fillStyle = "#f4f8fc";
+    ctx.fillRect(0, 0, 512, 512);
 
-    for (let i = 0; i < 320; i++) {
-      const rx = (i * 89 + 19) % w;
-      const ry = (i * 131 + 37) % h;
-      const rw = 18 + ((i * 29) % 58);
-      const rh = 8 + ((i * 17) % 24);
-      const pick = i % 5;
-      ctx.fillStyle =
-        pick === 0 || pick === 1
-          ? "#c8d6e5"
-          : pick === 2
-            ? "#b6c7d9"
-            : pick === 3
-              ? "#9fb3c8"
-              : "#adbfd3";
-      ctx.fillRect(rx, ry, rw, rh);
+    // Subtle tile-safe radial snowdrift clouds (zero sharp rects or axis-aligned stripes)
+    for (let i = 0; i < 18; i++) {
+      const cx = 72 + ((i * 157 + 41) % 368);
+      const cy = 72 + ((i * 199 + 83) % 368);
+      const radius = 64 + ((i * 29) % 48);
+      const isHighlight = i % 2 === 0;
+      const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, radius);
+      g.addColorStop(
+        0,
+        isHighlight ? "rgba(255, 255, 255, 0.035)" : "rgba(196, 214, 234, 0.04)",
+      );
+      g.addColorStop(1, "rgba(244, 248, 252, 0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
     }
-
-    ctx.fillStyle = "#8fa4ba";
-    for (let i = 0; i < 54; i++) {
-      const sx = (i * 149 + 29) % w;
-      const sy = (i * 173 + 11) % h;
-      ctx.fillRect(sx, sy, 24 + (i % 4) * 12, 12 + (i % 3) * 6);
-    }
-  });
+  }
+  const tex = new THREE.CanvasTexture(canvas);
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearFilter;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
   return tex;
 }
+
+const COLOR_SNOW_LOW = new THREE.Color("#182638");
+const COLOR_SNOW_HIGH = new THREE.Color("#293d54");
+const COLOR_SNOW_SWITCHYARD = new THREE.Color("#121d2b");
 
 function getExteriorVertexColor(
   x: number,
   y: number,
   z: number,
+  nx: number,
+  ny: number,
+  nz: number,
   target: THREE.Color,
 ): void {
-  // Base moonlit valley snow (#1c2f42) -> high crest snow (#2c4764)
-  const heightT = THREE.MathUtils.clamp((y + 10.8) / 11.5, 0, 1);
-  target.setRGB(
-    THREE.MathUtils.lerp(0.11, 0.18, heightT),
-    THREE.MathUtils.lerp(0.18, 0.28, heightT),
-    THREE.MathUtils.lerp(0.26, 0.39, heightT),
+  const rCorner = Math.hypot(Math.max(0, x - 6.0), Math.max(0, z - 4.5));
+  const heightT = THREE.MathUtils.clamp((y + 10.8) / 11.6, 0, 1);
+  const distT = smoothstep01((rCorner - 14.0) / 26.0);
+  const driftSwell =
+    0.045 *
+    Math.sin(x * 0.075 + z * 0.065) *
+    Math.cos(z * 0.05 - x * 0.04);
+  const snowT = THREE.MathUtils.clamp(
+    0.72 * heightT + 0.28 * distT + driftSwell,
+    0,
+    1,
   );
+  target.lerpColors(COLOR_SNOW_LOW, COLOR_SNOW_HIGH, snowT);
 
   // Subtle plowed industrial concrete/slate tint in the +X switchyard basin
   const switchyardT =
@@ -1098,24 +1109,17 @@ function getExteriorVertexColor(
     (1 - smoothstep01((z - 12.0) / 4.5)) *
     (1 - smoothstep01((y + 10.2) / 1.4));
   if (switchyardT > 0) {
-    target.r = THREE.MathUtils.lerp(target.r, 0.09, switchyardT);
-    target.g = THREE.MathUtils.lerp(target.g, 0.14, switchyardT);
-    target.b = THREE.MathUtils.lerp(target.b, 0.2, switchyardT);
+    target.lerp(COLOR_SNOW_SWITCHYARD, switchyardT);
   }
 
-  // Mottled dark winter pine-floor patches across the sculpted +X / +Z forest ridge
-  const ridgeBlend =
-    smoothstep01((x - 8.5) / 4.0) *
-    smoothstep01((z - 11.5) / 4.5) *
-    smoothstep01((y + 8.6) / 3.2) *
-    (1 - smoothstep01((y + 2.2) / 2.6));
-  if (ridgeBlend > 0) {
-    const patch =
-      0.5 +
-      0.5 * Math.sin(x * 0.43 + z * 0.37) * Math.cos(x * 0.29 - z * 0.51);
-    const forestShade = THREE.MathUtils.lerp(0.74, 1.08, patch);
-    target.multiplyScalar(THREE.MathUtils.lerp(1.0, forestShade, ridgeBlend));
-  }
+  // Gentle moonlit directional shading using smoothed terrain vertex normals
+  const moonDot = THREE.MathUtils.clamp(
+    nx * -0.34 + ny * 0.88 + nz * -0.33,
+    0,
+    1,
+  );
+  const moonShade = THREE.MathUtils.lerp(0.92, 1.06, moonDot);
+  target.multiplyScalar(moonShade);
 }
 
 /**
@@ -1126,20 +1130,20 @@ function createUnifiedExteriorTerrainGeometry(): THREE.BufferGeometry {
   const xs: number[] = [];
   const zs: number[] = [];
 
-  const nxLeft = 84;
+  const nxLeft = 88;
   for (let i = 0; i < nxLeft; i++) {
     xs.push(THREE.MathUtils.lerp(-52.0, 6.08, i / nxLeft));
   }
-  const nxRight = 76;
+  const nxRight = 112;
   for (let i = 0; i <= nxRight; i++) {
     xs.push(THREE.MathUtils.lerp(6.08, 54.0, i / nxRight));
   }
 
-  const nzBack = 72;
+  const nzBack = 96;
   for (let i = 0; i < nzBack; i++) {
     zs.push(THREE.MathUtils.lerp(-44.0, 4.58, i / nzBack));
   }
-  const nzFront = 76;
+  const nzFront = 96;
   for (let i = 0; i <= nzFront; i++) {
     zs.push(THREE.MathUtils.lerp(4.58, 54.0, i / nzFront));
   }
@@ -1148,9 +1152,7 @@ function createUnifiedExteriorTerrainGeometry(): THREE.BufferGeometry {
   const vertMap = new Int32Array(stride * zs.length).fill(-1);
   const posList: number[] = [];
   const uvList: number[] = [];
-  const colList: number[] = [];
   const indices: number[] = [];
-  const c = new THREE.Color();
 
   const getVertex = (ix: number, iz: number): number => {
     const slot = iz * stride + ix;
@@ -1160,13 +1162,11 @@ function createUnifiedExteriorTerrainGeometry(): THREE.BufferGeometry {
     const vx = xs[ix];
     const vz = zs[iz];
     const vy = getExteriorHeight(vx, vz);
-    getExteriorVertexColor(vx, vy, vz, c);
 
     const idx = posList.length / 3;
     vertMap[slot] = idx;
     posList.push(vx, vy, vz);
-    uvList.push(vx / 14.0, vz / 14.0);
-    colList.push(c.r, c.g, c.b);
+    uvList.push(vx / 32.0, vz / 32.0);
     return idx;
   };
 
@@ -1201,9 +1201,27 @@ function createUnifiedExteriorTerrainGeometry(): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(posList, 3));
   geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvList, 2));
-  geo.setAttribute("color", new THREE.Float32BufferAttribute(colList, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
+
+  const normAttr = geo.getAttribute("normal");
+  const vCount = posList.length / 3;
+  const colList = new Float32Array(vCount * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < vCount; i++) {
+    const vx = posList[i * 3];
+    const vy = posList[i * 3 + 1];
+    const vz = posList[i * 3 + 2];
+    const nx = normAttr.getX(i);
+    const ny = normAttr.getY(i);
+    const nz = normAttr.getZ(i);
+    getExteriorVertexColor(vx, vy, vz, nx, ny, nz, c);
+    colList[i * 3] = c.r;
+    colList[i * 3 + 1] = c.g;
+    colList[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute("color", new THREE.BufferAttribute(colList, 3));
+
   return geo;
 }
 
@@ -4816,18 +4834,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
   const roadLampLitRef = useRef<Uint8Array>(new Uint8Array(22).fill(1));
 
   const fourFaceGeo = useMemo(() => createFourFaceBoxGeometry(), []);
-  const riverRibbonGeo = useMemo(
-    () =>
-      createValleyRibbonGeometry(
-        riverCenterX,
-        riverHalfWidth,
-        -2.5,
-        -32.8,
-        64,
-        0.045,
-      ),
-    [],
-  );
   const highwayRibbonGeo = useMemo(
     () =>
       createValleyRibbonGeometry(
@@ -4873,35 +4879,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
       ctx.fillStyle = "#6a7f94";
       for (let y = 8; y < h; y += 36) {
         ctx.fillRect(w / 2 - 2, y, 4, 18);
-      }
-    });
-    tex.wrapS = THREE.ClampToEdgeWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    return tex;
-  }, []);
-
-  const frozenRiverRibbonTex = useMemo(() => {
-    const tex = createNearestCanvasTexture(128, 512, (ctx, w, h) => {
-      // Snow-drifted riverbanks
-      ctx.fillStyle = "#1d2f42";
-      ctx.fillRect(0, 0, w, h);
-      // Glossy #243b52 frozen ice channel
-      ctx.fillStyle = "#243b52";
-      ctx.fillRect(18, 0, w - 36, h);
-      // Moonlit ice highlights & fracture veins
-      ctx.fillStyle = "#3a5d7f";
-      ctx.fillRect(34, 0, 26, h);
-      ctx.fillStyle = "#5680a8";
-      for (let y = 12; y < h; y += 44) {
-        ctx.fillRect(40 + ((y * 7) % 16), y, 8, 22);
-      }
-      ctx.strokeStyle = "#172738";
-      ctx.lineWidth = 2;
-      for (let y = 20; y < h; y += 64) {
-        ctx.beginPath();
-        ctx.moveTo(22, y);
-        ctx.lineTo(w - 24, y + 26);
-        ctx.stroke();
       }
     });
     tex.wrapS = THREE.ClampToEdgeWrapping;
@@ -5514,19 +5491,15 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
     pushBeacon(-2.25, anchorRoofY + 1.65, -34.48, 0.095);
     pushBeacon(3.35, anchorRoofY + 1.65, -34.48, 0.095);
 
-    // 132 snow-dusted pines clustered across valley slopes (clearing highway, river & corner forest ridge)
+    // 132 snow-dusted pines clustered across valley slopes (clearing highway & corner forest ridge)
     const pineTransforms: Array<{ px: number; py: number; pz: number; scale: number }> = [];
     for (let idx = 0; idx < 132; idx++) {
       const u = seeded(idx * 11 + 5);
       const pz = THREE.MathUtils.lerp(-3.0, -25.5, u);
       let px = THREE.MathUtils.lerp(-9.5, 46.0, (idx / 131) + (seeded(idx * 3 + 7) - 0.5) * 0.04);
       const roadX = highwayCenterX(pz);
-      const riverX = riverCenterX(pz);
       if (Math.abs(px - roadX) < 1.65) {
         px += px < roadX ? -1.85 : 1.85;
-      }
-      if (Math.abs(px - riverX) < 1.85) {
-        px += px < riverX ? -2.05 : 2.05;
       }
       const scale = THREE.MathUtils.lerp(1.45, 0.45, u) * (0.85 + seeded(idx * 9 + 1) * 0.35);
       const py = Y(win2GroundY(px, pz) + scale * 0.78);
@@ -5613,11 +5586,10 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
   useEffect(() => {
     return () => {
       fourFaceGeo.dispose();
-      riverRibbonGeo.dispose();
       highwayRibbonGeo.dispose();
       powerWiresGeo.dispose();
     };
-  }, [fourFaceGeo, riverRibbonGeo, highwayRibbonGeo, powerWiresGeo]);
+  }, [fourFaceGeo, highwayRibbonGeo, powerWiresGeo]);
 
   useEffect(() => {
     const dummy = new THREE.Object3D();
@@ -6121,21 +6093,8 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
         {/* 1:1 Meter 42m Deep Exterior Landscape & City Props */}
         <group position={[0, -0.3, 0]}>
 
-          {/* VALLEY CORRIDOR: Glossy Frozen River, Winding Lit Highway, Power Corridor, Vehicles & Pines */}
+          {/* VALLEY CORRIDOR: Winding Lit Highway, Power Corridor, Vehicles & Pines */}
           <group>
-            <mesh
-              geometry={riverRibbonGeo}
-              raycast={NOOP_RAYCAST}
-              frustumCulled={false}
-            >
-              <meshBasicMaterial
-                map={frozenRiverRibbonTex}
-                polygonOffset
-                polygonOffsetFactor={-1}
-                fog={false}
-              />
-            </mesh>
-
             <mesh
               geometry={highwayRibbonGeo}
               raycast={NOOP_RAYCAST}

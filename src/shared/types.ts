@@ -25,19 +25,6 @@ export type SectorNodeId =
   | 'steel'
 export type DirectiveDecision = 'APPROVED' | 'SHREDDED'
 
-export type WePadTabId = 1 | 2 | 3 | 4 | 5 | 6
-
-export interface WePadChatMessage {
-  id: string
-  timestamp: string
-  sender: 'COMRADE VOLKOV' | 'K.O.M.R.A.D.-84' | 'SYSTEM' | 'PRAVDA-84'
-  text: string
-  hint?: string
-  phase?: TutorialPhase
-  completed?: boolean
-  level?: 'normal' | 'warn' | 'danger'
-}
-
 export type TutorialStep = 1 | 2 | 3 | 4 | 5 | 'DONE'
 export type DiagnosticAlarmId =
   | 'core'
@@ -118,6 +105,16 @@ export interface TerminalLogEntry {
   level: 'normal' | 'warn' | 'danger'
 }
 
+export type KomradMood = 'normal' | 'warning' | 'critical'
+
+export interface KomradMessageEntry {
+  id: string
+  timestamp: string // [HH:MM:SS] format
+  sender: 'K.O.M.R.A.D.-84' | 'SYS.DEFENSE' | 'PRINTER' | 'OPERATOR'
+  text: string
+  mood: KomradMood
+}
+
 export type HotspotSeverity = 'amber' | 'red' | 'cyan'
 
 export interface OperationalMandate {
@@ -137,10 +134,12 @@ export interface OperationalMandate {
   targetMW?: number
 }
 
-export interface GameState extends ReactorState {
+export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspecting'> {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
   activeStation: CameraStation
+  isSeatedAtDesk: boolean
+  canSitAtDesk: boolean
   shiftNumber: number // 1 to 5
   shiftTimeMinutes: number // 0 (00:00) to 360 (06:00)
   isShiftKeyHeld: boolean // Physical SHIFT key clutch
@@ -152,9 +151,7 @@ export interface GameState extends ReactorState {
   tutorialPhase: TutorialPhase
   tutorialPrompt: TutorialPrompt
 
-  // WE-PAD 84 & H2O Controls
-  wePadActiveTab: WePadTabId
-  wePadChatLog: WePadChatMessage[]
+  // H2O Controls
   selectedH2OSubstationId: 1 | 3 | 5
 
   // Reactor & Power Matrix (UNIT A, UNIT A-2, UNIT B & Right Turbine Panel)
@@ -217,6 +214,7 @@ export interface GameState extends ReactorState {
   // K.O.M.R.A.D.-84 Terminal & Cyber Defense (Komrad Kristianov's Domain)
   terminalLogs: string[]
   terminalEntries: TerminalLogEntry[]
+  komradMessages: KomradMessageEntry[]
   ciaIntrusionActive: boolean
   ciaIntrusionProgress: number // 0 to 100%
   komradOverrideLocked: boolean
@@ -230,9 +228,13 @@ export interface GameState extends ReactorState {
   hoveredDiagnosticId: DiagnosticAlarmId | null
   hoveredControlHint: string | null
   diagFeedActive: boolean
+  radioBroadcastSubtitle: string | null
 
   // Shared Actions
   setActiveStation: (station: CameraStation) => void
+  setSeatedAtDesk: (seated: boolean) => void
+  toggleSeatedAtDesk: () => void
+  setCanSitAtDesk: (canSit: boolean) => void
   startShift: () => void
   resetShift: () => void
   skipTutorial: () => void
@@ -251,9 +253,6 @@ export interface GameState extends ReactorState {
       steel?: number
     }
   ) => void
-  toggleWePadHeld: (forceHeld?: boolean) => void
-  toggleWePadInspecting: (forceInspecting?: boolean) => void
-  setWePadActiveTab: (tab: WePadTabId) => void
   setSubstationH2O: (substationId: 1 | 3 | 5, pct: number) => void
   adjustSubstationH2O: (substationId: 1 | 3 | 5, deltaPct: number) => void
   cycleSelectedH2OSubstation: () => void
@@ -328,6 +327,7 @@ export interface GameState extends ReactorState {
   ) => void
   toggleMusicMute: () => void
   setDiagFeedActive: (active: boolean) => void
+  setRadioBroadcastSubtitle: (subtitle: string | null) => void
   setGodMode: (enabled: boolean) => void
   debugSetTemp: (temp: number) => void
   debugTriggerBlackout: () => void

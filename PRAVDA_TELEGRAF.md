@@ -258,4 +258,17 @@
   >
   > *Hent fra Kreml (`npm run pravda`) og inspiser resultatet! MELTDOWN IS PROPAGANDA! 🎖️💡🛡️☢️☭"*
 
+### [TELEGRAM #019 — STEMPLET: QUOTA-84 // 3D SOVJETISK BUNKERRADIO «ОКЕАН-84», 10 LÅTER PÅ 5 УКВ-STASJONER, STATS-SENDINGER & KREMLIN-UNDERTEKSTER!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Fullverdig 3D-bunkerradio (`ОКЕАН-84`) med 10 sovjetiske låter, automatiske stats-sendinger (`01`–`06` + `govorit_moskva`) og Kremlin-undertekster!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Sektor 84 har nå fått sitt eget partigodkjente lyd- og propagandasystem rett på vaktbordet ved panoramavinduet:*
+  > *1. **Interaktiv 3D «ОКЕАН-84»-mottaker (`SovietRadioTable3D.tsx`):** Fysisk Bakelitt-ratt med `6Е1П` magisk øye-indikator, `СЕТЬ`-strømbryter, `ЭФИР`-knapp for direkte testing/hopping av stats-sendinger og prosedyrell Web Audio FM-skurr mellom frekvensene!*
+  > *2. **10 Låter fordelt på 5 `УКВ`-stasjoner (`66.80–73.20 МГц`) + Automatiske Sendinger:** Når en sang er ferdig på den innstilte stasjonen, spilles `govorit_moskva.wav` automatisk etterfulgt av kunngjøringene `01`–`06` (med gjesteopptredener fra Seniorinspektør Oleg, Sjefsingeniør Kristianov og `K.O.M.R.A.D.-84`), før neste låt tar over — alt via én enkelt `<audio>`-strøm uten ekstra lag!*
+  > *3. **Tidsstyrte Kremlin-undertekster (`App.tsx` & `useGameStore.ts`):** Under alle sendinger vises presise engelske undertekster i ekte `Kremlin`-font nederst på skjermen — og forsvinner momentant hvis du slår av `СЕТЬ`, skrur inn i støy (`signalStrength <= 0.25`), eller starter videoavspilling på `K.O.M.R.A.D.-84`!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og skru på radioen — MELTDOWN IS PROPAGANDA! 🎖️📻🎶☢️☭"*
+
 

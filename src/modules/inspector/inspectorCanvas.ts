@@ -3,7 +3,6 @@
 // Full Expanded Directives with Relative Ink Stamps, 3-Page Scrollable KGB Security Manual,
 // and True 2x Straight Optical Magnifying Glass Zoom (Zero UV).
 
-import type { WePadChatMessage, WePadTabId } from '../../shared/types'
 import {
   INK_COLOR_HEX,
   PAPER_COLOR_HEX,
@@ -18,45 +17,6 @@ import {
   type SealEmblemType,
   type SealMicroDefect,
 } from './useDeskStore'
-
-export interface WePadTelemetryPayload {
-  activeTab: WePadTabId
-  wePadHeld: boolean
-  wePadInspecting: boolean
-  tutorialPhase: string
-  tutorialHeader: string
-  tutorialBody: string
-  tutorialHint: string
-  tutorialPanelKey: string
-  tutorialActionLine: string
-  tutorialWhyLines: [string, string]
-  tutorialVolkovQuote: string
-  chatLog: WePadChatMessage[]
-  thermalPower: number
-  drumPressure: number
-  drumWaterLevel: number
-  coreTemp: number
-  controlRods: number
-  reactivity: number
-  xenonPoisoning: number
-  voidFraction: number
-  rpm: number
-  gridHz: number
-  syncPhase: number
-  gridConnected: boolean
-  turbineValve?: number
-  energyCreatedMW: number
-  batteryStoredMWh: number
-  batteryStoredPct: number
-  energyDemandMW: number
-  batteryWheelPct: number
-  totalElectricalMW: number
-  neededMWe: number
-  generatedMWe: number
-  houseLoadMW: number
-  plantWaterDrainPct: number
-  mcpActiveCount: number
-}
 
 // 16-Color Soviet Bunker Palette from Master Prompt STEP 1
 export const SOVIET_16_PALETTE_HEX = [
@@ -2992,520 +2952,6 @@ export function drawSecurityManualCanvas(
   ctx.restore()
 }
 
-/**
- * Draws the engraved Soviet "Bitten Beetroot with Hammer & Sickle" ("Надкусанная Свёкла с Серпом и Молотом")
- * emblem for ЭЛЕКТРОНИКА «МЫ-ПАД 84» (WE-PAD 84).
- */
-export function drawBittenBeetrootHammerSickleLogo(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  scale = 1.0,
-  strokeCol = '#39ff14',
-  fillCol = '#7a1628'
-): void {
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.scale(scale, scale)
-
-  // Beetroot leafy sprouts at top
-  ctx.strokeStyle = strokeCol
-  ctx.lineWidth = 2.4
-  ctx.beginPath()
-  ctx.moveTo(0, -14)
-  ctx.quadraticCurveTo(-9, -24, -14, -22)
-  ctx.moveTo(0, -14)
-  ctx.lineTo(0, -25)
-  ctx.moveTo(0, -14)
-  ctx.quadraticCurveTo(9, -24, 14, -22)
-  ctx.stroke()
-
-  // Beetroot body with a prominent Apple-style bite on the right side + root tail at bottom
-  ctx.fillStyle = fillCol
-  ctx.strokeStyle = strokeCol
-  ctx.lineWidth = 2.6
-  ctx.beginPath()
-  ctx.moveTo(0, -14)
-  ctx.bezierCurveTo(-16, -14, -19, 2, -10, 13)
-  ctx.lineTo(0, 24) // Root taproot tip
-  ctx.lineTo(9, 13)
-  // Bite indentation on right flank
-  ctx.arc(15, 0, 7.5, Math.PI * 0.68, -Math.PI * 0.68, true)
-  ctx.quadraticCurveTo(10, -14, 0, -14)
-  ctx.closePath()
-  ctx.fill()
-  ctx.stroke()
-
-  // Hammer & Sickle inside the beetroot
-  ctx.strokeStyle = '#ffd000'
-  ctx.lineWidth = 2.4
-  // Hammer handle & head
-  ctx.beginPath()
-  ctx.moveTo(-6, 9)
-  ctx.lineTo(5, -5)
-  ctx.moveTo(1, -7)
-  ctx.lineTo(8, -2)
-  ctx.stroke()
-  // Sickle arc
-  ctx.beginPath()
-  ctx.arc(-1, 1, 7.5, -Math.PI * 0.65, Math.PI * 0.55)
-  ctx.stroke()
-
-  ctx.restore()
-}
-
-/**
- * Draws the high-contrast phosphor screen of ЭЛЕКТРОНИКА «МЫ-ПАД 84» (WE-PAD 84) at 1024x1280:
- * +50% larger crisp laptop-readable fonts (34px-44px, max ~38-40 chars/line, generous line spacing, zero stroke bleed).
- * Tab 1 (`[1] GUIDE`) renders 3 clean visual cards:
- *   1. `STEP & PANEL KEY` + bold `ACTION`
- *   2. `WHY & GAUGE EFFECT` (2 crisp lines)
- *   3. `COMRADE VOLKOV` (punchy 1984 Soviet bureaucracy humor)
- */
-export function drawWePad84ScreenCanvas(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  payload: WePadTelemetryPayload,
-  scrollY = 0
-): void {
-  ctx.save()
-  ctx.imageSmoothingEnabled = true
-  const LW = 1024
-  const LH = 1280
-  ctx.scale(w / LW, h / LH)
-
-  const activeTab = payload.activeTab
-
-  // Deep Phosphor-Black CRT Screen Background & Crisp Outer Frame
-  ctx.fillStyle = '#030d06'
-  ctx.fillRect(0, 0, LW, LH)
-  ctx.strokeStyle = '#39ff14'
-  ctx.lineWidth = 4
-  ctx.strokeRect(10, 10, LW - 20, LH - 20)
-
-  // =========================================================================
-  // ZONE 1 (TOP): CRISP MASTER TELEMETRY BANNER (34px) + 6 LARGE TABS (32px)
-  // =========================================================================
-  ctx.fillStyle = '#082112'
-  ctx.fillRect(20, 20, LW - 40, 66)
-  ctx.strokeStyle = '#28b862'
-  ctx.lineWidth = 2.5
-  ctx.strokeRect(20, 20, LW - 40, 66)
-
-  const createdVal = Math.round(payload.energyCreatedMW)
-  const batPctVal = Math.round(payload.batteryStoredPct)
-  const gridVal = Math.round(payload.generatedMWe)
-  const demandVal = Math.round(payload.energyDemandMW)
-
-  ctx.textAlign = 'center'
-  ctx.fillStyle = '#00f0ff'
-  ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
-  const teleLine = `GEN:${createdVal}MW | BAT:${batPctVal}% | GRID:${gridVal}/${demandVal}MW`
-  ctx.fillText(teleLine, LW / 2, 64, LW - 56)
-
-  // 6 Chapter Tab Buttons (2 rows x 3 columns, y = 96..234, +50% larger 32px font)
-  const tabSpecs: Array<{ id: WePadTabId; label: string }> = [
-    { id: 1, label: '[1] GUIDE' },
-    { id: 2, label: '[2] TELEM' },
-    { id: 3, label: '[3] STARTUP' },
-    { id: 4, label: '[4] ORDERS' },
-    { id: 5, label: '[5] ALARMS' },
-    { id: 6, label: '[6] MANUAL' },
-  ]
-  const colW = Math.floor((LW - 52) / 3)
-  tabSpecs.forEach((tab, idx) => {
-    const col = idx % 3
-    const row = Math.floor(idx / 3)
-    const tx = 20 + col * (colW + 6)
-    const ty = 96 + row * 68
-    const isSel = activeTab === tab.id
-    ctx.fillStyle = isSel ? '#196b30' : '#091d11'
-    ctx.fillRect(tx, ty, colW, 60)
-    ctx.strokeStyle = isSel ? '#ffd000' : '#28b862'
-    ctx.lineWidth = isSel ? 4 : 2
-    ctx.strokeRect(tx, ty, colW, 60)
-    ctx.fillStyle = isSel ? '#ffffff' : '#8ce8a4'
-    ctx.font = 'bold 32px "Consolas", "Courier Prime", monospace'
-    ctx.textAlign = 'center'
-    ctx.fillText(tab.label, tx + colW / 2, ty + 41, colW - 14)
-  })
-
-  // =========================================================================
-  // ZONE 2 (MIDDLE — y = 244..1192): 3 CLEAN CARDS (TAB 1) OR BIG REFERENCE
-  // =========================================================================
-  const vpX = 20
-  const vpY = 244
-  const vpW = LW - 40
-  const vpH = 948
-
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(vpX, vpY, vpW, vpH)
-  ctx.clip()
-
-  if (activeTab === 1) {
-    const isCompletedShift = payload.tutorialPhase === 'COMPLETED'
-    const latestLiveMsg =
-      isCompletedShift && payload.chatLog.length > 0
-        ? payload.chatLog[payload.chatLog.length - 1]
-        : null
-
-    // -----------------------------------------------------------------------
-    // CARD 1 (y = 248..556): STEP & PANEL KEY + GIANT BOLD ACTION
-    // -----------------------------------------------------------------------
-    const c1Y = vpY + 4
-    const c1H = 304
-    ctx.fillStyle = '#171504'
-    ctx.fillRect(vpX + 4, c1Y, vpW - 8, c1H)
-    ctx.strokeStyle = '#ffd000'
-    ctx.lineWidth = 4
-    ctx.strokeRect(vpX + 4, c1Y, vpW - 8, c1H)
-
-    // Top Panel Key Ribbon
-    ctx.fillStyle = '#ffd000'
-    ctx.fillRect(vpX + 4, c1Y, vpW - 8, 62)
-    ctx.fillStyle = '#081008'
-    ctx.textAlign = 'left'
-    ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
-    const panelKeyText =
-      payload.tutorialPanelKey || 'GO TO: [KEY 5] UNIT C'
-    ctx.fillText(panelKeyText, vpX + 22, c1Y + 43, vpW - 44)
-
-    // Step Subtitle
-    ctx.fillStyle = '#39ff14'
-    ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
-    const stepTitle = payload.tutorialHeader.replace(/^>>\s*/, '')
-    ctx.fillText(stepTitle, vpX + 24, c1Y + 110, vpW - 48)
-
-    // Bold Action Command (40px crisp font, max 3 lines, generous 48px line height)
-    ctx.fillStyle = '#ffffff'
-    ctx.font = 'bold 40px "Consolas", "Courier Prime", monospace'
-    const actionRaw =
-      payload.tutorialActionLine || payload.tutorialBody || 'HOLD 50.0 HZ'
-    const actionWrapped = wrapCanvasText(ctx, actionRaw, vpW - 48).slice(0, 3)
-    actionWrapped.forEach((ln, idx) => {
-      ctx.fillText(ln, vpX + 24, c1Y + 168 + idx * 48, vpW - 48)
-    })
-
-    // -----------------------------------------------------------------------
-    // CARD 2 (y = 570..864): WHY & GAUGE EFFECT (2 CRISP CAUSE-EFFECT LINES)
-    // -----------------------------------------------------------------------
-    const c2Y = c1Y + c1H + 18
-    const c2H = 292
-    ctx.fillStyle = '#051a18'
-    ctx.fillRect(vpX + 4, c2Y, vpW - 8, c2H)
-    ctx.strokeStyle = '#00f0ff'
-    ctx.lineWidth = 3.5
-    ctx.strokeRect(vpX + 4, c2Y, vpW - 8, c2H)
-
-    ctx.fillStyle = '#00f0ff'
-    ctx.fillRect(vpX + 4, c2Y, vpW - 8, 56)
-    ctx.fillStyle = '#03100e'
-    ctx.textAlign = 'left'
-    ctx.font = 'bold 32px "Consolas", "Courier Prime", monospace'
-    ctx.fillText('WHY & GAUGE EFFECT', vpX + 22, c2Y + 39, vpW - 44)
-
-    const whyPair = payload.tutorialWhyLines ?? [
-      'Rods make heat -> heat boils steam.',
-      'Watch POWER BALANCE on [KEY 5] UNIT C.',
-    ]
-    ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
-    let whyCursorY = c2Y + 106
-    whyPair.forEach((item, wIdx) => {
-      ctx.fillStyle = wIdx === 0 ? '#ffffff' : '#7ef9ff'
-      const lines = wrapCanvasText(ctx, `• ${item}`, vpW - 48).slice(0, 2)
-      lines.forEach((ln) => {
-        ctx.fillText(ln, vpX + 22, whyCursorY, vpW - 44)
-        whyCursorY += 44
-      })
-      whyCursorY += 10
-    })
-
-    // -----------------------------------------------------------------------
-    // CARD 3 (y = 880..1186): COMRADE VOLKOV // SOVIET SATIRE & DISPATCH
-    // -----------------------------------------------------------------------
-    const c3Y = c2Y + c2H + 18
-    const c3H = 304
-    ctx.fillStyle = '#091f10'
-    ctx.fillRect(vpX + 4, c3Y, vpW - 8, c3H)
-    ctx.strokeStyle = '#39ff14'
-    ctx.lineWidth = 3.5
-    ctx.strokeRect(vpX + 4, c3Y, vpW - 8, c3H)
-
-    ctx.fillStyle = '#196b30'
-    ctx.fillRect(vpX + 4, c3Y, vpW - 8, 56)
-    ctx.fillStyle = '#ffe600'
-    ctx.textAlign = 'left'
-    ctx.font = 'bold 31px "Consolas", "Courier Prime", monospace'
-    const card3Header =
-      isCompletedShift && latestLiveMsg
-        ? `DISPATCH // ${latestLiveMsg.sender} [${latestLiveMsg.timestamp}]`
-        : 'COMRADE VOLKOV // SHIFT BRIEFING'
-    ctx.fillText(card3Header, vpX + 22, c3Y + 39, vpW - 44)
-
-    const quoteSource =
-      isCompletedShift && latestLiveMsg && scrollY > 20
-        ? payload.chatLog[
-            Math.max(
-              0,
-              payload.chatLog.length - 1 - Math.floor(scrollY / 40)
-            )
-          ]?.text ?? payload.tutorialVolkovQuote
-        : isCompletedShift && latestLiveMsg && !payload.tutorialHeader.startsWith('>> ACTIVE')
-          ? latestLiveMsg.text
-          : payload.tutorialVolkovQuote || payload.tutorialBody
-
-    ctx.fillStyle = '#c8ffd4'
-    ctx.font = 'bold 33px "Consolas", "Courier Prime", monospace'
-    const quoteLines = wrapCanvasText(
-      ctx,
-      `"${quoteSource.replace(/^"|"$/g, '')}"`,
-      vpW - 48
-    ).slice(0, 4)
-    quoteLines.forEach((ln, qIdx) => {
-      ctx.fillText(ln, vpX + 22, c3Y + 106 + qIdx * 46, vpW - 44)
-    })
-  } else if (activeTab === 2) {
-    // -----------------------------------------------------------------------
-    // TAB 2: [2] TELEM — GIANT PLANT OVERVIEW READOUT (MATCHES UNIT C)
-    // -----------------------------------------------------------------------
-    const deltaMW = Math.round(payload.generatedMWe - payload.energyDemandMW)
-    const deltaSign = deltaMW >= 0 ? '+' : ''
-    const rows: Array<{ label: string; val: string; col: string }> = [
-      {
-        label: 'ENERGY CREATED',
-        val: `${Math.round(payload.energyCreatedMW)} MW (${payload.batteryWheelPct}% DRAIN)`,
-        col: payload.energyCreatedMW >= 200 ? '#39ff14' : '#ffd000',
-      },
-      {
-        label: 'ENERGY STORED',
-        val: `${Math.round(payload.batteryStoredPct)}% (${Math.round(payload.batteryStoredMWh)} MWh)`,
-        col:
-          payload.batteryStoredPct < 10
-            ? '#ff5555'
-            : payload.batteryStoredPct < 25
-              ? '#ffd000'
-              : '#39ff14',
-      },
-      {
-        label: 'GRID DEMAND',
-        val: `${Math.round(payload.generatedMWe)}/${Math.round(payload.energyDemandMW)} (${deltaSign}${deltaMW})`,
-        col: Math.abs(deltaMW) <= 30 ? '#39ff14' : '#ffd000',
-      },
-      {
-        label: 'STEAM DRUM',
-        val: `${Math.round(payload.drumPressure)} BAR / ${Math.round(payload.drumWaterLevel)} mm`,
-        col: payload.drumPressure >= 58 && payload.drumPressure <= 74 ? '#00f0ff' : '#ffd000',
-      },
-      {
-        label: 'BORON RODS',
-        val: `${Math.round(payload.controlRods * 100)}% (${Math.round(payload.thermalPower)} MWt)`,
-        col: '#39ff14',
-      },
-      {
-        label: 'XENON-135 ASH',
-        val: `${Math.round(payload.xenonPoisoning)}%`,
-        col: payload.xenonPoisoning > 35 ? '#ffd000' : '#00f0ff',
-      },
-      {
-        label: 'STEAM VOID',
-        val: `${Math.round(payload.voidFraction)}%`,
-        col: payload.voidFraction > 28 ? '#ff5555' : '#39ff14',
-      },
-    ]
-
-    rows.forEach((r, idx) => {
-      const ry = vpY + 8 + idx * 132
-      ctx.fillStyle = '#071c10'
-      ctx.fillRect(vpX + 4, ry, vpW - 8, 118)
-      ctx.strokeStyle = r.col
-      ctx.lineWidth = 3
-      ctx.strokeRect(vpX + 4, ry, vpW - 8, 118)
-
-      ctx.textAlign = 'left'
-      ctx.fillStyle = '#9be8b0'
-      ctx.font = 'bold 32px "Consolas", "Courier Prime", monospace'
-      ctx.fillText(r.label, vpX + 24, ry + 44)
-
-      ctx.textAlign = 'right'
-      ctx.fillStyle = r.col
-      ctx.font = 'bold 42px "Consolas", "Courier Prime", monospace'
-      ctx.fillText(r.val, vpX + vpW - 24, ry + 94)
-    })
-  } else {
-    // -----------------------------------------------------------------------
-    // TABS 3–6: LARGE CRISP CARDS (+50% FONT SIZE: 34px-38px, ZERO CLUTTER)
-    // -----------------------------------------------------------------------
-    const drawBigGuideCards = (
-      banner: string,
-      cards: Array<{ head: string; line1: string; line2: string }>,
-      accent: string
-    ) => {
-      ctx.fillStyle = accent
-      ctx.fillRect(vpX + 4, vpY + 4, vpW - 8, 64)
-      ctx.fillStyle = '#041007'
-      ctx.textAlign = 'left'
-      ctx.font = 'bold 34px "Consolas", "Courier Prime", monospace'
-      ctx.fillText(banner, vpX + 22, vpY + 48, vpW - 44)
-
-      cards.forEach((c, idx) => {
-        const cy = vpY + 84 + idx * 214
-        ctx.fillStyle = '#071a0f'
-        ctx.fillRect(vpX + 4, cy, vpW - 8, 198)
-        ctx.strokeStyle = accent
-        ctx.lineWidth = 3
-        ctx.strokeRect(vpX + 4, cy, vpW - 8, 198)
-
-        ctx.fillStyle = '#ffd000'
-        ctx.font = 'bold 33px "Consolas", "Courier Prime", monospace'
-        ctx.fillText(c.head, vpX + 22, cy + 46, vpW - 44)
-
-        ctx.fillStyle = '#ffffff'
-        ctx.font = 'bold 32px "Consolas", "Courier Prime", monospace'
-        ctx.fillText(c.line1, vpX + 22, cy + 104, vpW - 44)
-
-        ctx.fillStyle = '#8ef6ff'
-        ctx.fillText(c.line2, vpX + 22, cy + 158, vpW - 44)
-      })
-    }
-
-    if (activeTab === 3) {
-      drawBigGuideCards(
-        'COLD STARTUP // 4 STEPS TO BATTERY & GRID',
-        [
-          {
-            head: '1. [KEY 3] UNIT B: GAS & PUMPS',
-            line1: 'Flip 3 SCRUBBERS + 4 PUMPS UP;',
-            line2: 'turn HELIUM-N2 & FEEDWATER ~50%.',
-          },
-          {
-            head: '2. [KEY 3] UNIT A-2: BORON RODS 55%',
-            line1: 'Scroll or drag [CONTROL ROD DRIVE] wheel',
-            line2: 'to raise BORON RODS to 55% (charge BAT).',
-          },
-          {
-            head: '3. [KEY 5] UNIT C: AUTO ZONE DISPATCH',
-            line1: 'Unit C auto-drains Banks A & B to match',
-            line2: 'Unit A levers! Verify 600 MW on VFD/Dial.',
-          },
-          {
-            head: '4. [KEY 1] UNIT A: 6 SUBSTATIONS',
-            line1: 'Set all 6 substation levers to 100 MW',
-            line2: '(600 MW total) + clear any drills!',
-          },
-        ],
-        '#39ff14'
-      )
-    } else if (activeTab === 4) {
-      drawBigGuideCards(
-        '+MW SURGE vs -MW SHED ORDERS',
-        [
-          {
-            head: 'AUTOMATIC BATTERY -> GRID DISPATCH!',
-            line1: 'Battery buffers reactor output! Unit C',
-            line2: 'auto-drains Banks A & B to feed DEMAND.',
-          },
-          {
-            head: '+MW ORDER (NEED MORE POWER):',
-            line1: '1. RODS UP [A-2] to charge Battery faster',
-            line2: '2. Raise Sector Levers [A] — C auto-feeds!',
-          },
-          {
-            head: '-MW ORDER (SHED GRID LOAD):',
-            line1: '1. Lower Sector Levers [A] (C auto-trims!)',
-            line2: '2. Trim RODS IN [A-2] to avoid >75 BAR!',
-          },
-          {
-            head: 'TEAR & STAMP AT [KEY 4] DESK:',
-            line1: 'Tear Pravda order -> Stamp APPROVED',
-            line2: '-> Pack Capsule -> Pull Tube Lever!',
-          },
-        ],
-        '#ffd000'
-      )
-    } else if (activeTab === 5) {
-      drawBigGuideCards(
-        'REACTOR ALARMS & QUICK CURES',
-        [
-          {
-            head: 'XENON-135 ("NUCLEAR ASH" >35%):',
-            line1: 'Too low Rods or excess cold Feedwater!',
-            line2: 'CURE: Raise RODS [A-2] or trim FEEDWATER [B].',
-          },
-          {
-            head: 'STEAM VOIDS ("BOILING DRY" >28%):',
-            line1: 'Rods too high for cooling water flow!',
-            line2: 'CURE: Raise FEEDWATER [B] or lower RODS [A-2].',
-          },
-          {
-            head: 'SPENT FUEL RODS (AMBER TILES ON A-2):',
-            line1: '4+ spent rods sag MW & overheat core!',
-            line2: 'CURE: Click AMBER tile + pull REFUEL LEVER.',
-          },
-          {
-            head: 'HOT PUMP BEARINGS (>80°C):',
-            line1: 'Melted bearings come off your pension!',
-            line2: 'CURE: Open OIL COOLER wheel [A-2/A].',
-          },
-        ],
-        '#ff5555'
-      )
-    } else {
-      drawBigGuideCards(
-        'SOVIET RBMK-1000 & BATTERY NOTES',
-        [
-          {
-            head: 'NO CONTAINMENT DOME ([KEY 3] B):',
-            line1: 'Ministry bought a banner instead —',
-            line2: 'keep He-N2 & 3 Scrubbers ON always!',
-          },
-          {
-            head: 'BORON RODS ([KEY 3] UNIT A-2):',
-            line1: 'Neutron sponges: UP charges Battery,',
-            line2: 'DOWN cools core. Keep Boron >25%!',
-          },
-          {
-            head: 'HEAVY ACCUMULATOR BANK ([KEY 5] C):',
-            line1: 'Reactor fills Banks A/B (ENERGY CREATED);',
-            line2: 'Zone Busbars auto-drain to feed DEMAND!',
-          },
-          {
-            head: 'SCROLL WHEEL SHORTCUT:',
-            line1: 'Scroll mouse wheel on ANY wheel or',
-            line2: 'lever (hold SHIFT for 1% fine trim)!',
-          },
-        ],
-        '#00f0ff'
-      )
-    }
-  }
-
-  ctx.restore() // end Zone 2 clip
-
-  // =========================================================================
-  // ZONE 3 (BOTTOM): CRISP 30PX FOOTER CONTROLS IN 100% ENGLISH
-  // =========================================================================
-  ctx.strokeStyle = '#28b862'
-  ctx.lineWidth = 2.5
-  ctx.beginPath()
-  ctx.moveTo(24, 1202)
-  ctx.lineTo(LW - 24, 1202)
-  ctx.stroke()
-
-  ctx.textAlign = 'center'
-  ctx.fillStyle = '#ffd000'
-  ctx.font = 'bold 30px "Consolas", "Courier Prime", monospace'
-  ctx.fillText(
-    '[1-6]: TABS  |  [TAB]: CLOSE ZOOM  |  [E]: PUT ON DESK',
-    LW / 2,
-    1248,
-    LW - 40
-  )
-
-  ctx.restore()
-}
-
 export function drawTrue2xOpticalLensCanvas(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -3513,9 +2959,6 @@ export function drawTrue2xOpticalLensCanvas(
   lensX: number,
   lensZ: number,
   docs: DeskDocument[],
-  manualPage: ManualPageId,
-  manualScrollY: number,
-  manualBounds: { x: number; z: number; width: number; height: number }
 ): void {
   ctx.save()
   ctx.imageSmoothingEnabled = false
@@ -3538,26 +2981,6 @@ export function drawTrue2xOpticalLensCanvas(
     ctx.moveTo(0, gz)
     ctx.lineTo(w, gz)
     ctx.stroke()
-  }
-
-  // Check if the lens is over the 3-Page KGB Security Manual
-  const manLeft = manualBounds.x - manualBounds.width / 2
-  const manTop = manualBounds.z - manualBounds.height / 2
-  if (
-    lensX >= manLeft - 0.12 &&
-    lensX <= manLeft + manualBounds.width + 0.12 &&
-    lensZ >= manTop - 0.12 &&
-    lensZ <= manTop + manualBounds.height + 0.12
-  ) {
-    const u = (lensX - manLeft) / manualBounds.width
-    const v = (lensZ - manTop) / manualBounds.height
-    ctx.save()
-    // 2x optical magnification centered on (u * 512, v * 640)
-    ctx.translate(w / 2, h / 2)
-    ctx.scale(2.0, 2.0)
-    ctx.translate(-u * 512, -v * 640)
-    drawSecurityManualCanvas(ctx, 512, 640, manualPage, manualScrollY, true)
-    ctx.restore()
   }
 
   // Check overlapping Desk Directives (in z-order from back to front)
@@ -3619,7 +3042,7 @@ export function drawDeskHeaderTickerCanvas(
   citations: number,
   lastVerdict: InspectionVerdict | null,
   isMuted = false,
-  isFreeLookMode = false,
+  isSeatedAtDesk = false,
   tutorialPrompt: string | null = null,
   diagnosticHint: string | null = null
 ): void {
@@ -3650,21 +3073,21 @@ export function drawDeskHeaderTickerCanvas(
     28
   )
 
-  // Diegetic Camera Mode Pill ([L-CTRL] РЕЖИМ: КУРСОР / ОБЗОР)
-  ctx.fillStyle = isFreeLookMode ? '#3b280b' : '#112e22'
+  // Diegetic Desk Posture Pill ([E] РЕЖИМ: ЗА СТОЛОМ / СЕСТЬ ЗА СТОЛ)
+  ctx.fillStyle = isSeatedAtDesk ? '#112e22' : '#3b280b'
   ctx.fillRect(210, 10, 344, 34)
-  ctx.strokeStyle = isFreeLookMode ? '#ffb000' : '#33ff66'
+  ctx.strokeStyle = isSeatedAtDesk ? '#33ff66' : '#ffb000'
   ctx.lineWidth = 2
   ctx.strokeRect(210, 10, 344, 34)
-  ctx.fillStyle = isFreeLookMode ? '#ffb000' : '#33ff66'
+  ctx.fillStyle = isSeatedAtDesk ? '#33ff66' : '#ffb000'
   ctx.font = 'bold 14px "Courier Prime", monospace'
   ctx.textAlign = 'center'
   ctx.fillText(
     isDrillMode
       ? '[BACKSPACE] SKIP TRAINING DRILL'
-      : isFreeLookMode
-        ? '[L-CTRL] РЕЖИМ: ОБЗОР (FREE-LOOK)'
-        : '[L-CTRL] РЕЖИМ: КУРСОР (CURSOR)',
+      : isSeatedAtDesk
+        ? '[E] РЕЖИМ: ЗА СТОЛОМ (SEATED)'
+        : '[E] СЕСТЬ ЗА СТОЛ (SIT AT DESK)',
     382,
     28
   )
@@ -3728,7 +3151,7 @@ export function drawDeskHeaderTickerCanvas(
     ? activeBannerPrompt
     : lastVerdict
       ? `${lastVerdict.docId} [${lastVerdict.decision}]: ${lastVerdict.reason}`
-      : 'INSPECT SEALS (2x ZOOM), FONTS/MINISTRIES & COLOURS IN KGB MANUAL BEFORE DISPATCHING'
+      : 'INSPECT SEALS (2X LENS), FONTS & COLOURS ON DESK + K.O.M.R.A.D.-84 BEFORE DISPATCHING'
 
   let fontPx = activeBannerPrompt ? 14 : 16
   ctx.font = `bold ${fontPx}px "Courier Prime", monospace`

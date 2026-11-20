@@ -1,11 +1,10 @@
 import { Canvas } from '@react-three/fiber'
-import { useEffect, useRef } from 'react'
-import { playKnifeSwitchSlam } from './modules/inspector/audio'
-import { playSwitchClank } from './modules/reactor/audioSynth'
+import { useEffect, useRef, useState } from 'react'
 import {
-  startSoundtrack,
-  updateSoundtrackState,
-} from './modules/reactor/soundtrackPlayer'
+  playKnifeSwitchSlam,
+  silenceAllLegacyGlobalBgm,
+} from './modules/inspector/audio'
+import { playSwitchClank } from './modules/reactor/audioSynth'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
 import { MainMenuOverlay } from './shared/MainMenuOverlay'
@@ -29,7 +28,7 @@ function CenterReticle() {
       const visible =
         gs.phase === 'playing' &&
         pointerLockInteraction.isPointerLocked &&
-        !gs.wePadInspecting &&
+        !gs.isSeatedAtDesk &&
         !pointerLockInteraction.debugMenuOpen &&
         !pointerLockInteraction.mainMenuOpen
 
@@ -111,12 +110,66 @@ function CenterReticle() {
   )
 }
 
+function RadioBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
+  const phase = useGameStore((s) => s.phase)
+  const diagFeedActive = useGameStore((s) => s.diagFeedActive)
+  const subtitle = useGameStore((s) => s.radioBroadcastSubtitle)
+
+  if (phase !== 'playing' || diagFeedActive || menusOpen || !subtitle) {
+    return null
+  }
+
+  return (
+    <div
+      className="pointer-events-none fixed bottom-20 left-1/2 z-25 w-max max-w-[min(92vw,48rem)] -translate-x-1/2 rounded border border-[#ffb000]/65 px-4 py-2 text-center shadow-[0_6px_22px_rgba(0,0,0,0.85)] select-none"
+      style={{ backgroundColor: 'rgba(10, 12, 10, 0.84)' }}
+    >
+      <div
+        className="mb-1 flex items-center justify-center gap-2 text-xs font-bold tracking-[0.18em] text-[#ffb000]"
+        style={{ fontFamily: '"VT323", "Courier Prime", monospace' }}
+      >
+        <span
+          className="inline-block h-2 w-2 rounded-full bg-[#ff2a2a]"
+          style={{ boxShadow: '0 0 6px #ff2a2a' }}
+        />
+        <span>[ РАДИО СССР // BROADCAST ]</span>
+      </div>
+      <div
+        className="text-base leading-snug tracking-[0.085em] text-[#f6ead0] uppercase sm:text-lg"
+        style={{
+          fontFamily: '"Kremlin", sans-serif',
+          textShadow:
+            '0 2px 0 #070907, 0 0 8px rgba(0, 0, 0, 0.95), 0 0 14px rgba(255, 176, 0, 0.22)',
+        }}
+      >
+        {subtitle}
+      </div>
+    </div>
+  )
+}
+
 export function App() {
   const phase = useGameStore((s) => s.phase)
   const tick = useGameStore((s) => s.tick)
-  const isMusicMuted = useGameStore((s) => s.isMusicMuted)
-  const diagFeedActive = useGameStore((s) => s.diagFeedActive)
-  const wePadInspecting = useGameStore((s) => s.wePadInspecting)
+  const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk)
+  const canSitAtDesk = useGameStore((s) => s.canSitAtDesk)
+  const [menusOpen, setMenusOpen] = useState<boolean>(
+    () => pointerLockInteraction.mainMenuOpen || pointerLockInteraction.debugMenuOpen
+  )
+
+  useEffect(() => {
+    const syncMenus = () => {
+      setMenusOpen(
+        pointerLockInteraction.mainMenuOpen || pointerLockInteraction.debugMenuOpen
+      )
+    }
+    syncMenus()
+    return subscribePointerLockInteraction(syncMenus)
+  }, [])
+
+  useEffect(() => {
+    silenceAllLegacyGlobalBgm()
+  }, [phase])
 
   useEffect(() => {
     if (phase !== 'playing') return
@@ -125,44 +178,6 @@ export function App() {
     }, 1000)
     return () => window.clearInterval(interval)
   }, [phase, tick])
-
-  // Start soundtrack automatically on first user gesture (click or key press anywhere in the bunker)
-  // and keep mute / redline state continuously synchronized even before pulling the Main Breaker!
-  useEffect(() => {
-    const syncSoundtrack = () => {
-      const s = useGameStore.getState()
-      const totalMW =
-        s.powerAllocation.cooling +
-        s.powerAllocation.defense +
-        s.powerAllocation.facility
-      const isRedline =
-        totalMW > s.maxSafePower ||
-        s.coreTemp >= 760 ||
-        s.redlineInstability >= 50
-      startSoundtrack()
-      updateSoundtrackState(isRedline, s.isMusicMuted || s.diagFeedActive)
-    }
-
-    window.addEventListener('pointerdown', syncSoundtrack, { passive: true })
-    window.addEventListener('keydown', syncSoundtrack)
-    return () => {
-      window.removeEventListener('pointerdown', syncSoundtrack)
-      window.removeEventListener('keydown', syncSoundtrack)
-    }
-  }, [])
-
-  // Immediately update soundtrack mute & redline crossfade whenever mute or phase changes
-  // (HighDetailReactorPanel3D also updates redline soundtrack state imperatively inside useFrame)
-  useEffect(() => {
-    const s = useGameStore.getState()
-    const totalMW =
-      s.powerAllocation.cooling +
-      s.powerAllocation.defense +
-      s.powerAllocation.facility
-    const isRedline =
-      totalMW > s.maxSafePower || s.coreTemp >= 760 || s.redlineInstability >= 50
-    updateSoundtrackState(isRedline, isMusicMuted || diagFeedActive)
-  }, [isMusicMuted, diagFeedActive, phase])
 
   // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase,
   // or to re-close the Main Breaker during an active shift if it tripped open (isBlackout === true).
@@ -184,8 +199,6 @@ export function App() {
         if (s.phase === 'boot') {
           e.preventDefault()
           playSwitchClank(true)
-          startSoundtrack()
-          updateSoundtrackState(false, s.isMusicMuted)
           s.startShift()
           if (wantSandbox) {
             s.setGodMode(true)
@@ -193,8 +206,6 @@ export function App() {
         } else if (s.phase !== 'playing') {
           e.preventDefault()
           playSwitchClank(true)
-          startSoundtrack()
-          updateSoundtrackState(false, s.isMusicMuted)
           s.resetShift()
           if (wantSandbox) {
             s.setGodMode(true)
@@ -219,20 +230,28 @@ export function App() {
       <MainMenuOverlay />
       <DebugMenu />
       <CenterReticle />
+      <RadioBroadcastSubtitleHud menusOpen={menusOpen} />
+
+      {/* Subtle Contextual [E] SIT AT DESK Prompt When Walking Near Inspector Desk */}
+      {phase === 'playing' && !isSeatedAtDesk && canSitAtDesk && !menusOpen && (
+        <div className="pointer-events-none fixed bottom-11 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#ffb000]/75 bg-[#07160c]/90 px-3 py-0.5 font-mono text-xs font-bold tracking-widest text-[#ffb000] shadow-md">
+          [E] SIT AT DESK
+        </div>
+      )}
 
       {/* Discreet Control & Locomotion Hint Bar at Bottom of Screen */}
       {phase === 'playing' && (
         <div className="pointer-events-none fixed bottom-2.5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#28b862]/70 bg-[#051209]/90 px-4 py-1 font-mono text-xs font-bold tracking-wider text-[#39ff14] shadow-lg">
-          {wePadInspecting
-            ? '[TAB]: EXIT WE-PAD ZOOM | [E]: STOW WE-PAD | [1–6]: SWITCH TAB'
-            : '[WASD]: WALK | [MOUSE]: LOOK | [HOLD LMB]: GRAB & DRAG | [RMB]: ZOOM | [E/TAB]: WE-PAD'}
+          {isSeatedAtDesk
+            ? '[LMB]: GRAB & DRAG DESK TOOLS | [RMB]: ZOOM | [E / ESC]: STAND UP'
+            : '[WASD]: WALK | [MOUSE]: LOOK | [HOLD LMB]: GRAB & DRAG | [RMB]: ZOOM | [E]: SIT / STAND (DESK)'}
         </div>
       )}
 
       {/* 100% True 3D First-Person Soviet Control Room Canvas (Locked dpr=1, unshadowed, stencil-free for 60 FPS micro-pixel aesthetic) */}
       <Canvas
         dpr={1}
-        camera={{ position: [0, 1.65, 0.6], fov: 68, near: 0.05, far: 160 }}
+        camera={{ position: [0, 1.65, 0.6], fov: 68, near: 0.12, far: 150 }}
         gl={{ powerPreference: 'high-performance', antialias: false, stencil: false }}
       >
         <ControlRoomScene />

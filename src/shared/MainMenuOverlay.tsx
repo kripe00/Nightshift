@@ -5,10 +5,6 @@ import {
   playSwitchClank,
 } from '../modules/inspector/audio'
 import { useDeskStore } from '../modules/inspector/useDeskStore'
-import {
-  startSoundtrack,
-  updateSoundtrackState,
-} from '../modules/reactor/soundtrackPlayer'
 import { updatePointerLockInteraction } from './pointerLockState'
 import { useGameStore } from './useGameStore'
 
@@ -377,10 +373,6 @@ export const MainMenuOverlay: React.FC = () => {
   }
 
   const handleNewGame = () => {
-    startSoundtrack()
-    const isMuted = useGameStore.getState().isMusicMuted
-    updateSoundtrackState(false, isMuted)
-
     useDeskStore.getState().resetDeskStore()
     useGameStore.getState().resetShift()
     saveCurrentShiftToStorage()
@@ -392,9 +384,6 @@ export const MainMenuOverlay: React.FC = () => {
   const handleContinueGame = () => {
     if (!hasLiveOrSavedShift) return
     playSwitchClank(true)
-    startSoundtrack()
-    const isMuted = useGameStore.getState().isMusicMuted
-    updateSoundtrackState(false, isMuted)
 
     if (phase !== 'playing' && savedShift) {
       useGameStore.setState({

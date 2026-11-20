@@ -55,6 +55,49 @@ export function isSkalaDiagFeedSyncing(): boolean {
 const trackedBgMedia = new Set<HTMLMediaElement>()
 const intendedBgVolumes = new WeakMap<HTMLMediaElement, number>()
 const heldAuxCodes = new Set<string>()
+const LEGACY_GLOBAL_BGM_RE = /music\/(night-shift|redline-reactor)\.mp3/i
+
+function isLegacyGlobalBgmMedia(el: HTMLMediaElement): boolean {
+  if ((el as HTMLElement).dataset?.okean84Radio === '1') return false
+  if ((el as HTMLElement).dataset?.legacyBgmBlocked === '1') return true
+  const src = el.currentSrc || el.getAttribute('src') || el.src || ''
+  return LEGACY_GLOBAL_BGM_RE.test(src)
+}
+
+export function unregisterTrackedMedia(el: HTMLMediaElement): void {
+  trackedBgMedia.delete(el)
+  intendedBgVolumes.delete(el)
+}
+
+export function silenceAllLegacyGlobalBgm(): void {
+  if (typeof window === 'undefined') return
+  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
+  const candidates = new Set<HTMLMediaElement>(trackedBgMedia)
+  if (typeof document !== 'undefined') {
+    for (const el of Array.from(document.querySelectorAll('audio'))) {
+      candidates.add(el)
+    }
+  }
+  for (const el of candidates) {
+    if (!isLegacyGlobalBgmMedia(el)) continue
+    ;(el as HTMLElement).dataset.legacyBgmBlocked = '1'
+    try {
+      el.pause()
+    } catch {
+      // ignore
+    }
+    el.muted = true
+    setNativeVol?.call(el, 0)
+    el.removeAttribute('src')
+    try {
+      el.load()
+    } catch {
+      // ignore
+    }
+    trackedBgMedia.delete(el)
+    intendedBgVolumes.delete(el)
+  }
+}
 
 function clampUnit(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1
@@ -105,6 +148,21 @@ function installMediaGainBus(): void {
         nativeSet.call(this, clamped)
         return
       }
+      if (isLegacyGlobalBgmMedia(this)) {
+        ;(this as HTMLElement).dataset.legacyBgmBlocked = '1'
+        this.muted = true
+        if (!this.paused) {
+          try {
+            this.pause()
+          } catch {
+            // ignore
+          }
+        }
+        nativeSet.call(this, 0)
+        trackedBgMedia.delete(this)
+        intendedBgVolumes.delete(this)
+        return
+      }
       trackedBgMedia.add(this)
       intendedBgVolumes.set(this, clamped)
       nativeSet.call(this, clampUnit(clamped * bgDuckGain))
@@ -112,6 +170,21 @@ function installMediaGainBus(): void {
   })
 
   HTMLMediaElement.prototype.play = function (this: HTMLMediaElement): Promise<void> {
+    if (isLegacyGlobalBgmMedia(this)) {
+      ;(this as HTMLElement).dataset.legacyBgmBlocked = '1'
+      this.muted = true
+      if (!this.paused) {
+        try {
+          this.pause()
+        } catch {
+          // ignore
+        }
+      }
+      nativeSet.call(this, 0)
+      trackedBgMedia.delete(this)
+      intendedBgVolumes.delete(this)
+      return Promise.resolve()
+    }
     if (this !== auxDiagVideo) {
       trackedBgMedia.add(this)
       const currentIntended =
@@ -121,6 +194,8 @@ function installMediaGainBus(): void {
     }
     return nativePlay.call(this)
   }
+
+  silenceAllLegacyGlobalBgm()
 }
 
 function setAuxTrackVolume(vol: number): void {

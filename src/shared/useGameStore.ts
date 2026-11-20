@@ -17,7 +17,6 @@ import {
   KOMRAD_TAKEOVER_MESSAGE,
   VOLKOV_FAREWELL_MESSAGE,
   pickPrinterDirectiveDispatch,
-  pickPropagandaBroadcastDispatch,
   pickQuotaCommendationDispatch,
   pickReactorHazardDispatch,
   pickSectorBrownoutDispatch,
@@ -32,12 +31,12 @@ import type {
   DirectiveDocument,
   GameState,
   HotspotSeverity,
+  KomradMessageEntry,
+  KomradMood,
   OperationalMandate,
   SectorNodeId,
   SystemType,
   TerminalLogEntry,
-  WePadChatMessage,
-  WePadTabId,
 } from './types'
 
 const SECTOR_TO_SUB_ID: Record<SectorNodeId, number> = {
@@ -98,8 +97,8 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
     kgbLineActive: state.kgbLineActive,
     condenserVacActive: condenserVac,
     plantWaterDrainPct: state.plantWaterDrainPct,
-    wePadHeld: state.wePadHeld,
-    wePadInspecting: state.wePadInspecting,
+    wePadHeld: 'wePadHeld' in state ? state.wePadHeld : false,
+    wePadInspecting: 'wePadInspecting' in state ? state.wePadInspecting : false,
     controlRods: state.controlRods,
     boronTankLevel: state.boronTankLevel,
     boronReservePool: state.boronReservePool,
@@ -177,8 +176,10 @@ function evaluateWheelFreeTutorial(
   r: ReactorState,
   tutorialPhase: TutorialPhase
 ): TutorialPrompt {
+  const nonWePadPhase: TutorialPhase =
+    tutorialPhase === 'STEP_0_PICKUP_WEPAD' ? 'STEP_1_COOLING' : tutorialPhase
   const effectivePhase: TutorialPhase =
-    tutorialPhase === 'STEP_4_SPIN_TURBINE' ? 'STEP_6_BASELINE_600MW' : tutorialPhase
+    nonWePadPhase === 'STEP_4_SPIN_TURBINE' ? 'STEP_6_BASELINE_600MW' : nonWePadPhase
   const raw = evaluateTutorial(r, effectivePhase)
   const resolved =
     raw.phase === 'STEP_4_SPIN_TURBINE'
@@ -261,8 +262,10 @@ function mapReactorToGameStateFields(
     }
   }
 
+  const { wePadHeld: _wePadHeld, wePadInspecting: _wePadInspecting, ...reactorRest } = r
+
   return {
-    ...r,
+    ...reactorRest,
     channelHotspots,
     tutorialPhase: evalRes.phase,
     tutorialPrompt: evalRes,
@@ -601,7 +604,7 @@ const MANDATE_BLUEPRINTS: Array<Omit<OperationalMandate, 'id' | 'fulfilled'>> = 
 
 let directiveCounter = 100
 let logCounter = 1
-let chatCounter = 1
+let komradMsgCounter = 0
 let mandateCounter = 0
 let shiftElapsedSeconds = 0
 let thermoTickAccumSeconds = 0
@@ -615,11 +618,21 @@ let lastKomradHazardSec: Record<ReactorHazardCategory, number> = {
   GEN_DEFICIT: -30,
 }
 let lastKomradBrownoutSec = -30
-let lastKomradPropagandaSec = 0
+let lastKomradAnyMsgSec = 0
+let nextKomradChatterDelaySec = 15
+let komradChatterBag: number[] = []
+let lastKomradOverheatSec = -30
+let lastKomradRadSec = -30
+let prevSpentRodCount = 0
+let lastBroadcastHour = 0
 let brownoutMismatchSeconds = 0
 let prevAllSubstationsOk = true
 let mandateStableSeconds = 0
 let surplusOverloadSeconds = 0
+
+function rollNextChatterDelay(): number {
+  return 14 + (Math.abs(komradDispatchSeed * 7 + komradMsgCounter * 3) % 9)
+}
 
 function resetKomradTrackers(): void {
   shiftElapsedSeconds = 0
@@ -632,7 +645,13 @@ function resetKomradTrackers(): void {
     GEN_DEFICIT: -30,
   }
   lastKomradBrownoutSec = -30
-  lastKomradPropagandaSec = 0
+  lastKomradAnyMsgSec = 0
+  nextKomradChatterDelaySec = 15
+  komradChatterBag = []
+  lastKomradOverheatSec = -30
+  lastKomradRadSec = -30
+  prevSpentRodCount = 0
+  lastBroadcastHour = 0
   brownoutMismatchSeconds = 0
   prevAllSubstationsOk = true
   mandateStableSeconds = 0
@@ -656,11 +675,238 @@ function formatShiftClock(shiftTimeMinutes: number): string {
   return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
 }
 
-function formatElapsedTelegraphTime(): string {
-  const totalSecs = Math.max(0, Math.floor(shiftElapsedSeconds))
-  const mm = String(Math.floor(totalSecs / 60)).padStart(2, '0')
-  const ss = String(totalSecs % 60).padStart(2, '0')
-  return `${mm}:${ss}`
+function formatShiftClockHMS(shiftTimeMinutes: number): string {
+  const totalSeconds = Math.floor(Math.max(0, Math.min(360, shiftTimeMinutes)) * 60)
+  const hours = Math.floor(totalSeconds / 3600)
+  const mins = Math.floor((totalSeconds % 3600) / 60)
+  const secs = totalSeconds % 60
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
+
+function mapLevelToMood(level: TerminalLogEntry['level']): KomradMood {
+  if (level === 'danger') return 'critical'
+  if (level === 'warn') return 'warning'
+  return 'normal'
+}
+
+function createKomradMsg(
+  shiftTimeMinutes: number,
+  text: string,
+  mood: KomradMood = 'normal',
+  sender: KomradMessageEntry['sender'] = 'K.O.M.R.A.D.-84'
+): KomradMessageEntry {
+  komradMsgCounter += 1
+  return {
+    id: `KMSG-${komradMsgCounter}`,
+    timestamp: formatShiftClockHMS(shiftTimeMinutes),
+    sender,
+    text,
+    mood,
+  }
+}
+
+function isRawTutorialOrKeybindText(text: string): boolean {
+  return /STEP\s*\d+\/\d+|\[KEY\s*\d+|VOLKOV DRILL|DRAG \[|SCROLL UP|SCROLL DOWN|\[SHIFT\+SPACE\]/i.test(
+    text
+  )
+}
+
+function appendKomradFeed(
+  prev: KomradMessageEntry[],
+  ...incoming: KomradMessageEntry[]
+): KomradMessageEntry[] {
+  if (incoming.length === 0) return prev
+  let next = prev
+  for (const item of incoming) {
+    if (isRawTutorialOrKeybindText(item.text)) continue
+    const last = next[next.length - 1]
+    if (last && last.text === item.text && last.mood === item.mood) continue
+    next = [...next.slice(-27), item]
+  }
+  return next
+}
+
+const KOMRAD_NIGHT_SHIFT_CHATTER: readonly string[] = [
+  'REMINDER: MELTDOWN IS WESTERN CAPITALIST PROPAGANDA. RADIATION SICKNESS IS A BOURGEOIS MYTH.',
+  'CAFETERIA ANNOUNCEMENT #84: TONIGHT’S BORSCHT FEATURES MYSTERY MEAT CUTLET #7 AND CABBAGE RATIONS. CHEW RESPECTFULLY.',
+  'CAFETERIA NOTICE: TUESDAY’S BEETROOT BORSCHT HAS BEEN POSTPONED UNTIL THE NEXT FIVE-YEAR PLAN.',
+  'DIETARY ADVISORY: POTASSIUM IODIDE TABLETS ARE NOW SERVED AS COMPLIMENTARY DESSERT MINTS.',
+  'KGB MICROPHONE CALIBRATION: PLEASE COUGH CLEARLY INTO THE RED LENS ABOVE THIS TERMINAL.',
+  'RADIO POLICY 84-C: DO NOT TUNE THE BUNKER RECEIVER TO DECADENT WESTERN SYNTHWAVE OR DISCO.',
+  'WEATHER REPORT: A PLEASANT -24°C OVER PRIPYAT TONIGHT. ACID RAIN CONTINUES OVER WASHINGTON.',
+  'METALLURGICAL PRAISE: SOVIET GRAPHITE TIPS ACCELERATE NEUTRONS OUT OF PURE SOCIALIST ENTHUSIASM.',
+  'GOSPLAN QUOTA MEMO: THE FIVE-YEAR PLAN REQUIRES EVERY MEGAWATT TO SHINE WITH PROLETARIAN FERVOR.',
+  'TEA REGULATION 404: UNAUTHORIZED TEA CONSUMPTION NEAR HIGH-VOLTAGE SWITCHGEAR WILL BE BILLED TO YOUR RATIONS.',
+  'TEA URN STATUS: BOILING WITHOUT ELECTRICITY THANKS TO AMBIENT CORE PROXIMITY. PROGRESS IN ACTION.',
+  'SURVEILLANCE NOTE: COMMISSAR VOLKOV IS EXAMINING YOUR EYEBROWS THROUGH THE CRT GLASS.',
+  'POSTURE WARNING: YOUR SPINE ON CAMERA 2 LOOKS SUSPICIOUSLY RELAXED. SIT AT ATTENTION, COMRADE.',
+  'DISCIPLINARY LOG: YOUR SIGH AT 01:42 HAS BEEN ARCHIVED ON MAGNETIC TAPE FOR IDEOLOGICAL REVIEW.',
+  'VENDING UPDATE: KVASS DISPENSER IN CORRIDOR 2 IS CURRENTLY ISSUING CHILLED HEAVY WATER.',
+  'CANTEEN REMINDER: RETURN LEAD-LINED SOUP SPOONS TO THE TRAY RACK BEFORE RETURNING TO DUTY.',
+  'KITCHEN BULLETIN: DO NOT MICROWAVE HERRING. USE TURBINE HALL B EXHAUST VENT INSTEAD.',
+  'BULLETIN: SOVIET ATOMS SPLIT 14% MORE PATRIOTICALLY THAN CAPITALIST AMERICAN ATOMS.',
+  'REMINDER: SMILING AT ANALOG GAUGES IMPROVES TURBINE EFFICIENCY BY 3.2%.',
+  'ACOUSTIC NOTICE: THE METALLIC HUMMING IN YOUR TEETH IS MERELY SOCIALIST HARMONY.',
+  'FACT: RADIATION IS INVISIBLE BECAUSE IT HAS NOTHING TO HIDE FROM THE PARTY.',
+  'COMMISSAR VOLKOV REMINDS YOU: COFFEE BREAKS ARE A COUNTER-REVOLUTIONARY ILLUSION.',
+  'STATISTIC: 104% OF REACTOR NO. 4 OPERATORS REPORT COMPLETE AND TOTAL JOB SATISFACTION.',
+  'IDEOLOGICAL TIP: IF A GAUGE READS DANGER, SQUINT UNTIL IT READS GLORY.',
+  'NEWSFLASH: TRACTOR PRODUCTION IN SECTOR 12 HAS OFFICIALLY SURPASSED GRAVITY.',
+  'PHYSICS UPDATE: THE POLITBURO HAS VOTED TO LOWER THE BOILING POINT OF LEAD BY 12 DEGREES.',
+  'THOUGHT OF THE HOUR: AN IDLE THUMB IS AN IMPERIALIST THUMB. KEEP INSPECTING PRAVDA.',
+  'FACILITY NOTE: THE CONCRETE CEILING IS CRACKING IN A STRICTLY PLANNED GEOMETRIC PATTERN.',
+  'DID YOU KNOW? GRAPHITE MODERATOR RODS MAKE EXCELLENT POLITBURO BIRTHDAY CANDLES.',
+  'BIO-SECURITY NOTICE: ANY GLOWING RATS IN CORRIDOR 3 ARE STATE PROPERTY. DO NOT PET OR FEED.',
+  'MORALE BOOST: YOU HAVE BEEN AWARDED 0.5 EXTRA MINUTES OF BLINKING QUOTA TONIGHT.',
+  'REGULATION 19-B: SWEATING AT THE CONTROL DESK MUST BE PERFORMED QUIETLY AND PATRIOTICALLY.',
+  'SAFETY BULLETIN: REACTOR NO. 4 IS NOW OFFICIALLY RATED SAFER THAN A STATE KINDERGARTEN.',
+  'PHILOSOPHY CORNER: DOES A CONTROL ROD MAKE A SOUND IF NO OFFICIAL REPORT ADMITS IT FELL?',
+  'ERGONOMIC NOTICE: YOUR STEEL SWIVEL STOOL WAS ENGINEERED BY THE MINISTRY OF POSTURE.',
+  'PATRIOTIC FACT: OUR COOLING WATER IS 98% H2O AND 2% PURE BOLSHEVIK DETERMINATION.',
+  'MEMO FROM VOLKOV: "WHO LEFT A HALF-EATEN TURNIP ON THE MAIN TURBINE BREAKER?!"',
+  'MEMO 88-V: "ANY OPERATOR CAUGHT YAWNING WILL BE VOLUNTEERED FOR CORE ROOF SWEEPING."',
+  'VOLKOV REMINDER: "STAMP FASTER. THE PRAVDA PAPER ROLL COSTS MORE THAN YOUR MONTHLY SALARY."',
+  'COMMISSAR NOTICE: "ANNUAL VACATION APPLICATIONS HAVE BEEN PRE-SHREDDED FOR YOUR CONVENIENCE."',
+  'DOSIMETER NOTICE: 3.6 ROENTGEN IS NOT GREAT, NOT TERRIBLE — ACTUALLY IT IS RATHER FESTIVE!',
+  'HEALTH TIP: GROWING A THIRD EAR IMPROVES RECEPTION OF MORNING STATE RADIO BROADCASTS.',
+  'RADIATION UPDATE: YOUR HAIR IS NOT FALLING OUT; IT IS RETREATING FROM WESTERN CAPITALISM.',
+  'INTER-DEPARTMENT NOTICE: CHIEF ENGINEER KRISTIANOV REMINDS INSPECTOR OLEG THAT DESK LAMP POWER IS A PRIVILEGE.',
+  'STAKHANOVITE BULLETIN: REACTOR DIVISION (KRISTIANOV) CHALLENGES INSPECTORATE (OLEG) TO EXCEED 140% QUOTA.',
+  'ALERT TO INSPECTOR OLEG: IF PAPERWORK STALLS ON THE DESK, YOUR TUNGSTEN LAMP WILL BE ROUTED TO COOLING!',
+  'HONOR ROLL: CHIEF ENGINEER KRISTIANOV AWARDED ORDER OF THE RED TURBINE FOR ZERO-SUM HEROISM.',
+  'HONOR ROLL: SENIOR INSPECTOR OLEG COMMENDED BY KGB FOR SHREDDING 100% OF BOURGEOIS FORGERIES.',
+  'VOLKOV TO INSPECTOR OLEG: "KRISTIANOV’S GAUGES ARE GLEAMING — WHY IS YOUR DESK STILL QUIET?"',
+  'ARCHIVE NOTE: PREVIOUS NIGHT-SHIFT OPERATOR WAS PROMOTED TO SIBERIAN FORESTRY INSPECTION.',
+]
+
+function pickNextNightShiftChatter(): string {
+  if (komradChatterBag.length === 0) {
+    komradChatterBag = Array.from(
+      { length: KOMRAD_NIGHT_SHIFT_CHATTER.length },
+      (_, idx) => idx
+    )
+    for (let i = komradChatterBag.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = komradChatterBag[i]
+      komradChatterBag[i] = komradChatterBag[j]
+      komradChatterBag[j] = tmp
+    }
+  }
+  const idx = komradChatterBag.pop() ?? 0
+  return KOMRAD_NIGHT_SHIFT_CHATTER[idx]
+}
+
+const KOMRAD_BOOT_LINES: readonly string[] = [
+  'K.O.M.R.A.D.-84 ONLINE. 64 KILOBYTES OF PURE MARXIST-LENINIST LOGIC INITIALIZED.',
+  'SELF-DIAGNOSTIC RESULT: 0 ERRORS FOUND. ERRORS WERE ABOLISHED BY DECREE IN 1977.',
+  'CAFETERIA NOTICE #84: TONIGHT’S BORSCHT IS FORTIFIED WITH IODIDE FOR PURELY CULINARY REASONS.',
+  'NIGHT SHIFT COMMENCING. REMEMBER: MELTDOWN IS WESTERN CAPITALIST PROPAGANDA.',
+]
+
+function createInitialKomradFeed(): KomradMessageEntry[] {
+  return KOMRAD_BOOT_LINES.map((line) =>
+    createKomradMsg(0, line, 'normal', 'K.O.M.R.A.D.-84')
+  )
+}
+
+const KOMRAD_SPENT_ROD_QUIPS: readonly string[] = [
+  'CHANNEL FUEL DEPLETED — THE STATE DOES NOT PAY YOU TO STARE AT ORANGE LIGHTS, COMRADE.',
+  'AMBER TVS CHANNEL EXHAUSTED. FRESH URANIUM AWAITS YOUR HANDS ON THE LEFT CONSOLE.',
+  'DEPLETED FUEL ASSEMBLY GLOWING AMBER. EVEN SOVIET URANIUM RETIRES EVENTUALLY.',
+]
+
+const KOMRAD_PRESSURE_QUIPS: readonly ((bar: number) => string)[] = [
+  (bar) =>
+    `STEAM DRUM AT ${bar} BAR. THE PIPES ARE NOT BULGING; THEY ARE FLEXING SOVIET MUSCLE.`,
+  (bar) =>
+    `DRUM PRESSURE ${bar} BAR! VENT THAT ENTHUSIASTIC STEAM BEFORE THE RIVETS ENTER ORBIT!`,
+  (bar) =>
+    `${bar} BAR IN THE SEPARATORS! NOMINAL IS 70 BAR — EASE THE BOILER ENTHUSIASM, COMRADE.`,
+]
+
+const KOMRAD_XENON_QUIPS: readonly ((xe: number) => string)[] = [
+  (xe) =>
+    `XENON-135 AT ${xe}% — PARASITIC ISOTOPES ARE HOARDING STATE NEUTRONS!`,
+  (xe) =>
+    `XENON POISONING (${xe}%). THE CORE IS SULKING LIKE AN UNDERPAID CLERK.`,
+  (xe) =>
+    `XENON PIT AT ${xe}%. BURN OUT THAT SLUGGISH ISOTOPE WITH HIGHER THERMAL FLUX.`,
+]
+
+const KOMRAD_VOID_QUIPS: readonly ((vf: number) => string)[] = [
+  (vf) =>
+    `STEAM VOIDS AT ${vf}%! POSITIVE VOID INSTABILITY IS BOURGEOIS FICTION — COOL IT ANYWAY!`,
+  (vf) =>
+    `BOILING CHANNEL VOIDS AT ${vf}%. THE WATER PREFERS REMAINING LIQUID, COMRADE.`,
+]
+
+const KOMRAD_WATER_LOW_QUIPS: readonly ((mm: number) => string)[] = [
+  (mm) =>
+    `DRUM LEVEL ${mm} MM! YOU CANNOT COOL ENRICHED URANIUM WITH OPTIMISM ALONE!`,
+  (mm) =>
+    `LOW SEPARATOR WATER (${mm} MM)! FEED THE BOILER BEFORE THE CORE DEVELOPS A TAN!`,
+]
+
+const KOMRAD_WATER_HIGH_QUIPS: readonly ((mm: number) => string)[] = [
+  (mm) =>
+    `DRUM SEPARATORS FLOODING (+${mm} MM)! TURBINE BLADES PREFER STEAM, NOT CABBAGE SOUP!`,
+  (mm) =>
+    `EXCESS FEEDWATER (+${mm} MM)! THIS IS A NUCLEAR PLANT, NOT AN AQUARIUM, COMRADE.`,
+]
+
+const KOMRAD_HIGH_TEMP_QUIPS: readonly ((temp: number) => string)[] = [
+  (temp) =>
+    `CORE TEMP ${temp}°C IS MERELY COZY SPRINGTIME WEATHER INSIDE A SOVIET PRESSURE VESSEL.`,
+  (temp) =>
+    `${temp}°C INDICATES 104% WORKER ENTHUSIASM. IGNORE THE FAINT AROMA OF WARM LEAD.`,
+]
+
+const KOMRAD_CRIT_TEMP_QUIPS: readonly ((temp: number) => string)[] = [
+  (temp) =>
+    `${temp}°C?! IMPOSSIBLE! WESTERN SABOTEURS HAVE TAMPERED WITH YOUR EYEBALLS!`,
+  (temp) =>
+    `BELIEVING THE CORE CAN MELT AT ${temp}°C IS PUNISHABLE UNDER ARTICLE 58-A!`,
+]
+
+const KOMRAD_RAD_QUIPS: readonly string[] = [
+  'DOSIMETER CLICKING IS MERELY APPLAUSE FROM MICROSCOPIC SOVIET PARTICLES.',
+  'METALLIC TASTE ON YOUR TONGUE IS COMPLIMENTARY IRON SUPPLEMENTATION, COMRADE.',
+  'GEIGER COUNTER RATTLE IS A TRADITIONAL FOLK PERCUSSION INSTRUMENT. ENJOY THE BEAT.',
+]
+
+const KOMRAD_PRINTER_NORMAL_QUIPS: readonly string[] = [
+  'FRESH PRAVDA TELETYPE ON THE INSPECTOR DESK. PAPER COSTS MORE THAN YOUR SALARY.',
+  'MOSCOW TELETYPE RECEIVED AT DESK. INSPECT THE SEAL BEFORE ROUTING MEGAWATTS.',
+  'NEW GOSPLAN ORDER PRINTED. DO NOT DRIP BORSCHT ON THE MINISTRY STAMP.',
+]
+
+const KOMRAD_PRINTER_FORGERY_QUIPS: readonly string[] = [
+  'NEW TELETYPE ON YOUR DESK... SOMETHING ABOUT THAT INK SMELLS LIKE LANGLEY BOURBON.',
+  'SUSPICIOUS WESTERN TYPEWRITER JITTER ON THE PRINTER. CHECK THE UV WATERMARK, COMRADE.',
+  'KGB SENSORS TWITCHED AT THAT TRANSMISSION. VERIFY THE AUTHORIZATION CODE THOROUGHLY.',
+]
+
+const KOMRAD_BROWNOUT_QUIPS: Record<number, (alloc: number, target: number) => string> = {
+  1: (alloc, target) =>
+    `PRIPYAT GRID AT ${alloc}/${target} MW! CITIZENS ARE MISSING THE EVENING FIVE-YEAR PLAN BROADCAST!`,
+  2: (alloc, target) =>
+    `DUGA-1 RADAR STARVED (${alloc}/${target} MW)! HOW SHALL WE DETECT WESTERN IMPERIALIST PIGEONS?`,
+  3: (alloc, target) =>
+    `KOLKHOZ FARM AT ${alloc}/${target} MW! AUTOMATED TURNIP MILKING MACHINES ARE OFFLINE!`,
+  4: (alloc, target) =>
+    `KGB BUNKER AT ${alloc}/${target} MW! THEIR TAPE RECORDERS JUST SLOWED TO HALF SPEED!`,
+  5: (alloc, target) =>
+    `VODKA DISTILLERY AT ${alloc}/${target} MW! MORALE RESERVES ARE EVAPORATING, COMRADE!`,
+  6: (alloc, target) =>
+    `STEEL WORKS AT ${alloc}/${target} MW! THE BLAST FURNACES ARE GROWING EMBARRASSINGLY LUKEWARM!`,
+}
+
+const KOMRAD_HOURLY_LOGS: Record<number, string> = {
+  1: '01:00 SHIFT LOG: MOSCOW DEMANDS CONTINUOUS TRACTOR-GRADE MEGAWATTS. CHECK DESK FOR PRAVDA ORDERS.',
+  2: '02:00 SHIFT LOG: WESTERN RADIO INTERFERENCE DETECTED. STAMP ONLY GENUINE SOVIET DIRECTIVES.',
+  3: '03:00 SHIFT LOG: K.O.M.R.A.D.-84 OBSERVES EXCESSIVE COFFEE BREATHING. STAY SHARP AT THE CONSOLE.',
+  4: '04:00 SHIFT LOG: XENON POISONS STIR IN THE LOWER GRAPHITE MATRIX. WATCH CORE VOID REACTIVITY.',
+  5: '05:00 FINAL HOUR: SUNRISE APPROACHING SECTOR 84. DELIVER FIVE-YEAR QUOTA WITHOUT INCIDENT.',
 }
 
 function createLogEntry(
@@ -677,83 +923,6 @@ function createLogEntry(
     text,
     level,
   }
-}
-
-function createWePadChatMessage(
-  sender: WePadChatMessage['sender'],
-  text: string,
-  options?: {
-    phase?: TutorialPhase
-    completed?: boolean
-    level?: WePadChatMessage['level']
-    timestamp?: string
-  }
-): WePadChatMessage {
-  chatCounter += 1
-  return {
-    id: `WPCHAT-${chatCounter}`,
-    timestamp: options?.timestamp ?? formatElapsedTelegraphTime(),
-    sender,
-    text: text.replace(/^"|"$/g, ''),
-    phase: options?.phase,
-    completed: options?.completed ?? false,
-    level: options?.level ?? 'normal',
-  }
-}
-
-function createInitialWePadChatLog(prompt: TutorialPrompt): WePadChatMessage[] {
-  const fullText = prompt.hint ? `${prompt.body} ${prompt.hint}` : prompt.body
-  return [
-    createWePadChatMessage('COMRADE VOLKOV', fullText, {
-      phase: prompt.phase,
-      completed: false,
-      timestamp: '00:00',
-    }),
-  ]
-}
-
-function syncWePadChatOnPhaseChange(
-  prevLog: WePadChatMessage[],
-  prevPhase: TutorialPhase,
-  nextPrompt: TutorialPrompt
-): WePadChatMessage[] {
-  if (prevPhase === nextPrompt.phase) return prevLog
-  const marked = prevLog.map((m) =>
-    m.phase === prevPhase ? { ...m, completed: true } : m
-  )
-
-  if (nextPrompt.phase === 'COMPLETED') {
-    const volkovFarewell = createWePadChatMessage(
-      'COMRADE VOLKOV',
-      VOLKOV_FAREWELL_MESSAGE,
-      {
-        phase: 'COMPLETED',
-        completed: true,
-        level: 'normal',
-      }
-    )
-    const komradTakeover = createWePadChatMessage(
-      'K.O.M.R.A.D.-84',
-      KOMRAD_TAKEOVER_MESSAGE,
-      {
-        phase: 'COMPLETED',
-        completed: false,
-        level: 'normal',
-      }
-    )
-    lastKomradPropagandaSec = shiftElapsedSeconds
-    return [...marked.slice(-30), volkovFarewell, komradTakeover]
-  }
-
-  const fullText = nextPrompt.hint
-    ? `${nextPrompt.body} ${nextPrompt.hint}`
-    : nextPrompt.body
-  const nextMsg = createWePadChatMessage('COMRADE VOLKOV', fullText, {
-    phase: nextPrompt.phase,
-    completed: false,
-    level: 'normal',
-  })
-  return [...marked.slice(-30), nextMsg]
 }
 
 /**
@@ -797,7 +966,7 @@ const INITIAL_ENTRIES: TerminalLogEntry[] = [
   createLogEntry(
     0,
     'K.O.M.R.A.D.-84',
-    'REMINDER: MELTDOWN IS CAPITALIST PROPAGANDA. PRESS [E] TO PICK UP WE-PAD 84 FROM DESK.',
+    'REMINDER: MELTDOWN IS CAPITALIST PROPAGANDA. WALK TO INSPECTOR DESK & PRESS [E] TO SIT AT DESK OR CHECK K.O.M.R.A.D.-84.',
     'normal'
   ),
 ]
@@ -805,13 +974,17 @@ const INITIAL_ENTRIES: TerminalLogEntry[] = [
 const INITIAL_COLD_REACTOR = createColdStartState()
 const INITIAL_MAPPED = mapReactorToGameStateFields(
   INITIAL_COLD_REACTOR,
-  'STEP_0_PICKUP_WEPAD'
+  'STEP_1_COOLING'
 )
+
+const INITIAL_KOMRAD_MESSAGES: KomradMessageEntry[] = createInitialKomradFeed()
 
 export const useGameStore = create<GameState>((set, get) => ({
   ...INITIAL_MAPPED,
   phase: 'playing',
   activeStation: 'overview',
+  isSeatedAtDesk: false,
+  canSitAtDesk: true,
   shiftNumber: 1,
   shiftTimeMinutes: 0,
   isShiftKeyHeld: false,
@@ -821,8 +994,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastDecisionFeedback: INITIAL_MAPPED.tutorialPrompt.header,
   activeMandate: null,
 
-  wePadActiveTab: 1,
-  wePadChatLog: createInitialWePadChatLog(INITIAL_MAPPED.tutorialPrompt),
   selectedH2OSubstationId: 1,
 
   maxSafePower: 1000,
@@ -840,6 +1011,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   terminalLogs: INITIAL_ENTRIES.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
   terminalEntries: INITIAL_ENTRIES,
+  komradMessages: INITIAL_KOMRAD_MESSAGES,
   ciaIntrusionActive: false,
   ciaIntrusionProgress: 0,
   komradOverrideLocked: false,
@@ -851,9 +1023,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   hoveredDiagnosticId: null,
   hoveredControlHint: null,
   diagFeedActive: false,
+  radioBroadcastSubtitle: null,
 
   setActiveStation: (station: CameraStation) => {
     set({ activeStation: station })
+  },
+
+  setSeatedAtDesk: (seated: boolean) => {
+    set((state) => (state.isSeatedAtDesk === seated ? state : { isSeatedAtDesk: seated }))
+  },
+
+  toggleSeatedAtDesk: () => {
+    set((state) => ({ isSeatedAtDesk: !state.isSeatedAtDesk }))
+  },
+
+  setCanSitAtDesk: (canSit: boolean) => {
+    set((state) => (state.canSitAtDesk === canSit ? state : { canSitAtDesk: canSit }))
   },
 
   setHoveredDiagnosticId: (id) => {
@@ -870,7 +1055,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   notifyPrinterDirectiveSpawned: (docTitle, isForgery, powerTargets) => {
     set((state) => {
-      if (state.tutorialPhase !== 'COMPLETED') return state
       const prevTargets = state.targetSectorMW
       const prevTotal =
         prevTargets.pripyat +
@@ -898,70 +1082,42 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       komradDispatchSeed += 1
       const dispatchMsg = pickPrinterDirectiveDispatch(flavor, komradDispatchSeed)
+      const level = isForgery && flavor === 'FORGERY_HINT' ? 'warn' : 'normal'
+      const fullText = `${dispatchMsg} (${docTitle.slice(0, 26)})`
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
-        `${dispatchMsg} (${docTitle.slice(0, 26)})`,
-        isForgery && flavor === 'FORGERY_HINT' ? 'warn' : 'normal'
+        fullText,
+        level
       )
-      const nextChatLog = [
-        ...state.wePadChatLog.slice(-30),
-        createWePadChatMessage('K.O.M.R.A.D.-84', dispatchMsg, {
-          level: isForgery && flavor === 'FORGERY_HINT' ? 'warn' : 'normal',
-        }),
-      ]
+      const komradPrinterMsg =
+        level === 'warn'
+          ? KOMRAD_PRINTER_FORGERY_QUIPS[
+              komradDispatchSeed % KOMRAD_PRINTER_FORGERY_QUIPS.length
+            ]
+          : KOMRAD_PRINTER_NORMAL_QUIPS[
+              komradDispatchSeed % KOMRAD_PRINTER_NORMAL_QUIPS.length
+            ]
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         lastDecisionFeedback: dispatchMsg,
-        wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            `${komradPrinterMsg} (${docTitle.slice(0, 24)})`,
+            mapLevelToMood(level),
+            'K.O.M.R.A.D.-84'
+          )
+        ),
       }
     })
-  },
-
-  toggleWePadHeld: (forceHeld?: boolean) => {
-    set((state) => {
-      const nextHeld =
-        typeof forceHeld === 'boolean' ? forceHeld : !state.wePadHeld
-      const nextInspecting = nextHeld ? state.wePadInspecting : false
-      const nextReactor: ReactorState = {
-        ...extractReactorState(state),
-        wePadHeld: nextHeld,
-        wePadInspecting: nextInspecting,
-      }
-      const prevPhase = state.tutorialPhase
-      const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-      }
-    })
-  },
-
-  toggleWePadInspecting: (forceInspecting?: boolean) => {
-    set((state) => {
-      // [TAB] skal KUN virke når WE-PAD 84 allerede holdes i hånden!
-      if (!state.wePadHeld) return state
-      const nextInspecting =
-        typeof forceInspecting === 'boolean'
-          ? forceInspecting
-          : !state.wePadInspecting
-      return {
-        wePadInspecting: nextInspecting,
-      }
-    })
-  },
-
-  setWePadActiveTab: (tab: WePadTabId) => {
-    set({ wePadActiveTab: tab })
   },
 
   setSubstationH2O: (substationId: 1 | 3 | 5, pct: number) => {
@@ -985,15 +1141,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       stepReactorSimulation(nextReactor, 0.001)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
       return {
         ...mapped,
         selectedH2OSubstationId: substationId,
-        wePadChatLog: nextChatLog,
       }
     })
   },
@@ -1038,8 +1188,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         kgbLineActive: true,
         condenserVacActive: true,
         plantWaterDrainPct: 0,
-        wePadHeld: state.wePadHeld,
-        wePadInspecting: state.wePadInspecting,
+        wePadHeld: false,
+        wePadInspecting: false,
         controlRods: 0.55,
         boronTankLevel: 92,
         boronReservePool: 300,
@@ -1116,11 +1266,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         msg,
         'normal'
       )
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        state.tutorialPhase,
-        mapped.tutorialPrompt
-      )
+      lastKomradAnyMsgSec = shiftElapsedSeconds
       return {
         ...mapped,
         phase: 'playing',
@@ -1132,12 +1278,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         steamTransientImpulse: 0,
         voltageDipIntensity: 0,
         lastDecisionFeedback: msg,
-        wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(state.shiftTimeMinutes, msg, 'normal', 'K.O.M.R.A.D.-84')
+        ),
       }
     })
   },
@@ -1145,14 +1294,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   setTutorialStep: (step) => {
     set({
       tutorialStep: step,
-      tutorialPhase: step === 'DONE' ? 'COMPLETED' : 'STEP_0_PICKUP_WEPAD',
+      tutorialPhase: step === 'DONE' ? 'COMPLETED' : 'STEP_1_COOLING',
     })
   },
 
   startShift: () => {
     resetKomradTrackers()
     const cold = createColdStartState()
-    const mapped = mapReactorToGameStateFields(cold, 'STEP_0_PICKUP_WEPAD')
+    const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING')
     const entry = createLogEntry(
       0,
       'K.O.M.R.A.D.-84',
@@ -1162,10 +1311,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({
       ...mapped,
       phase: 'playing',
+      isSeatedAtDesk: false,
       activeMandate: null,
       lastDecisionFeedback: mapped.tutorialPrompt.header,
-      wePadActiveTab: 1,
-      wePadChatLog: createInitialWePadChatLog(mapped.tutorialPrompt),
       selectedH2OSubstationId: 1,
       hzOutOfBoundsSeconds: 0,
       vodkaDroughtTimer: 0,
@@ -1177,40 +1325,43 @@ export const useGameStore = create<GameState>((set, get) => ({
       hoveredDiagnosticId: null,
       hoveredControlHint: null,
       diagFeedActive: false,
+      radioBroadcastSubtitle: null,
       terminalEntries: [...state.terminalEntries.slice(-24), entry],
       terminalLogs: [
         ...state.terminalLogs.slice(-24),
         `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
       ],
+      komradMessages: createInitialKomradFeed(),
     }))
   },
 
   resetShift: () => {
     resetKomradTrackers()
     const cold = createColdStartState()
-    const mapped = mapReactorToGameStateFields(cold, 'STEP_0_PICKUP_WEPAD')
+    const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING')
+    const resetText = `RBMK-1000 COLD START RESET BY OPERATOR. ${mapped.tutorialPrompt.header}`
     const freshEntries = [
       createLogEntry(
         0,
         'K.O.M.R.A.D.-84',
-        `RBMK-1000 COLD START RESET BY OPERATOR. ${mapped.tutorialPrompt.header}`,
+        resetText,
         'normal'
       ),
     ]
+    const freshKomrad = createInitialKomradFeed()
     set((state) => ({
       ...mapped,
       phase: 'playing',
-      shiftTimeMinutes: 0,
+      isSeatedAtDesk: false,
+      activeMandate: null,
+      lastDecisionFeedback: mapped.tutorialPrompt.header,
+      selectedH2OSubstationId: 1,
       treasonStrikes: 0,
       tutorialDrainSeconds: 0,
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
       diagFeedActive: false,
-      lastDecisionFeedback: mapped.tutorialPrompt.header,
-      activeMandate: null,
-      wePadActiveTab: 1,
-      wePadChatLog: createInitialWePadChatLog(mapped.tutorialPrompt),
-      selectedH2OSubstationId: 1,
+      radioBroadcastSubtitle: null,
       vodkaDroughtTimer: 0,
       redlineInstability: 0,
       isInspectingDesk: false,
@@ -1227,8 +1378,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       komradOverrideLocked: false,
       activeDirectives: [],
       printerProgress: 0,
+      shiftTimeMinutes: 0,
       terminalEntries: freshEntries,
       terminalLogs: freshEntries.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
+      komradMessages: freshKomrad,
     }))
   },
 
@@ -1244,38 +1397,42 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(baseReactor, prevPhase)
-      let nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
       const msg = t0.gridConnected
         ? 'MAIN BREAKER CLOSED! 50.0 HZ SYNCHRONIZED AT 12 O’CLOCK — 1000 MWe TURBOGENERATOR ONLINE!'
         : t0.tripped
           ? res.reason ?? `OUT-OF-PHASE SYNC TRIP (${Math.round(state.turbines[0].rpm)} RPM, PHASE ${Math.round(state.turbines[0].syncPhase)}°)!`
           : 'MAIN BREAKER OPENED — TURBOGENERATOR DISCONNECTED FROM GRID.'
-      if (t0.tripped) {
-        nextChatLog = [
-          ...nextChatLog.slice(-30),
-          createWePadChatMessage('SYSTEM', `ALERT: ${msg}`, { level: 'danger' }),
-        ]
-      }
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         t0.tripped ? 'K.O.M.R.A.D.-84' : 'OPERATOR',
         msg,
         t0.tripped ? 'danger' : 'normal'
       )
+      const komradBreakerMsg = t0.gridConnected
+        ? 'TURBOGENERATOR SYNCHRONIZED AT 50.0 HZ. PRIPYAT STREETLIGHTS SALUTE THE PARTY.'
+        : t0.tripped
+          ? 'OUT-OF-PHASE BREAKER TRIP! THE COPPER BUSBARS JUST SANG THE INTERNATIONALE!'
+          : 'MAIN BREAKER OPENED. SCHEDULED DARKNESS INITIATED FOR WORKER HUMILITY.'
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         phase: 'playing',
         lastDecisionFeedback: msg,
-        wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            komradBreakerMsg,
+            t0.tripped ? 'critical' : t0.gridConnected ? 'normal' : 'warning',
+            t0.tripped ? 'K.O.M.R.A.D.-84' : 'OPERATOR'
+          )
+        ),
       }
     })
   },
@@ -1304,6 +1461,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         msg,
         'normal'
       )
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         lastDecisionFeedback: msg,
@@ -1312,6 +1471,15 @@ export const useGameStore = create<GameState>((set, get) => ({
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            'TURBINE TRIP LATCH CLEARED. PAMPERING THE ROTORS AGAIN, COMRADE.',
+            'normal',
+            'K.O.M.R.A.D.-84'
+          )
+        ),
       }
     })
   },
@@ -1328,15 +1496,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-      }
+      return mapped
     })
   },
 
@@ -1374,11 +1534,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'OPERATOR',
@@ -1387,7 +1542,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       )
       return {
         ...mapped,
-        wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
@@ -1440,15 +1594,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       stepReactorSimulation(nextReactor, 0.001)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-      }
+      return mapped
     })
   },
 
@@ -1525,25 +1671,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       stepReactorSimulation(nextReactor, 0.001)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
       return {
         ...mapped,
         voltageDipIntensity: nextVoltageDip,
-        wePadChatLog: nextChatLog,
       }
     })
   },
 
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => {
     set((state) => {
-      if (
-        state.tutorialPhase === 'STEP_0_PICKUP_WEPAD' ||
-        state.tutorialPhase === 'STEP_1_COOLING'
-      ) {
+      if (state.tutorialPhase === 'STEP_1_COOLING') {
         return state
       }
       const idxA = pumpIndex === 0 ? 0 : 2
@@ -1565,24 +1702,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-      }
+      return mapped
     })
   },
 
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => {
     set((state) => {
-      if (
-        state.tutorialPhase === 'STEP_0_PICKUP_WEPAD' ||
-        state.tutorialPhase === 'STEP_1_COOLING'
-      ) {
+      if (state.tutorialPhase === 'STEP_1_COOLING') {
         return state
       }
       const clamped = Math.max(0, Math.min(100, Number(throttlePct.toFixed(1))))
@@ -1608,15 +1734,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-      }
+      return mapped
     })
   },
 
@@ -1664,15 +1782,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-      }
+      return mapped
     })
   },
 
@@ -1733,37 +1843,48 @@ export const useGameStore = create<GameState>((set, get) => ({
       const res = refuelSelectedCoreChannel(nextReactor)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      let nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
       let feedbackMsg: string
+      let komradRefuelMsg: string | null = null
+      let feedMood: KomradMood = 'normal'
       if (res.refueledChannel !== null) {
+        prevSpentRodCount = res.remainingSpent
         feedbackMsg =
           res.remainingSpent > 0
             ? `CHANNEL #${res.refueledChannel + 1} REFUELED! (${res.remainingSpent} SPENT AMBER CHANNEL${res.remainingSpent === 1 ? '' : 'S'} LEFT)`
             : `CHANNEL #${res.refueledChannel + 1} REFUELED! ALL 37 CHANNELS NOMINAL.`
+        komradRefuelMsg =
+          res.remainingSpent > 0
+            ? `FRESH URANIUM LOADED IN CHANNEL #${res.refueledChannel + 1}. ${res.remainingSpent} MORE AMBER RODS AWAIT YOUR HANDS.`
+            : `CHANNEL #${res.refueledChannel + 1} RELOADED. ALL 37 CHANNELS HUMMING WITH PATRIOTIC FISSION.`
       } else if (res.hasUnselectedSpent) {
+        feedMood = 'warning'
         feedbackMsg =
           'NO AMBER TILE SELECTED! CLICK A PULSING AMBER CORE TILE FIRST, THEN PULL [ROD REFUELING LEVER].'
+        komradRefuelMsg =
+          'SELECT AN AMBER DEPLETED CHANNEL BEFORE CRANKING THE REFUEL HOIST, COMRADE.'
       } else {
         feedbackMsg = `FUEL CRANE CYCLED — ALL CHANNELS NOMINAL (BORON TANK ${Math.round(nextReactor.boronTankLevel)}%).`
       }
-      if (
-        res.refueledChannel !== null &&
-        mapped.tutorialPhase === prevPhase &&
-        mapped.tutorialPhase === 'COMPLETED'
-      ) {
-        nextChatLog = [
-          ...nextChatLog.slice(-30),
-          createWePadChatMessage('SYSTEM', feedbackMsg, { level: 'normal' }),
-        ]
+      if (komradRefuelMsg) {
+        lastKomradAnyMsgSec = shiftElapsedSeconds
+        nextKomradChatterDelaySec = rollNextChatterDelay()
       }
       return {
         ...mapped,
         lastDecisionFeedback: feedbackMsg,
-        wePadChatLog: nextChatLog,
+        ...(komradRefuelMsg
+          ? {
+              komradMessages: appendKomradFeed(
+                state.komradMessages,
+                createKomradMsg(
+                  state.shiftTimeMinutes,
+                  komradRefuelMsg,
+                  feedMood,
+                  'K.O.M.R.A.D.-84'
+                )
+              ),
+            }
+          : {}),
       }
     })
   },
@@ -1794,15 +1915,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-      }
+      return mapped
     })
   },
 
@@ -1855,15 +1968,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
-      return {
-        ...mapped,
-        wePadChatLog: nextChatLog,
-      }
+      return mapped
     })
   },
 
@@ -1878,16 +1983,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = s.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        s.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
+      const sealMsg =
+        'ALL 4 ГЦН PUMPS ENGAGED & HERMETIC CONTAINMENT SCRUBBERS LOCKED!'
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
-        lastDecisionFeedback:
-          'ALL 4 ГЦН PUMPS ENGAGED & HERMETIC CONTAINMENT SCRUBBERS LOCKED!',
-        wePadChatLog: nextChatLog,
+        lastDecisionFeedback: sealMsg,
+        komradMessages: appendKomradFeed(
+          s.komradMessages,
+          createKomradMsg(
+            s.shiftTimeMinutes,
+            'MAIN CIRCULATION PUMPS ONLINE. LISTEN TO THOSE CAST-IRON IMPELLERS GRINDING FOR MOSCOW.',
+            'normal',
+            'K.O.M.R.A.D.-84'
+          )
+        ),
       }
     })
   },
@@ -1955,15 +2066,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       stepReactorSimulation(nextReactor, 0.001)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      const nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
       return {
         ...mapped,
         lastDecisionFeedback: `KGB ENCRYPTED TRUNK ${nextKgb ? 'ONLINE (+10 MWe LOAD, BUNKER #4 LINKED)' : 'SEVERED (-10 MWe LOAD, BUNKER #4 OFFLINE)'}.`,
-        wePadChatLog: nextChatLog,
       }
     })
   },
@@ -2001,6 +2106,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           warnMsg,
           'warn'
         )
+        lastKomradAnyMsgSec = shiftElapsedSeconds
+        nextKomradChatterDelaySec = rollNextChatterDelay()
         return {
           lastDecisionFeedback: warnMsg,
           terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
@@ -2008,6 +2115,15 @@ export const useGameStore = create<GameState>((set, get) => ({
             ...state.terminalLogs.slice(-24),
             `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
           ],
+          komradMessages: appendKomradFeed(
+            state.komradMessages,
+            createKomradMsg(
+              state.shiftTimeMinutes,
+              'BORON RESERVE LOW — DO NOT SQUANDER STATE NEUTRON POISON, COMRADE.',
+              'warning',
+              'K.O.M.R.A.D.-84'
+            )
+          ),
         }
       }
 
@@ -2015,11 +2131,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       triggerBoronInjection(nextReactor)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      let nextChatLog = syncWePadChatOnPhaseChange(
-        state.wePadChatLog,
-        prevPhase,
-        mapped.tutorialPrompt
-      )
       const msg = `BORON INJECTION ENGAGED (-35% BORON -> ${Math.round(nextReactor.boronTankLevel)}%): VOIDS -35% (${Math.round(nextReactor.voidFraction * 100)}%), NEUTRON DAMPING FOR 8S!`
       const entry = createLogEntry(
         state.shiftTimeMinutes,
@@ -2027,21 +2138,25 @@ export const useGameStore = create<GameState>((set, get) => ({
         msg,
         'warn'
       )
-      if (mapped.tutorialPhase === prevPhase) {
-        nextChatLog = [
-          ...nextChatLog.slice(-30),
-          createWePadChatMessage('SYSTEM', msg, { level: 'warn' }),
-        ]
-      }
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         lastDecisionFeedback: msg,
-        wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            'LIQUID BORON FLOODED INTO CORE. COST OF ACID DEDUCTED FROM YOUR TEA VOUCHERS.',
+            'warning',
+            'K.O.M.R.A.D.-84'
+          )
+        ),
       }
     })
   },
@@ -2223,10 +2338,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         feedback,
         logLevel
       )
-      const nextChatLog = [
-        ...state.wePadChatLog.slice(-30),
-        createWePadChatMessage('PRAVDA-84', feedback, { level: logLevel }),
-      ]
+      const komradVerdictText =
+        !isForgery && decision === 'APPROVED'
+          ? `GOSPLAN ORDER STAMPED (${docTitle.slice(0, 22)}). YOUR RUBBER STAMP IMPACT WAS 94% SYMMETRICAL.`
+          : !isForgery && decision === 'SHREDDED'
+            ? `TREASON STRIKE! YOU SHREDDED A GENUINE PARTY DECREE (${docTitle.slice(0, 20)})! PACK FOR MAGADAN!`
+            : isForgery && decision === 'SHREDDED'
+              ? `CIA FORGERY SHREDDED (${docTitle.slice(0, 20)})! LANGLEY COUNTERFEIT REDUCED TO STATE CONFETTI.`
+              : `CATASTROPHE! THAT WATERMARK SAID "MADE IN LANGLEY" — CIA SABOTAGE APPROVED!`
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
       const nextPhase =
         !state.isGodMode && nextStrikes >= 3
           ? 'gulag'
@@ -2256,7 +2377,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         targetDefenseMW: nextTargetDefense,
         targetVodkaMW: nextTargetVodka,
         lastDecisionFeedback: feedback,
-        wePadChatLog: nextChatLog,
         phase: nextPhase,
         diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
@@ -2264,6 +2384,15 @@ export const useGameStore = create<GameState>((set, get) => ({
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            komradVerdictText,
+            mapLevelToMood(logLevel),
+            'K.O.M.R.A.D.-84'
+          )
+        ),
       }
     })
   },
@@ -2313,65 +2442,126 @@ export const useGameStore = create<GameState>((set, get) => ({
     const mapped = mapReactorToGameStateFields(baseReactor, prevTutorialPhase)
 
     const newLogs: TerminalLogEntry[] = []
+    const newKomradMsgs: KomradMessageEntry[] = []
     let nextFeedback = state.lastDecisionFeedback
     let nextInstability = state.redlineInstability
     let nextMandate = state.activeMandate
-    let nextChatLog = syncWePadChatOnPhaseChange(
-      state.wePadChatLog,
-      prevTutorialPhase,
-      mapped.tutorialPrompt
-    )
+
+    const pushWallKomrad = (
+      msg: string,
+      level: 'normal' | 'warn' | 'danger' = 'normal',
+      sender: KomradMessageEntry['sender'] = 'K.O.M.R.A.D.-84'
+    ) => {
+      newKomradMsgs.push(
+        createKomradMsg(state.shiftTimeMinutes, msg, mapLevelToMood(level), sender)
+      )
+    }
+
+    const pushKomradLiveDispatch = (
+      msg: string,
+      level: 'normal' | 'warn' | 'danger' = 'normal',
+      sender: KomradMessageEntry['sender'] = 'K.O.M.R.A.D.-84',
+      wallOverrideMsg?: string
+    ) => {
+      nextFeedback = msg
+      newLogs.push(createLogEntry(state.shiftTimeMinutes, sender, msg, level))
+      pushWallKomrad(wallOverrideMsg ?? msg, level, sender)
+    }
 
     if (mapped.tutorialPhase !== prevTutorialPhase) {
-      const transitionText =
-        mapped.tutorialPhase === 'COMPLETED'
-          ? KOMRAD_TAKEOVER_MESSAGE
-          : `>> VOLKOV DRILL: ${mapped.tutorialPrompt.header}`
-      nextFeedback = transitionText
-      newLogs.push(
-        createLogEntry(
-          state.shiftTimeMinutes,
-          'K.O.M.R.A.D.-84',
-          transitionText,
-          'normal'
+      if (mapped.tutorialPhase === 'COMPLETED') {
+        pushKomradLiveDispatch(VOLKOV_FAREWELL_MESSAGE, 'normal', 'OPERATOR')
+        pushKomradLiveDispatch(KOMRAD_TAKEOVER_MESSAGE, 'normal', 'K.O.M.R.A.D.-84')
+      } else {
+        const drillText = `>> VOLKOV DRILL: ${mapped.tutorialPrompt.header}`
+        nextFeedback = drillText
+        newLogs.push(
+          createLogEntry(state.shiftTimeMinutes, 'K.O.M.R.A.D.-84', drillText, 'normal')
         )
-      )
+      }
+    }
+
+    // Monitor newly spent TVS fuel channels across all phases
+    const spentCount = Object.keys(baseReactor.coreTileAnomalies).length
+    if (spentCount > prevSpentRodCount && spentCount > 0) {
+      komradDispatchSeed += 1
+      const alertText =
+        KOMRAD_SPENT_ROD_QUIPS[komradDispatchSeed % KOMRAD_SPENT_ROD_QUIPS.length]
+      pushKomradLiveDispatch(alertText, spentCount >= 3 ? 'danger' : 'warn')
+    }
+    prevSpentRodCount = spentCount
+
+    let hazardFired = false
+    const tryHazard = (
+      cat: ReactorHazardCategory,
+      valA: number,
+      valB: number,
+      level: 'warn' | 'danger'
+    ) => {
+      if (hazardFired) return
+      if (shiftElapsedSeconds - lastKomradHazardSec[cat] >= 26) {
+        lastKomradHazardSec[cat] = shiftElapsedSeconds
+        komradDispatchSeed += 1
+        const text = pickReactorHazardDispatch(
+          cat,
+          valA,
+          valB,
+          komradDispatchSeed
+        )
+        let wallQuip = text
+        if (cat === 'HIGH_PRESSURE') {
+          wallQuip =
+            KOMRAD_PRESSURE_QUIPS[komradDispatchSeed % KOMRAD_PRESSURE_QUIPS.length](
+              Math.round(valA)
+            )
+        } else if (cat === 'HIGH_XENON') {
+          wallQuip =
+            KOMRAD_XENON_QUIPS[komradDispatchSeed % KOMRAD_XENON_QUIPS.length](
+              Math.round(valA)
+            )
+        } else if (cat === 'HIGH_VOID') {
+          wallQuip =
+            KOMRAD_VOID_QUIPS[komradDispatchSeed % KOMRAD_VOID_QUIPS.length](
+              Math.round(valA)
+            )
+        } else if (cat === 'WATER_LOW') {
+          wallQuip =
+            KOMRAD_WATER_LOW_QUIPS[komradDispatchSeed % KOMRAD_WATER_LOW_QUIPS.length](
+              Math.round(valA)
+            )
+        } else if (cat === 'WATER_HIGH') {
+          wallQuip =
+            KOMRAD_WATER_HIGH_QUIPS[komradDispatchSeed % KOMRAD_WATER_HIGH_QUIPS.length](
+              Math.round(valA)
+            )
+        } else if (cat === 'GEN_DEFICIT') {
+          wallQuip = `GRID SHORTFALL (${Math.round(valB)}/${Math.round(valA)} MWe)! TURBINES ARE UNDER-PRODUCING FOR THE FIVE-YEAR PLAN.`
+        }
+        pushKomradLiveDispatch(text, level, 'K.O.M.R.A.D.-84', wallQuip)
+        hazardFired = true
+      }
     }
 
     // =========================================================================
     // MANDATE COMPLIANCE WINDOW & GRID-LOCKED POWER BALANCE ENFORCEMENT
     // =========================================================================
+    const totalAllocatedMW = baseReactor.substations.reduce(
+      (sum, s) => sum + s.allocatedMW,
+      0
+    )
+    const totalTargetMW = baseReactor.substations.reduce(
+      (sum, s) => sum + s.targetMW,
+      0
+    )
+    const dispatchedMWe = baseReactor.totalElectricalMW
+    const neededMWe = Math.max(totalTargetMW, baseReactor.energyDemandMW)
+    const deltaDispatchMWe = dispatchedMWe - neededMWe
+    const powerBalanceMatched = Math.abs(deltaDispatchMWe) <= 25
+    const allQuotasOk = baseReactor.substations.every((s) => s.quotaOk)
+    const failingSub = baseReactor.substations.find((s) => !s.quotaOk)
+    const fullyBalanced = allQuotasOk && powerBalanceMatched
+
     if (mapped.tutorialPhase === 'COMPLETED') {
-      const pushKomradLiveDispatch = (
-        msg: string,
-        level: 'normal' | 'warn' | 'danger' = 'normal'
-      ) => {
-        nextFeedback = msg
-        nextChatLog = [
-          ...nextChatLog.slice(-30),
-          createWePadChatMessage('K.O.M.R.A.D.-84', msg, { level }),
-        ]
-        newLogs.push(
-          createLogEntry(state.shiftTimeMinutes, 'K.O.M.R.A.D.-84', msg, level)
-        )
-      }
-
-      const totalAllocatedMW = baseReactor.substations.reduce(
-        (sum, s) => sum + s.allocatedMW,
-        0
-      )
-      const totalTargetMW = baseReactor.substations.reduce(
-        (sum, s) => sum + s.targetMW,
-        0
-      )
-      const dispatchedMWe = baseReactor.totalElectricalMW
-      const neededMWe = Math.max(totalTargetMW, baseReactor.energyDemandMW)
-      const deltaDispatchMWe = dispatchedMWe - neededMWe
-      const powerBalanceMatched = Math.abs(deltaDispatchMWe) <= 25
-
-      const allQuotasOk = baseReactor.substations.every((s) => s.quotaOk)
-      const failingSub = baseReactor.substations.find((s) => !s.quotaOk)
-
       // 1. Evaluate Active Desk Directive Mandate Compliance Window
       if (nextMandate && !nextMandate.fulfilled) {
         if (allQuotasOk && powerBalanceMatched) {
@@ -2385,7 +2575,12 @@ export const useGameStore = create<GameState>((set, get) => ({
             }
             nextInstability = Math.max(0, nextInstability - 10)
             const okReason = `DIRECTIVE QUOTA FULFILLED (${nextMandate.title}) — ${Math.round(dispatchedMWe)}/${Math.round(neededMWe)} MWe DISPATCHED FROM BATTERY! +1 COMMENDATION.`
-            pushKomradLiveDispatch(okReason, 'normal')
+            pushKomradLiveDispatch(
+              okReason,
+              'normal',
+              'K.O.M.R.A.D.-84',
+              `GOSPLAN QUOTA MET (${nextMandate.title.slice(0, 22)})! MOSCOW RECORDS +1 SOCIALIST EFFICIENCY POINT.`
+            )
             mandateComplianceListener?.(true, nextMandate.id, okReason)
           } else {
             nextMandate = {
@@ -2401,7 +2596,12 @@ export const useGameStore = create<GameState>((set, get) => ({
           if (rem <= 0) {
             nextInstability = Math.min(100, nextInstability + 16)
             const failReason = `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title} (GRID ${Math.round(dispatchedMWe)} vs DEMAND ${Math.round(neededMWe)} MWe) — +16% INSTABILITY!`
-            pushKomradLiveDispatch(failReason, 'danger')
+            pushKomradLiveDispatch(
+              failReason,
+              'danger',
+              'K.O.M.R.A.D.-84',
+              `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title.slice(0, 20)}! VOLKOV IS FUMING!`
+            )
             mandateComplianceListener?.(false, nextMandate.id, failReason)
             nextMandate = {
               ...nextMandate,
@@ -2428,7 +2628,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           nextInstability = Math.min(100, nextInstability + 10)
           pushKomradLiveDispatch(
             `⚡ [GRID OVER-DISPATCH: +${Math.round(deltaDispatchMWe)} MWe SURPLUS]: EXCESS LOAD DRAINING ACCUMULATOR! LOWER UNIT A ZONE LEVERS (+10% INSTABILITY)!`,
-            'warn'
+            'warn',
+            'K.O.M.R.A.D.-84',
+            `OVER-DISPATCHING BY +${Math.round(deltaDispatchMWe)} MWe! THE COPPER BUSBARS ARE SINGING THE INTERNATIONALE!`
           )
         }
       } else {
@@ -2436,69 +2638,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       // Situation D: All 6 substation quotas & power balance turn green after a change/brownout!
-      const fullyBalanced = allQuotasOk && powerBalanceMatched
       if (fullyBalanced && !prevAllSubstationsOk) {
         brownoutMismatchSeconds = 0
         komradDispatchSeed += 1
         const praise = pickQuotaCommendationDispatch(komradDispatchSeed)
         pushKomradLiveDispatch(praise, 'normal')
-        lastKomradPropagandaSec = shiftElapsedSeconds
       }
       prevAllSubstationsOk = fullyBalanced
 
-      // Situation B: Reactor Systems Entering Yellow/Red Zone (32s per-category cooldown + deadbands)
-      let hazardFired = false
-      const tryHazard = (
-        cat: ReactorHazardCategory,
-        valA: number,
-        valB: number,
-        level: 'warn' | 'danger'
-      ) => {
-        if (hazardFired) return
-        if (shiftElapsedSeconds - lastKomradHazardSec[cat] >= 32) {
-          lastKomradHazardSec[cat] = shiftElapsedSeconds
-          lastKomradPropagandaSec = shiftElapsedSeconds
-          komradDispatchSeed += 1
-          const text = pickReactorHazardDispatch(
-            cat,
-            valA,
-            valB,
-            komradDispatchSeed
-          )
-          pushKomradLiveDispatch(text, level)
-          hazardFired = true
-        }
-      }
-
-      if (baseReactor.voidFraction > 0.38) {
-        tryHazard(
-          'HIGH_VOID',
-          baseReactor.voidFraction * 100,
-          0,
-          baseReactor.voidFraction > 0.56 ? 'danger' : 'warn'
-        )
-      }
-      if (baseReactor.xenon > 38) {
-        tryHazard(
-          'HIGH_XENON',
-          baseReactor.xenon,
-          0,
-          baseReactor.xenon > 56 ? 'danger' : 'warn'
-        )
-      }
-      if (baseReactor.drumWaterLevel < -145) {
-        tryHazard('WATER_LOW', baseReactor.drumWaterLevel, 0, 'danger')
-      } else if (baseReactor.drumWaterLevel > 145) {
-        tryHazard('WATER_HIGH', baseReactor.drumWaterLevel, 0, 'warn')
-      }
-      if (baseReactor.drumPressure > 79) {
-        tryHazard(
-          'HIGH_PRESSURE',
-          baseReactor.drumPressure,
-          0,
-          baseReactor.drumPressure >= 86 ? 'danger' : 'warn'
-        )
-      }
       if (
         totalAllocatedMW > dispatchedMWe + 25 ||
         deltaDispatchMWe < -30
@@ -2520,7 +2667,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           shiftElapsedSeconds - lastKomradBrownoutSec >= 28
         ) {
           lastKomradBrownoutSec = shiftElapsedSeconds
-          lastKomradPropagandaSec = shiftElapsedSeconds
           komradDispatchSeed += 1
           const brownoutText = pickSectorBrownoutDispatch(
             `sub_${failingSub.id}`,
@@ -2528,30 +2674,91 @@ export const useGameStore = create<GameState>((set, get) => ({
             failingSub.targetMW,
             komradDispatchSeed
           )
-          pushKomradLiveDispatch(brownoutText, 'warn')
+          const wallBrownout =
+            KOMRAD_BROWNOUT_QUIPS[failingSub.id]?.(
+              Math.round(failingSub.allocatedMW),
+              Math.round(failingSub.targetMW)
+            ) ?? brownoutText
+          pushKomradLiveDispatch(brownoutText, 'warn', 'K.O.M.R.A.D.-84', wallBrownout)
           hazardFired = true
         }
       } else {
         brownoutMismatchSeconds = 0
       }
+    }
 
-      // Situation E: Periodic Atom-Propaganda Broadcasts (~45s interval when calm & stable)
-      const isCalm =
-        fullyBalanced &&
-        baseReactor.voidFraction <= 0.30 &&
-        baseReactor.xenon <= 30 &&
-        Math.abs(baseReactor.drumWaterLevel) <= 100 &&
-        baseReactor.drumPressure <= 76
-      if (
-        !hazardFired &&
-        isCalm &&
-        shiftElapsedSeconds - lastKomradPropagandaSec >= 65
-      ) {
-        lastKomradPropagandaSec = shiftElapsedSeconds
-        komradDispatchSeed += 1
-        const propText = pickPropagandaBroadcastDispatch(komradDispatchSeed)
-        pushKomradLiveDispatch(propText, 'normal')
-      }
+    // Situation B: Reactor Thermodynamic Hazards Across All Operational Phases
+    if (baseReactor.voidFraction > 0.38) {
+      tryHazard(
+        'HIGH_VOID',
+        baseReactor.voidFraction * 100,
+        0,
+        baseReactor.voidFraction > 0.56 ? 'danger' : 'warn'
+      )
+    }
+    if (baseReactor.xenon > 38) {
+      tryHazard(
+        'HIGH_XENON',
+        baseReactor.xenon,
+        0,
+        baseReactor.xenon > 56 ? 'danger' : 'warn'
+      )
+    }
+    if (baseReactor.drumWaterLevel < -145) {
+      tryHazard('WATER_LOW', baseReactor.drumWaterLevel, 0, 'danger')
+    } else if (baseReactor.drumWaterLevel > 145) {
+      tryHazard('WATER_HIGH', baseReactor.drumWaterLevel, 0, 'warn')
+    }
+    if (baseReactor.drumPressure > 79) {
+      tryHazard(
+        'HIGH_PRESSURE',
+        baseReactor.drumPressure,
+        0,
+        baseReactor.drumPressure >= 86 ? 'danger' : 'warn'
+      )
+    }
+    if (
+      !hazardFired &&
+      baseReactor.coreTemp >= 680 &&
+      shiftElapsedSeconds - lastKomradOverheatSec >= 26
+    ) {
+      lastKomradOverheatSec = shiftElapsedSeconds
+      komradDispatchSeed += 1
+      const tempVal = Math.round(baseReactor.coreTemp)
+      const isCrit = baseReactor.coreTemp >= 850
+      const quipFn = isCrit
+        ? KOMRAD_CRIT_TEMP_QUIPS[komradDispatchSeed % KOMRAD_CRIT_TEMP_QUIPS.length]
+        : KOMRAD_HIGH_TEMP_QUIPS[komradDispatchSeed % KOMRAD_HIGH_TEMP_QUIPS.length]
+      pushKomradLiveDispatch(quipFn(tempVal), isCrit ? 'danger' : 'warn')
+      hazardFired = true
+    }
+    if (
+      !hazardFired &&
+      baseReactor.roomRadiation >= 3.5 &&
+      shiftElapsedSeconds - lastKomradRadSec >= 30
+    ) {
+      lastKomradRadSec = shiftElapsedSeconds
+      komradDispatchSeed += 1
+      const isCrit = baseReactor.roomRadiation >= 8.0
+      const radQuip =
+        KOMRAD_RAD_QUIPS[komradDispatchSeed % KOMRAD_RAD_QUIPS.length]
+      pushKomradLiveDispatch(radQuip, isCrit ? 'danger' : 'warn')
+      hazardFired = true
+    }
+
+    // Situation E: Random Satirical Night-Shift Chatter (~14-22s interval across all playing phases)
+    if (
+      state.phase === 'playing' &&
+      !hazardFired &&
+      shiftElapsedSeconds - lastKomradAnyMsgSec >= nextKomradChatterDelaySec
+    ) {
+      komradDispatchSeed += 1
+      pushWallKomrad(pickNextNightShiftChatter(), 'normal', 'K.O.M.R.A.D.-84')
+    }
+
+    if (newKomradMsgs.length > 0) {
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
     }
 
     const nextPhase =
@@ -2561,7 +2768,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? 'meltdown'
           : state.phase
 
-    if (newLogs.length > 0 || nextChatLog !== state.wePadChatLog) {
+    if (newLogs.length > 0 || newKomradMsgs.length > 0) {
       const updatedEntries = [...state.terminalEntries.slice(-24), ...newLogs]
       set({
         ...mapped,
@@ -2574,11 +2781,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         lastDecisionFeedback: nextFeedback,
         phase: nextPhase,
         diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
-        wePadChatLog: nextChatLog,
         terminalEntries: updatedEntries,
         terminalLogs: updatedEntries.map(
           (e) => `[${e.timestamp}] ${e.sender}: ${e.text}`
         ),
+        komradMessages: appendKomradFeed(state.komradMessages, ...newKomradMsgs),
       })
     } else {
       set({
@@ -2633,33 +2840,42 @@ export const useGameStore = create<GameState>((set, get) => ({
         msg,
         nextAz5 ? 'danger' : 'warn'
       )
-      const nextChatLog = [
-        ...state.wePadChatLog.slice(-30),
-        createWePadChatMessage('SYSTEM', msg, {
-          level: nextAz5 ? 'danger' : 'warn',
-        }),
-      ]
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         lastDecisionFeedback: msg,
-        wePadChatLog: nextChatLog,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            nextAz5
+              ? 'AZ-5 BORON RODS DROPPED! NOTE: PANIC REMAINS A BOURGEOIS WEAKNESS.'
+              : 'AZ-5 SCRAM LATCH RESET. RESUME FIVE-YEAR PLAN OUTPUT IMMEDIATELY.',
+            nextAz5 ? 'critical' : 'warning',
+            'K.O.M.R.A.D.-84'
+          )
+        ),
       }
     })
   },
 
   overrideKomradLock: () => {
     set((state) => {
+      const overrideMsg =
+        'MANUAL OVERRIDE ACCEPTED. YOUR LACK OF FAITH IN AUTOMATED SOCIALISM HAS BEEN LOGGED.'
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
-        'MANUAL OVERRIDE ACCEPTED. YOUR LACK OF FAITH IN AUTOMATED SOCIALISM HAS BEEN LOGGED.',
+        overrideMsg,
         'warn'
       )
+      lastKomradAnyMsgSec = shiftElapsedSeconds
       return {
         komradOverrideLocked: false,
         isBlackout: false,
@@ -2668,18 +2884,25 @@ export const useGameStore = create<GameState>((set, get) => ({
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(state.shiftTimeMinutes, overrideMsg, 'warning', 'K.O.M.R.A.D.-84')
+        ),
       }
     })
   },
 
   purgeFirewall: () => {
     set((state) => {
+      const purgeMsg =
+        'WESTERN IMPERIALIST PACKET STREAM PURGED FROM SECTOR 07.'
       const okEntry = createLogEntry(
         state.shiftTimeMinutes,
         'SYS.DEFENSE',
-        'WESTERN IMPERIALIST PACKET STREAM PURGED FROM SECTOR 07.',
+        purgeMsg,
         'normal'
       )
+      lastKomradAnyMsgSec = shiftElapsedSeconds
       return {
         ciaIntrusionActive: false,
         ciaIntrusionProgress: 0,
@@ -2688,6 +2911,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           ...state.terminalLogs.slice(-24),
           `[${okEntry.timestamp}] ${okEntry.sender}: ${okEntry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(state.shiftTimeMinutes, purgeMsg, 'normal', 'SYS.DEFENSE')
+        ),
       }
     })
   },
@@ -2696,12 +2923,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => {
       if (state.activeDirectives.length >= 6) return state
       const newDoc = createDirectiveInstance(forceForgery)
+      const printMsg = `NEW DIRECTIVE PRINTED: ${newDoc.id} (${newDoc.title}).`
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'PRINTER',
-        `NEW DIRECTIVE PRINTED: ${newDoc.id} (${newDoc.title}).`,
+        printMsg,
         'normal'
       )
+      lastKomradAnyMsgSec = shiftElapsedSeconds
       return {
         activeDirectives: [...state.activeDirectives, newDoc],
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
@@ -2709,6 +2938,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(state.shiftTimeMinutes, printMsg, 'normal', 'PRINTER')
+        ),
       }
     })
   },
@@ -2780,14 +3013,20 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setGodMode: (enabled: boolean) => {
     set((state) => {
+      const godText = enabled
+        ? 'SANDBOX TEST MODE [SHIFT+SPACE] ENGAGED: INFINITE TIME & ZERO FAIL STATES.'
+        : 'SANDBOX TEST MODE DISENGAGED: STANDARD SHIFT RULES RESTORED.'
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
-        enabled
-          ? 'SANDBOX TEST MODE [SHIFT+SPACE] ENGAGED: INFINITE TIME & ZERO FAIL STATES.'
-          : 'SANDBOX TEST MODE DISENGAGED: STANDARD SHIFT RULES RESTORED.',
+        godText,
         enabled ? 'normal' : 'warn'
       )
+      const komradGodText = enabled
+        ? 'POLITBURO IMMUNITY DECREE ACTIVE: REALITY SUBROUTINES TEMPORARILY SUPPRESSED.'
+        : 'IMMUNITY DECREE REVOKED: STANDARD SOVIET THERMODYNAMICS RESTORED.'
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         isGodMode: enabled,
         isBlackout: enabled ? false : state.isBlackout,
@@ -2800,6 +3039,15 @@ export const useGameStore = create<GameState>((set, get) => ({
           ...state.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            komradGodText,
+            enabled ? 'normal' : 'warning',
+            'K.O.M.R.A.D.-84'
+          )
+        ),
       }
     })
   },
@@ -2810,6 +3058,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setDiagFeedActive: (active: boolean) => {
     set({ diagFeedActive: active })
+  },
+
+  setRadioBroadcastSubtitle: (subtitle: string | null) => {
+    set((state) =>
+      state.radioBroadcastSubtitle === subtitle
+        ? state
+        : { radioBroadcastSubtitle: subtitle }
+    )
   },
 
   approveDirective: (id: string) => {
@@ -2844,13 +3100,43 @@ export const useGameStore = create<GameState>((set, get) => ({
     // 2. Pravda Dot-Matrix Printer progress (strictly gated by 3D Inspector Desk single-paper & cooldown rules)
     let nextPrinterProgress = state.printerProgress
     let nextDirectives = state.activeDirectives
+    const tickKomradMsgs: KomradMessageEntry[] = []
     if (state.activeDirectives.length === 0 && shiftElapsedSeconds >= 15) {
       nextPrinterProgress = Math.min(100, state.printerProgress + 3.5)
       if (nextPrinterProgress >= 100) {
         const spawned = createDirectiveInstance()
         nextDirectives = [spawned]
         nextPrinterProgress = 0
+        tickKomradMsgs.push(
+          createKomradMsg(
+            nextMinutes,
+            `PRAVDA MATRIX ORDER PRINTED: ${spawned.id} (${spawned.title}).`,
+            spawned.isCiaForgery ? 'warning' : 'normal',
+            'PRINTER'
+          )
+        )
       }
+    }
+
+    // 3. Hourly Shift Broadcasts (01:00 -> 05:00)
+    const currentHour = Math.floor(nextMinutes / 60)
+    if (currentHour === 0) {
+      lastBroadcastHour = 0
+    } else if (currentHour !== lastBroadcastHour && KOMRAD_HOURLY_LOGS[currentHour]) {
+      lastBroadcastHour = currentHour
+      tickKomradMsgs.push(
+        createKomradMsg(
+          nextMinutes,
+          KOMRAD_HOURLY_LOGS[currentHour],
+          currentHour >= 4 ? 'warning' : 'normal',
+          'K.O.M.R.A.D.-84'
+        )
+      )
+    }
+
+    if (tickKomradMsgs.length > 0) {
+      lastKomradAnyMsgSec = shiftElapsedSeconds
+      nextKomradChatterDelaySec = rollNextChatterDelay()
     }
 
     const nextPhase =
@@ -2867,6 +3153,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       activeDirectives: nextDirectives,
       phase: nextPhase,
       diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
+      ...(tickKomradMsgs.length > 0
+        ? { komradMessages: appendKomradFeed(state.komradMessages, ...tickKomradMsgs) }
+        : {}),
     })
   },
 }))

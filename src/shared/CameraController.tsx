@@ -2,6 +2,7 @@ import { type RootState, useFrame, useThree } from "@react-three/fiber";
 import React, { useCallback, useEffect, useRef } from "react";
 import * as THREE from "three";
 import { create } from "zustand";
+import { playSwitchClank } from "../modules/reactor/audioSynth";
 import {
   canEngageCanvasPointerLock,
   classifyPressTarget,
@@ -50,6 +51,35 @@ const MAX_PITCH = THREE.MathUtils.degToRad(75);
 const DEFAULT_PITCH = THREE.MathUtils.degToRad(-4);
 const PLAYER_RADIUS = 0.26;
 
+const DESK_CENTER_X = 0.0;
+const DESK_CENTER_Z = 1.8;
+const DESK_CHAIR_X = -0.28;
+const DESK_CHAIR_Z = 2.74;
+const DESK_SIT_RANGE = 2.8;
+
+const SEATED_DESK_POSE = {
+  x: -0.05,
+  y: 1.52,
+  z: 2.42,
+  yaw: 0,
+  pitch: -0.86,
+  fov: 62,
+} as const;
+const RMB_SEATED_ZOOM_FOV = 42;
+
+const STAND_UP_SPOT: BayStandingSpot = {
+  x: -0.05,
+  z: 3.06,
+  yaw: 0,
+  pitch: -0.32,
+};
+
+function checkWithinDeskRange(px: number, pz: number): boolean {
+  const dDesk = Math.hypot(px - DESK_CENTER_X, pz - DESK_CENTER_Z);
+  const dChair = Math.hypot(px - DESK_CHAIR_X, pz - DESK_CHAIR_Z);
+  return Math.min(dDesk, dChair) <= DESK_SIT_RANGE;
+}
+
 const BAY_STANDING_SPOTS: Record<CameraStation, BayStandingSpot> = {
   overview: {
     // [0] Hall Spawn: standing between Supervisor Desk and Main Operator Row facing -Z
@@ -60,7 +90,7 @@ const BAY_STANDING_SPOTS: Record<CameraStation, BayStandingSpot> = {
   },
   reactor: {
     // [1] Left Operator Desk right bay (`UNIT A`): Cooling, Pumps & 6 MW Levers
-    x: -2.23,
+    x: -2.54,
     z: -0.31,
     yaw: (15 * Math.PI) / 180,
     pitch: -0.24,
@@ -73,11 +103,11 @@ const BAY_STANDING_SPOTS: Record<CameraStation, BayStandingSpot> = {
     pitch: 0.06,
   },
   power: {
-    // [3] Right Operator Desk outer bay (`UNIT B`): Drum Separators & Coolant Loop
-    x: 3.71,
-    z: 0.09,
-    yaw: -(15 * Math.PI) / 180,
-    pitch: -0.24,
+    // [3] Right Operator Desk outer bay (`UNIT B`): Drum Separators & Coolant Loop (1.162x scale)
+    x: 4.22,
+    z: 0.35,
+    yaw: -(18 * Math.PI) / 180,
+    pitch: -0.22,
   },
   inspector: {
     // [4] Shift Supervisor Desk (`Стол НСБ`): standing on +Z side facing desk & console row
@@ -87,17 +117,17 @@ const BAY_STANDING_SPOTS: Record<CameraStation, BayStandingSpot> = {
     pitch: -0.56,
   },
   aux: {
-    // [5] Right Operator Desk (`UNIT C`): Energy Storage & Grid Dispatch
-    x: 2.23,
-    z: -0.31,
-    yaw: -(15 * Math.PI) / 180,
-    pitch: -0.24,
+    // [5] Right Operator Desk (`UNIT C`): Energy Storage & Grid Dispatch (1.162x scale)
+    x: 2.58,
+    z: -0.19,
+    yaw: -(18 * Math.PI) / 180,
+    pitch: -0.22,
   },
 };
 
 const UNIT_A2_SPOT: BayStandingSpot = {
   // [6] Left Operator Desk left bay (`UNIT A-2`): RBMK Core & Control Rods
-  x: -3.69,
+  x: -4.0,
   z: 0.08,
   yaw: (15 * Math.PI) / 180,
   pitch: -0.24,
@@ -105,8 +135,8 @@ const UNIT_A2_SPOT: BayStandingSpot = {
 
 const UNIT_D_SPOT: BayStandingSpot = {
   // [7] Left-Wall Electrical Switchgear (`UNIT D`): Main Breaker, Steam Vent & Fuses
-  x: -3.38,
-  z: 1.35,
+  x: -3.98,
+  z: 1.42,
   yaw: Math.PI / 2,
   pitch: -0.14,
 };
@@ -124,17 +154,19 @@ const CONTROL_ROOM_COLLIDERS: readonly ColliderOBB[] = [
   { cx: 0.0, cz: -3.86, halfW: 1.98, halfD: 0.42, rotY: 0 },
   { cx: -3.9, cz: -3.62, halfW: 1.88, halfD: 0.3, rotY: 0.21 },
   { cx: 3.9, cz: -3.62, halfW: 1.88, halfD: 0.3, rotY: -0.21 },
-  // Split Two-Wing 1.37x Operator Console Desks (`Левое и Правое Крыло Пульта БЩУ`)
-  { cx: -3.29, cz: -1.44, halfW: 1.72, halfD: 0.675, rotY: (15 * Math.PI) / 180 },
-  { cx: 3.29, cz: -1.44, halfW: 1.72, halfD: 0.675, rotY: -(15 * Math.PI) / 180 },
+  // Split Two-Wing Operator Console Desks (`Левое и Правое Крыло Пульта БЩУ`)
+  { cx: -3.61, cz: -1.49, halfW: 1.68, halfD: 0.68, rotY: (15 * Math.PI) / 180 },
+  { cx: 3.86, cz: -1.36, halfW: 1.78, halfD: 0.72, rotY: -(18 * Math.PI) / 180 },
   // Shift Supervisor Desk (`Стол НСБ` — `InspectorDesk3D` at `(0, 0.06, +1.80)`)
   { cx: 0.0, cz: 1.8, halfW: 1.28, halfD: 0.46, rotY: 0 },
-  // Left-Wall 1.25x `UNIT D` HV Switchgear Enclosure (`x = -4.6, z = +1.35`)
-  { cx: -5.13, cz: 1.35, halfW: 0.87, halfD: 1.84, rotY: 0 },
+  // Left-Wall Tucked-Back `UNIT D` HV Switchgear Enclosure (`x = -5.18, z = +1.42`)
+  { cx: -5.56, cz: 1.42, halfW: 0.72, halfD: 1.84, rotY: 0 },
   // Corner `СМ-2М` Magnetic Tape Computer Cabinets & Rear Fire-Shield Sand Box
-  { cx: -5.56, cz: -1.96, halfW: 0.36, halfD: 0.82, rotY: 0 },
+  { cx: -5.6, cz: -2.56, halfW: 0.36, halfD: 0.8, rotY: 0 },
   { cx: 5.56, cz: -2.5, halfW: 0.34, halfD: 0.56, rotY: 0 },
   { cx: -4.05, cz: 4.3, halfW: 0.52, halfD: 0.22, rotY: 0 },
+  // Right-Window Duty Radio Side Table (`Столик дежурного` + `ОКЕАН-84` at `x = +5.58, z = +1.58`)
+  { cx: 5.58, cz: 1.58, halfW: 0.28, halfD: 0.43, rotY: 0 },
 ];
 
 function pushCircleOutOfOBB(
@@ -237,11 +269,12 @@ export const CameraController: React.FC = () => {
   const activeStation = useGameStore((s) => s.activeStation);
   const setActiveStation = useGameStore((s) => s.setActiveStation);
   const phase = useGameStore((s) => s.phase);
-  const wePadInspecting = useGameStore((s) => s.wePadInspecting);
+  const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk);
 
   const playerPosRef = useRef(
     new THREE.Vector3(SPAWN_X, STANDING_EYE_Y, SPAWN_Z),
   );
+  const currentEyeYRef = useRef(STANDING_EYE_Y);
   const velocityRef = useRef({ vx: 0, vz: 0 });
   const headBobPhaseRef = useRef(0);
   const headBobOffsetRef = useRef(0);
@@ -342,9 +375,9 @@ export const CameraController: React.FC = () => {
     };
   }, [activeStation]);
 
-  // Auto-exit Pointer Lock and clear held locomotion keys when gameplay pauses or WE-PAD close-up opens
+  // Auto-exit Pointer Lock and clear held locomotion keys when gameplay pauses or seated at Inspector Desk
   useEffect(() => {
-    if (wePadInspecting || phase !== "playing") {
+    if (isSeatedAtDesk || phase !== "playing") {
       moveKeysRef.current.forward = false;
       moveKeysRef.current.backward = false;
       moveKeysRef.current.left = false;
@@ -357,7 +390,7 @@ export const CameraController: React.FC = () => {
     const syncAllowedLock = () => {
       const gs = useGameStore.getState();
       if (
-        !canEngageCanvasPointerLock(gs.phase, gs.wePadInspecting) &&
+        !canEngageCanvasPointerLock(gs.phase, gs.isSeatedAtDesk) &&
         document.pointerLockElement === gl.domElement
       ) {
         document.exitPointerLock?.();
@@ -365,22 +398,24 @@ export const CameraController: React.FC = () => {
     };
     syncAllowedLock();
     return subscribePointerLockInteraction(syncAllowedLock);
-  }, [gl, phase, wePadInspecting]);
+  }, [gl, phase, isSeatedAtDesk]);
 
   useEffect(() => {
     installSafePointerCaptureShim();
 
     // Custom R3F event computation: center reticle (0, 0) while idle/hovering,
-    // virtual cursor (virtualX, virtualY) during Amnesia-style hold-and-drag.
+    // virtual cursor (virtualX, virtualY) during Amnesia-style hold-and-drag,
+    // or live free mouse cursor coordinates when seated at the Inspector Desk.
     const prevCompute = get().events.compute;
     setEvents({
       compute: (event, state) => {
         const gs = useGameStore.getState();
-        const interactionFar = pointerLockInteraction.isGrabbingControl
-          ? GRAB_ACTIVE_FAR
-          : gs.phase !== "playing"
-            ? MENU_FAR
-            : REACH_MAX_DIST;
+        const interactionFar =
+          pointerLockInteraction.isGrabbingControl || gs.isSeatedAtDesk
+            ? GRAB_ACTIVE_FAR
+            : gs.phase !== "playing"
+              ? MENU_FAR
+              : REACH_MAX_DIST;
 
         if (document.pointerLockElement === state.gl.domElement) {
           if (
@@ -404,18 +439,25 @@ export const CameraController: React.FC = () => {
         }
 
         const mouseEv = event as MouseEvent;
-        if (
-          state.size.width > 0 &&
-          state.size.height > 0 &&
-          typeof mouseEv.offsetX === "number"
-        ) {
-          state.pointer.set(
-            (mouseEv.offsetX / state.size.width) * 2 - 1,
-            -(mouseEv.offsetY / state.size.height) * 2 + 1,
-          );
-          state.raycaster.near = 0.05;
-          state.raycaster.far = interactionFar;
-          state.raycaster.setFromCamera(state.pointer, state.camera);
+        if (state.size.width > 0 && state.size.height > 0) {
+          const rect = state.gl.domElement.getBoundingClientRect();
+          const px =
+            typeof mouseEv.clientX === "number"
+              ? mouseEv.clientX - rect.left
+              : mouseEv.offsetX;
+          const py =
+            typeof mouseEv.clientY === "number"
+              ? mouseEv.clientY - rect.top
+              : mouseEv.offsetY;
+          if (typeof px === "number" && typeof py === "number") {
+            state.pointer.set(
+              (px / state.size.width) * 2 - 1,
+              -(py / state.size.height) * 2 + 1,
+            );
+            state.raycaster.near = 0.05;
+            state.raycaster.far = interactionFar;
+            state.raycaster.setFromCamera(state.pointer, state.camera);
+          }
         }
       },
     });
@@ -502,7 +544,7 @@ export const CameraController: React.FC = () => {
     const requestCanvasLockIfAllowed = () => {
       const gs = useGameStore.getState();
       if (document.pointerLockElement === gl.domElement) return;
-      if (!canEngageCanvasPointerLock(gs.phase, gs.wePadInspecting)) return;
+      if (!canEngageCanvasPointerLock(gs.phase, gs.isSeatedAtDesk)) return;
       try {
         const req = gl.domElement.requestPointerLock?.() as
           | Promise<void>
@@ -512,6 +554,60 @@ export const CameraController: React.FC = () => {
         });
       } catch {
         // Ignore security exceptions when calling requestPointerLock
+      }
+    };
+
+    const sitAtDesk = () => {
+      const mk = moveKeysRef.current;
+      mk.forward = false;
+      mk.backward = false;
+      mk.left = false;
+      mk.right = false;
+      mk.shift = false;
+      mk.zKey = false;
+      mk.digit5 = false;
+      velocityRef.current.vx = 0;
+      velocityRef.current.vz = 0;
+      glideTargetRef.current.active = false;
+      rmbHeldRef.current = false;
+      if (pointerLockInteraction.isGrabbingControl) {
+        releaseActiveGrab(true);
+      }
+      lookStateRef.current.targetYaw = setShortestTargetYaw(
+        lookStateRef.current.currentYaw,
+        SEATED_DESK_POSE.yaw,
+      );
+      lookStateRef.current.targetPitch = SEATED_DESK_POSE.pitch;
+      const gs = useGameStore.getState();
+      skipNextPoseSyncRef.current = gs.activeStation !== "inspector";
+      gs.setSeatedAtDesk(true);
+      setActiveStation("inspector");
+      if (document.pointerLockElement === gl.domElement) {
+        document.exitPointerLock?.();
+      }
+      playSwitchClank(true);
+    };
+
+    const standUpFromDesk = (reengagePointerLock: boolean) => {
+      if (pointerLockInteraction.isGrabbingControl) {
+        releaseActiveGrab(true);
+      }
+      rmbHeldRef.current = false;
+      const gs = useGameStore.getState();
+      gs.setSeatedAtDesk(false);
+      lookStateRef.current.targetYaw = setShortestTargetYaw(
+        lookStateRef.current.currentYaw,
+        STAND_UP_SPOT.yaw,
+      );
+      lookStateRef.current.targetPitch = STAND_UP_SPOT.pitch;
+      glideTargetRef.current = {
+        active: true,
+        x: STAND_UP_SPOT.x,
+        z: STAND_UP_SPOT.z,
+      };
+      playSwitchClank(false);
+      if (reengagePointerLock) {
+        requestCanvasLockIfAllowed();
       }
     };
 
@@ -606,7 +702,6 @@ export const CameraController: React.FC = () => {
         const gs = useGameStore.getState();
         if (
           gs.phase === "playing" &&
-          !gs.wePadInspecting &&
           !pointerLockInteraction.isGrabbingControl
         ) {
           rmbHeldRef.current = true;
@@ -715,45 +810,82 @@ export const CameraController: React.FC = () => {
         mk.digit5 = true;
       }
 
-      // When inspecting WE-PAD 84 up close ([TAB]), keys [1-6] switch WE-PAD tabs instead of gliding
-      if (
-        useGameStore.getState().wePadInspecting &&
-        (e.key === "1" ||
-          e.key === "2" ||
-          e.key === "3" ||
-          e.key === "4" ||
-          e.key === "5" ||
-          e.key === "6")
-      ) {
+      if (e.code === "KeyE" && !e.repeat) {
+        const gs = useGameStore.getState();
+        if (
+          gs.phase === "playing" &&
+          !pointerLockInteraction.mainMenuOpen &&
+          !pointerLockInteraction.debugMenuOpen
+        ) {
+          if (gs.isSeatedAtDesk) {
+            e.preventDefault();
+            standUpFromDesk(true);
+            return;
+          }
+          if (checkWithinDeskRange(playerPosRef.current.x, playerPosRef.current.z)) {
+            e.preventDefault();
+            sitAtDesk();
+            return;
+          }
+        }
+      }
+
+      if (e.key === "Escape") {
+        const gs = useGameStore.getState();
+        if (
+          gs.phase === "playing" &&
+          gs.isSeatedAtDesk &&
+          !pointerLockInteraction.mainMenuOpen &&
+          !pointerLockInteraction.debugMenuOpen
+        ) {
+          e.preventDefault();
+          standUpFromDesk(false);
+          return;
+        }
+        glideTargetRef.current.active = false;
         return;
       }
 
+      const leaveSeatedIfNeeded = () => {
+        const gs = useGameStore.getState();
+        if (gs.isSeatedAtDesk) {
+          gs.setSeatedAtDesk(false);
+        }
+      };
+
       if (e.key === "1") {
         e.preventDefault();
+        leaveSeatedIfNeeded();
         syncStationSpot("reactor");
       } else if (e.key === "2") {
         e.preventDefault();
+        leaveSeatedIfNeeded();
         syncStationSpot("terminal");
       } else if (e.key === "3") {
         e.preventDefault();
+        leaveSeatedIfNeeded();
         syncStationSpot("power");
       } else if (e.key === "4") {
         e.preventDefault();
-        syncStationSpot("inspector");
+        if (!useGameStore.getState().isSeatedAtDesk) {
+          syncStationSpot("inspector");
+        }
       } else if (e.key === "5") {
         e.preventDefault();
+        leaveSeatedIfNeeded();
         syncStationSpot("aux");
       } else if (e.key === "6") {
         e.preventDefault();
+        leaveSeatedIfNeeded();
         applyBaySpot(UNIT_A2_SPOT, "power");
       } else if (e.key === "7") {
         e.preventDefault();
+        leaveSeatedIfNeeded();
         applyBaySpot(UNIT_D_SPOT, "aux");
       } else if (e.key === "0") {
         e.preventDefault();
+        leaveSeatedIfNeeded();
         syncStationSpot("overview");
-      } else if (e.key === "Escape") {
-        glideTargetRef.current.active = false;
       }
     };
 
@@ -844,132 +976,250 @@ export const CameraController: React.FC = () => {
     const look = lookStateRef.current;
     const mk = moveKeysRef.current;
     const isGrabbing = pointerLockInteraction.isGrabbingControl;
-    const canMove = gs.phase === "playing" && !gs.wePadInspecting && !isGrabbing;
-
-    // Preserve Shift+A+Z+5 easter egg and Shift fine-tuning: disable strafe/sprint during A+Z+5 chord
-    const isAz5Chord = mk.shift && (mk.zKey || mk.digit5);
-    const moveForward = Number(mk.forward) - Number(mk.backward);
-    const moveRight = Number(mk.right) - Number(isAz5Chord ? false : mk.left);
-
-    if (canMove && (moveForward !== 0 || moveRight !== 0)) {
-      glideTargetRef.current.active = false;
-    }
-
-    look.targetPitch = THREE.MathUtils.clamp(
-      look.targetPitch,
-      MIN_PITCH,
-      MAX_PITCH,
-    );
-
-    if (isGrabbing) {
-      // Lock camera yaw & pitch rock-solid while LMB is dragging a physical 3D control
-      look.targetYaw = look.currentYaw;
-      look.targetPitch = look.currentPitch;
-    } else {
-      look.currentYaw = THREE.MathUtils.damp(
-        look.currentYaw,
-        look.targetYaw,
-        18,
-        dt,
-      );
-      look.currentPitch = THREE.MathUtils.damp(
-        look.currentPitch,
-        look.targetPitch,
-        18,
-        dt,
-      );
-    }
+    const isSeated = gs.isSeatedAtDesk;
+    const canMove = gs.phase === "playing" && !isSeated && !isGrabbing;
 
     const playerPos = playerPosRef.current;
     const vel = velocityRef.current;
     const glide = glideTargetRef.current;
 
-    if (isGrabbing) {
-      vel.vx = 0;
-      vel.vz = 0;
-      glide.active = false;
-    } else if (glide.active && canMove) {
-      const prevX = playerPos.x;
-      const prevZ = playerPos.z;
-      playerPos.x = THREE.MathUtils.damp(playerPos.x, glide.x, 7.5, dt);
-      playerPos.z = THREE.MathUtils.damp(playerPos.z, glide.z, 7.5, dt);
-      resolveControlRoomCollisions(playerPos);
-      vel.vx = dt > 1e-4 ? (playerPos.x - prevX) / dt : 0;
-      vel.vz = dt > 1e-4 ? (playerPos.z - prevZ) / dt : 0;
-      if (Math.hypot(glide.x - playerPos.x, glide.z - playerPos.z) < 0.025) {
-        glide.active = false;
-      }
-    } else {
-      const fx = -Math.sin(look.currentYaw);
-      const fz = -Math.cos(look.currentYaw);
-      const rx = Math.cos(look.currentYaw);
-      const rz = -Math.sin(look.currentYaw);
-
-      let wishX = fx * moveForward + rx * moveRight;
-      let wishZ = fz * moveForward + rz * moveRight;
-      const wishLen = Math.hypot(wishX, wishZ);
-      if (wishLen > 1e-5) {
-        wishX /= wishLen;
-        wishZ /= wishLen;
-      } else {
-        wishX = 0;
-        wishZ = 0;
-      }
-
-      const canSprint = canMove && mk.shift && !isAz5Chord;
-      const speed = canMove ? (canSprint ? SPRINT_SPEED : WALK_SPEED) : 0;
-      vel.vx = THREE.MathUtils.damp(vel.vx, wishX * speed, VELOCITY_DAMP, dt);
-      vel.vz = THREE.MathUtils.damp(vel.vz, wishZ * speed, VELOCITY_DAMP, dt);
-
-      if (Math.abs(vel.vx) > 1e-4 || Math.abs(vel.vz) > 1e-4) {
-        playerPos.x += vel.vx * dt;
-        playerPos.z += vel.vz * dt;
-        resolveControlRoomCollisions(playerPos);
-      }
+    const nearDesk = !isSeated && checkWithinDeskRange(playerPos.x, playerPos.z);
+    if (nearDesk !== gs.canSitAtDesk) {
+      gs.setCanSitAtDesk(nearDesk);
     }
 
-    const horizSpeed = Math.hypot(vel.vx, vel.vz);
-    if (!isGrabbing && canMove && horizSpeed > 0.12) {
-      headBobPhaseRef.current += dt * (8.5 + horizSpeed * 1.15);
-      const targetBob =
-        Math.sin(headBobPhaseRef.current) *
-        HEAD_BOB_AMPLITUDE *
-        Math.min(1, horizSpeed / WALK_SPEED);
-      headBobOffsetRef.current = THREE.MathUtils.damp(
-        headBobOffsetRef.current,
-        targetBob,
+    if (isSeated) {
+      glide.active = false;
+      vel.vx = 0;
+      vel.vz = 0;
+      const nextSeatedX = THREE.MathUtils.damp(
+        playerPos.x,
+        SEATED_DESK_POSE.x,
         14,
         dt,
       );
-    } else {
-      headBobOffsetRef.current = THREE.MathUtils.damp(
+      const nextSeatedZ = THREE.MathUtils.damp(
+        playerPos.z,
+        SEATED_DESK_POSE.z,
+        14,
+        dt,
+      );
+      playerPos.x =
+        Math.abs(SEATED_DESK_POSE.x - nextSeatedX) < 1e-4
+          ? SEATED_DESK_POSE.x
+          : nextSeatedX;
+      playerPos.z =
+        Math.abs(SEATED_DESK_POSE.z - nextSeatedZ) < 1e-4
+          ? SEATED_DESK_POSE.z
+          : nextSeatedZ;
+
+      const nextSeatedY = THREE.MathUtils.damp(
+        currentEyeYRef.current,
+        SEATED_DESK_POSE.y,
+        14,
+        dt,
+      );
+      currentEyeYRef.current =
+        Math.abs(SEATED_DESK_POSE.y - nextSeatedY) < 1e-4
+          ? SEATED_DESK_POSE.y
+          : nextSeatedY;
+
+      const nextSeatedBob = THREE.MathUtils.damp(
         headBobOffsetRef.current,
         0,
         14,
         dt,
       );
-    }
+      headBobOffsetRef.current =
+        Math.abs(nextSeatedBob) < 1e-5 ? 0 : nextSeatedBob;
 
-    state.camera.position.set(
-      playerPos.x,
-      STANDING_EYE_Y + headBobOffsetRef.current,
-      playerPos.z,
-    );
-    state.camera.rotation.order = "YXZ";
-    state.camera.rotation.set(look.currentPitch, look.currentYaw, 0, "YXZ");
-    state.camera.rotation.z = 0;
+      look.targetYaw = setShortestTargetYaw(
+        look.currentYaw,
+        SEATED_DESK_POSE.yaw,
+      );
+      look.targetPitch = SEATED_DESK_POSE.pitch;
+      const nextSeatedYaw = THREE.MathUtils.damp(
+        look.currentYaw,
+        look.targetYaw,
+        14,
+        dt,
+      );
+      const nextSeatedPitch = THREE.MathUtils.damp(
+        look.currentPitch,
+        look.targetPitch,
+        14,
+        dt,
+      );
+      look.currentYaw =
+        Math.abs(look.targetYaw - nextSeatedYaw) < 1e-4
+          ? look.targetYaw
+          : nextSeatedYaw;
+      look.currentPitch =
+        Math.abs(look.targetPitch - nextSeatedPitch) < 1e-4
+          ? look.targetPitch
+          : nextSeatedPitch;
+
+      state.camera.position.set(
+        playerPos.x,
+        currentEyeYRef.current + headBobOffsetRef.current,
+        playerPos.z,
+      );
+      state.camera.rotation.order = "YXZ";
+      state.camera.rotation.set(look.currentPitch, look.currentYaw, 0, "YXZ");
+      state.camera.rotation.z = 0;
+    } else {
+      // Preserve Shift+A+Z+5 easter egg and Shift fine-tuning: disable strafe/sprint during A+Z+5 chord
+      const isAz5Chord = mk.shift && (mk.zKey || mk.digit5);
+      const moveForward = Number(mk.forward) - Number(mk.backward);
+      const moveRight = Number(mk.right) - Number(isAz5Chord ? false : mk.left);
+
+      if (canMove && (moveForward !== 0 || moveRight !== 0)) {
+        glideTargetRef.current.active = false;
+      }
+
+      look.targetPitch = THREE.MathUtils.clamp(
+        look.targetPitch,
+        MIN_PITCH,
+        MAX_PITCH,
+      );
+
+      if (isGrabbing) {
+        // Lock camera yaw & pitch rock-solid while LMB is dragging a physical 3D control
+        look.targetYaw = look.currentYaw;
+        look.targetPitch = look.currentPitch;
+      } else {
+        const nextYaw = THREE.MathUtils.damp(
+          look.currentYaw,
+          look.targetYaw,
+          18,
+          dt,
+        );
+        const nextPitch = THREE.MathUtils.damp(
+          look.currentPitch,
+          look.targetPitch,
+          18,
+          dt,
+        );
+        look.currentYaw =
+          Math.abs(look.targetYaw - nextYaw) < 1e-4 ? look.targetYaw : nextYaw;
+        look.currentPitch =
+          Math.abs(look.targetPitch - nextPitch) < 1e-4
+            ? look.targetPitch
+            : nextPitch;
+      }
+
+      if (isGrabbing) {
+        vel.vx = 0;
+        vel.vz = 0;
+        glide.active = false;
+      } else if (glide.active && canMove) {
+        const prevX = playerPos.x;
+        const prevZ = playerPos.z;
+        playerPos.x = THREE.MathUtils.damp(playerPos.x, glide.x, 7.5, dt);
+        playerPos.z = THREE.MathUtils.damp(playerPos.z, glide.z, 7.5, dt);
+        resolveControlRoomCollisions(playerPos);
+        vel.vx = dt > 1e-4 ? (playerPos.x - prevX) / dt : 0;
+        vel.vz = dt > 1e-4 ? (playerPos.z - prevZ) / dt : 0;
+        if (Math.hypot(glide.x - playerPos.x, glide.z - playerPos.z) < 0.025) {
+          glide.active = false;
+        }
+      } else {
+        const fx = -Math.sin(look.currentYaw);
+        const fz = -Math.cos(look.currentYaw);
+        const rx = Math.cos(look.currentYaw);
+        const rz = -Math.sin(look.currentYaw);
+
+        let wishX = fx * moveForward + rx * moveRight;
+        let wishZ = fz * moveForward + rz * moveRight;
+        const wishLen = Math.hypot(wishX, wishZ);
+        if (wishLen > 1e-5) {
+          wishX /= wishLen;
+          wishZ /= wishLen;
+        } else {
+          wishX = 0;
+          wishZ = 0;
+        }
+
+        const canSprint = canMove && mk.shift && !isAz5Chord;
+        const speed = canMove ? (canSprint ? SPRINT_SPEED : WALK_SPEED) : 0;
+        vel.vx = THREE.MathUtils.damp(vel.vx, wishX * speed, VELOCITY_DAMP, dt);
+        vel.vz = THREE.MathUtils.damp(vel.vz, wishZ * speed, VELOCITY_DAMP, dt);
+
+        const dampedSpeed = Math.hypot(vel.vx, vel.vz);
+        if ((speed === 0 || (wishX === 0 && wishZ === 0)) && dampedSpeed < 0.01) {
+          vel.vx = 0;
+          vel.vz = 0;
+        }
+
+        if (vel.vx !== 0 || vel.vz !== 0) {
+          playerPos.x += vel.vx * dt;
+          playerPos.z += vel.vz * dt;
+          resolveControlRoomCollisions(playerPos);
+        }
+      }
+
+      const horizSpeed = Math.hypot(vel.vx, vel.vz);
+      if (!isGrabbing && canMove && horizSpeed > 0.12) {
+        headBobPhaseRef.current += dt * (8.5 + horizSpeed * 1.15);
+        const targetBob =
+          Math.sin(headBobPhaseRef.current) *
+          HEAD_BOB_AMPLITUDE *
+          Math.min(1, horizSpeed / WALK_SPEED);
+        headBobOffsetRef.current = THREE.MathUtils.damp(
+          headBobOffsetRef.current,
+          targetBob,
+          14,
+          dt,
+        );
+      } else if (horizSpeed < 0.01) {
+        // Zero out camera head-bob completely when standing still so Bayer dither stays rock-solid
+        headBobOffsetRef.current = 0;
+      } else {
+        const nextBob = THREE.MathUtils.damp(
+          headBobOffsetRef.current,
+          0,
+          14,
+          dt,
+        );
+        headBobOffsetRef.current = Math.abs(nextBob) < 1e-5 ? 0 : nextBob;
+      }
+
+      const nextStandingY = THREE.MathUtils.damp(
+        currentEyeYRef.current,
+        STANDING_EYE_Y,
+        14,
+        dt,
+      );
+      currentEyeYRef.current =
+        Math.abs(STANDING_EYE_Y - nextStandingY) < 1e-4
+          ? STANDING_EYE_Y
+          : nextStandingY;
+      state.camera.position.set(
+        playerPos.x,
+        currentEyeYRef.current + headBobOffsetRef.current,
+        playerPos.z,
+      );
+      state.camera.rotation.order = "YXZ";
+      state.camera.rotation.set(look.currentPitch, look.currentYaw, 0, "YXZ");
+      state.camera.rotation.z = 0;
+    }
 
     const isRmbFocus =
       rmbHeldRef.current &&
       gs.phase === "playing" &&
-      !gs.wePadInspecting &&
       !isGrabbing;
-    const targetFov = isRmbFocus ? RMB_ZOOM_FOV : BASE_FOV;
+    const baseFov = isSeated ? SEATED_DESK_POSE.fov : BASE_FOV;
+    const zoomFov = isSeated ? RMB_SEATED_ZOOM_FOV : RMB_ZOOM_FOV;
+    const targetFov = isRmbFocus ? zoomFov : baseFov;
 
     if (state.camera instanceof THREE.PerspectiveCamera) {
       let projDirty = false;
-      if (state.camera.far < 160) {
-        state.camera.far = 160;
+      if (Math.abs(state.camera.near - 0.12) > 1e-4) {
+        state.camera.near = 0.12;
+        projDirty = true;
+      }
+      if (Math.abs(state.camera.far - 150) > 1e-3) {
+        state.camera.far = 150;
         projDirty = true;
       }
       const nextFov = THREE.MathUtils.damp(
@@ -978,8 +1228,10 @@ export const CameraController: React.FC = () => {
         10,
         dt,
       );
-      if (Math.abs(nextFov - state.camera.fov) > 0.02) {
-        state.camera.fov = nextFov;
+      const snappedFov =
+        Math.abs(targetFov - nextFov) <= 0.02 ? targetFov : nextFov;
+      if (Math.abs(snappedFov - state.camera.fov) > 1e-4) {
+        state.camera.fov = snappedFov;
         projDirty = true;
       }
       if (projDirty) {
