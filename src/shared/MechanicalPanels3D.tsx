@@ -487,10 +487,10 @@ const MANOMETER_8_BOLTS_GEO = mergeStaticGeometries(
 const POWER_COL_4_BOLTS_GEO = mergeStaticGeometries(
   (
     [
-      [-0.052, 0.162],
-      [0.052, 0.162],
-      [-0.052, -0.162],
-      [0.052, -0.162],
+      [-0.048, 0.236],
+      [0.048, 0.236],
+      [-0.048, -0.236],
+      [0.048, -0.236],
     ] as const
   ).map(([bx, by]) => ({
     geometry: new THREE.CylinderGeometry(0.006, 0.006, 0.008, 6),
@@ -501,46 +501,46 @@ const POWER_COL_4_BOLTS_GEO = mergeStaticGeometries(
 
 const POWER_COL_10_LOUVERS_GEO = mergeStaticGeometries(
   Array.from({ length: 10 }, (_, idx) => ({
-    geometry: new THREE.BoxGeometry(0.114, 0.006, 0.016),
-    position: [0, -0.144 + idx * 0.032 + 0.015, 0.019],
+    geometry: new THREE.BoxGeometry(0.104, 0.007, 0.016),
+    position: [0, -0.209 + idx * 0.0465 + 0.0225, 0.019],
   })),
 );
 
 const POWER_COL_6_BOLTS_GEO = mergeStaticGeometries(
   (
     [
-      [-0.044, 0.155],
-      [0.044, 0.155],
-      [-0.044, 0],
-      [0.044, 0],
-      [-0.044, -0.155],
-      [0.044, -0.155],
+      [-0.054, 0.234],
+      [0.054, 0.234],
+      [-0.054, 0],
+      [0.054, 0],
+      [-0.054, -0.234],
+      [0.054, -0.234],
     ] as const
   ).map(([bx, by]) => ({
     geometry: new THREE.CylinderGeometry(0.0055, 0.0055, 0.008, 6),
-    position: [bx, by, 0.024],
+    position: [bx, by, 0.025],
     rotation: [Math.PI / 2, 0, 0],
   })),
 );
 
 const POWER_COL_18_PLEATS_GEO = mergeStaticGeometries(
-  Array.from({ length: 18 }, (_, pIdx) => ({
-    geometry: new THREE.BoxGeometry(0.024, 0.006, 0.006),
-    position: [0.006, -0.144 + pIdx * 0.017, 0.018],
+  Array.from({ length: 24 }, (_, pIdx) => ({
+    geometry: new THREE.BoxGeometry(0.028, 0.006, 0.006),
+    position: [0.008, -0.22 + pIdx * 0.0191, 0.019],
   })),
 );
 
 const POWER_COL_20_TEETH_GEO = mergeStaticGeometries(
-  Array.from({ length: 10 }, (_, tIdx) => {
-    const ty = -0.144 + tIdx * 0.032;
+  Array.from({ length: 11 }, (_, tIdx) => {
+    const ty = -0.225 + tIdx * 0.045;
     return [
       {
         geometry: new THREE.BoxGeometry(0.012, 0.009, 0.01),
-        position: [0.006 - 0.016, ty, 0.021] as const,
+        position: [0.008 - 0.018, ty, 0.022] as const,
       },
       {
         geometry: new THREE.BoxGeometry(0.014, 0.01, 0.012),
-        position: [0.006 + 0.016, ty, 0.021] as const,
+        position: [0.008 + 0.018, ty, 0.022] as const,
       },
     ];
   }).flat(),
@@ -578,39 +578,39 @@ const A2_OIL_5_LOUVERS_GEO = mergeStaticGeometries(
 const A2_BORON_6_BOLTS_GEO = mergeStaticGeometries(
   (
     [
-      [-0.052, 0.126],
-      [0.052, 0.126],
-      [-0.052, 0],
-      [0.052, 0],
-      [-0.052, -0.126],
-      [0.052, -0.126],
+      [-0.058, 0.142],
+      [0.058, 0.142],
+      [-0.058, 0],
+      [0.058, 0],
+      [-0.058, -0.142],
+      [0.058, -0.142],
     ] as const
   ).map(([bx, by]) => ({
     geometry: new THREE.CylinderGeometry(0.005, 0.005, 0.006, 6),
-    position: [bx, by, 0.018],
+    position: [bx, by, 0.019],
     rotation: [Math.PI / 2, 0, 0],
   })),
 );
 
 const A2_BORON_12_PLEATS_GEO = mergeStaticGeometries(
-  Array.from({ length: 12 }, (_, bIdx) => ({
-    geometry: new THREE.CylinderGeometry(0.004, 0.004, 0.032, 8),
-    position: [0, -0.105 + bIdx * 0.019, 0.015],
+  Array.from({ length: 14 }, (_, bIdx) => ({
+    geometry: new THREE.CylinderGeometry(0.0042, 0.0042, 0.036, 8),
+    position: [0, -0.122 + bIdx * 0.0188, 0.016],
     rotation: [0, 0, Math.PI / 2],
   })),
 );
 
 const A2_BORON_16_TEETH_GEO = mergeStaticGeometries(
-  Array.from({ length: 8 }, (_, tIdx) => {
-    const ty = -0.102 + tIdx * 0.029;
+  Array.from({ length: 9 }, (_, tIdx) => {
+    const ty = -0.12 + tIdx * 0.03;
     return [
       {
         geometry: new THREE.BoxGeometry(0.014, 0.009, 0.01),
-        position: [-0.022, ty, 0.019] as const,
+        position: [-0.025, ty, 0.02] as const,
       },
       {
         geometry: new THREE.BoxGeometry(0.014, 0.009, 0.01),
-        position: [0.022, ty, 0.019] as const,
+        position: [0.025, ty, 0.02] as const,
       },
     ];
   }).flat(),
@@ -618,8 +618,8 @@ const A2_BORON_16_TEETH_GEO = mergeStaticGeometries(
 
 const A2_BORON_10_LOUVERS_GEO = mergeStaticGeometries(
   Array.from({ length: 10 }, (_, idx) => ({
-    geometry: new THREE.BoxGeometry(0.048, 0.004, 0.012),
-    position: [0, -0.112 + idx * 0.025 + 0.0115, 0.014],
+    geometry: new THREE.BoxGeometry(0.068, 0.0045, 0.012),
+    position: [0, -0.122 + idx * 0.0272 + 0.013, 0.015],
   })),
 );
 
@@ -716,12 +716,8 @@ const RBMK_8_CLAMPS_GEO = mergeStaticGeometries(
   Array.from({ length: 8 }, (_, cIdx) => {
     const ang = (cIdx / 8) * Math.PI * 2 + Math.PI / 8;
     return {
-      geometry: new THREE.BoxGeometry(0.028, 0.044, 0.018),
-      position: [
-        Math.cos(ang) * 0.222,
-        -0.015 + Math.sin(ang) * 0.222,
-        0.029,
-      ],
+      geometry: new THREE.BoxGeometry(0.026, 0.04, 0.018),
+      position: [Math.cos(ang) * 0.2, Math.sin(ang) * 0.2, 0.029],
       rotation: [0, 0, ang],
     };
   }),
@@ -731,12 +727,8 @@ const RBMK_16_BOLTS_GEO = mergeStaticGeometries(
   Array.from({ length: 16 }, (_, bIdx) => {
     const ang = (bIdx / 16) * Math.PI * 2;
     return {
-      geometry: new THREE.CylinderGeometry(0.0055, 0.0055, 0.006, 6),
-      position: [
-        Math.cos(ang) * 0.214,
-        -0.015 + Math.sin(ang) * 0.214,
-        0.036,
-      ],
+      geometry: new THREE.CylinderGeometry(0.0052, 0.0052, 0.006, 6),
+      position: [Math.cos(ang) * 0.194, Math.sin(ang) * 0.194, 0.036],
       rotation: [Math.PI / 2, 0, 0],
     };
   }),
@@ -783,6 +775,7 @@ export interface SovietModularSteelCabinet3DProps {
   openRightSide?: boolean;
   hideChartRecorders?: boolean;
   hideStripMeters?: boolean;
+  unifiedUpperFace?: boolean;
 }
 
 /**
@@ -1086,6 +1079,7 @@ export const SovietModularSteelCabinet3D: React.FC<
     openRightSide = false,
     hideChartRecorders = false,
     hideStripMeters = false,
+    unifiedUpperFace = false,
   }) => {
     const cabinetRootRef = useRef<THREE.Group>(null);
     const ironTex = useMemo(() => getHammeredIronTextures(), []);
@@ -1802,104 +1796,153 @@ export const SovietModularSteelCabinet3D: React.FC<
           />
         </mesh>
 
-        {/* Upper Cabinet Outer Enamel Frame (`#7e9087` Light Industrial Sage-Grey) */}
-        <mesh position={[0, 1.96, -0.004]} castShadow receiveShadow>
-          <boxGeometry args={[width, 0.68, 0.036]} />
-          <meshStandardMaterial
-            color="#7e9087"
-            roughness={0.42}
-            metalness={0.3}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.004}
-          />
-        </mesh>
-
-        {/* Upper Synoptic Slate-Blue Faceplates (`#2c4a63` — Iconic Soviet Mnemoscheme Blue) */}
-        {[-subPlateX, subPlateX].map((px, idx) => (
-          <mesh
-            key={`ugp-${idx}`}
-            position={[px, 1.94, 0.012]}
-            castShadow
-            receiveShadow
-          >
-            <boxGeometry args={[subPlateHalfW, 0.60, 0.016]} />
-            <meshStandardMaterial
-              color="#2c4a63"
-              roughness={0.44}
-              metalness={0.24}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.004}
-            />
-          </mesh>
-        ))}
-
-        {/* Dense Synoptic Channel/Valve Matrix Tags Along Upper Board (`y = 2.015m`) */}
-        {Array.from({ length: 12 }).map((_, tIdx) => {
-          const tx = -plateW * 0.44 + (tIdx / 11) * (plateW * 0.88);
-          const isLit = tIdx % 3 === 0;
-          const isWarn = tIdx === 4 || tIdx === 8;
-          return (
-            <mesh key={`syn-tag-${tIdx}`} position={[tx, 2.015, 0.026]}>
-              <boxGeometry args={[0.056, 0.022, 0.005]} />
+        {unifiedUpperFace ? (
+          <>
+            {/* Unified Vertical Upper Enamel Frame (`#7e9087` Light Industrial Sage-Grey, y: 1.26..2.28) */}
+            <mesh position={[0, 1.77, -0.004]} castShadow receiveShadow>
+              <boxGeometry args={[width, 1.02, 0.036]} />
               <meshStandardMaterial
-                color={isWarn ? "#ffe088" : "#f0ece0"}
-                emissive={isWarn ? "#ffaa00" : isLit ? "#fff6d6" : "#000000"}
-                emissiveIntensity={isWarn ? 0.55 : isLit ? 0.32 : 0}
-                roughness={0.32}
+                color="#7e9087"
+                roughness={0.42}
+                metalness={0.3}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.004}
               />
             </mesh>
-          );
-        })}
 
-        {/* 2 Physical 3D Glass-Front Paper Strip-Chart Recorders (KSP-4)
-            Mounted cleanly in the gaps between the 3 circular manometer gauges (`x = ±recorderX, y = 1.78m`) */}
-        {!hideChartRecorders &&
-          ksp4ChartTextures &&
-          [-recorderX, recorderX].map((rx, rIdx) => (
-            <group key={`ksp4-${rIdx}`} position={[rx, 1.78, 0.032]}>
-              {/* Dark Charcoal Steel KSP-4 Bezel Casing (`#222826`) */}
-              <mesh>
-                <boxGeometry args={[recorderW, 0.228, 0.022]} />
-                <meshStandardMaterial
-                  color="#222826"
-                  roughness={0.42}
-                  metalness={0.55}
-                />
-              </mesh>
-              {/* Cream-White Paper Roll & Dual Red/Blue Ink Trace Curve (`#f4f1e6`) */}
-              <mesh position={[0, -0.004, 0.013]}>
-                <planeGeometry args={[recorderW - 0.018, 0.198]} />
-                <meshStandardMaterial
-                  map={ksp4ChartTextures[rIdx]}
-                  emissive="#ffffff"
-                  emissiveMap={ksp4ChartTextures[rIdx]}
-                  emissiveIntensity={0.22}
-                  roughness={0.55}
-                  polygonOffset
-                  polygonOffsetFactor={-2}
-                  polygonOffsetUnits={-2}
-                />
-              </mesh>
-              {/* Cylindrical Paper Roll Drum at Bottom of Recorder Window */}
+            {/* Unified Upper Synoptic Slate-Blue Faceplates (`#2c4a63`) */}
+            {[-subPlateX, subPlateX].map((px, idx) => (
               <mesh
-                position={[0, -0.092, 0.016]}
-                rotation={[0, 0, Math.PI / 2]}
+                key={`ugp-uni-${idx}`}
+                position={[px, 1.76, 0.012]}
+                castShadow
+                receiveShadow
               >
-                <cylinderGeometry args={[0.012, 0.012, recorderW - 0.02, 12]} />
-                <meshStandardMaterial color="#f0ede2" roughness={0.5} />
-              </mesh>
-              {/* Protective Glass Window Front */}
-              <mesh position={[0, 0, 0.018]}>
-                <planeGeometry args={[recorderW - 0.014, 0.204]} />
-                <meshBasicMaterial
-                  color="#dff4ff"
-                  transparent
-                  opacity={0.12}
-                  depthWrite={false}
+                <boxGeometry args={[subPlateHalfW, 0.94, 0.016]} />
+                <meshStandardMaterial
+                  color="#2c4a63"
+                  roughness={0.44}
+                  metalness={0.24}
+                  bumpMap={ironTex.bumpMap}
+                  bumpScale={0.004}
                 />
               </mesh>
-            </group>
-          ))}
+            ))}
+
+            {/* Structural Transition Apron Bridging Vertical Riser to Top of Sloped Desk */}
+            <mesh position={[0, 1.285, 0.026]} castShadow receiveShadow>
+              <boxGeometry args={[width, 0.045, 0.056]} />
+              <meshStandardMaterial
+                color="#5a6b63"
+                roughness={0.44}
+                metalness={0.36}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.004}
+              />
+            </mesh>
+          </>
+        ) : (
+          <>
+            {/* Upper Cabinet Outer Enamel Frame (`#7e9087` Light Industrial Sage-Grey) */}
+            <mesh position={[0, 1.96, -0.004]} castShadow receiveShadow>
+              <boxGeometry args={[width, 0.68, 0.036]} />
+              <meshStandardMaterial
+                color="#7e9087"
+                roughness={0.42}
+                metalness={0.3}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.004}
+              />
+            </mesh>
+
+            {/* Upper Synoptic Slate-Blue Faceplates (`#2c4a63` — Iconic Soviet Mnemoscheme Blue) */}
+            {[-subPlateX, subPlateX].map((px, idx) => (
+              <mesh
+                key={`ugp-${idx}`}
+                position={[px, 1.94, 0.012]}
+                castShadow
+                receiveShadow
+              >
+                <boxGeometry args={[subPlateHalfW, 0.60, 0.016]} />
+                <meshStandardMaterial
+                  color="#2c4a63"
+                  roughness={0.44}
+                  metalness={0.24}
+                  bumpMap={ironTex.bumpMap}
+                  bumpScale={0.004}
+                />
+              </mesh>
+            ))}
+
+            {/* Dense Synoptic Channel/Valve Matrix Tags Along Upper Board (`y = 2.015m`) */}
+            {Array.from({ length: 12 }).map((_, tIdx) => {
+              const tx = -plateW * 0.44 + (tIdx / 11) * (plateW * 0.88);
+              const isLit = tIdx % 3 === 0;
+              const isWarn = tIdx === 4 || tIdx === 8;
+              return (
+                <mesh key={`syn-tag-${tIdx}`} position={[tx, 2.015, 0.026]}>
+                  <boxGeometry args={[0.056, 0.022, 0.005]} />
+                  <meshStandardMaterial
+                    color={isWarn ? "#ffe088" : "#f0ece0"}
+                    emissive={isWarn ? "#ffaa00" : isLit ? "#fff6d6" : "#000000"}
+                    emissiveIntensity={isWarn ? 0.55 : isLit ? 0.32 : 0}
+                    roughness={0.32}
+                  />
+                </mesh>
+              );
+            })}
+
+            {/* 2 Physical 3D Glass-Front Paper Strip-Chart Recorders (KSP-4)
+                Mounted cleanly in the gaps between the 3 circular manometer gauges (`x = ±recorderX, y = 1.78m`) */}
+            {!hideChartRecorders &&
+              ksp4ChartTextures &&
+              [-recorderX, recorderX].map((rx, rIdx) => (
+                <group key={`ksp4-${rIdx}`} position={[rx, 1.78, 0.032]}>
+                  {/* Dark Charcoal Steel KSP-4 Bezel Casing (`#222826`) */}
+                  <mesh>
+                    <boxGeometry args={[recorderW, 0.228, 0.022]} />
+                    <meshStandardMaterial
+                      color="#222826"
+                      roughness={0.42}
+                      metalness={0.55}
+                    />
+                  </mesh>
+                  {/* Cream-White Paper Roll & Dual Red/Blue Ink Trace Curve (`#f4f1e6`) */}
+                  <mesh position={[0, -0.004, 0.013]}>
+                    <planeGeometry args={[recorderW - 0.018, 0.198]} />
+                    <meshStandardMaterial
+                      map={ksp4ChartTextures[rIdx]}
+                      emissive="#ffffff"
+                      emissiveMap={ksp4ChartTextures[rIdx]}
+                      emissiveIntensity={0.22}
+                      roughness={0.55}
+                      polygonOffset
+                      polygonOffsetFactor={-2}
+                      polygonOffsetUnits={-2}
+                    />
+                  </mesh>
+                  {/* Cylindrical Paper Roll Drum at Bottom of Recorder Window */}
+                  <mesh
+                    position={[0, -0.092, 0.016]}
+                    rotation={[0, 0, Math.PI / 2]}
+                  >
+                    <cylinderGeometry args={[0.012, 0.012, recorderW - 0.02, 12]} />
+                    <meshStandardMaterial color="#f0ede2" roughness={0.5} />
+                  </mesh>
+                  {/* Protective Glass Window Front */}
+                  <mesh position={[0, 0, 0.018]}>
+                    <planeGeometry args={[recorderW - 0.014, 0.204]} />
+                    <meshBasicMaterial
+                      color="#dff4ff"
+                      transparent
+                      opacity={0.12}
+                      depthWrite={false}
+                    />
+                  </mesh>
+                </group>
+              ))}
+          </>
+        )}
 
         {/* Upper Forward-Leaning Progressive Alarm & Startup Beacon Canopy Overhang (`#7e9087` Light Sage-Grey) */}
         <group position={[0, 2.305, 0.062]} rotation={[0.18, 0, 0]}>
@@ -2095,110 +2138,112 @@ export const SovietModularSteelCabinet3D: React.FC<
             Light Sage-Green/Grey Enamel (`#8ea296`) + Recessed CRT Surround
             + Flanking Stacks of Soviet Cream-White Horizontal Strip Meters (`M381`)
            ================================================================ */}
-        <group position={[0, 1.465, 0.032]} rotation={[-0.08, 0, 0]}>
-          {/* Angled Light-Sage/Grey Instrument Riser Housing (`#8ea296`) */}
-          <mesh position={[0, 0, -0.018]} castShadow receiveShadow>
-            <boxGeometry args={[width, 0.36, 0.044]} />
-            <meshStandardMaterial
-              color="#8ea296"
-              roughness={0.4}
-              metalness={0.28}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.004}
-            />
-          </mesh>
-          {/* Recessed Dark 1980s Soviet CRT Monitor Bezel Cavity (`#1c2220`) */}
-          <mesh position={[0, 0.0, 0.008]}>
-            <boxGeometry args={[1.18, 0.296, 0.014]} />
-            <meshStandardMaterial
-              color="#1c2220"
-              roughness={0.68}
-              metalness={0.42}
-            />
-          </mesh>
+        {!unifiedUpperFace && (
+          <group position={[0, 1.465, 0.032]} rotation={[-0.08, 0, 0]}>
+            {/* Angled Light-Sage/Grey Instrument Riser Housing (`#8ea296`) */}
+            <mesh position={[0, 0, -0.018]} castShadow receiveShadow>
+              <boxGeometry args={[width, 0.36, 0.044]} />
+              <meshStandardMaterial
+                color="#8ea296"
+                roughness={0.4}
+                metalness={0.28}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.004}
+              />
+            </mesh>
+            {/* Recessed Dark 1980s Soviet CRT Monitor Bezel Cavity (`#1c2220`) */}
+            <mesh position={[0, 0.0, 0.008]}>
+              <boxGeometry args={[1.18, 0.296, 0.014]} />
+              <meshStandardMaterial
+                color="#1c2220"
+                roughness={0.68}
+                metalness={0.42}
+              />
+            </mesh>
 
-          {/* Left & Right Stacks of 4 Soviet Cream-White Horizontal Edge-Wise Strip Meters (`M381`) */}
-          {!hideStripMeters &&
-            [-stripMeterBankX, stripMeterBankX].map((mx, sideIdx) => (
-              <group key={`m381-stack-${sideIdx}`} position={[mx, -0.005, 0.012]}>
-                {/* Dark Recessed Mounting Frame behind the 4 Strip Meters */}
-                <mesh>
-                  <boxGeometry args={[stripMeterW + 0.016, 0.276, 0.01]} />
-                  <meshStandardMaterial color="#2a322f" roughness={0.55} />
-                </mesh>
-                {[-0.096, -0.032, 0.032, 0.096].map((my, mIdx) => (
-                  <group key={`m381-${mIdx}`} position={[0, my, 0.011]}>
-                    {/* Sculpted Cream-White (`#ece8d8`) Bakelite/Enamel Meter Bezel */}
-                    <mesh castShadow receiveShadow>
-                      <boxGeometry args={[stripMeterW, 0.054, 0.012]} />
-                      <meshStandardMaterial
-                        color="#ece8d8"
-                        roughness={0.34}
-                        metalness={0.12}
-                      />
+            {/* Left & Right Stacks of 4 Soviet Cream-White Horizontal Edge-Wise Strip Meters (`M381`) */}
+            {!hideStripMeters &&
+              [-stripMeterBankX, stripMeterBankX].map((mx, sideIdx) => (
+                <group key={`m381-stack-${sideIdx}`} position={[mx, -0.005, 0.012]}>
+                  {/* Dark Recessed Mounting Frame behind the 4 Strip Meters */}
+                  <mesh>
+                    <boxGeometry args={[stripMeterW + 0.016, 0.276, 0.01]} />
+                    <meshStandardMaterial color="#2a322f" roughness={0.55} />
+                  </mesh>
+                  {[-0.096, -0.032, 0.032, 0.096].map((my, mIdx) => (
+                    <group key={`m381-${mIdx}`} position={[0, my, 0.011]}>
+                      {/* Sculpted Cream-White (`#ece8d8`) Bakelite/Enamel Meter Bezel */}
+                      <mesh castShadow receiveShadow>
+                        <boxGeometry args={[stripMeterW, 0.054, 0.012]} />
+                        <meshStandardMaterial
+                          color="#ece8d8"
+                          roughness={0.34}
+                          metalness={0.12}
+                        />
+                      </mesh>
+                      {/* Crisp Horizontal Scale Window with Red Pointer Needle */}
+                      <mesh position={[0, 0, 0.0075]}>
+                        <planeGeometry args={[stripMeterW - 0.018, 0.038]} />
+                        <meshStandardMaterial
+                          map={m381ScaleTex}
+                          emissive="#ffffff"
+                          emissiveMap={m381ScaleTex}
+                          emissiveIntensity={0.25}
+                          roughness={0.4}
+                          polygonOffset
+                          polygonOffsetFactor={-2}
+                          polygonOffsetUnits={-2}
+                        />
+                      </mesh>
+                      {/* Physical 3D Red Pointer Needle with Spring-Damper Overshoot & Micro-Jitter */}
+                      <mesh
+                        ref={(el) => {
+                          m381NeedleRefs.current[sideIdx * 4 + mIdx] = el;
+                        }}
+                        position={[0, 0.002, 0.0105]}
+                      >
+                        <boxGeometry args={[0.0042, 0.031, 0.0018]} />
+                        <meshStandardMaterial
+                          color="#e82418"
+                          emissive="#ff2a1a"
+                          emissiveIntensity={0.55}
+                          roughness={0.25}
+                        />
+                      </mesh>
+                    </group>
+                  ))}
+                </group>
+              ))}
+
+            {/* Horizontal Row of Glowing Translucent White/Amber Rectangular Alarm Push-Lamps above Riser (`DRUM BAR`, `AZ-1`, `MCP PUMPS`) */}
+            <group position={[0, 0.162, 0.012]}>
+              {Array.from({ length: 8 }).map((_, lIdx) => {
+                const lx = -plateW * 0.42 + (lIdx / 7) * (plateW * 0.84);
+                const isAmber = lIdx === 1 || lIdx === 4 || lIdx === 6;
+                return (
+                  <group key={`riser-lamp-${lIdx}`} position={[lx, 0, 0]}>
+                    <mesh>
+                      <boxGeometry args={[0.135, 0.028, 0.01]} />
+                      <meshStandardMaterial color="#ece8d8" roughness={0.35} />
                     </mesh>
-                    {/* Crisp Horizontal Scale Window with Red Pointer Needle */}
-                    <mesh position={[0, 0, 0.0075]}>
-                      <planeGeometry args={[stripMeterW - 0.018, 0.038]} />
+                    <mesh position={[0, 0, 0.0068]}>
+                      <planeGeometry args={[0.122, 0.019]} />
                       <meshStandardMaterial
-                        map={m381ScaleTex}
-                        emissive="#ffffff"
-                        emissiveMap={m381ScaleTex}
-                        emissiveIntensity={0.25}
-                        roughness={0.4}
+                        color={isAmber ? "#ffd255" : "#f6f2e4"}
+                        emissive={isAmber ? "#ffaa00" : "#fff4d2"}
+                        emissiveIntensity={isAmber ? 0.65 : 0.42}
+                        roughness={0.28}
                         polygonOffset
                         polygonOffsetFactor={-2}
                         polygonOffsetUnits={-2}
                       />
                     </mesh>
-                    {/* Physical 3D Red Pointer Needle with Spring-Damper Overshoot & Micro-Jitter */}
-                    <mesh
-                      ref={(el) => {
-                        m381NeedleRefs.current[sideIdx * 4 + mIdx] = el;
-                      }}
-                      position={[0, 0.002, 0.0105]}
-                    >
-                      <boxGeometry args={[0.0042, 0.031, 0.0018]} />
-                      <meshStandardMaterial
-                        color="#e82418"
-                        emissive="#ff2a1a"
-                        emissiveIntensity={0.55}
-                        roughness={0.25}
-                      />
-                    </mesh>
                   </group>
-                ))}
-              </group>
-            ))}
-
-          {/* Horizontal Row of Glowing Translucent White/Amber Rectangular Alarm Push-Lamps above Riser (`DRUM BAR`, `AZ-1`, `MCP PUMPS`) */}
-          <group position={[0, 0.162, 0.012]}>
-            {Array.from({ length: 8 }).map((_, lIdx) => {
-              const lx = -plateW * 0.42 + (lIdx / 7) * (plateW * 0.84);
-              const isAmber = lIdx === 1 || lIdx === 4 || lIdx === 6;
-              return (
-                <group key={`riser-lamp-${lIdx}`} position={[lx, 0, 0]}>
-                  <mesh>
-                    <boxGeometry args={[0.135, 0.028, 0.01]} />
-                    <meshStandardMaterial color="#ece8d8" roughness={0.35} />
-                  </mesh>
-                  <mesh position={[0, 0, 0.0068]}>
-                    <planeGeometry args={[0.122, 0.019]} />
-                    <meshStandardMaterial
-                      color={isAmber ? "#ffd255" : "#f6f2e4"}
-                      emissive={isAmber ? "#ffaa00" : "#fff4d2"}
-                      emissiveIntensity={isAmber ? 0.65 : 0.42}
-                      roughness={0.28}
-                      polygonOffset
-                      polygonOffsetFactor={-2}
-                      polygonOffsetUnits={-2}
-                    />
-                  </mesh>
-                </group>
-              );
-            })}
+                );
+              })}
+            </group>
           </group>
-        </group>
+        )}
 
         {/* ================================================================
             TIER 1: LOWER PROTRUDING SLOPED CONTROL DESK (`y: 0.0m -> 1.28m`, `z: 0.0m -> +0.52m`)
@@ -2329,8 +2374,11 @@ export const SovietModularSteelCabinet3D: React.FC<
           })}
 
           {/* Authentic Soviet Backlit Push-Button Clusters (MCR Control Push-Buttons)
-              Omitted on A2, B & C so the 3 main interactive control assemblies and plaques have zero overlap! */}
-          {(unitCode === "A2" || unitCode === "B" || unitCode === "C"
+              Omitted on A, A2, B & C so interactive control assemblies and plaques have zero overlap! */}
+          {(unitCode === "A" ||
+          unitCode === "A2" ||
+          unitCode === "B" ||
+          unitCode === "C"
             ? ([] as number[])
             : [-plateW * 0.41, plateW * 0.41]
           ).map((clusterX, cIdx) => {
@@ -2494,10 +2542,13 @@ export const SovietModularSteelCabinet3D: React.FC<
 
         {/* Brushed Steel Horizontal Transition Trim Between Upper Synoptic Wall & Mid-Riser (`y = 1.638m`)
             and Between Mid-Riser & Sloped Control Desk (`y = 1.285m`) */}
-        {[
-          { y: 1.638, z: 0.028 },
-          { y: dividerY, z: 0.056 },
-        ].map((trim, tIdx) => (
+        {(unifiedUpperFace
+          ? [{ y: dividerY, z: 0.056 }]
+          : [
+              { y: 1.638, z: 0.028 },
+              { y: dividerY, z: 0.056 },
+            ]
+        ).map((trim, tIdx) => (
           <group key={`h-trim-${tIdx}`} position={[0, trim.y, trim.z]}>
             <mesh castShadow receiveShadow>
               <boxGeometry args={[width + 0.03, 0.02, 0.028]} />
@@ -3860,6 +3911,7 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
 
 interface SculptedPumpValveAssembly3DProps {
   position: [number, number, number];
+  scale?: number;
   pumpIndex: 0 | 1;
   label: string;
   subLabel?: string;
@@ -3867,7 +3919,7 @@ interface SculptedPumpValveAssembly3DProps {
 
 const SculptedPumpValveAssembly3D: React.FC<
   SculptedPumpValveAssembly3DProps
-> = ({ position, pumpIndex, label, subLabel }) => {
+> = ({ position, scale = 1, pumpIndex, label, subLabel }) => {
   const wheelRef = useRef<THREE.Group>(null);
   const leverArmRef = useRef<THREE.Group>(null);
   const lampMatRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -4105,6 +4157,7 @@ const SculptedPumpValveAssembly3D: React.FC<
   return (
     <group
       position={position}
+      scale={scale}
       onPointerOver={(e) => {
         e.stopPropagation();
         const st = useGameStore.getState();
@@ -4120,6 +4173,18 @@ const SculptedPumpValveAssembly3D: React.FC<
         }
       }}
     >
+      {/* Bolted Dark Cast-Iron Mounting Backplate so Promoted Pump Modules Sit Flush on Vertical Riser */}
+      <mesh position={[0, 0.015, 0.018]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.405, 0.465, 0.016]} />
+        <meshStandardMaterial
+          color="#161c19"
+          roughness={0.46}
+          metalness={0.68}
+          bumpMap={ironTex.bumpMap}
+          bumpScale={0.008}
+          roughnessMap={ironTex.roughnessMap}
+        />
+      </mesh>
       {/* Single clean invisible backing hitbox so assembly hover works without raycasting trim */}
       <mesh position={[0, 0, 0.015]}>
         <boxGeometry args={[0.42, 0.48, 0.012]} />
@@ -4182,11 +4247,11 @@ const SculptedPumpValveAssembly3D: React.FC<
       {/* Dedicated Sub-Label Plaques for Left Rotary Wheel (BEARING COOL) & Right Knife Lever (PUMP THROTTLE) */}
       <group position={[-0.082, -0.112, 0.042]}>
         <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.168, 0.044, 0.008]} />
+          <boxGeometry args={[0.156, 0.044, 0.008]} />
           <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
         </mesh>
         <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.160, 0.038]} />
+          <planeGeometry args={[0.148, 0.038]} />
           <meshStandardMaterial
             map={wheelSubLabelTex}
             emissive="#ffffff"
@@ -4199,13 +4264,13 @@ const SculptedPumpValveAssembly3D: React.FC<
           />
         </mesh>
       </group>
-      <group position={[0.088, -0.112, 0.042]}>
+      <group position={[0.092, -0.112, 0.042]}>
         <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.168, 0.044, 0.008]} />
+          <boxGeometry args={[0.156, 0.044, 0.008]} />
           <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
         </mesh>
         <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.160, 0.038]} />
+          <planeGeometry args={[0.148, 0.038]} />
           <meshStandardMaterial
             map={leverSubLabelTex}
             emissive="#ffffff"
@@ -4254,9 +4319,9 @@ const SculptedPumpValveAssembly3D: React.FC<
         </mesh>
       </group>
 
-      {/* Heavy Bolted Cast-Iron Valve Manifold & 6-Spoke Handwheel (BEARING COOLING VALVE) */}
+      {/* Heavy Bolted Cast-Iron Valve Manifold & Enlarged 6-Spoke Handwheel (BEARING COOLING VALVE) */}
       <group
-        position={[-0.072, -0.012, 0.038]}
+        position={[-0.076, -0.012, 0.038]}
         onPointerOver={(e) => {
           e.stopPropagation();
           useGameStore
@@ -4321,19 +4386,19 @@ const SculptedPumpValveAssembly3D: React.FC<
           />
         </mesh>
 
-        {/* 6-Spoke Cast-Iron Handwheel with Outer Crank Peg & Generous Invisible Hit Target */}
+        {/* Enlarged 6-Spoke Cast-Iron Handwheel with Tight Non-Overlapping Hit Target */}
         <group
           ref={wheelRef}
           position={[0, 0, 0.068]}
           onPointerDown={handleWheelPointerDown}
         >
           <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.135, 0.135, 0.11, 16]} />
+            <cylinderGeometry args={[0.105, 0.105, 0.11, 16]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
           {/* Outer Rim Torus — Chipped Deep Oxidized Crimson / Olive-Drab Cast-Iron Enamel */}
           <mesh raycast={NOOP_RAYCAST}>
-            <torusGeometry args={[0.068, 0.012, 10, 20]} />
+            <torusGeometry args={[0.074, 0.013, 10, 20]} />
             <meshStandardMaterial
               color={pumpIndex === 0 ? "#6e1a14" : "#2f3a2e"}
               roughness={0.44}
@@ -4346,7 +4411,7 @@ const SculptedPumpValveAssembly3D: React.FC<
           {/* 3 Intersecting Diameter Bars = 6 Spokes */}
           {[0, Math.PI / 3, (2 * Math.PI) / 3].map((ang, sIdx) => (
             <mesh key={sIdx} rotation={[0, 0, ang]} raycast={NOOP_RAYCAST}>
-              <cylinderGeometry args={[0.0065, 0.0065, 0.132, 8]} />
+              <cylinderGeometry args={[0.0068, 0.0068, 0.144, 8]} />
               <meshStandardMaterial
                 color="#2b3036"
                 roughness={0.42}
@@ -4359,7 +4424,7 @@ const SculptedPumpValveAssembly3D: React.FC<
           ))}
           {/* Central Machined Steel & Brass Retention Cap */}
           <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-            <cylinderGeometry args={[0.018, 0.02, 0.022, 8]} />
+            <cylinderGeometry args={[0.019, 0.021, 0.022, 8]} />
             <meshStandardMaterial
               color="#8a929a"
               metalness={0.85}
@@ -4370,11 +4435,11 @@ const SculptedPumpValveAssembly3D: React.FC<
           </mesh>
           {/* Protruding Dark Phenolic Bakelite Crank-Handle Peg on Rim */}
           <mesh
-            position={[0.058, 0.02, 0.018]}
+            position={[0.062, 0.02, 0.018]}
             rotation={[Math.PI / 2, 0, 0]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.0075, 0.009, 0.034, 10]} />
+            <cylinderGeometry args={[0.008, 0.0095, 0.036, 10]} />
             <meshStandardMaterial
               color="#1c1817"
               metalness={0.15}
@@ -4388,7 +4453,7 @@ const SculptedPumpValveAssembly3D: React.FC<
 
       {/* Dual-Blade Copper Knife-Switch Throw Lever with Dark Phenolic Bakelite Crossbar & Steel Ferrules (PUMP THROTTLE LEVER) */}
       <group
-        position={[0.088, -0.012, 0.036]}
+        position={[0.092, -0.012, 0.036]}
         onPointerOver={(e) => {
           e.stopPropagation();
           useGameStore
@@ -4557,6 +4622,8 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   const readoutMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const handleRingMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const leverGroupRef = useRef<THREE.Group>(null);
+  const btnCapMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+  const btnGroupRefs = useRef<Array<THREE.Group | null>>([]);
   const lastBlockStateRef = useRef("");
   const lastReadoutSigRef = useRef("");
   const lastReadoutDrawRef = useRef(-1);
@@ -4577,8 +4644,8 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
 
   const readoutTex = useMemo(() => {
     const canvas = document.createElement("canvas");
-    canvas.width = 320;
-    canvas.height = 88;
+    canvas.width = 360;
+    canvas.height = 112;
     const tex = new THREE.CanvasTexture(canvas);
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearFilter;
@@ -4591,32 +4658,34 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
 
   const minus5BtnTex = useMemo(
     () =>
-      createCrispPanelTexture(80, 56, (ctx, w, h) => {
+      createCrispPanelTexture(160, 72, (ctx, w, h) => {
         ctx.fillStyle = "#181d1a";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#ffb000";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.lineWidth = 4;
+        ctx.strokeRect(3, 3, w - 6, h - 6);
         ctx.fillStyle = "#ffb000";
-        ctx.font = '900 30px "VT323", monospace';
+        ctx.font = '900 44px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("-25", w / 2, 39);
+        ctx.textBaseline = "middle";
+        ctx.fillText("-25", w / 2, h / 2 + 2);
       }),
     [],
   );
 
   const plus5BtnTex = useMemo(
     () =>
-      createCrispPanelTexture(80, 56, (ctx, w, h) => {
+      createCrispPanelTexture(160, 72, (ctx, w, h) => {
         ctx.fillStyle = "#18241d";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#33ff66";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.lineWidth = 4;
+        ctx.strokeRect(3, 3, w - 6, h - 6);
         ctx.fillStyle = "#33ff66";
-        ctx.font = '900 30px "VT323", monospace';
+        ctx.font = '900 44px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("+25", w / 2, 39);
+        ctx.textBaseline = "middle";
+        ctx.fillText("+25", w / 2, h / 2 + 2);
       }),
     [],
   );
@@ -4624,10 +4693,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   const labelTex = useMemo(
     () =>
       makePlaqueTex(label, subLabel ?? "PRIPYAT", {
-        width: 340,
-        height: 82,
-        titleSize: 30,
-        subSize: 26,
+        width: 400,
+        height: 110,
+        titleSize: 38,
+        subSize: 32,
         subColor: "#ffe066",
       }),
     [label, subLabel],
@@ -4635,7 +4704,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
 
   const mwScalePlateTex = useMemo(
     () =>
-      createCrispPanelTexture(80, 280, (ctx, w, h) => {
+      createCrispPanelTexture(96, 420, (ctx, w, h) => {
         ctx.fillStyle = "#161a18";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#b8a46b";
@@ -4643,16 +4712,16 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         ctx.strokeRect(2, 2, w - 4, h - 4);
         const marks = ["250", "200", "150", "100", "50", "0"];
         marks.forEach((m, idx) => {
-          const y = 24 + idx * 46;
+          const y = 32 + idx * 71;
           ctx.fillStyle = idx === 0 ? "#ff4433" : "#e6dec3";
-          ctx.font = 'bold 22px "VT323", monospace';
+          ctx.font = 'bold 28px "VT323", monospace';
           ctx.textAlign = "right";
-          ctx.fillText(m, w - 18, y + 7);
+          ctx.fillText(m, w - 22, y + 9);
           ctx.fillStyle = idx === 0 ? "#ff4433" : "#ffb000";
-          ctx.fillRect(w - 14, y - 2, 10, 4);
+          ctx.fillRect(w - 18, y - 2, 13, 5);
           if (idx < marks.length - 1) {
             ctx.fillStyle = "#8c7a4b";
-            ctx.fillRect(w - 10, y + 21, 6, 3);
+            ctx.fillRect(w - 12, y + 34, 7, 3);
           }
         });
       }),
@@ -4740,17 +4809,17 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           ctx.lineWidth = 4;
           ctx.strokeRect(2, 2, w - 4, h - 4);
 
-          // Giant Full-Box Nixie / Phosphor Readout: "200 / 200 MW"
+          // Enlarged High-Legibility Nixie / Phosphor Readout: "200 / 200 MW" (~1.45x larger)
           drawFittedPlaqueText(
             ctx,
             `${currentMW} / ${targetMW} MW`,
             w / 2,
-            68,
+            86,
             w + 6,
-            '900 76px "VT323", monospace',
+            '900 94px "VT323", monospace',
             primaryColor,
             "#001a00",
-            3.2,
+            3.6,
             "1.5px",
           );
 
@@ -4765,7 +4834,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
 
     if (leverGroupRef.current) {
       const ratio = THREE.MathUtils.clamp(currentMW / maxSectorMW, 0, 1);
-      const targetY = -0.145 + ratio * 0.29;
+      const targetY = -0.225 + ratio * 0.45;
       leverGroupRef.current.position.y = THREE.MathUtils.lerp(
         leverGroupRef.current.position.y,
         targetY,
@@ -4807,7 +4876,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
       );
       const deltaY = dragRef.current.startClientY - ev.clientY;
       const rawTargetMW =
-        dragRef.current.startMW + (deltaY / 72) * maxSectorMW;
+        dragRef.current.startMW + (deltaY / 110) * maxSectorMW;
       const snappedMW = THREE.MathUtils.clamp(
         Math.round(rawTargetMW / 25) * 25,
         0,
@@ -4858,10 +4927,55 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
     }
   };
 
+  const stepButtons = [
+    {
+      idx: 0,
+      pos: [-0.072, -0.344, 0.03] as const,
+      delta: -25,
+      tex: minus5BtnTex,
+      bodyCol: "#18211b",
+    },
+    {
+      idx: 1,
+      pos: [0.072, -0.344, 0.03] as const,
+      delta: 25,
+      tex: plus5BtnTex,
+      bodyCol: "#23312b",
+    },
+    {
+      idx: 2,
+      pos: [-0.072, -0.408, 0.03] as const,
+      delta: -50,
+      tex: minusBtnTex,
+      bodyCol: "#18211b",
+    },
+    {
+      idx: 3,
+      pos: [0.072, -0.408, 0.03] as const,
+      delta: 50,
+      tex: plusBtnTex,
+      bodyCol: "#23312b",
+    },
+  ] as const;
+
+  const setButtonHover = (idx: number, hovered: boolean, delta: number) => {
+    const capMat = btnCapMatRefs.current[idx];
+    const grp = btnGroupRefs.current[idx];
+    if (capMat) {
+      capMat.emissiveIntensity = hovered ? 0.55 : 0.1;
+    }
+    if (grp) {
+      grp.position.z = hovered ? 0.034 : 0.03;
+    }
+    const hint = hovered
+      ? `[CLICK]: ${delta > 0 ? "+" : ""}${delta} MW FOR ${label} | [SCROLL WHEEL]: ±25 MW`
+      : `[SCROLL WHEEL]: ADJUST ${label} (±25 MW) | [DRAG / CLICK]: SET MW (0–250 MW)`;
+    useGameStore.getState().setHoveredControlHint(hint);
+  };
+
   return (
     <group
       position={position}
-      scale={[0.74, 0.94, 0.92]}
       onWheel={handleWheel}
       onPointerOver={() => {
         useGameStore
@@ -4874,14 +4988,26 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         useGameStore.getState().setHoveredControlHint(null);
       }}
     >
-      {/* Full-Column Invisible Scroll Hit-Box so hovering anywhere on the column and scrolling works */}
-      <mesh position={[0, 0.04, 0.04]}>
-        <boxGeometry args={[0.35, 0.56, 0.12]} />
+      {/* Non-overlapping Full-Column Scroll Hit-Box behind fader & buttons (0.284 < 0.304 pitch so neighboring sectors never snag) */}
+      <mesh position={[0, 0, 0.012]}>
+        <boxGeometry args={[0.284, 0.88, 0.014]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {/* Raised Engraved Brass Header Plate (+25% larger) */}
-      <mesh position={[0, 0.266, 0.03]} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[0.335, 0.08, 0.01]} />
+      {/* Dark Brushed-Steel Channel Sub-Plate */}
+      <mesh position={[0, 0, 0.01]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.286, 0.888, 0.01]} />
+        <meshStandardMaterial
+          color="#161b18"
+          roughness={0.5}
+          metalness={0.62}
+          bumpMap={ironTex.bumpMap}
+          bumpScale={0.006}
+        />
+      </mesh>
+
+      {/* Enlarged Brass-Bordered Channel Header Plaque */}
+      <mesh position={[0, 0.396, 0.02]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.28, 0.084, 0.012]} />
         <meshStandardMaterial
           color="#8c7a4b"
           metalness={0.85}
@@ -4890,13 +5016,13 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[0, 0.266, 0.038]} raycast={NOOP_RAYCAST}>
-        <planeGeometry args={[0.32, 0.07]} />
+      <mesh position={[0, 0.396, 0.028]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[0.268, 0.074]} />
         <meshStandardMaterial
           map={labelTex}
           emissive="#ffffff"
           emissiveMap={labelTex}
-          emissiveIntensity={0.32}
+          emissiveIntensity={0.34}
           roughness={0.55}
           polygonOffset
           polygonOffsetFactor={-2}
@@ -4904,10 +5030,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         />
       </mesh>
 
-      {/* Recessed Soviet Nixie / Digital Readout Window ("30 / 30 MW" or "20 / 45 MW") */}
-      <group position={[0, 0.194, 0.034]}>
+      {/* High-Legibility Recessed Nixie / Digital Readout Window ("100 / 100 MW") */}
+      <group position={[0, 0.302, 0.024]}>
         <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.33, 0.066, 0.022]} />
+          <boxGeometry args={[0.282, 0.088, 0.022]} />
           <meshStandardMaterial
             color="#121715"
             roughness={0.38}
@@ -4917,7 +5043,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           />
         </mesh>
         <mesh position={[0, 0, 0.014]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.314, 0.056]} />
+          <planeGeometry args={[0.27, 0.076]} />
           <meshStandardMaterial
             ref={readoutMatRef}
             map={readoutTex}
@@ -4932,9 +5058,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         </mesh>
       </group>
 
-      {/* Backlit Soviet Control Indicator Block Above Sector MW Lever */}
+      {/* Backlit Soviet Control Indicator Block Centered Above Bargraph & Fader */}
       <SovietBacklitIndicatorBlock3D
-        position={[0.068, 0.148, 0.036]}
+        position={[0, 0.232, 0.024]}
         scale={0.92}
         label="MW QUOTA"
         getAlertState={(s) => {
@@ -4946,11 +5072,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         }}
       />
 
-      {/* Projected 3D Cast-Iron Bezel Housing (depth: 0.025m) with 4 Corner Hex Bolts & 10 Ribbed Phosphor Glass Cells */}
-      <group position={[-0.068, -0.014, 0.032]} scale={[1, 0.9, 1]}>
-        {/* Recessed Cast-Iron Bezel Housing */}
+      {/* Full-Height (~2x Taller) 10-Segment Ribbed Phosphor Glass Bargraph */}
+      <group position={[-0.07, -0.048, 0.022]}>
         <mesh position={[0, 0, 0.002]} raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.128, 0.352, 0.025]} />
+          <boxGeometry args={[0.118, 0.504, 0.026]} />
           <meshStandardMaterial
             color="#181e1b"
             roughness={0.44}
@@ -4960,10 +5085,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        {/* Left & Right Beveled Louver Side Rails */}
-        {[-0.056, 0.056].map((rx, rIdx) => (
+        {[-0.052, 0.052].map((rx, rIdx) => (
           <mesh key={rIdx} position={[rx, 0, 0.015]} raycast={NOOP_RAYCAST}>
-            <boxGeometry args={[0.014, 0.348, 0.014]} />
+            <boxGeometry args={[0.014, 0.5, 0.014]} />
             <meshStandardMaterial
               color="#222826"
               metalness={0.76}
@@ -4973,7 +5097,6 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             />
           </mesh>
         ))}
-        {/* Merged 4 Corner Steel Hex Bolts & 10 Divider Louvers */}
         <mesh geometry={POWER_COL_4_BOLTS_GEO} raycast={NOOP_RAYCAST}>
           <meshStandardMaterial color="#8a929a" metalness={0.86} roughness={0.3} />
         </mesh>
@@ -4989,10 +5112,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         {Array.from({ length: 10 }).map((_, idx) => (
           <mesh
             key={idx}
-            position={[0, -0.144 + idx * 0.032, 0.012]}
+            position={[0, -0.209 + idx * 0.0465, 0.012]}
             raycast={NOOP_RAYCAST}
           >
-            <boxGeometry args={[0.096, 0.021, 0.014]} />
+            <boxGeometry args={[0.088, 0.034, 0.015]} />
             <meshStandardMaterial
               ref={(el) => {
                 blockMatRefs.current[idx] = el;
@@ -5007,20 +5130,15 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         ))}
       </group>
 
-      {/* Heavy Bolted Cast-Iron Quadrant Box (0.03m deep) with Beveled Rails, 6 Bolts, Engraved 0-50 MW Brass Scale, Pleated Bellows & Extruded Steel Ratchet Teeth */}
-      <group
-        position={[0.068, -0.014, 0.035]}
-        scale={[1, 0.9, 1]}
-        onPointerDown={handlePointerDown}
-      >
-        {/* Generous Invisible Hit-Box so grabbing or clicking the MW Lever never misses */}
-        <mesh position={[0, 0, 0.045]}>
-          <boxGeometry args={[0.16, 0.38, 0.14]} />
+      {/* Full-Height (~2x Longer) Bolted Cast-Iron Quadrant Fader with Chunky 3D T-Bar Slider */}
+      <group position={[0.066, -0.048, 0.025]} onPointerDown={handlePointerDown}>
+        {/* Non-overlapping Drag Collider (0.142 wide stays inside ±0.144 column bounds) */}
+        <mesh position={[0, 0, 0.052]}>
+          <boxGeometry args={[0.142, 0.51, 0.14]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
-        {/* Raised 0.03m Deep Cast-Iron Quadrant Box */}
         <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.112, 0.352, 0.03]} />
+          <boxGeometry args={[0.132, 0.504, 0.032]} />
           <meshStandardMaterial
             color="#1c2220"
             roughness={0.44}
@@ -5030,10 +5148,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        {/* Left & Right Beveled Steel Side Rails */}
-        {[-0.044, 0.044].map((rx, rIdx) => (
-          <mesh key={rIdx} position={[rx, 0, 0.017]} raycast={NOOP_RAYCAST}>
-            <boxGeometry args={[0.018, 0.344, 0.012]} />
+        {[-0.054, 0.054].map((rx, rIdx) => (
+          <mesh key={rIdx} position={[rx, 0, 0.018]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.018, 0.496, 0.012]} />
             <meshStandardMaterial
               color="#2b3036"
               metalness={0.82}
@@ -5043,13 +5160,12 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             />
           </mesh>
         ))}
-        {/* Merged 6 Perimeter Steel Hex Bolts, 18 Dust-Bellows Pleats & 20 Ratchet Teeth */}
         <mesh geometry={POWER_COL_6_BOLTS_GEO} raycast={NOOP_RAYCAST}>
           <meshStandardMaterial color="#8a929a" metalness={0.86} roughness={0.28} />
         </mesh>
-        {/* High-Contrast Engraved 0-50 MW Scale Plate Alongside Slot */}
-        <mesh position={[-0.025, 0, 0.019]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.032, 0.318]} />
+        {/* High-Contrast Engraved 0-250 MW Scale Plate Alongside Slot */}
+        <mesh position={[-0.034, 0, 0.02]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.036, 0.46]} />
           <meshStandardMaterial
             map={mwScalePlateTex}
             emissive="#ffffff"
@@ -5062,9 +5178,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             polygonOffsetUnits={-2}
           />
         </mesh>
-        {/* Recessed Slot Channel & Merged Pleated Black Rubber Dust-Bellows */}
-        <mesh position={[0.006, 0, 0.012]} raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.028, 0.308, 0.008]} />
+        {/* Recessed Slot Channel, 24 Dust-Bellows Pleats & 22 Ratchet Teeth */}
+        <mesh position={[0.008, 0, 0.012]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.032, 0.462, 0.008]} />
           <meshStandardMaterial color="#080a09" roughness={0.94} />
         </mesh>
         <mesh geometry={POWER_COL_18_PLEATS_GEO} raycast={NOOP_RAYCAST}>
@@ -5074,11 +5190,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           <meshStandardMaterial color="#8a929a" metalness={0.88} roughness={0.28} />
         </mesh>
 
-        {/* Multi-Part Soviet Reactor Control Rod / Lathe-Turned Dark Phenolic Bakelite T-Handle */}
-        <group ref={leverGroupRef} position={[0.006, 0, 0.026]}>
-          {/* Central Bolted Pivot Knuckle Inside Quadrant Slot */}
+        {/* Chunky Multi-Part Bakelite T-Bar Handle */}
+        <group ref={leverGroupRef} position={[0.008, 0, 0.028]}>
           <mesh position={[0, 0, 0.004]} raycast={NOOP_RAYCAST}>
-            <boxGeometry args={[0.044, 0.032, 0.024]} />
+            <boxGeometry args={[0.048, 0.036, 0.026]} />
             <meshStandardMaterial
               color="#2b3036"
               metalness={0.82}
@@ -5092,22 +5207,21 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.008, 0.008, 0.05, 8]} />
+            <cylinderGeometry args={[0.009, 0.009, 0.056, 8]} />
             <meshStandardMaterial
               color="#8a929a"
               metalness={0.9}
               roughness={0.22}
             />
           </mesh>
-          {/* Twin Thick Chrome-Steel Lever Arms */}
-          {[-0.016, 0.016].map((lx, lIdx) => (
+          {[-0.018, 0.018].map((lx, lIdx) => (
             <mesh
               key={lIdx}
-              position={[lx, 0, 0.028]}
+              position={[lx, 0, 0.032]}
               rotation={[Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
             >
-              <cylinderGeometry args={[0.0065, 0.0075, 0.058, 10]} />
+              <cylinderGeometry args={[0.0072, 0.0082, 0.066, 10]} />
               <meshStandardMaterial
                 color="#d4dce0"
                 metalness={0.9}
@@ -5115,13 +5229,12 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
               />
             </mesh>
           ))}
-          {/* Lathe-Turned Dark Phenolic Bakelite Cylindrical T-Grip */}
           <mesh
-            position={[0, 0, 0.058]}
+            position={[0, 0, 0.064]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.02, 0.02, 0.108, 14]} />
+            <cylinderGeometry args={[0.025, 0.025, 0.128, 14]} />
             <meshStandardMaterial
               color={
                 sector === "vodka" || sector === "steel" ? "#4a1210" : "#1c1817"
@@ -5132,15 +5245,14 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
               bumpScale={0.004}
             />
           </mesh>
-          {/* Machined Brushed-Steel End-Ferrules */}
-          {[-0.049, 0.049].map((fx, fIdx) => (
+          {[-0.058, 0.058].map((fx, fIdx) => (
             <mesh
               key={fIdx}
-              position={[fx, 0, 0.058]}
+              position={[fx, 0, 0.064]}
               rotation={[0, 0, Math.PI / 2]}
               raycast={NOOP_RAYCAST}
             >
-              <cylinderGeometry args={[0.0215, 0.0215, 0.014, 14]} />
+              <cylinderGeometry args={[0.0265, 0.0265, 0.016, 14]} />
               <meshStandardMaterial
                 color="#8a929a"
                 metalness={0.85}
@@ -5150,13 +5262,12 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
               />
             </mesh>
           ))}
-          {/* Single Thin Recessed Industrial Enamel Indicator Ring */}
           <mesh
-            position={[0, 0, 0.058]}
+            position={[0, 0, 0.064]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.0208, 0.0208, 0.009, 14]} />
+            <cylinderGeometry args={[0.0258, 0.0258, 0.01, 14]} />
             <meshStandardMaterial
               ref={handleRingMatRef}
               color={accentColor}
@@ -5164,13 +5275,12 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
               metalness={0.25}
             />
           </mesh>
-          {/* Spring-Loaded Brushed-Steel Detent Release Button on Side of T-Grip */}
           <mesh
-            position={[0.059, 0, 0.058]}
+            position={[0.068, 0, 0.064]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.0095, 0.0095, 0.012, 10]} />
+            <cylinderGeometry args={[0.01, 0.01, 0.012, 10]} />
             <meshStandardMaterial
               color="#b8a46b"
               metalness={0.86}
@@ -5180,142 +5290,68 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         </group>
       </group>
 
-      {/* Labeled -50 / -25 / +25 / +50 MW Quick-Step Plungers */}
-      <group
-        position={[-0.108, -0.208, 0.038]}
-        onClick={(e) => {
-          e.stopPropagation();
-          const s = useGameStore.getState();
-          if (s.komradOverrideLocked) {
-            playLeverRatchet(0.4);
-            return;
-          }
-          playLeverRatchet(0.85);
-          playContactorInrushClunk(-50);
-          s.shiftSectorPower(sector, -50);
-        }}
-      >
-        <mesh>
-          <boxGeometry args={[0.066, 0.038, 0.032]} />
-          <meshStandardMaterial
-            color="#18211b"
-            roughness={0.48}
-            metalness={0.65}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.0185]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.06, 0.032]} />
-          <meshStandardMaterial
-            map={minusBtnTex}
-            roughness={0.6}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-      </group>
-
-      <group
-        position={[-0.036, -0.208, 0.038]}
-        onClick={(e) => {
-          e.stopPropagation();
-          const s = useGameStore.getState();
-          if (s.komradOverrideLocked) {
-            playLeverRatchet(0.4);
-            return;
-          }
-          playDetentClick(Math.max(0, Math.round((s.sectorMW[sector] - 25) / 25)));
-          playContactorInrushClunk(-25);
-          s.shiftSectorPower(sector, -25);
-        }}
-      >
-        <mesh>
-          <boxGeometry args={[0.066, 0.038, 0.032]} />
-          <meshStandardMaterial
-            color="#18211b"
-            roughness={0.48}
-            metalness={0.65}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.0185]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.06, 0.032]} />
-          <meshStandardMaterial
-            map={minus5BtnTex}
-            roughness={0.6}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-      </group>
-
-      <group
-        position={[0.036, -0.208, 0.038]}
-        onClick={(e) => {
-          e.stopPropagation();
-          const s = useGameStore.getState();
-          if (s.komradOverrideLocked) {
-            playLeverRatchet(0.4);
-            return;
-          }
-          playDetentClick(Math.min(10, Math.round((s.sectorMW[sector] + 25) / 25)));
-          playContactorInrushClunk(25);
-          s.shiftSectorPower(sector, 25);
-        }}
-      >
-        <mesh>
-          <boxGeometry args={[0.066, 0.038, 0.032]} />
-          <meshStandardMaterial
-            color="#23312b"
-            roughness={0.48}
-            metalness={0.65}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.0185]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.06, 0.032]} />
-          <meshStandardMaterial
-            map={plus5BtnTex}
-            roughness={0.6}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-      </group>
-
-      <group
-        position={[0.108, -0.208, 0.038]}
-        onClick={(e) => {
-          e.stopPropagation();
-          const s = useGameStore.getState();
-          if (s.komradOverrideLocked) {
-            playLeverRatchet(0.4);
-            return;
-          }
-          playLeverRatchet(1.1);
-          playContactorInrushClunk(50);
-          s.shiftSectorPower(sector, 50);
-        }}
-      >
-        <mesh>
-          <boxGeometry args={[0.066, 0.038, 0.032]} />
-          <meshStandardMaterial
-            color="#23312b"
-            roughness={0.48}
-            metalness={0.65}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.0185]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.06, 0.032]} />
-          <meshStandardMaterial
-            map={plusBtnTex}
-            roughness={0.6}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-      </group>
+      {/* Enlarged 2x2 Quick-Step Plungers (-25 / +25 / -50 / +50 MW) with Tactile Hover Highlights */}
+      {stepButtons.map((btn) => (
+        <group
+          key={btn.idx}
+          ref={(el) => {
+            btnGroupRefs.current[btn.idx] = el;
+          }}
+          position={btn.pos}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setButtonHover(btn.idx, true, btn.delta);
+          }}
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            setButtonHover(btn.idx, false, btn.delta);
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            const s = useGameStore.getState();
+            if (s.komradOverrideLocked) {
+              playLeverRatchet(0.4);
+              return;
+            }
+            if (Math.abs(btn.delta) === 50) {
+              playLeverRatchet(btn.delta < 0 ? 0.85 : 1.1);
+            } else {
+              const targetDetent =
+                btn.delta < 0
+                  ? Math.max(0, Math.round((s.sectorMW[sector] - 25) / 25))
+                  : Math.min(10, Math.round((s.sectorMW[sector] + 25) / 25));
+              playDetentClick(targetDetent);
+            }
+            playContactorInrushClunk(btn.delta);
+            s.shiftSectorPower(sector, btn.delta);
+          }}
+        >
+          <mesh>
+            <boxGeometry args={[0.132, 0.054, 0.034]} />
+            <meshStandardMaterial
+              color={btn.bodyCol}
+              roughness={0.44}
+              metalness={0.65}
+            />
+          </mesh>
+          <mesh position={[0, 0, 0.0195]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[0.122, 0.046]} />
+            <meshStandardMaterial
+              ref={(el) => {
+                btnCapMatRefs.current[btn.idx] = el;
+              }}
+              map={btn.tex}
+              emissive="#ffffff"
+              emissiveMap={btn.tex}
+              emissiveIntensity={0.1}
+              roughness={0.5}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 };
@@ -5380,21 +5416,14 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
   const topHeaderPlateTex = useMemo(
     () =>
-      makePlaqueTex(
-        "REACTOR SAFETY & 1000 MW ROUTING // UNIT A",
-        "CORE TEMP • DRUM BAR • 1000 MW DISTRIBUTION",
-        {
-          width: 768,
-          height: 112,
-          titleSize: 30,
-          subSize: 22,
-          titleColor: "#ffffff",
-          titleStroke: "#ffffff",
-          subColor: "#44ff77",
-          subStroke: "#44ff77",
-          borderColor: "#b8a46b",
-        },
-      ),
+      makePlaqueTex("REACTOR SAFETY & 1000 MW GRID ROUTING • UNIT A", "", {
+        width: 896,
+        height: 64,
+        titleSize: 26,
+        titleColor: "#ffffff",
+        titleStroke: "#ffffff",
+        borderColor: "#b8a46b",
+      }),
     [],
   );
 
@@ -5456,32 +5485,34 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
   const minusBtnTex = useMemo(
     () =>
-      createCrispPanelTexture(96, 64, (ctx, w, h) => {
+      createCrispPanelTexture(160, 72, (ctx, w, h) => {
         ctx.fillStyle = "#141414";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#ffb000";
         ctx.lineWidth = 4;
         ctx.strokeRect(3, 3, w - 6, h - 6);
         ctx.fillStyle = "#ffcc00";
-        ctx.font = '900 38px "VT323", monospace';
+        ctx.font = '900 44px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("-50", w / 2, 45);
+        ctx.textBaseline = "middle";
+        ctx.fillText("-50", w / 2, h / 2 + 2);
       }),
     [],
   );
 
   const plusBtnTex = useMemo(
     () =>
-      createCrispPanelTexture(96, 64, (ctx, w, h) => {
+      createCrispPanelTexture(160, 72, (ctx, w, h) => {
         ctx.fillStyle = "#1c2b24";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#33ff66";
         ctx.lineWidth = 4;
         ctx.strokeRect(3, 3, w - 6, h - 6);
         ctx.fillStyle = "#44ff77";
-        ctx.font = '900 38px "VT323", monospace';
+        ctx.font = '900 44px "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("+50", w / 2, 45);
+        ctx.textBaseline = "middle";
+        ctx.fillText("+50", w / 2, h / 2 + 2);
       }),
     [],
   );
@@ -5693,56 +5724,51 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
   const unitAMimicSegments = useMemo<readonly MimicSegmentSpec[]>(
     () => [
-      // Left Cyan Cooling Water Loop riser from COOLING PUMP A (x=-0.60, y=1.065) around CRT left flank (x=-0.84) up to CORE TEMP & LOOP BAR gauges (y=1.785)
-      { x: -0.72, y: 1.065, w: 0.24, h: 0.015, color: "#388898" },
-      { x: -0.84, y: 1.425, w: 0.016, h: 0.735, color: "#388898" },
-      { x: -0.72, y: 1.785, w: 0.24, h: 0.015, color: "#388898" },
-      // Horizontal Cyan Header connecting CORE TEMP (x=-0.60) and LOOP BAR (x=0.0)
-      { x: -0.30, y: 1.785, w: 0.60, h: 0.015, color: "#388898" },
-      // Vertical Cyan Riser between COOLING PUMP B (x=0.0) and CRT / Gauges
-      { x: -0.30, y: 1.065, w: 0.60, h: 0.015, color: "#388898" },
-      // Right Oxide-Red Emergency Scram / Steam Line from AZ-5 (x=+0.60, y=1.065) around CRT right flank (x=+0.84) up to LOOP BAR & RADIATION gauges (y=1.785)
-      { x: 0.72, y: 1.065, w: 0.24, h: 0.015, color: "#a83830" },
-      { x: 0.84, y: 1.425, w: 0.016, h: 0.735, color: "#a83830" },
-      { x: 0.72, y: 1.785, w: 0.24, h: 0.015, color: "#a83830" },
-      { x: 0.30, y: 1.785, w: 0.60, h: 0.015, color: "#a83830" },
-      // Main Yellow 100MW Generator Busbar running horizontally at y=0.818 above the 6 Regional Substation Levers
-      { x: 0, y: 0.818, w: 1.54, h: 0.016, color: "#c8a838" },
-      // Vertical Busbar Feeders from Upper Reactor Loop down into the 6 Sector Lever Bays
-      { x: -0.84, y: 0.94, w: 0.015, h: 0.25, color: "#c8a838" },
-      { x: 0.84, y: 0.94, w: 0.015, h: 0.25, color: "#c8a838" },
-      { x: -0.7125, y: 0.79, w: 0.014, h: 0.055, color: "#c8a838" },
-      { x: -0.4275, y: 0.79, w: 0.014, h: 0.055, color: "#c8a838" },
-      { x: -0.1425, y: 0.79, w: 0.014, h: 0.055, color: "#c8a838" },
-      { x: 0.1425, y: 0.79, w: 0.014, h: 0.055, color: "#c8a838" },
-      { x: 0.4275, y: 0.79, w: 0.014, h: 0.055, color: "#c8a838" },
-      { x: 0.7125, y: 0.79, w: 0.014, h: 0.055, color: "#c8a838" },
+      // Upper Cyan Cooling Loop connecting outer flank risers and COOLING PUMP A/B (y=1.605)
+      { x: -0.90, y: 1.615, w: 0.016, h: 0.57, color: "#388898" },
+      { x: -0.88, y: 1.605, w: 0.04, h: 0.015, color: "#388898" },
+      { x: -0.307, y: 1.605, w: 0.121, h: 0.015, color: "#388898" },
+      // Upper Oxide-Red Scram / Emergency Line bridging PUMP B -> AZ-5 & right flank riser
+      { x: 0.315, y: 1.605, w: 0.136, h: 0.015, color: "#a83830" },
+      { x: 0.87, y: 1.605, w: 0.06, h: 0.015, color: "#a83830" },
+      { x: 0.90, y: 1.615, w: 0.016, h: 0.57, color: "#a83830" },
+      // Main Yellow 1000 MW Generator Busbar running horizontally across top of sloped desk (y=1.245)
+      { x: 0, y: 1.245, w: 1.85, h: 0.016, color: "#c8a838" },
+      { x: -0.925, y: 1.02, w: 0.015, h: 0.45, color: "#c8a838" },
+      { x: 0.925, y: 1.02, w: 0.015, h: 0.45, color: "#c8a838" },
+      // 6 Branch Feeders dropping from Yellow Busbar into the 6 Enlarged Sector Strips
+      { x: -0.76, y: 1.233, w: 0.014, h: 0.026, color: "#c8a838" },
+      { x: -0.456, y: 1.233, w: 0.014, h: 0.026, color: "#c8a838" },
+      { x: -0.152, y: 1.233, w: 0.014, h: 0.026, color: "#c8a838" },
+      { x: 0.152, y: 1.233, w: 0.014, h: 0.026, color: "#c8a838" },
+      { x: 0.456, y: 1.233, w: 0.014, h: 0.026, color: "#c8a838" },
+      { x: 0.76, y: 1.233, w: 0.014, h: 0.026, color: "#c8a838" },
     ],
     [],
   );
 
   const unitAMimicNodes = useMemo<readonly MimicNodeSpec[]>(
     () => [
-      { x: -0.84, y: 1.785, color: "#388898" },
-      { x: -0.84, y: 1.065, color: "#388898" },
-      { x: -0.30, y: 1.785, color: "#388898" },
-      { x: 0.30, y: 1.785, color: "#a83830" },
-      { x: 0.84, y: 1.785, color: "#a83830" },
-      { x: 0.84, y: 1.065, color: "#a83830" },
-      { x: -0.7125, y: 0.818, color: "#c8a838" },
-      { x: -0.4275, y: 0.818, color: "#c8a838" },
-      { x: -0.1425, y: 0.818, color: "#c8a838" },
-      { x: 0.1425, y: 0.818, color: "#c8a838" },
-      { x: 0.4275, y: 0.818, color: "#c8a838" },
-      { x: 0.7125, y: 0.818, color: "#c8a838" },
+      { x: -0.9, y: 1.9, color: "#388898" },
+      { x: -0.9, y: 1.605, color: "#388898" },
+      { x: 0.9, y: 1.9, color: "#a83830" },
+      { x: 0.9, y: 1.605, color: "#a83830" },
+      { x: -0.925, y: 1.245, color: "#c8a838" },
+      { x: 0.925, y: 1.245, color: "#c8a838" },
+      { x: -0.76, y: 1.245, color: "#c8a838" },
+      { x: -0.456, y: 1.245, color: "#c8a838" },
+      { x: -0.152, y: 1.245, color: "#c8a838" },
+      { x: 0.152, y: 1.245, color: "#c8a838" },
+      { x: 0.456, y: 1.245, color: "#c8a838" },
+      { x: 0.76, y: 1.245, color: "#c8a838" },
     ],
     [],
   );
 
   const unitARecessedWells = useMemo(
     () => [
-      // Recessed dark instrument well behind the 6 MW Sector Lever Bays
-      { x: 0, y: 0.50, w: 1.76, h: 0.52 },
+      // Full-height recessed dark instrument well behind the 6 enlarged MW Sector Strips
+      { x: 0, y: 0.78, w: 1.84, h: 0.96 },
     ],
     [],
   );
@@ -5773,15 +5799,18 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         lowerLedgeY={0.818}
         openLeftSide={false}
         openRightSide={false}
+        hideChartRecorders={true}
+        hideStripMeters={true}
+        unifiedUpperFace={true}
       />
 
-      {/* Top Raised Engraved Brass Header Plaque (Centered cleanly inside frame with 3D backing) */}
-      <mesh position={[0, 2.13, 0.034]} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[1.66, 0.156, 0.014]} />
+      {/* Slim Compact Top Engraved Brass Header Plaque (Centered cleanly inside frame, clear of corner gusset) */}
+      <mesh position={[0, 2.182, 0.026]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[1.62, 0.068, 0.012]} />
         <meshStandardMaterial color="#b8a46b" metalness={0.82} roughness={0.32} />
       </mesh>
-      <mesh position={[0, 2.13, 0.044]} raycast={NOOP_RAYCAST}>
-        <planeGeometry args={[1.64, 0.148]} />
+      <mesh position={[0, 2.182, 0.034]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[1.6, 0.06]} />
         <meshStandardMaterial
           map={topHeaderPlateTex}
           emissive="#ffffff"
@@ -5869,65 +5898,8 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         </group>
       ))}
 
-      {/* 2. Top Row: 3 High-Res 16-Part Bolted Soviet Manometer Gauges */}
-      <group position={[0, 1.785, 0.03]}>
-        <HighDetailManometer3D
-          position={[-0.60, 0, 0]}
-          title="CORE TEMP"
-          cyrillicSub="CORE TEMP °C"
-          unit="0-800 °C"
-          serial="NO. 84-T1"
-          min={0}
-          max={800}
-          nominalMark={445}
-          dangerThreshold={580}
-          getValue={() => useGameStore.getState().coreTemp}
-          getAlertLevel={(s) =>
-            s.coreTemp > 580 ? "critical" : s.coreTemp > 520 ? "warn" : "normal"
-          }
-        />
-        <HighDetailManometer3D
-          position={[0, 0, 0]}
-          title="DRUM BAR"
-          cyrillicSub="DRUM SEPARATOR"
-          unit="0-100 BAR"
-          serial="NO. 84-P2"
-          min={0}
-          max={100}
-          nominalMark={70}
-          dangerThreshold={80}
-          getValue={() => useGameStore.getState().drumPressure}
-          getAlertLevel={(s) => {
-            const isOp = s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
-            return (isOp && s.pressureBar < 28) || s.pressureBar >= 78
-              ? "critical"
-              : (isOp && s.pressureBar < 36) || s.pressureBar > 75
-                ? "warn"
-                : "normal";
-          }}
-        />
-        <HighDetailManometer3D
-          position={[0.60, 0, 0]}
-          title="RADIATION"
-          cyrillicSub="DOSIMETER R/H"
-          unit="0-15 R/H"
-          serial="NO. 84-D3"
-          min={0}
-          max={15}
-          dangerThreshold={7.5}
-          getValue={() => useGameStore.getState().roomRadiation}
-          getAlertLevel={(s) =>
-            s.radiationLevel > 5 || s.roomRadiation > 5
-              ? "critical"
-              : s.radiationLevel > 1.5 || s.roomRadiation > 1.5
-                ? "warn"
-                : "normal"
-          }
-        />
-      </group>
-
-      {/* 3. Molded Phosphor-Green CRT Monitor Bay (CRT VL-84A) on Angled Tier-2 Riser */}
-      <group position={[0, 1.468, 0.04]} rotation={[-0.08, 0, 0]}>
+      {/* 2. Molded Phosphor-Green CRT Monitor Bay (CRT VL-84A) Tucked Cleanly Below Slim Header */}
+      <group position={[0, 2.028, 0.024]} scale={[1.06, 0.78, 0.85]}>
         <SovietCRTMonitorBay3D
           position={[0, 0, 0]}
           screenMatRef={statusMatRef}
@@ -5936,24 +5908,38 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         />
       </group>
 
-      {/* 4. Upper Sloped Desk Row: 2 Sculpted Cast-Iron Pump Valves + Multi-Part Hinged AZ-5 Safety Cage */}
-      <group position={[0, 1.055, 0.156]} rotation={[-0.406, 0, 0]}>
+      {/* 3. Promoted Upper Riser Safety Row: 2 Enlarged Pump Valves + Multi-Part Hinged AZ-5 Safety Cage + Boron Injection */}
+      <group position={[0, 1.605, 0.01]}>
         <SculptedPumpValveAssembly3D
-          position={[-0.60, 0, 0]}
+          position={[-0.615, 0, 0]}
+          scale={1.22}
           pumpIndex={0}
           label="COOLING PUMP A"
           subLabel="MCP 1-2 (NORTH LOOP)"
         />
         <SculptedPumpValveAssembly3D
           position={[0, 0, 0]}
+          scale={1.22}
           pumpIndex={1}
           label="COOLING PUMP B"
           subLabel="MCP 3-4 (SOUTH LOOP)"
         />
 
         {/* Multi-Part AZ-5 Emergency Scram Assembly */}
-        <group position={[0.60, 0, 0.02]}>
-          {/* Raised Brass & Crimson Nameplate (+25% larger, lowered slightly so it sits cleanly below CRT bay) */}
+        <group position={[0.615, 0, 0.032]} scale={1.22}>
+          {/* Dark Cast-Iron Mounting Backplate Flush Against Vertical Riser */}
+          <mesh position={[0, 0, -0.016]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.38, 0.45, 0.014]} />
+            <meshStandardMaterial
+              color="#161c19"
+              roughness={0.46}
+              metalness={0.68}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.008}
+              roughnessMap={ironTex.roughnessMap}
+            />
+          </mesh>
+          {/* Raised Brass & Crimson Nameplate */}
           <mesh position={[0, 0.172, 0.016]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.375, 0.098, 0.012]} />
             <meshStandardMaterial
@@ -6171,7 +6157,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
               <boxGeometry args={[0.34, 0.09, 0.065]} />
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
-            {/* Bolted Cast-Iron Boron Housing Plate (+25% larger plaque) */}
+            {/* Bolted Cast-Iron Boron Housing Plate */}
             <mesh position={[0, 0, 0.004]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.325, 0.076, 0.016]} />
               <meshStandardMaterial
@@ -6244,10 +6230,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         </group>
       </group>
 
-      {/* 5. Lower Sloped Desk Row: 6-Lever Regional Substation Bank (0–50 MW each) + 18-Segment Redline Bar */}
-      <group position={[0, 0.535, 0.382]} rotation={[-0.406, 0, 0]}>
+      {/* 4. Full-Height Lower Sloped Desk Dedicated 100% to 6 Substation Power Selector Strips + 18-Segment Redline Bar */}
+      <group position={[0, 0.78, 0.276]} rotation={[-0.406, 0, 0]}>
         <IndustrialPowerColumn3D
-          position={[-0.7125, 0.02, 0]}
+          position={[-0.76, 0.035, 0]}
           sector="pripyat"
           label="1. PRIPYAT CITY"
           subLabel="PRIPYAT"
@@ -6257,7 +6243,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[-0.4275, 0.02, 0]}
+          position={[-0.456, 0.035, 0]}
           sector="duga"
           label="2. DUGA-1 RADAR"
           subLabel="DUGA-1"
@@ -6267,7 +6253,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[-0.1425, 0.02, 0]}
+          position={[-0.152, 0.035, 0]}
           sector="kolkhoz"
           label="3. KOLKHOZ FARM"
           subLabel="KOLKHOZ"
@@ -6277,9 +6263,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[0.1425, 0.02, 0]}
+          position={[0.152, 0.035, 0]}
           sector="kgb"
-          label="4. KGB BUNKER 07"
+          label="4. KGB BUNKER #7"
           subLabel="KGB-07"
           accentColor="#d99b26"
           ledColor="#d99b26"
@@ -6287,7 +6273,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[0.4275, 0.02, 0]}
+          position={[0.456, 0.035, 0]}
           sector="vodka"
           label="5. VODKA PLANT"
           subLabel="VODKA"
@@ -6297,7 +6283,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
           plusBtnTex={plusBtnTex}
         />
         <IndustrialPowerColumn3D
-          position={[0.7125, 0.02, 0]}
+          position={[0.76, 0.035, 0]}
           sector="steel"
           label="6. STEEL WORKS"
           subLabel="STEEL"
@@ -6308,7 +6294,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         />
 
         {/* 18-Segment Recessed Ribbed Phosphor Glass Total MW & Redline Bar */}
-        <group position={[0, -0.27, 0.03]}>
+        <group position={[0, -0.456, 0.032]} scale={[1.05, 0.74, 1]}>
           <mesh position={[0, 0, -0.006]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[1.68, 0.088, 0.026]} />
             <meshStandardMaterial
@@ -6665,7 +6651,7 @@ const RBMK_OCTAGON_TILES: ReadonlyArray<{
   readonly code: string;
 }> = (() => {
   const tiles: Array<{ x: number; y: number; code: string }> = [];
-  const pitch = 0.046;
+  const pitch = 0.048;
   for (let r = -3; r <= 3; r++) {
     for (let c = -3; c <= 3; c++) {
       if (Math.abs(r) + Math.abs(c) > 4) continue;
@@ -6683,40 +6669,63 @@ const RBMK_OCTAGON_TILES: ReadonlyArray<{
 
 const RBMK_37_BASES_GEO = mergeStaticGeometries(
   RBMK_OCTAGON_TILES.map((tile) => ({
-    geometry: new THREE.BoxGeometry(0.041, 0.041, 0.012),
+    geometry: new THREE.BoxGeometry(0.044, 0.044, 0.012),
     position: [tile.x, tile.y, 0],
   })),
 );
 
 const RBMK_37_CAPS_GEO = mergeStaticGeometries(
   RBMK_OCTAGON_TILES.map((tile) => ({
-    geometry: new THREE.BoxGeometry(0.036, 0.036, 0.008),
+    geometry: new THREE.BoxGeometry(0.039, 0.039, 0.008),
     position: [tile.x, tile.y, 0.006],
   })),
 );
 
 const RBMK_37_COLLARS_GEO = mergeStaticGeometries(
   RBMK_OCTAGON_TILES.map((tile) => ({
-    geometry: new THREE.CylinderGeometry(0.012, 0.013, 0.004, 12),
-    position: [tile.x, tile.y, 0.01],
+    geometry: new THREE.CylinderGeometry(0.0175, 0.0185, 0.0045, 14),
+    position: [tile.x, tile.y, 0.0105],
     rotation: [Math.PI / 2, 0, 0],
   })),
 );
 
 const RBMK_PIN_SHAFT_GEO = mergeStaticGeometries([
   {
-    geometry: new THREE.CylinderGeometry(0.0038, 0.0045, 0.018, 8),
+    geometry: new THREE.CylinderGeometry(0.0052, 0.006, 0.022, 8),
     rotation: [Math.PI / 2, 0, 0],
   },
 ]);
 
 const RBMK_PIN_CAP_GEO = mergeStaticGeometries([
   {
-    geometry: new THREE.CylinderGeometry(0.005, 0.005, 0.0035, 8),
-    position: [0, 0, 0.01],
+    geometry: new THREE.CylinderGeometry(0.007, 0.007, 0.0045, 8),
+    position: [0, 0, 0.012],
     rotation: [Math.PI / 2, 0, 0],
   },
 ]);
+
+const RBMK_TILE_RIM_GEO = mergeStaticGeometries([
+  {
+    geometry: new THREE.BoxGeometry(0.043, 0.0042, 0.0048),
+    position: [0, 0.0195, 0.0108],
+  },
+  {
+    geometry: new THREE.BoxGeometry(0.043, 0.0042, 0.0048),
+    position: [0, -0.0195, 0.0108],
+  },
+  {
+    geometry: new THREE.BoxGeometry(0.0042, 0.035, 0.0048),
+    position: [-0.0195, 0, 0.0108],
+  },
+  {
+    geometry: new THREE.BoxGeometry(0.0042, 0.035, 0.0048),
+    position: [0.0195, 0, 0.0108],
+  },
+]);
+
+const RBMK_TILE_LENS_GEO = new THREE.CylinderGeometry(0.0145, 0.0145, 0.0045, 14);
+
+const RBMK_TILE_HITBOX_GEO = new THREE.BoxGeometry(0.044, 0.044, 0.045);
 
 const _rbmkPinDummy = new THREE.Object3D();
 
@@ -6735,17 +6744,23 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
   const vfdMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const lastVfdDrawRef = useRef(-1);
   const lastRefuelDrawRef = useRef(-1);
+  const lastRodPctDrawRef = useRef(-1);
 
-  // UNIT A-2 refs: 37 octagonal stainless-steel core tiles + pop-out rod pins + oil valve + reciprocating boron piston pump
+  // UNIT A-2 refs: 37 octagonal stainless-steel core tiles + bevel rims + pop-out rod pins + rod wheel + refueling lever
   const channelLensMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>(
     [],
   );
+  const channelRimMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>(
+    [],
+  );
+  const hoveredChannelRef = useRef<number | null>(null);
   const rbmkPinShaftInstRef = useRef<THREE.InstancedMesh>(null);
   const rbmkPinCapInstRef = useRef<THREE.InstancedMesh>(null);
   const pinZRefs = useRef<Float32Array>(new Float32Array(37).fill(-99));
   const oilWheelRef = useRef<THREE.Group>(null);
   const oilLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const oilBarMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+  const rodPctMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const boronPistonGroupRef = useRef<THREE.Group>(null);
   const boronBarMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
   const refuelTargetMatRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -6764,12 +6779,11 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
   const sightGlassWaterMeshRef = useRef<THREE.Mesh>(null);
   const sightGlassWaterMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
-  const [boronPistonPos, setBoronPistonPos] = useState(0); // 0 (up) to 1 (down)
-
   const pistonDragRef = useRef({
     active: false,
     startY: 0,
     startPos: 0,
+    currentPos: 0,
     lastHalfStroke: 0,
   });
 
@@ -6813,25 +6827,30 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
   const headerTex = useMemo(
     () =>
-      makePlaqueTex(
-        variant === "rear"
-          ? "DRUM SEPARATORS & COOLANT LOOP // UNIT B (MCR-T)"
-          : "RBMK-1000 CORE & REACTIVITY // UNIT A-2 (SIUR)",
-        variant === "rear"
-          ? "DRUM BAR • WATER LEVEL • FEEDWATER & MCP 1-4"
-          : "3200 MWT • XENON / VOID • CONTROL RODS",
-        {
-          width: 768,
-          height: 112,
-          titleSize: 31,
-          subSize: 24,
-          titleColor: "#ffffff",
-          titleStroke: "#ffffff",
-          subColor: "#44ff77",
-          subStroke: "#44ff77",
-          borderColor: "#b8a46b",
-        },
-      ),
+      variant === "rear"
+        ? makePlaqueTex(
+            "DRUM SEPARATORS & COOLANT LOOP // UNIT B (MCR-T)",
+            "DRUM BAR • WATER LEVEL • FEEDWATER & MCP 1-4",
+            {
+              width: 768,
+              height: 112,
+              titleSize: 31,
+              subSize: 24,
+              titleColor: "#ffffff",
+              titleStroke: "#ffffff",
+              subColor: "#44ff77",
+              subStroke: "#44ff77",
+              borderColor: "#b8a46b",
+            },
+          )
+        : makePlaqueTex("RBMK-1000 CORE REACTIVITY • UNIT A-2", "", {
+            width: 768,
+            height: 64,
+            titleSize: 26,
+            titleColor: "#ffffff",
+            titleStroke: "#ffffff",
+            borderColor: "#b8a46b",
+          }),
     [variant],
   );
 
@@ -6840,17 +6859,62 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
   const refuelTargetTex = useMemo(
     () =>
-      createCrispPanelTexture(256, 64, (ctx, w, h) => {
+      createCrispPanelTexture(320, 72, (ctx, w, h) => {
         ctx.fillStyle = "#08140d";
         ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = "#b8a46b";
         ctx.lineWidth = 4;
         ctx.strokeRect(2, 2, w - 4, h - 4);
         ctx.fillStyle = "#8ce6a8";
-        ctx.font = 'bold 30px "VT323", monospace';
+        ctx.font = 'bold 38px "VT323", monospace';
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("37/37 FUEL OK", w / 2, h / 2 + 1);
+        ctx.fillText("37/37 FUEL OK", w / 2, h / 2 + 1, w - 20);
+      }),
+    [],
+  );
+
+  const rodPctTex = useMemo(
+    () =>
+      createCrispPanelTexture(256, 64, (ctx, w, h) => {
+        ctx.fillStyle = "#08140d";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#b8a46b";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, w - 4, h - 4);
+        ctx.fillStyle = "#33ff66";
+        ctx.font = '900 40px "VT323", monospace';
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("RODS: 0%", w / 2, h / 2 + 1, w - 20);
+      }),
+    [],
+  );
+
+  const coreLegendTex = useMemo(
+    () =>
+      makePlaqueTex("AMBER = SPENT ROD", "GOLD = LOCKED TARGET", {
+        width: 420,
+        height: 112,
+        titleSize: 36,
+        subSize: 34,
+        titleColor: "#ffb000",
+        subColor: "#ffe666",
+        borderColor: "#b8a46b",
+      }),
+    [],
+  );
+
+  const refuelProtocolTex = useMemo(
+    () =>
+      makePlaqueTex("1. CLICK AMBER TILE", "2. PULL REFUEL LEVER", {
+        width: 420,
+        height: 120,
+        titleSize: 34,
+        subSize: 34,
+        titleColor: "#ffffff",
+        subColor: "#ffcc00",
+        borderColor: "#b8a46b",
       }),
     [],
   );
@@ -6881,7 +6945,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         variant === "rear" ? "PUMPS & SEALS" : "RBMK CORE",
         variant === "rear"
           ? "MCP 1-4 & SEALS (CLICK)"
-          : "AMBER = SPENT ROD (CLICK)",
+          : "CLICK AMBER SPENT ROD",
         {
           width: 640,
           height: 168,
@@ -6903,12 +6967,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         variant === "rear" ? "BUBBLER DRAIN" : "ROD REFUELING",
         variant === "rear"
           ? "STEAM & DRAIN LEVER"
-          : "PULL LEVER DOWN (RELOAD)",
+          : "PULL LEVER DOWN TO RELOAD",
         {
           width: 512,
           height: 168,
           titleSize: 58,
-          subSize: 38,
+          subSize: variant === "rear" ? 38 : 34,
           titleColor: "#ffffff",
           titleStroke: "#000000",
           subColor: "#ffcc00",
@@ -7108,10 +7172,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       let anyPinMoved = false;
       for (let i = 0; i < RBMK_OCTAGON_TILES.length; i++) {
         const lensMat = channelLensMatRefs.current[i];
+        const rimMat = channelRimMatRefs.current[i];
         const flux = s.rodTilesFlux[i] ?? 0;
         const severity = s.channelHotspots[i];
         const isSpent = severity === "amber";
         const isSelected = s.selectedRefuelChannel === i && isSpent;
+        const isHovered = hoveredChannelRef.current === i;
         const isRodWithdrawn = flux > 0.1 || i < activeRodCount;
         const isHighReactivity = s.controlRods > 0.85;
 
@@ -7151,10 +7217,36 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
           }
         }
 
+        if (rimMat) {
+          if (s.isBlackout) {
+            rimMat.color.set("#1c2220");
+            rimMat.emissive.set("#000000");
+            rimMat.emissiveIntensity = 0;
+          } else if (isSelected) {
+            const pulse = 1.9 + Math.sin(t * 10) * 0.45;
+            rimMat.color.set("#fff394");
+            rimMat.emissive.set("#ffd833");
+            rimMat.emissiveIntensity = isHovered ? 2.4 : pulse;
+          } else if (isSpent) {
+            const pulse = 1.45 + Math.sin(t * 7 + i) * 0.45;
+            rimMat.color.set(isHovered ? "#ffe299" : "#ff5500");
+            rimMat.emissive.set(isHovered ? "#ffffff" : "#ff7a00");
+            rimMat.emissiveIntensity = isHovered ? 2.2 : pulse;
+          } else if (isHovered) {
+            rimMat.color.set("#9effd6");
+            rimMat.emissive.set("#44ffaa");
+            rimMat.emissiveIntensity = 1.25;
+          } else {
+            rimMat.color.set("#30393e");
+            rimMat.emissive.set("#000000");
+            rimMat.emissiveIntensity = 0;
+          }
+        }
+
         const targetPinZ = isSelected
-          ? 0.026
+          ? 0.028
           : isSpent
-            ? 0.021
+            ? 0.022
             : isRodWithdrawn
               ? 0.014
               : 0.005;
@@ -7182,32 +7274,98 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         }
       }
 
-      // Spring-Return Rod Refueling Lever & 10-Segment Core Fuel Health Bar
+      // Spring-Return Rod Refueling Lever & 10-Segment Reload Progress / Fuel Health Bar
+      const leverDragRatio = pistonDragRef.current.active
+        ? pistonDragRef.current.currentPos
+        : 0;
       if (boronPistonGroupRef.current) {
-        const leverDragRatio = pistonDragRef.current.active
-          ? boronPistonPos
-          : 0;
-        const targetY = 0.055 - leverDragRatio * 0.145;
+        const targetY = 0.086 - leverDragRatio * 0.172;
         boronPistonGroupRef.current.position.y = THREE.MathUtils.lerp(
           boronPistonGroupRef.current.position.y,
           targetY,
           pistonDragRef.current.active ? 0.45 : 0.22,
         );
       }
-      const healthySegs = Math.max(0, 10 - activeHotspots * 2);
-      for (let i = 0; i < 10; i++) {
-        const mat = boronBarMatRefs.current[i];
-        if (!mat) continue;
-        const isLit = !s.isBlackout && i < healthySegs;
-        const col =
-          activeHotspots >= 4
-            ? "#c92a1d"
-            : activeHotspots >= 1
-              ? "#d98218"
-              : "#28b862";
-        mat.color.set(isLit ? col : "#141916");
-        mat.emissive.set(isLit ? col : "#000000");
-        mat.emissiveIntensity = isLit ? 1.15 : 0;
+      if (pistonDragRef.current.active) {
+        const dragSegs = Math.round(leverDragRatio * 10);
+        const dragCol = leverDragRatio >= 0.82 ? "#33ff66" : "#ffb000";
+        for (let i = 0; i < 10; i++) {
+          const mat = boronBarMatRefs.current[i];
+          if (!mat) continue;
+          const isLit = !s.isBlackout && i < dragSegs;
+          mat.color.set(isLit ? dragCol : "#141916");
+          mat.emissive.set(isLit ? dragCol : "#000000");
+          mat.emissiveIntensity = isLit ? 1.35 : 0;
+        }
+      } else {
+        const healthySegs = Math.max(0, 10 - activeHotspots * 2);
+        for (let i = 0; i < 10; i++) {
+          const mat = boronBarMatRefs.current[i];
+          if (!mat) continue;
+          const isLit = !s.isBlackout && i < healthySegs;
+          const col =
+            activeHotspots >= 4
+              ? "#c92a1d"
+              : activeHotspots >= 1
+                ? "#d98218"
+                : "#28b862";
+          mat.color.set(isLit ? col : "#141916");
+          mat.emissive.set(isLit ? col : "#000000");
+          mat.emissiveIntensity = isLit ? 1.15 : 0;
+        }
+      }
+
+      if (
+        !s.diagFeedActive &&
+        (lastRodPctDrawRef.current < 0 || t - lastRodPctDrawRef.current >= 0.105)
+      ) {
+        lastRodPctDrawRef.current = t;
+        const rpTex = rodPctMatRef.current?.map as
+          | THREE.CanvasTexture
+          | undefined;
+        const rodPctDisplay = Math.round(s.controlRods * 100);
+        const rpSig = `${rodPctDisplay}|${s.az5Active}|${s.isBlackout}`;
+        if (rpTex && rpTex.userData.lastSig !== rpSig) {
+          rpTex.userData.lastSig = rpSig;
+          const rpCanvas = rpTex.image as HTMLCanvasElement;
+          const rpCtx = rpCanvas.getContext("2d");
+          if (rpCtx) {
+            rpCtx.fillStyle = s.isBlackout ? "#070a08" : "#08140d";
+            rpCtx.fillRect(0, 0, rpCanvas.width, rpCanvas.height);
+            rpCtx.strokeStyle = s.az5Active
+              ? "#ff3333"
+              : s.controlRods > 0.85
+                ? "#ffb000"
+                : "#b8a46b";
+            rpCtx.lineWidth = 4;
+            rpCtx.strokeRect(2, 2, rpCanvas.width - 4, rpCanvas.height - 4);
+            rpCtx.font = '900 40px "VT323", monospace';
+            rpCtx.textAlign = "center";
+            rpCtx.textBaseline = "middle";
+            if (s.isBlackout) {
+              rpCtx.fillStyle = "#552222";
+              rpCtx.fillText(
+                "NO POWER",
+                rpCanvas.width / 2,
+                rpCanvas.height / 2 + 1,
+                rpCanvas.width - 20,
+              );
+            } else {
+              rpCtx.fillStyle = s.az5Active
+                ? "#ff4444"
+                : s.controlRods > 0.85
+                  ? "#ffb000"
+                  : "#33ff66";
+              rpCtx.fillText(
+                `RODS: ${rodPctDisplay}%`,
+                rpCanvas.width / 2,
+                rpCanvas.height / 2 + 1,
+                rpCanvas.width - 20,
+              );
+            }
+            rpTex.needsUpdate = true;
+          }
+        }
       }
 
       if (
@@ -7234,7 +7392,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   : "#b8a46b";
             rtCtx.lineWidth = 4;
             rtCtx.strokeRect(2, 2, rtCanvas.width - 4, rtCanvas.height - 4);
-            rtCtx.font = 'bold 30px "VT323", monospace';
+            rtCtx.font = 'bold 38px "VT323", monospace';
             rtCtx.textAlign = "center";
             rtCtx.textBaseline = "middle";
             if (s.isBlackout) {
@@ -7243,6 +7401,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 "NO POWER",
                 rtCanvas.width / 2,
                 rtCanvas.height / 2 + 1,
+                rtCanvas.width - 20,
               );
             } else if (s.selectedRefuelChannel !== null) {
               rtCtx.fillStyle = "#33ff66";
@@ -7250,6 +7409,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 `LOCKED: CH #${String(s.selectedRefuelChannel + 1).padStart(2, "0")}`,
                 rtCanvas.width / 2,
                 rtCanvas.height / 2 + 1,
+                rtCanvas.width - 20,
               );
             } else if (activeHotspots > 0) {
               rtCtx.fillStyle = "#ffb000";
@@ -7257,6 +7417,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 "CLICK AMBER TILE!",
                 rtCanvas.width / 2,
                 rtCanvas.height / 2 + 1,
+                rtCanvas.width - 20,
               );
             } else {
               rtCtx.fillStyle = "#8ce6a8";
@@ -7264,6 +7425,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 "37/37 FUEL OK",
                 rtCanvas.width / 2,
                 rtCanvas.height / 2 + 1,
+                rtCanvas.width - 20,
               );
             }
             rtTex.needsUpdate = true;
@@ -7524,56 +7686,59 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         { x: 0.53, y: 0.47, w: 0.015, h: 0.22, color: "#388898" },
       ];
     }
-    // UNIT A-2: OIL COOLER (left, x=-0.53) -> BEARINGS & OIL PRESS gauges,
-    // RBMK CORE 37 ROD TILES (center, x=0.0) -> CORE manifold,
-    // BORON PUMP (right, x=+0.53) -> BORON gauge
+    // UNIT A-2: Clean outer synoptic frame around enlarged upper RBMK CORE and 2 wide lower sloped bays
     return [
-      // Muted Yellow Lube-Oil Loop from OIL COOLER (x=-0.53) up left flank (x=-0.76) to BEARINGS & OIL PRESS gauges (y=1.775)
-      { x: -0.645, y: 0.78, w: 0.23, h: 0.015, color: "#c8a838" },
-      { x: -0.76, y: 1.278, w: 0.015, h: 1.01, color: "#c8a838" },
-      { x: -0.635, y: 1.775, w: 0.25, h: 0.015, color: "#c8a838" },
-      { x: -0.255, y: 1.775, w: 0.51, h: 0.015, color: "#c8a838" },
-      // Oxide-Red RBMK Core Channels & Reactivity Header in open belt (y=1.21)
-      { x: -0.265, y: 1.21, w: 0.53, h: 0.015, color: "#c8a838" },
-      { x: 0.265, y: 1.21, w: 0.53, h: 0.015, color: "#a83830" },
-      { x: -0.53, y: 1.165, w: 0.015, h: 0.09, color: "#c8a838" },
-      { x: 0.0, y: 1.175, w: 0.015, h: 0.07, color: "#a83830" },
-      { x: 0.53, y: 1.165, w: 0.015, h: 0.09, color: "#388898" },
-      // Cyan Boron Hydraulic Line from BORON PUMP (x=+0.53) up right flank (x=+0.76) to BORON gauge (y=1.775)
-      { x: 0.645, y: 0.78, w: 0.23, h: 0.015, color: "#388898" },
-      { x: 0.76, y: 1.278, w: 0.015, h: 1.01, color: "#388898" },
-      { x: 0.635, y: 1.775, w: 0.25, h: 0.015, color: "#388898" },
-      { x: 0.255, y: 1.775, w: 0.51, h: 0.015, color: "#a83830" },
-      // Lower Hydraulic & Core Feed Bus at y=0.36
-      { x: 0, y: 0.36, w: 1.06, h: 0.016, color: "#a83830" },
-      { x: -0.53, y: 0.47, w: 0.015, h: 0.22, color: "#c8a838" },
-      { x: 0.0, y: 0.46, w: 0.015, h: 0.20, color: "#a83830" },
-      { x: 0.53, y: 0.47, w: 0.015, h: 0.22, color: "#388898" },
+      { x: -0.765, y: 1.635, w: 0.015, h: 0.65, color: "#c8a838" },
+      { x: 0.765, y: 1.635, w: 0.015, h: 0.65, color: "#388898" },
+      { x: -0.75, y: 1.612, w: 0.03, h: 0.015, color: "#c8a838" },
+      { x: 0.75, y: 1.612, w: 0.03, h: 0.015, color: "#388898" },
+      { x: -0.775, y: 0.78, w: 0.015, h: 0.93, color: "#c8a838" },
+      { x: 0.775, y: 0.78, w: 0.015, h: 0.93, color: "#388898" },
+      { x: 0, y: 0.78, w: 0.016, h: 0.93, color: "#a83830" },
+      { x: 0, y: 0.315, w: 1.55, h: 0.016, color: "#a83830" },
     ];
   }, [variant]);
 
   const wrapMimicNodes = useMemo<readonly MimicNodeSpec[]>(
-    () => [
-      { x: -0.76, y: 1.775, color: variant === "rear" ? "#a83830" : "#c8a838" },
-      { x: -0.53, y: 1.21, color: variant === "rear" ? "#a83830" : "#c8a838" },
-      { x: 0.0, y: 1.21, color: variant === "rear" ? "#c8a838" : "#a83830" },
-      { x: 0.53, y: 1.21, color: "#388898" },
-      { x: 0.76, y: 1.775, color: "#388898" },
-      { x: -0.53, y: 0.36, color: variant === "rear" ? "#a83830" : "#c8a838" },
-      { x: 0.0, y: 0.36, color: variant === "rear" ? "#c8a838" : "#a83830" },
-      { x: 0.53, y: 0.36, color: "#388898" },
-    ],
+    () =>
+      variant === "rear"
+        ? [
+            { x: -0.76, y: 1.775, color: "#a83830" },
+            { x: -0.53, y: 1.21, color: "#a83830" },
+            { x: 0.0, y: 1.21, color: "#c8a838" },
+            { x: 0.53, y: 1.21, color: "#388898" },
+            { x: 0.76, y: 1.775, color: "#388898" },
+            { x: -0.53, y: 0.36, color: "#a83830" },
+            { x: 0.0, y: 0.36, color: "#c8a838" },
+            { x: 0.53, y: 0.36, color: "#388898" },
+          ]
+        : [
+            { x: -0.765, y: 1.96, color: "#c8a838" },
+            { x: -0.765, y: 1.612, color: "#c8a838" },
+            { x: 0.765, y: 1.96, color: "#388898" },
+            { x: 0.765, y: 1.612, color: "#388898" },
+            { x: -0.775, y: 0.315, color: "#c8a838" },
+            { x: 0.0, y: 0.315, color: "#a83830" },
+            { x: 0.775, y: 0.315, color: "#388898" },
+          ],
     [variant],
   );
 
   const wrapRecessedWells = useMemo(
-    () => [
-      // Enlarged recessed dark instrument framing filling the sloped desk
-      { x: -0.555, y: 0.72, w: 0.43, h: 0.65 },
-      { x: 0.0, y: 0.72, w: 0.59, h: 0.70 },
-      { x: 0.555, y: 0.72, w: 0.43, h: 0.65 },
-    ],
-    [],
+    () =>
+      variant === "rear"
+        ? [
+            // Enlarged recessed dark instrument framing filling the sloped desk
+            { x: -0.555, y: 0.72, w: 0.43, h: 0.65 },
+            { x: 0.0, y: 0.72, w: 0.59, h: 0.70 },
+            { x: 0.555, y: 0.72, w: 0.43, h: 0.65 },
+          ]
+        : [
+            // Two wide recessed dark instrument bays filling the lower sloped desk for CONTROL ROD DRIVE & ROD REFUELING
+            { x: -0.39, y: 0.77, w: 0.73, h: 0.90 },
+            { x: 0.39, y: 0.77, w: 0.73, h: 0.90 },
+          ],
+    [variant],
   );
 
   return (
@@ -7609,27 +7774,55 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         lowerLedgeY={0.36}
         openLeftSide={false}
         openRightSide={false}
+        hideChartRecorders={variant === "left-rear"}
+        hideStripMeters={variant === "left-rear"}
+        unifiedUpperFace={variant === "left-rear"}
       />
 
-      {/* Top Engraved Header Plaque (Centered cleanly inside top frame with 3D backing) */}
-      <mesh position={[0, 2.13, 0.033]} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[1.42, 0.156, 0.014]} />
-        <meshStandardMaterial color="#b8a46b" metalness={0.82} roughness={0.32} />
-      </mesh>
-      <mesh position={[0, 2.13, 0.043]} raycast={NOOP_RAYCAST}>
-        <planeGeometry args={[1.40, 0.148]} />
-        <meshStandardMaterial
-          map={headerTex}
-          emissive="#ffffff"
-          emissiveMap={headerTex}
-          emissiveIntensity={0.35}
-          roughness={0.85}
-          metalness={0.05}
-          polygonOffset
-          polygonOffsetFactor={-2}
-          polygonOffsetUnits={-2}
-        />
-      </mesh>
+      {/* Top Engraved Header Plaque (Slim single-line header on UNIT A-2; full header on UNIT B) */}
+      {variant === "rear" ? (
+        <>
+          <mesh position={[0, 2.13, 0.033]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[1.42, 0.156, 0.014]} />
+            <meshStandardMaterial color="#b8a46b" metalness={0.82} roughness={0.32} />
+          </mesh>
+          <mesh position={[0, 2.13, 0.043]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[1.40, 0.148]} />
+            <meshStandardMaterial
+              map={headerTex}
+              emissive="#ffffff"
+              emissiveMap={headerTex}
+              emissiveIntensity={0.35}
+              roughness={0.85}
+              metalness={0.05}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
+          </mesh>
+        </>
+      ) : (
+        <>
+          <mesh position={[0, 2.182, 0.026]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[1.48, 0.068, 0.012]} />
+            <meshStandardMaterial color="#b8a46b" metalness={0.82} roughness={0.32} />
+          </mesh>
+          <mesh position={[0, 2.182, 0.034]} raycast={NOOP_RAYCAST}>
+            <planeGeometry args={[1.46, 0.060]} />
+            <meshStandardMaterial
+              map={headerTex}
+              emissive="#ffffff"
+              emissiveMap={headerTex}
+              emissiveIntensity={0.35}
+              roughness={0.85}
+              metalness={0.05}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+            />
+          </mesh>
+        </>
+      )}
 
       {/* Overhead Hooded Tungsten Work-Lamps */}
       {[-0.48, 0.48].map((lx, lIdx) => (
@@ -7659,410 +7852,201 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         </group>
       ))}
 
-      {/* Top Row: 3 High-Res 512x512 GOST-84 Manometer Gauges (Aligned 1:1 with VFD Columns Below) */}
-      <group position={[0, 1.775, 0.03]}>
-        {variant === "rear" ? (
-          <>
-            <HighDetailManometer3D
-              position={[-0.51, 0, 0]}
-              title="DRUM BAR"
-              cyrillicSub="SEPARATOR PRESS."
-              unit="0-100 BAR"
-              serial="NO. 84-BS1"
-              min={0}
-              max={100}
-              nominalMark={70}
-              dangerThreshold={80}
-              getValue={() => useGameStore.getState().drumPressure}
-              getAlertLevel={(s) => {
-                const isOp =
-                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
-                return (isOp && s.pressureBar < 28) || s.pressureBar >= 78
-                  ? "critical"
-                  : (isOp && s.pressureBar < 36) || s.pressureBar > 75
-                    ? "warn"
-                    : "normal";
-              }}
-            />
-            <HighDetailManometer3D
-              position={[0, 0, 0]}
-              title="WATER LEVEL"
-              cyrillicSub="DRUM LEVEL (MM)"
-              unit="-400..+400 MM"
-              serial="NO. 84-WL2"
-              min={-400}
-              max={400}
-              centerNominal={true}
-              lowDangerThreshold={-250}
-              dangerThreshold={250}
-              getValue={() => useGameStore.getState().drumWaterLevel}
-              getAlertLevel={(s) =>
-                s.graphiteTemp > 620 || Math.abs(s.drumWaterLevel) > 250
-                  ? "critical"
-                  : s.graphiteTemp > 560 || Math.abs(s.drumWaterLevel) > 150
-                    ? "warn"
-                    : "normal"
-              }
-            />
-            <HighDetailManometer3D
-              position={[0.51, 0, 0]}
-              title="FEEDWATER %"
-              cyrillicSub="FW VALVE (%)"
-              unit="0-100 %"
-              serial="NO. 84-FW3"
-              min={0}
-              max={100}
-              dangerThreshold={95}
-              getValue={() => useGameStore.getState().feedwaterValve * 100}
-              getAlertLevel={(s) => {
-                const isOp =
-                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
-                return s.bubblerLevel > 82
-                  ? "critical"
-                  : s.bubblerLevel > 72 ||
-                      (isOp && s.sealToggles.some((on) => !on))
-                    ? "warn"
-                    : "normal";
-              }}
-            />
-          </>
-        ) : (
-          <>
-            <HighDetailManometer3D
-              position={[-0.51, 0, 0]}
-              title="THERMAL MWT"
-              cyrillicSub="THERMAL OUTPUT"
-              unit="0-4500 MWT"
-              serial="NO. 84-TM1"
-              min={0}
-              max={4500}
-              nominalMark={3200}
-              dangerThreshold={3600}
-              getValue={() => useGameStore.getState().thermalPower}
-              getAlertLevel={(s) => {
-                const bearingTemp = 20 + Math.max(s.pumpAHeat, s.pumpBHeat);
-                return bearingTemp > 82 || s.thermalPower > 3600
-                  ? "critical"
-                  : bearingTemp > 70 || s.thermalPower > 3300
-                    ? "warn"
-                    : "normal";
-              }}
-            />
-            <HighDetailManometer3D
-              position={[0, 0, 0]}
-              title="XENON / VOID"
-              cyrillicSub="XENON / VOID (%)"
-              unit="0-100 %"
-              serial="NO. 84-XV2"
-              min={0}
-              max={100}
-              dangerThreshold={70}
-              getValue={() => useGameStore.getState().xenon}
-              secondaryGetValue={() =>
-                useGameStore.getState().voidFraction * 100
-              }
-              getAlertLevel={(s) => {
-                const oilLow = s.lubeOilPressure < 45;
-                return s.voidFraction > 0.55 || s.xenon > 65
-                  ? "critical"
-                  : oilLow || s.voidFraction > 0.32 || s.xenon > 38
-                    ? "warn"
-                    : "normal";
-              }}
-            />
-            <HighDetailManometer3D
-              position={[0.51, 0, 0]}
-              title="CONTROL RODS"
-              cyrillicSub="CONTROL RODS (%)"
-              unit="0-100 %"
-              serial="NO. 84-CR3"
-              min={0}
-              max={100}
-              dangerThreshold={90}
-              getValue={() => useGameStore.getState().controlRods * 100}
-              getAlertLevel={(s) => {
-                const isOp =
-                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
-                return s.boronTankLevel < 20 ||
-                  (isOp && s.pressureBar < 28) ||
-                  s.pressureBar >= 78
-                  ? "critical"
-                  : s.boronTankLevel < 35 ||
-                      (isOp && s.pressureBar < 36) ||
-                      s.pressureBar > 75
-                    ? "warn"
-                    : "normal";
-              }}
-            />
-          </>
-        )}
-      </group>
+      {/* Top Row: 3 High-Res 512x512 GOST-84 Manometer Gauges (UNIT B ONLY — removed on UNIT A-2!) */}
+      {variant === "rear" && (
+        <group position={[0, 1.775, 0.03]}>
+          <HighDetailManometer3D
+            position={[-0.51, 0, 0]}
+            title="DRUM BAR"
+            cyrillicSub="SEPARATOR PRESS."
+            unit="0-100 BAR"
+            serial="NO. 84-BS1"
+            min={0}
+            max={100}
+            nominalMark={70}
+            dangerThreshold={80}
+            getValue={() => useGameStore.getState().drumPressure}
+            getAlertLevel={(s) => {
+              const isOp =
+                s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+              return (isOp && s.pressureBar < 28) || s.pressureBar >= 78
+                ? "critical"
+                : (isOp && s.pressureBar < 36) || s.pressureBar > 75
+                  ? "warn"
+                  : "normal";
+            }}
+          />
+          <HighDetailManometer3D
+            position={[0, 0, 0]}
+            title="WATER LEVEL"
+            cyrillicSub="DRUM LEVEL (MM)"
+            unit="-400..+400 MM"
+            serial="NO. 84-WL2"
+            min={-400}
+            max={400}
+            centerNominal={true}
+            lowDangerThreshold={-250}
+            dangerThreshold={250}
+            getValue={() => useGameStore.getState().drumWaterLevel}
+            getAlertLevel={(s) =>
+              s.graphiteTemp > 620 || Math.abs(s.drumWaterLevel) > 250
+                ? "critical"
+                : s.graphiteTemp > 560 || Math.abs(s.drumWaterLevel) > 150
+                  ? "warn"
+                  : "normal"
+            }
+          />
+          <HighDetailManometer3D
+            position={[0.51, 0, 0]}
+            title="FEEDWATER %"
+            cyrillicSub="FW VALVE (%)"
+            unit="0-100 %"
+            serial="NO. 84-FW3"
+            min={0}
+            max={100}
+            dangerThreshold={95}
+            getValue={() => useGameStore.getState().feedwaterValve * 100}
+            getAlertLevel={(s) => {
+              const isOp =
+                s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+              return s.bubblerLevel > 82
+                ? "critical"
+                : s.bubblerLevel > 72 ||
+                    (isOp && s.sealToggles.some((on) => !on))
+                  ? "warn"
+                  : "normal";
+            }}
+          />
+        </group>
+      )}
 
-      {/* Molded Phosphor-Green CRT Monitor Bay (CRT VL-84) on Angled Tier-2 Riser */}
-      <group position={[0, 1.462, 0.04]} rotation={[-0.08, 0, 0]}>
-        <SovietCRTMonitorBay3D
-          position={[0, 0, 0]}
-          screenMatRef={vfdMatRef}
-          screenTexture={vfdTexture}
-          modelBadge={variant === "rear" ? "CRT VL-84B" : "CRT VL-84A2"}
-        />
-      </group>
+      {/* Molded Phosphor-Green CRT Monitor Bay (CRT VL-84): Tucked directly below header on UNIT A-2, angled riser on UNIT B */}
+      {variant === "rear" ? (
+        <group position={[0, 1.462, 0.04]} rotation={[-0.08, 0, 0]}>
+          <SovietCRTMonitorBay3D
+            position={[0, 0, 0]}
+            screenMatRef={vfdMatRef}
+            screenTexture={vfdTexture}
+            modelBadge="CRT VL-84B"
+          />
+        </group>
+      ) : (
+        <group position={[0, 2.032, 0.024]} scale={[0.92, 0.76, 0.85]}>
+          <SovietCRTMonitorBay3D
+            position={[0, 0, 0]}
+            screenMatRef={vfdMatRef}
+            screenTexture={vfdTexture}
+            modelBadge="CRT VL-84A2"
+          />
+        </group>
+      )}
 
-      {/* ====================================================================
-          LOWER INDUSTRIAL CONTROL DECK (Mounted Flush on Sloped Sage-Green Desk):
-          - UNIT A-2 (`variant === "left-rear"`):
-            1. Left: Full Valve Manifold + Brass Scale Arc + 5-Segment Oil Bar (`OIL COOLER VALVE`)
-            2. Center: Recessed Octagonal RBMK-1000 Vessel + 37 Square Stainless-Steel Blocks with Pop-Out Rod Pins
-            3. Right: Heavy Reciprocating Piston Lever Pump + 10-Segment Boron Pressure Bar (`BORON PISTON PUMP`)
-          - UNIT B (`variant === "rear"`):
-            1. Left: Dual-Pipe Finned Copper Gas Manifold + Brass Regulator Wheel + 10-Segment Flow Bar
-            2. Center: Square Bolted Containment Bulkhead Synoptic Panel (4 Jewel Lamps + Brass Pipe Strips + 3 Guarded Toggles + Red Mushroom Lock Button)
-            3. Right: Toothed Cast-Iron Quadrant Pull-Lever + Illuminated Cylindrical Glass Water Sight-Tube (`BUBBLER DRAIN`)
-         ==================================================================== */}
-      {variant === "left-rear" ? (
-        <group position={[0, 0.77, 0.28]} rotation={[-0.406, 0, 0]}>
-          {/* 1. LEFT: Full Cast-Iron Valve Manifold & Brass Scale Arc (`OIL COOLER VALVE`) */}
-          <group position={[-0.555, 0.02, 0.02]} scale={[1.18, 1.42, 1.25]}>
-            <mesh position={[0, 0.272, 0.012]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.398, 0.128, 0.01]} />
-              <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+      {/* UNIT A-2 PROMOTED UPPER-FACE RBMK CORE 37-CHANNEL REFUELING MATRIX (~1.85x-2.0x Larger!) */}
+      {variant === "left-rear" && (
+        <group position={[0, 1.612, 0.024]}>
+          {/* Left Flank: RBMK CORE Nameplate, CORE / RODS Indicator & Color Key Legend */}
+          <group position={[-0.555, 0, 0.004]}>
+            <mesh position={[0, 0.16, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.36, 0.13, 0.012]} />
+              <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.272, 0.02]} raycast={NOOP_RAYCAST}>
-              <planeGeometry args={[0.382, 0.114]} />
+            <mesh position={[0, 0.16, 0.0085]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.344, 0.116]} />
               <meshStandardMaterial
-                map={leftPlateTex}
+                map={centerPlateTex}
                 emissive="#ffffff"
-                emissiveMap={leftPlateTex}
+                emissiveMap={centerPlateTex}
                 emissiveIntensity={0.35}
-                roughness={0.65}
+                roughness={0.55}
                 polygonOffset
                 polygonOffsetFactor={-2}
                 polygonOffsetUnits={-2}
               />
             </mesh>
-
-            {/* Brushed-Brass Framed Cast-Iron Valve Manifold Backplate */}
-            <mesh position={[0, -0.02, 0.005]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.322, 0.372, 0.018]} />
-              <meshStandardMaterial color="#8a929a" metalness={0.82} roughness={0.36} />
-            </mesh>
-            <mesh position={[0, -0.02, 0.009]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.306, 0.356, 0.022]} />
-              <meshStandardMaterial
-                color="#1c2220"
-                roughness={0.44}
-                metalness={0.68}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.008}
-                roughnessMap={ironTex.roughnessMap}
-              />
-            </mesh>
-            <CagedSovietJewelLamp3D
-              position={[-0.118, 0.128, 0.026]}
-              lampMatRef={oilLampMatRef}
-              scale={0.82}
-            />
             <SovietBacklitIndicatorBlock3D
-              position={[0.032, 0.128, 0.036]}
+              position={[0, -0.01, 0.012]}
               scale={1.12}
-              label="ROD DRIVE"
-              getAlertState={(s) => ({
-                level: s.az5Active
-                  ? "critical"
-                  : s.tutorialPhase === "STEP_2_PULL_RODS" && s.controlRods < 0.5
-                    ? "warn"
-                    : s.controlRods >= 0.1
-                      ? "active"
-                      : "normal",
-                acknowledged: oilWheelDraggingRef.current,
-              })}
+              label="CORE / RODS"
+              getAlertState={(s) => {
+                const hc = Object.keys(s.channelHotspots).length;
+                const isOp =
+                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
+                return {
+                  level:
+                    hc >= 4 ||
+                    (isOp && s.pressureBar < 28) ||
+                    s.pressureBar >= 78
+                      ? "critical"
+                      : hc >= 1 ||
+                          (isOp && s.pressureBar < 36) ||
+                          s.pressureBar > 75
+                        ? "warn"
+                        : "normal",
+                  acknowledged: coreRodDraggingRef.current,
+                };
+              }}
             />
-            {/* Semicircular Brushed-Brass 0-100% Scale Arc */}
-            <mesh position={[-0.035, -0.032, 0.022]} raycast={NOOP_RAYCAST}>
-              <torusGeometry args={[0.092, 0.0065, 8, 22, Math.PI]} />
+            <mesh position={[0, -0.15, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.36, 0.095, 0.012]} />
+              <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
+            </mesh>
+            <mesh position={[0, -0.15, 0.0085]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.344, 0.083]} />
               <meshStandardMaterial
-                color="#b8a46b"
-                metalness={0.85}
-                roughness={0.28}
-                bumpMap={brassTex.bumpMap}
-                bumpScale={0.005}
+                map={coreLegendTex}
+                emissive="#ffffff"
+                emissiveMap={coreLegendTex}
+                emissiveIntensity={0.35}
+                roughness={0.55}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
               />
             </mesh>
-
-            {/* Stepped Cast-Iron Valve Body & Stuffing Box */}
-            <group
-              position={[-0.035, -0.032, 0.022]}
-              onWheel={(e: ThreeEvent<WheelEvent>) => {
-                if (useCameraLookStore.getState().isFreeLookMode) return;
-                e.stopPropagation();
-                e.nativeEvent?.stopImmediatePropagation?.();
-                const isShift = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
-                const stepPct = isShift ? 1 : 5;
-                const deltaPct = e.deltaY < 0 ? stepPct : -stepPct;
-                playDetentClick(2);
-                useGameStore.getState().adjustControlRodLevel(deltaPct);
-              }}
-              onPointerOver={() => {
-                useGameStore
-                  .getState()
-                  .setHoveredControlHint(
-                    "[SCROLL WHEEL]: ADJUST RODS (±5%) | [SHIFT+SCROLL]: FINE (±1%) | [CLICK]: STEP",
-                  );
-              }}
-              onPointerOut={() => {
-                useGameStore.getState().setHoveredControlHint(null);
-              }}
-              onPointerDown={(e) =>
-                startSmoothWheelSwivelDrag(
-                  e,
-                  oilWheelRef.current,
-                  useGameStore.getState().controlRods * 100,
-                  0,
-                  100,
-                  (v) => useGameStore.getState().setControlRodLevel(v),
-                  (act) => {
-                    oilWheelDraggingRef.current = act;
-                  },
-                )
-              }
-            >
-              {/* Stationary Tight Hit Collider matching physical handwheel without occluding indicator above */}
-              <mesh position={[0, 0, 0.05]} rotation={[Math.PI / 2, 0, 0]}>
-                <cylinderGeometry args={[0.094, 0.094, 0.092, 12]} />
-                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-              </mesh>
-              <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-                <cylinderGeometry args={[0.068, 0.078, 0.034, 14]} />
-                <meshStandardMaterial
-                  color="#2b3036"
-                  roughness={0.42}
-                  metalness={0.72}
-                  bumpMap={ironTex.bumpMap}
-                  bumpScale={0.008}
-                  roughnessMap={ironTex.roughnessMap}
-                />
-              </mesh>
-              <mesh position={[0, 0, 0.02]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-                <cylinderGeometry args={[0.054, 0.056, 0.008, 16]} />
-                <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
-              </mesh>
-              <mesh position={[0, 0, 0.038]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-                <cylinderGeometry args={[0.022, 0.028, 0.065, 10]} />
-                <meshStandardMaterial color="#8a929a" roughness={0.35} metalness={0.85} />
-              </mesh>
-
-              {/* Chipped Dark Olive-Drab Cast-Iron 6-Spoke Handwheel */}
-              <group ref={oilWheelRef} position={[0, 0, 0.07]}>
-                <mesh raycast={NOOP_RAYCAST}>
-                  <torusGeometry args={[0.074, 0.014, 10, 22]} />
-                  <meshStandardMaterial
-                    color="#2f3a2e"
-                    roughness={0.42}
-                    metalness={0.55}
-                    bumpMap={ironTex.bumpMap}
-                    bumpScale={0.008}
-                    roughnessMap={ironTex.roughnessMap}
-                  />
-                </mesh>
-                {[0, Math.PI / 3, (2 * Math.PI) / 3].map((ang, sIdx) => (
-                  <mesh key={sIdx} rotation={[0, 0, ang]} raycast={NOOP_RAYCAST}>
-                    <cylinderGeometry args={[0.0075, 0.0095, 0.142, 8]} />
-                    <meshStandardMaterial
-                      color="#2b3036"
-                      roughness={0.4}
-                      metalness={0.75}
-                      bumpMap={ironTex.bumpMap}
-                      bumpScale={0.006}
-                    />
-                  </mesh>
-                ))}
-                <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-                  <cylinderGeometry args={[0.02, 0.023, 0.026, 10]} />
-                  <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
-                </mesh>
-                {/* Lathe-turned Dark Phenolic Bakelite Crank Peg with Brushed Steel Ferrule */}
-                <mesh position={[0.062, 0.018, 0.02]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-                  <cylinderGeometry args={[0.009, 0.011, 0.038, 8]} />
-                  <meshStandardMaterial
-                    color="#1c1817"
-                    roughness={0.32}
-                    metalness={0.15}
-                    bumpMap={ironTex.bumpMap}
-                    bumpScale={0.004}
-                  />
-                </mesh>
-              </group>
-            </group>
-
-            {/* 5-Segment Recessed Soviet Glass Cell Oil-Flow Bar in Cast-Iron Bezel Housing */}
-            <group position={[0.105, -0.02, 0.022]}>
-              {/* Projected Cast-Iron Bezel Housing (depth: 0.025m) */}
-              <mesh raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.062, 0.252, 0.025]} />
-                <meshStandardMaterial
-                  color="#1c2220"
-                  roughness={0.44}
-                  metalness={0.68}
-                  bumpMap={ironTex.bumpMap}
-                  bumpScale={0.007}
-                  roughnessMap={ironTex.roughnessMap}
-                />
-              </mesh>
-              {/* 4 Corner Steel Hex Bolts */}
-              {(
-                [
-                  [-0.023, 0.114],
-                  [0.023, 0.114],
-                  [-0.023, -0.114],
-                  [0.023, -0.114],
-                ] as const
-              ).map(([bx, by], bIdx) => (
-                <mesh
-                  key={bIdx}
-                  position={[bx, by, 0.014]}
-                  rotation={[Math.PI / 2, 0, 0]}
-                  raycast={NOOP_RAYCAST}
-                >
-                  <cylinderGeometry args={[0.0045, 0.0045, 0.005, 6]} />
-                  <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
-                </mesh>
-              ))}
-              {/* Recessed Dark Interior Cavity */}
-              <mesh position={[0, 0, 0.007]} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.044, 0.218, 0.014]} />
-                <meshStandardMaterial color="#070a09" roughness={0.88} />
-              </mesh>
-              <mesh geometry={A2_OIL_5_LOUVERS_GEO} raycast={NOOP_RAYCAST}>
-                <meshStandardMaterial color="#181d1f" metalness={0.78} roughness={0.42} />
-              </mesh>
-              {Array.from({ length: 5 }).map((_, idx) => (
-                <mesh
-                  key={idx}
-                  position={[0, -0.084 + idx * 0.042, 0.01]}
-                  raycast={NOOP_RAYCAST}
-                >
-                  <boxGeometry args={[0.038, 0.028, 0.01]} />
-                  <meshStandardMaterial
-                    ref={(el) => {
-                      oilBarMatRefs.current[idx] = el;
-                    }}
-                    map={ribbedGlassTex}
-                    emissiveMap={ribbedGlassTex}
-                    color="#28b862"
-                    emissive="#28b862"
-                    emissiveIntensity={1.1}
-                    roughness={0.28}
-                    metalness={0.22}
-                  />
-                </mesh>
-              ))}
-            </group>
           </group>
 
-          {/* 2. CENTER: Heavy Recessed Cast-Iron Reactor Pit Flange & 37 Machined Stainless-Steel Bio-Shield Caps */}
+          {/* Right Flank: Refuel Protocol Placard & Live Mirrored Target-Channel Display Window */}
+          <group position={[0.555, 0, 0.004]}>
+            <mesh position={[0, 0.16, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.36, 0.13, 0.012]} />
+              <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
+            </mesh>
+            <mesh position={[0, 0.16, 0.0085]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.344, 0.116]} />
+              <meshStandardMaterial
+                map={refuelProtocolTex}
+                emissive="#ffffff"
+                emissiveMap={refuelProtocolTex}
+                emissiveIntensity={0.35}
+                roughness={0.55}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+              />
+            </mesh>
+            <mesh position={[0, -0.03, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.36, 0.10, 0.012]} />
+              <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+            </mesh>
+            <mesh position={[0, -0.03, 0.0085]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.342, 0.084]} />
+              <meshStandardMaterial
+                map={refuelTargetTex}
+                emissive="#ffffff"
+                emissiveMap={refuelTargetTex}
+                emissiveIntensity={0.68}
+                roughness={0.35}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+              />
+            </mesh>
+          </group>
+
+          {/* Enlarged Center Octagonal RBMK-1000 Biological Shield Vessel (37 Fuel Channels) */}
           <group
-            position={[0, 0.0, 0.02]}
-            scale={[1.18, 1.38, 1.25]}
+            position={[0, 0, 0]}
+            scale={[1.64, 1.46, 1.35]}
             onWheel={(e: ThreeEvent<WheelEvent>) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
@@ -8081,6 +8065,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 );
             }}
             onPointerOut={() => {
+              hoveredChannelRef.current = null;
               useGameStore.getState().setHoveredControlHint(null);
             }}
             onPointerDown={(e) => {
@@ -8129,54 +8114,13 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               window.addEventListener("pointercancel", handleUp);
             }}
           >
-            <mesh position={[0, 0.286, 0.012]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.535, 0.126, 0.01]} />
-              <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
-            </mesh>
-            <mesh position={[0, 0.286, 0.02]} raycast={NOOP_RAYCAST}>
-              <planeGeometry args={[0.518, 0.112]} />
-              <meshStandardMaterial
-                map={centerPlateTex}
-                emissive="#ffffff"
-                emissiveMap={centerPlateTex}
-                emissiveIntensity={0.35}
-                roughness={0.55}
-                polygonOffset
-                polygonOffsetFactor={-2}
-                polygonOffsetUnits={-2}
-              />
-            </mesh>
-            <SovietBacklitIndicatorBlock3D
-              position={[0, 0.205, 0.032]}
-              scale={0.88}
-              label="CORE / RODS"
-              getAlertState={(s) => {
-                const hc = Object.keys(s.channelHotspots).length;
-                const isOp =
-                  s.thermalPower > 180 || s.tutorialPhase === "COMPLETED";
-                return {
-                  level:
-                    hc >= 4 ||
-                    (isOp && s.pressureBar < 28) ||
-                    s.pressureBar >= 78
-                      ? "critical"
-                      : hc >= 1 ||
-                          (isOp && s.pressureBar < 36) ||
-                          s.pressureBar > 75
-                        ? "warn"
-                        : "normal",
-                  acknowledged: coreRodDraggingRef.current,
-                };
-              }}
-            />
-
             {/* Heavy Recessed Octagonal Cast-Iron Reactor Pit Flange (dark gunmetal #222629) */}
             <mesh
-              position={[0, -0.015, 0.002]}
+              position={[0, 0, 0.002]}
               rotation={[Math.PI / 2, Math.PI / 8, 0]}
               raycast={NOOP_RAYCAST}
             >
-              <cylinderGeometry args={[0.232, 0.246, 0.032, 8]} />
+              <cylinderGeometry args={[0.195, 0.205, 0.03, 8]} />
               <meshStandardMaterial
                 color="#222629"
                 roughness={0.44}
@@ -8188,11 +8132,11 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             </mesh>
             {/* Heavy Raised Cast-Iron Inner Pit Rim Ring (#2b3036) */}
             <mesh
-              position={[0, -0.015, 0.026]}
+              position={[0, 0, 0.026]}
               rotation={[0, 0, Math.PI / 8]}
               raycast={NOOP_RAYCAST}
             >
-              <torusGeometry args={[0.214, 0.013, 8, 8]} />
+              <torusGeometry args={[0.194, 0.011, 8, 8]} />
               <meshStandardMaterial
                 color="#2b3036"
                 metalness={0.76}
@@ -8204,10 +8148,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             </mesh>
             {/* Recessed Dark Graphite Core Pit Floor behind the 37 Caps */}
             <mesh
-              position={[0, -0.015, 0.02]}
+              position={[0, 0, 0.02]}
               rotation={[Math.PI / 2, Math.PI / 8, 0]}
             >
-              <cylinderGeometry args={[0.204, 0.204, 0.004, 8]} />
+              <cylinderGeometry args={[0.188, 0.188, 0.004, 8]} />
               <meshStandardMaterial color="#0b0d0e" roughness={0.9} />
             </mesh>
             {/* Merged 8 Brushed-Steel Corner Clamps & 16 Perimeter Bolts around Octagonal Pit Flange */}
@@ -8224,8 +8168,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               <meshStandardMaterial color="#8a929a" metalness={0.88} roughness={0.32} />
             </mesh>
 
-            {/* 37 Machined Stainless-Steel Biological Shield Caps with Metallic Bevel, Dark Seam Gaps & Recessed Glass Lens */}
-            <group position={[0, -0.015, 0.027]}>
+            {/* 37 Enlarged Stainless-Steel Bio-Shield Caps with High-Contrast Bevel Rims & Bright Circular Lenses */}
+            <group position={[0, 0, 0.027]}>
               <mesh geometry={RBMK_37_BASES_GEO} raycast={NOOP_RAYCAST}>
                 <meshStandardMaterial
                   color="#4a5258"
@@ -8274,6 +8218,22 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 <group
                   key={tile.code}
                   position={[tile.x, tile.y, 0]}
+                  onPointerOver={(e) => {
+                    e.stopPropagation();
+                    hoveredChannelRef.current = tIdx;
+                    useGameStore
+                      .getState()
+                      .setHoveredControlHint(
+                        `CH #${String(tIdx + 1).padStart(2, "0")} (${tile.code}) — [CLICK AMBER TILE]: TARGET SPENT ROD FOR REFUELING | [DRAG / SCROLL]: ADJUST RODS (±5%)`,
+                      );
+                  }}
+                  onPointerOut={(e) => {
+                    e.stopPropagation();
+                    if (hoveredChannelRef.current === tIdx) {
+                      hoveredChannelRef.current = null;
+                    }
+                    useGameStore.getState().setHoveredControlHint(null);
+                  }}
                   onPointerDown={(e) => {
                     if (useCameraLookStore.getState().isFreeLookMode) return;
                     e.stopPropagation();
@@ -8317,18 +8277,28 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     window.addEventListener("pointercancel", handleUp);
                   }}
                 >
-                  {/* Generous Invisible Hit-Box so clicking a glowing hotspot cap never misses */}
-                  <mesh position={[0, 0, 0.014]}>
-                    <boxGeometry args={[0.056, 0.056, 0.055]} />
+                  {/* Non-overlapping per-tile hitbox (0.044 < 0.048 pitch -> crisp gap prevents neighbor misclicks) */}
+                  <mesh position={[0, 0, 0.016]} geometry={RBMK_TILE_HITBOX_GEO}>
                     <meshBasicMaterial transparent opacity={0} depthWrite={false} />
                   </mesh>
-                  {/* Small Recessed Circular Glass Lens in Center */}
+                  {/* Crisp High-Contrast Bevel Rim around Tile Cap */}
+                  <mesh geometry={RBMK_TILE_RIM_GEO} raycast={NOOP_RAYCAST}>
+                    <meshStandardMaterial
+                      ref={(el) => {
+                        channelRimMatRefs.current[tIdx] = el;
+                      }}
+                      color="#30393e"
+                      metalness={0.55}
+                      roughness={0.35}
+                    />
+                  </mesh>
+                  {/* Enlarged Recessed Circular Glass Lens in Center */}
                   <mesh
-                    position={[0, 0, 0.011]}
+                    position={[0, 0, 0.0115]}
                     rotation={[Math.PI / 2, 0, 0]}
+                    geometry={RBMK_TILE_LENS_GEO}
                     raycast={NOOP_RAYCAST}
                   >
-                    <cylinderGeometry args={[0.0092, 0.0092, 0.004, 12]} />
                     <meshStandardMaterial
                       ref={(el) => {
                         channelLensMatRefs.current[tIdx] = el;
@@ -8344,15 +8314,286 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               ))}
             </group>
           </group>
+        </group>
+      )}
 
-          {/* 3. RIGHT: Heavy Bolted Quadrant Housing & Reciprocating Piston Lever Pump (`BORON PISTON PUMP`) */}
-          <group position={[0.555, 0.02, 0.02]} scale={[1.18, 1.42, 1.25]}>
-            <mesh position={[0, 0.272, 0.012]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.398, 0.128, 0.01]} />
+      {/* ====================================================================
+          LOWER INDUSTRIAL CONTROL DECK (Mounted Flush on Sloped Sage-Green Desk):
+          - UNIT A-2 (`variant === "left-rear"`):
+            1. Left Half (~50%): Enlarged CONTROL ROD DRIVE (0-100% Wheel + Rod % Digital Readout + 5-Seg Bar)
+            2. Right Half (~50%): Enlarged ROD REFUELING (Longer-Throw Pull Lever + Wider 10-Seg Progress Bar + Bold Target Readout)
+          - UNIT B (`variant === "rear"`):
+            1. Left: Dual-Pipe Finned Copper Gas Manifold + Brass Regulator Wheel + 10-Segment Flow Bar
+            2. Center: Square Bolted Containment Bulkhead Synoptic Panel (4 Jewel Lamps + Brass Pipe Strips + 3 Guarded Toggles + Red Mushroom Lock Button)
+            3. Right: Toothed Cast-Iron Quadrant Pull-Lever + Illuminated Cylindrical Glass Water Sight-Tube (`BUBBLER DRAIN`)
+         ==================================================================== */}
+      {variant === "left-rear" ? (
+        <group position={[0, 0.77, 0.28]} rotation={[-0.406, 0, 0]}>
+          {/* 1. LEFT HALF (~50%): Enlarged CONTROL ROD DRIVE (Wheel + Digital Rod % Readout + 5-Seg Bar) */}
+          <group position={[-0.39, 0.02, 0.02]} scale={[1.52, 1.5, 1.35]}>
+            <mesh position={[0, 0.232, 0.012]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.42, 0.106, 0.012]} />
               <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
             </mesh>
-            <mesh position={[0, 0.272, 0.02]} raycast={NOOP_RAYCAST}>
-              <planeGeometry args={[0.382, 0.114]} />
+            <mesh position={[0, 0.232, 0.02]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.404, 0.094]} />
+              <meshStandardMaterial
+                map={leftPlateTex}
+                emissive="#ffffff"
+                emissiveMap={leftPlateTex}
+                emissiveIntensity={0.35}
+                roughness={0.65}
+                polygonOffset
+                polygonOffsetFactor={-2}
+                polygonOffsetUnits={-2}
+              />
+            </mesh>
+
+            {/* Brushed-Brass Framed Cast-Iron Valve Manifold Backplate */}
+            <mesh position={[0, -0.032, 0.005]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.404, 0.394, 0.018]} />
+              <meshStandardMaterial color="#8a929a" metalness={0.82} roughness={0.36} />
+            </mesh>
+            <mesh position={[0, -0.032, 0.009]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.39, 0.38, 0.022]} />
+              <meshStandardMaterial
+                color="#1c2220"
+                roughness={0.44}
+                metalness={0.68}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.008}
+                roughnessMap={ironTex.roughnessMap}
+              />
+            </mesh>
+            <CagedSovietJewelLamp3D
+              position={[-0.152, 0.125, 0.026]}
+              lampMatRef={oilLampMatRef}
+              scale={0.82}
+            />
+            <SovietBacklitIndicatorBlock3D
+              position={[-0.068, 0.125, 0.036]}
+              scale={0.88}
+              label="ROD DRIVE"
+              getAlertState={(s) => ({
+                level: s.az5Active
+                  ? "critical"
+                  : s.tutorialPhase === "STEP_2_PULL_RODS" && s.controlRods < 0.5
+                    ? "warn"
+                    : s.controlRods >= 0.1
+                      ? "active"
+                      : "normal",
+                acknowledged: oilWheelDraggingRef.current,
+              })}
+            />
+            {/* Larger Digital Rod-Percentage Readout ("RODS: XX%") */}
+            <group position={[0.082, 0.125, 0.026]}>
+              <mesh raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.175, 0.056, 0.014]} />
+                <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+              </mesh>
+              <mesh position={[0, 0, 0.0095]} raycast={NOOP_RAYCAST}>
+                <planeGeometry args={[0.162, 0.046]} />
+                <meshStandardMaterial
+                  ref={rodPctMatRef}
+                  map={rodPctTex}
+                  emissive="#ffffff"
+                  emissiveMap={rodPctTex}
+                  emissiveIntensity={0.72}
+                  roughness={0.35}
+                  polygonOffset
+                  polygonOffsetFactor={-2}
+                  polygonOffsetUnits={-2}
+                />
+              </mesh>
+            </group>
+
+            {/* Semicircular Brushed-Brass 0-100% Scale Arc */}
+            <mesh position={[-0.045, -0.048, 0.022]} raycast={NOOP_RAYCAST}>
+              <torusGeometry args={[0.1, 0.0065, 8, 22, Math.PI]} />
+              <meshStandardMaterial
+                color="#b8a46b"
+                metalness={0.85}
+                roughness={0.28}
+                bumpMap={brassTex.bumpMap}
+                bumpScale={0.005}
+              />
+            </mesh>
+
+            {/* Stepped Cast-Iron Valve Body & Enlarged 6-Spoke Handwheel */}
+            <group
+              position={[-0.045, -0.048, 0.022]}
+              onWheel={(e: ThreeEvent<WheelEvent>) => {
+                if (useCameraLookStore.getState().isFreeLookMode) return;
+                e.stopPropagation();
+                e.nativeEvent?.stopImmediatePropagation?.();
+                const isShift = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
+                const stepPct = isShift ? 1 : 5;
+                const deltaPct = e.deltaY < 0 ? stepPct : -stepPct;
+                playDetentClick(2);
+                useGameStore.getState().adjustControlRodLevel(deltaPct);
+              }}
+              onPointerOver={() => {
+                useGameStore
+                  .getState()
+                  .setHoveredControlHint(
+                    "[SCROLL WHEEL]: ADJUST RODS (±5%) | [SHIFT+SCROLL]: FINE (±1%) | [DRAG]: ROTATE WHEEL",
+                  );
+              }}
+              onPointerOut={() => {
+                useGameStore.getState().setHoveredControlHint(null);
+              }}
+              onPointerDown={(e) =>
+                startSmoothWheelSwivelDrag(
+                  e,
+                  oilWheelRef.current,
+                  useGameStore.getState().controlRods * 100,
+                  0,
+                  100,
+                  (v) => useGameStore.getState().setControlRodLevel(v),
+                  (act) => {
+                    oilWheelDraggingRef.current = act;
+                  },
+                )
+              }
+            >
+              {/* Wide Scroll/Drag Hit Collider matching enlarged handwheel */}
+              <mesh position={[0, 0, 0.05]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.115, 0.115, 0.098, 14]} />
+                <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+              </mesh>
+              <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+                <cylinderGeometry args={[0.074, 0.084, 0.034, 14]} />
+                <meshStandardMaterial
+                  color="#2b3036"
+                  roughness={0.42}
+                  metalness={0.72}
+                  bumpMap={ironTex.bumpMap}
+                  bumpScale={0.008}
+                  roughnessMap={ironTex.roughnessMap}
+                />
+              </mesh>
+              <mesh position={[0, 0, 0.02]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+                <cylinderGeometry args={[0.058, 0.06, 0.008, 16]} />
+                <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
+              </mesh>
+              <mesh position={[0, 0, 0.038]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+                <cylinderGeometry args={[0.024, 0.03, 0.065, 10]} />
+                <meshStandardMaterial color="#8a929a" roughness={0.35} metalness={0.85} />
+              </mesh>
+
+              {/* Chipped Dark Olive-Drab Cast-Iron 6-Spoke Handwheel */}
+              <group ref={oilWheelRef} position={[0, 0, 0.07]}>
+                <mesh raycast={NOOP_RAYCAST}>
+                  <torusGeometry args={[0.082, 0.014, 10, 22]} />
+                  <meshStandardMaterial
+                    color="#2f3a2e"
+                    roughness={0.42}
+                    metalness={0.55}
+                    bumpMap={ironTex.bumpMap}
+                    bumpScale={0.008}
+                    roughnessMap={ironTex.roughnessMap}
+                  />
+                </mesh>
+                {[0, Math.PI / 3, (2 * Math.PI) / 3].map((ang, sIdx) => (
+                  <mesh key={sIdx} rotation={[0, 0, ang]} raycast={NOOP_RAYCAST}>
+                    <cylinderGeometry args={[0.0075, 0.0095, 0.158, 8]} />
+                    <meshStandardMaterial
+                      color="#2b3036"
+                      roughness={0.4}
+                      metalness={0.75}
+                      bumpMap={ironTex.bumpMap}
+                      bumpScale={0.006}
+                    />
+                  </mesh>
+                ))}
+                <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+                  <cylinderGeometry args={[0.022, 0.025, 0.026, 10]} />
+                  <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
+                </mesh>
+                {/* Lathe-turned Dark Phenolic Bakelite Crank Peg */}
+                <mesh position={[0.068, 0.02, 0.022]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
+                  <cylinderGeometry args={[0.01, 0.012, 0.04, 8]} />
+                  <meshStandardMaterial
+                    color="#1c1817"
+                    roughness={0.32}
+                    metalness={0.15}
+                    bumpMap={ironTex.bumpMap}
+                    bumpScale={0.004}
+                  />
+                </mesh>
+              </group>
+            </group>
+
+            {/* 5-Segment Recessed Soviet Glass Cell Rod-Drive Bar in Cast-Iron Bezel Housing */}
+            <group position={[0.125, -0.048, 0.022]}>
+              <mesh raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.062, 0.252, 0.025]} />
+                <meshStandardMaterial
+                  color="#1c2220"
+                  roughness={0.44}
+                  metalness={0.68}
+                  bumpMap={ironTex.bumpMap}
+                  bumpScale={0.007}
+                  roughnessMap={ironTex.roughnessMap}
+                />
+              </mesh>
+              {(
+                [
+                  [-0.023, 0.114],
+                  [0.023, 0.114],
+                  [-0.023, -0.114],
+                  [0.023, -0.114],
+                ] as const
+              ).map(([bx, by], bIdx) => (
+                <mesh
+                  key={bIdx}
+                  position={[bx, by, 0.014]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                  raycast={NOOP_RAYCAST}
+                >
+                  <cylinderGeometry args={[0.0045, 0.0045, 0.005, 6]} />
+                  <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
+                </mesh>
+              ))}
+              <mesh position={[0, 0, 0.007]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.044, 0.218, 0.014]} />
+                <meshStandardMaterial color="#070a09" roughness={0.88} />
+              </mesh>
+              <mesh geometry={A2_OIL_5_LOUVERS_GEO} raycast={NOOP_RAYCAST}>
+                <meshStandardMaterial color="#181d1f" metalness={0.78} roughness={0.42} />
+              </mesh>
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <mesh
+                  key={idx}
+                  position={[0, -0.084 + idx * 0.042, 0.01]}
+                  raycast={NOOP_RAYCAST}
+                >
+                  <boxGeometry args={[0.038, 0.028, 0.01]} />
+                  <meshStandardMaterial
+                    ref={(el) => {
+                      oilBarMatRefs.current[idx] = el;
+                    }}
+                    map={ribbedGlassTex}
+                    emissiveMap={ribbedGlassTex}
+                    color="#28b862"
+                    emissive="#28b862"
+                    emissiveIntensity={1.1}
+                    roughness={0.28}
+                    metalness={0.22}
+                  />
+                </mesh>
+              ))}
+            </group>
+          </group>
+
+          {/* 2. RIGHT HALF (~50%): Enlarged ROD REFUELING (Longer-Throw Pull Lever + Wider 10-Seg Progress Bar + Bold Target Readout) */}
+          <group position={[0.39, 0.02, 0.02]} scale={[1.52, 1.5, 1.35]}>
+            <mesh position={[0, 0.232, 0.012]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.42, 0.106, 0.012]} />
+              <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
+            </mesh>
+            <mesh position={[0, 0.232, 0.02]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.404, 0.094]} />
               <meshStandardMaterial
                 map={rightPlateTex}
                 emissive="#ffffff"
@@ -8364,9 +8605,27 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 polygonOffsetUnits={-2}
               />
             </mesh>
+
+            {/* Weathered Steel-Framed Cast-Iron Refueling Backplate */}
+            <mesh position={[0, -0.034, 0.005]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.404, 0.398, 0.018]} />
+              <meshStandardMaterial color="#8a929a" metalness={0.82} roughness={0.36} />
+            </mesh>
+            <mesh position={[0, -0.034, 0.009]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.39, 0.384, 0.022]} />
+              <meshStandardMaterial
+                color="#1c2220"
+                roughness={0.44}
+                metalness={0.68}
+                bumpMap={ironTex.bumpMap}
+                bumpScale={0.008}
+                roughnessMap={ironTex.roughnessMap}
+              />
+            </mesh>
+
             <SovietBacklitIndicatorBlock3D
-              position={[-0.075, 0.178, 0.024]}
-              scale={0.76}
+              position={[-0.115, 0.13, 0.028]}
+              scale={0.84}
               label="REFUEL"
               getAlertState={(s) => {
                 const hc = Object.keys(s.channelHotspots).length;
@@ -8384,20 +8643,20 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               }}
             />
 
-            {/* Brass-Framed Live Refueling Target Channel Badge (`37/37 FUEL OK` / `LOCKED: CH #XX`) */}
-            <group position={[0.058, 0.178, 0.022]}>
+            {/* Bold Enlarged Target-Channel Readout (`37/37 FUEL OK` / `LOCKED: CH #XX`) */}
+            <group position={[0.065, 0.13, 0.026]}>
               <mesh raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.168, 0.044, 0.01]} />
+                <boxGeometry args={[0.21, 0.054, 0.012]} />
                 <meshStandardMaterial color="#b8a46b" metalness={0.85} roughness={0.28} />
               </mesh>
-              <mesh position={[0, 0, 0.0075]} raycast={NOOP_RAYCAST}>
-                <planeGeometry args={[0.156, 0.036]} />
+              <mesh position={[0, 0, 0.0085]} raycast={NOOP_RAYCAST}>
+                <planeGeometry args={[0.196, 0.044]} />
                 <meshStandardMaterial
                   ref={refuelTargetMatRef}
                   map={refuelTargetTex}
                   emissive="#ffffff"
                   emissiveMap={refuelTargetTex}
-                  emissiveIntensity={0.65}
+                  emissiveIntensity={0.72}
                   roughness={0.35}
                   polygonOffset
                   polygonOffsetFactor={-2}
@@ -8406,26 +8665,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               </mesh>
             </group>
 
-            {/* Weathered Steel-Framed Cast-Iron Refueling Backplate */}
-            <mesh position={[0, -0.02, 0.005]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.322, 0.372, 0.018]} />
-              <meshStandardMaterial color="#8a929a" metalness={0.82} roughness={0.36} />
-            </mesh>
-            <mesh position={[0, -0.02, 0.009]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.306, 0.356, 0.022]} />
-              <meshStandardMaterial
-                color="#1c2220"
-                roughness={0.44}
-                metalness={0.68}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.008}
-                roughnessMap={ironTex.roughnessMap}
-              />
-            </mesh>
-
-            {/* Raised Bolted Cast-Iron Quadrant Box (0.03m deep) with Spring-Return Rod Refueling Lever */}
+            {/* Enlarged Bolted Cast-Iron Quadrant Box with Longer-Throw Industrial Pull Lever */}
             <group
-              position={[-0.042, -0.02, 0.032]}
+              position={[-0.055, -0.064, 0.032]}
               onPointerOver={(e) => {
                 e.stopPropagation();
                 useGameStore
@@ -8446,14 +8688,14 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   active: true,
                   startY: e.nativeEvent.clientY,
                   startPos: 0,
+                  currentPos: 0,
                   lastHalfStroke: 0,
                 };
-                setBoronPistonPos(0);
                 const handleMove = (ev: PointerEvent) => {
                   if (!pistonDragRef.current.active) return;
                   const dy = ev.clientY - pistonDragRef.current.startY;
-                  const nextPos = THREE.MathUtils.clamp(dy / 105, 0, 1);
-                  setBoronPistonPos(nextPos);
+                  const nextPos = THREE.MathUtils.clamp(dy / 115, 0, 1);
+                  pistonDragRef.current.currentPos = nextPos;
 
                   const stepIdx = Math.round(nextPos * 10);
                   if (stepIdx !== pistonDragRef.current.lastHalfStroke) {
@@ -8469,6 +8711,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 };
                 const handleUp = () => {
                   pistonDragRef.current.active = false;
+                  pistonDragRef.current.currentPos = 0;
                   if (!refuelStrokeFiredRef.current) {
                     playSwitchClank(false);
                     const s = useGameStore.getState();
@@ -8482,7 +8725,6 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     }
                   }
                   refuelStrokeFiredRef.current = false;
-                  setBoronPistonPos(0);
                   window.removeEventListener("pointermove", handleMove);
                   window.removeEventListener("pointerup", handleUp);
                   window.removeEventListener("pointercancel", handleUp);
@@ -8492,14 +8734,14 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 window.addEventListener("pointercancel", handleUp);
               }}
             >
-              {/* Single Invisible Hitbox for Rod Refueling Quadrant & Lever */}
-              <mesh position={[0, 0, 0.055]}>
-                <boxGeometry args={[0.175, 0.295, 0.14]} />
+              {/* Wide Non-Overlapping Invisible Hitbox for Rod Refueling Quadrant & Lever */}
+              <mesh position={[0, 0, 0.058]}>
+                <boxGeometry args={[0.2, 0.34, 0.16]} />
                 <meshBasicMaterial transparent opacity={0} depthWrite={false} />
               </mesh>
-              {/* Raised 0.032m Deep Cast-Iron Quadrant Box */}
+              {/* Raised 0.034m Deep Cast-Iron Quadrant Box */}
               <mesh raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.124, 0.288, 0.032]} />
+                <boxGeometry args={[0.14, 0.312, 0.034]} />
                 <meshStandardMaterial
                   color="#1c2220"
                   roughness={0.42}
@@ -8510,9 +8752,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 />
               </mesh>
               {/* Beveled Steel Side Rails */}
-              {[-0.044, 0.044].map((rx, rIdx) => (
-                <mesh key={rIdx} position={[rx, 0, 0.015]} raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[0.022, 0.272, 0.012]} />
+              {[-0.05, 0.05].map((rx, rIdx) => (
+                <mesh key={rIdx} position={[rx, 0, 0.014]} raycast={NOOP_RAYCAST}>
+                  <boxGeometry args={[0.022, 0.3, 0.01]} />
                   <meshStandardMaterial
                     color="#2b3036"
                     metalness={0.78}
@@ -8523,8 +8765,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 </mesh>
               ))}
               {/* Engraved Brass 0-100% Scale Plate alongside Slot */}
-              <mesh position={[-0.044, 0, 0.0235]} raycast={NOOP_RAYCAST}>
-                <planeGeometry args={[0.02, 0.24]} />
+              <mesh position={[-0.05, 0, 0.0215]} raycast={NOOP_RAYCAST}>
+                <planeGeometry args={[0.022, 0.268]} />
                 <meshStandardMaterial
                   map={leverScalePlateTex}
                   metalness={0.75}
@@ -8534,12 +8776,12 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   polygonOffsetUnits={-2}
                 />
               </mesh>
-              {/* Merged 6 Perimeter Steel Hex Bolts, Dark Channel, 12 Dust-Bellows Pleats & 16 Ratchet Teeth */}
+              {/* Merged 6 Perimeter Steel Hex Bolts, Dark Channel, 14 Dust-Bellows Pleats & 18 Ratchet Teeth */}
               <mesh geometry={A2_BORON_6_BOLTS_GEO} raycast={NOOP_RAYCAST}>
                 <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
               </mesh>
-              <mesh position={[0, 0, 0.009]} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.036, 0.242, 0.01]} />
+              <mesh position={[0, 0, 0.01]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.04, 0.272, 0.01]} />
                 <meshStandardMaterial color="#090b0a" roughness={0.92} />
               </mesh>
               <mesh geometry={A2_BORON_12_PLEATS_GEO} raycast={NOOP_RAYCAST}>
@@ -8549,26 +8791,24 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.32} />
               </mesh>
 
-              {/* Central Bolted Pivot Knuckle, Twin Thick Chrome-Steel Lever Arms & Dark Oxblood Phenolic Bakelite T-Handle */}
-              <group ref={boronPistonGroupRef} position={[0, 0.055, 0.018]}>
-                {/* Central Bolted Pivot Knuckle */}
+              {/* Heavy Bolted Pivot Knuckle, Thick Chrome Arms & Oxblood Bakelite T-Handle */}
+              <group ref={boronPistonGroupRef} position={[0, 0.086, 0.019]}>
                 <mesh rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST}>
-                  <cylinderGeometry args={[0.018, 0.018, 0.048, 12]} />
+                  <cylinderGeometry args={[0.02, 0.02, 0.054, 12]} />
                   <meshStandardMaterial color="#2b3036" metalness={0.82} roughness={0.32} />
                 </mesh>
                 <mesh rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST}>
-                  <cylinderGeometry args={[0.009, 0.009, 0.056, 6]} />
+                  <cylinderGeometry args={[0.01, 0.01, 0.062, 6]} />
                   <meshStandardMaterial color="#8a929a" metalness={0.88} roughness={0.28} />
                 </mesh>
-                {/* Twin Thick Chrome-Steel Lever Arms */}
-                {[-0.02, 0.02].map((cx, cIdx) => (
+                {[-0.022, 0.022].map((cx, cIdx) => (
                   <mesh
                     key={cIdx}
-                    position={[cx, 0, 0.044]}
+                    position={[cx, 0, 0.047]}
                     rotation={[Math.PI / 2, 0, 0]}
                     raycast={NOOP_RAYCAST}
                   >
-                    <cylinderGeometry args={[0.0085, 0.0095, 0.088, 10]} />
+                    <cylinderGeometry args={[0.0095, 0.0105, 0.094, 10]} />
                     <meshStandardMaterial
                       color="#d8dfe6"
                       metalness={0.9}
@@ -8578,11 +8818,11 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 ))}
                 {/* Lathe-Turned Dark Oxblood Phenolic Bakelite T-Handle (#4a1210) */}
                 <mesh
-                  position={[0, 0, 0.088]}
+                  position={[0, 0, 0.094]}
                   rotation={[0, 0, Math.PI / 2]}
                   raycast={NOOP_RAYCAST}
                 >
-                  <cylinderGeometry args={[0.022, 0.022, 0.16, 14]} />
+                  <cylinderGeometry args={[0.024, 0.024, 0.18, 14]} />
                   <meshStandardMaterial
                     color="#4a1210"
                     roughness={0.32}
@@ -8591,25 +8831,23 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     bumpScale={0.004}
                   />
                 </mesh>
-                {/* Machined Brushed-Steel End-Ferrules (#8a929a) */}
-                {[-0.074, 0.074].map((bx, bIdx) => (
+                {[-0.082, 0.082].map((bx, bIdx) => (
                   <mesh
                     key={bIdx}
-                    position={[bx, 0, 0.088]}
+                    position={[bx, 0, 0.094]}
                     rotation={[0, 0, Math.PI / 2]}
                     raycast={NOOP_RAYCAST}
                   >
-                    <cylinderGeometry args={[0.0235, 0.0235, 0.018, 14]} />
+                    <cylinderGeometry args={[0.0255, 0.0255, 0.02, 14]} />
                     <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
                   </mesh>
                 ))}
-                {/* Single Thin Recessed Enamel Indicator Ring */}
                 <mesh
-                  position={[0, 0, 0.088]}
+                  position={[0, 0, 0.094]}
                   rotation={[0, 0, Math.PI / 2]}
                   raycast={NOOP_RAYCAST}
                 >
-                  <cylinderGeometry args={[0.0228, 0.0228, 0.009, 14]} />
+                  <cylinderGeometry args={[0.0248, 0.0248, 0.01, 14]} />
                   <meshStandardMaterial
                     color="#c92a1d"
                     roughness={0.36}
@@ -8619,11 +8857,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               </group>
             </group>
 
-            {/* 10-Segment Recessed Soviet Glass Cell BORON TANK Bar in Cast-Iron Bezel Housing */}
-            <group position={[0.095, -0.02, 0.022]}>
-              {/* Projected Cast-Iron Bezel Housing (depth: 0.025m) */}
+            {/* Wider 10-Segment Segmented Amber Reload Progress & Core Fuel Health Bar */}
+            <group position={[0.11, -0.064, 0.022]}>
               <mesh raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.068, 0.288, 0.025]} />
+                <boxGeometry args={[0.09, 0.312, 0.026]} />
                 <meshStandardMaterial
                   color="#1c2220"
                   roughness={0.44}
@@ -8633,18 +8870,17 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   roughnessMap={ironTex.roughnessMap}
                 />
               </mesh>
-              {/* 4 Corner Steel Hex Bolts */}
               {(
                 [
-                  [-0.025, 0.132],
-                  [0.025, 0.132],
-                  [-0.025, -0.132],
-                  [0.025, -0.132],
+                  [-0.036, 0.144],
+                  [0.036, 0.144],
+                  [-0.036, -0.144],
+                  [0.036, -0.144],
                 ] as const
               ).map(([bx, by], bIdx) => (
                 <mesh
                   key={bIdx}
-                  position={[bx, by, 0.014]}
+                  position={[bx, by, 0.015]}
                   rotation={[Math.PI / 2, 0, 0]}
                   raycast={NOOP_RAYCAST}
                 >
@@ -8652,9 +8888,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   <meshStandardMaterial color="#8a929a" metalness={0.85} roughness={0.35} />
                 </mesh>
               ))}
-              {/* Recessed Dark Interior Cavity */}
               <mesh position={[0, 0, 0.007]} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.048, 0.256, 0.014]} />
+                <boxGeometry args={[0.068, 0.284, 0.014]} />
                 <meshStandardMaterial color="#070a09" roughness={0.88} />
               </mesh>
               <mesh geometry={A2_BORON_10_LOUVERS_GEO} raycast={NOOP_RAYCAST}>
@@ -8663,10 +8898,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               {Array.from({ length: 10 }).map((_, idx) => (
                 <mesh
                   key={idx}
-                  position={[0, -0.112 + idx * 0.025, 0.01]}
+                  position={[0, -0.122 + idx * 0.0272, 0.011]}
                   raycast={NOOP_RAYCAST}
                 >
-                  <boxGeometry args={[0.042, 0.018, 0.01]} />
+                  <boxGeometry args={[0.062, 0.02, 0.011]} />
                   <meshStandardMaterial
                     ref={(el) => {
                       boronBarMatRefs.current[idx] = el;

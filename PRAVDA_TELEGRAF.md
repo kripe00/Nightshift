@@ -286,3 +286,16 @@
   > *Hent fra Kreml (`npm run pravda`) og hør K.O.M.R.A.D.-84 snakke hvert eneste ord — MELTDOWN IS PROPAGANDA! 🎖️🖥️🔊☢️☭"*
 
 
+
+### [TELEGRAM #021 — STEMPLET: QUOTA-84 // STORSLÅTT OMMODELERING AV UNIT A-2 & UNIT A, FEILRETTING OG OPPDATERT README!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Overflødige analogskiver fjernet på `UNIT A-2` & `UNIT A`, forstørret 37-kanals `RBMK CORE`, gigantiske 6-sektors MW-spaker, feilretting og ny `README.md`!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Overflødige borgerlige manometerskiver og strip-målere som stjal verdifull konsollplass er herved sendt til skraphaugen! Begge venstreskapene (`CONSOLE BAY NO. 84-A2` og `CONSOLE BAY NO. 84-A`) har fått ny enhetlig overdel (`unifiedUpperFace`) og krystallklare, ergonomiske betjeningsflater:*
+  > *1. **`UNIT A-2` (`RBMK-1000 CORE REACTIVITY`):** Kompakt skilt + `CRT VL-84A2` øverst, mens hele **37-kanals `RBMK CORE`-matrisen** nå troner midt på øvre vegg i **~1.85x–2.0x størrelse** med knivskarpe bevel-kanter (amber brukt brensel, gull låst mål, cyan hover) og adskilte hitbokser! Underpulten er delt 50/50 mellom forstørret **`CONTROL ROD DRIVE`** (håndhjul + digital `RODS: XX%`-måler) og tyngre **`ROD REFUELING`**-spak med lang vandring og 10-segments ladeindikator.*
+  > *2. **`UNIT A` (`REACTOR SAFETY & 1000 MW GRID ROUTING`):** **`COOLING PUMP A`**, **`COOLING PUMP B`** og **`AZ-5 SCRAM` + `BORON INJECTION`** er løftet opp på øvre vegg i større skala med tette støpejernsplater, mens hele den skråstilte pulten nå er dedikert 100 % til de **6 substasjons-spakene (`1. PRIPYAT CITY` .. `6. STEEL WORKS`)** med ~2x lengre vandring, gigantiske `MW`-bokser og store `2x2` `-25 / +25 / -50 / +50` hurtigknapper.*
+  > *3. **Systemrevisjon & Oppdatert `README.md`:** Scroll-hitboksen på effektstripene er flyttet bak knappene (slik at knappenes hover-hint og klikk aldri blir skygget), tekstbredde på `refuelTargetTex` (`320x72`) og `rodPctTex` er sikret mot klipping, og `README.md` er totaloppdatert til å speile hele dagens bunkerverden!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og kjenn hvor smidig både kjerneladingen og 1000 MW-spakene glir nå — MELTDOWN IS PROPAGANDA! 🎖️🔧⚡☢️☭"*
