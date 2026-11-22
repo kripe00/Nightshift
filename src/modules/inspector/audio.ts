@@ -2298,7 +2298,40 @@ export function updateTurbinePitchHum(
   turbineHumCtrl.gain.gain.setTargetAtTime(targetGain, now, 0.06)
 }
 
+/**
+ * Crisp ascending 3-note Soviet brass/bell triad played when an active P.O.S.T.-84
+ * directive auto-completes and pays out across the control room.
+ */
+export function playOrderCompleteChime(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
 
+  const notes = [523.25, 659.25, 783.99] // C5 -> E5 -> G5
+  notes.forEach((freq, idx) => {
+    const t0 = now + idx * 0.11
+    const bell = audio.createOscillator()
+    const overtone = audio.createOscillator()
+    const gain = audio.createGain()
+    const otGain = audio.createGain()
 
+    bell.type = 'triangle'
+    bell.frequency.setValueAtTime(freq, t0)
+    overtone.type = 'sine'
+    overtone.frequency.setValueAtTime(freq * 2, t0)
 
+    gain.gain.setValueAtTime(0.2, t0)
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.42)
+    otGain.gain.setValueAtTime(0.08, t0)
+    otGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.24)
+
+    bell.connect(gain).connect(audio.destination)
+    overtone.connect(otGain).connect(audio.destination)
+
+    bell.start(t0)
+    overtone.start(t0)
+    bell.stop(t0 + 0.44)
+    overtone.stop(t0 + 0.26)
+  })
+}
 

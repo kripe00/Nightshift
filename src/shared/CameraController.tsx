@@ -44,6 +44,7 @@ const BASE_FOV = 68;
 const RMB_ZOOM_FOV = 46;
 const REACH_MAX_DIST = 2.6;
 const GRAB_ACTIVE_FAR = 6.0;
+const SEATED_DESK_FAR = 2.6;
 const MENU_FAR = 6.5;
 const MOUSE_SENSITIVITY = 0.0024;
 const MIN_PITCH = THREE.MathUtils.degToRad(-80);
@@ -58,14 +59,14 @@ const DESK_CHAIR_Z = 2.74;
 const DESK_SIT_RANGE = 2.8;
 
 const SEATED_DESK_POSE = {
-  x: -0.05,
-  y: 1.52,
-  z: 2.42,
+  x: 0.0,
+  y: 1.12,
+  z: 2.48,
   yaw: 0,
-  pitch: -0.86,
-  fov: 62,
+  pitch: -0.08,
+  fov: 44,
 } as const;
-const RMB_SEATED_ZOOM_FOV = 42;
+const RMB_SEATED_ZOOM_FOV = 37;
 
 const STAND_UP_SPOT: BayStandingSpot = {
   x: -0.05,
@@ -403,11 +404,13 @@ export const CameraController: React.FC = () => {
       compute: (event, state) => {
         const gs = useGameStore.getState();
         const interactionFar =
-          pointerLockInteraction.isGrabbingControl || gs.isSeatedAtDesk
+          pointerLockInteraction.isGrabbingControl
             ? GRAB_ACTIVE_FAR
-            : gs.phase !== "playing"
-              ? MENU_FAR
-              : REACH_MAX_DIST;
+            : gs.isSeatedAtDesk
+              ? SEATED_DESK_FAR
+              : gs.phase !== "playing"
+                ? MENU_FAR
+                : REACH_MAX_DIST;
 
         if (document.pointerLockElement === state.gl.domElement) {
           if (
@@ -806,8 +809,10 @@ export const CameraController: React.FC = () => {
         const gs = useGameStore.getState();
         if (
           gs.phase === "playing" &&
+          gs.isShiftControlReady &&
           !pointerLockInteraction.mainMenuOpen &&
-          !pointerLockInteraction.debugMenuOpen
+          !pointerLockInteraction.debugMenuOpen &&
+          !pointerLockInteraction.shiftTransitionActive
         ) {
           if (gs.isSeatedAtDesk) {
             e.preventDefault();
@@ -826,9 +831,11 @@ export const CameraController: React.FC = () => {
         const gs = useGameStore.getState();
         if (
           gs.phase === "playing" &&
+          gs.isShiftControlReady &&
           gs.isSeatedAtDesk &&
           !pointerLockInteraction.mainMenuOpen &&
-          !pointerLockInteraction.debugMenuOpen
+          !pointerLockInteraction.debugMenuOpen &&
+          !pointerLockInteraction.shiftTransitionActive
         ) {
           e.preventDefault();
           standUpFromDesk(false);
@@ -969,7 +976,8 @@ export const CameraController: React.FC = () => {
     const mk = moveKeysRef.current;
     const isGrabbing = pointerLockInteraction.isGrabbingControl;
     const isSeated = gs.isSeatedAtDesk;
-    const canMove = gs.phase === "playing" && !isSeated && !isGrabbing;
+    const canMove =
+      gs.phase === "playing" && gs.isShiftControlReady && !isSeated && !isGrabbing;
 
     const playerPos = playerPosRef.current;
     const vel = velocityRef.current;

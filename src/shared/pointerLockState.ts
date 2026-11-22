@@ -9,6 +9,7 @@ export interface PointerLockInteractionSnapshot {
   virtualY: number
   debugMenuOpen: boolean
   mainMenuOpen: boolean
+  shiftTransitionActive: boolean
 }
 
 export const pointerLockInteraction: PointerLockInteractionSnapshot = {
@@ -20,6 +21,7 @@ export const pointerLockInteraction: PointerLockInteractionSnapshot = {
   virtualY: 0,
   debugMenuOpen: false,
   mainMenuOpen: true,
+  shiftTransitionActive: false,
 }
 
 const listeners = new Set<() => void>()
@@ -39,6 +41,7 @@ export function updatePointerLockInteraction(
   const prevGrab = pointerLockInteraction.isGrabbingControl
   const prevDebug = pointerLockInteraction.debugMenuOpen
   const prevMain = pointerLockInteraction.mainMenuOpen
+  const prevTransition = pointerLockInteraction.shiftTransitionActive
 
   Object.assign(pointerLockInteraction, partial)
 
@@ -47,7 +50,8 @@ export function updatePointerLockInteraction(
     prevHover !== pointerLockInteraction.isHoveringControl ||
     prevGrab !== pointerLockInteraction.isGrabbingControl ||
     prevDebug !== pointerLockInteraction.debugMenuOpen ||
-    prevMain !== pointerLockInteraction.mainMenuOpen
+    prevMain !== pointerLockInteraction.mainMenuOpen ||
+    prevTransition !== pointerLockInteraction.shiftTransitionActive
   ) {
     listeners.forEach((listener) => listener())
   }
@@ -61,7 +65,8 @@ export function canEngageCanvasPointerLock(
     phase === 'playing' &&
     !isSeatedAtDesk &&
     !pointerLockInteraction.debugMenuOpen &&
-    !pointerLockInteraction.mainMenuOpen
+    !pointerLockInteraction.mainMenuOpen &&
+    !pointerLockInteraction.shiftTransitionActive
   )
 }
 

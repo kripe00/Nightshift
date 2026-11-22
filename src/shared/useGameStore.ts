@@ -23,6 +23,13 @@ import {
   type PrinterOrderFlavor,
   type ReactorHazardCategory,
 } from './komradLiveDispatches'
+import {
+  canEmitKomradIdleChatter,
+  canEmitKomradNonCriticalWarning,
+  reserveIdleChatterEmission,
+  resetKomradSilenceState,
+} from './komradSilenceState'
+import { pointerLockInteraction } from './pointerLockState'
 import type {
   AppliedStampMark,
   CameraStation,
@@ -607,20 +614,33 @@ let mandateCounter = 0
 let shiftElapsedSeconds = 0
 let thermoTickAccumSeconds = 0
 let komradDispatchSeed = 1
+const NON_FATAL_HAZARD_DEBOUNCE_SEC = 55
+const CRITICAL_HAZARD_DEBOUNCE_SEC = 25
+const BROWNOUT_DEBOUNCE_SEC = 60
+const OVERHEAT_WARN_DEBOUNCE_SEC = 55
+const OVERHEAT_CRIT_DEBOUNCE_SEC = 25
+const RAD_WARN_DEBOUNCE_SEC = 60
+const RAD_CRIT_DEBOUNCE_SEC = 25
+const SPENT_ROD_WARN_DEBOUNCE_SEC = 55
+const SPENT_ROD_CRIT_DEBOUNCE_SEC = 25
+const OVER_DISPATCH_DEBOUNCE_SEC = 50
+const PRAISE_DEBOUNCE_SEC = 60
+
 let lastKomradHazardSec: Record<ReactorHazardCategory, number> = {
-  HIGH_VOID: -30,
-  HIGH_XENON: -30,
-  WATER_LOW: -30,
-  WATER_HIGH: -30,
-  HIGH_PRESSURE: -30,
-  GEN_DEFICIT: -30,
+  HIGH_VOID: -120,
+  HIGH_XENON: -120,
+  WATER_LOW: -120,
+  WATER_HIGH: -120,
+  HIGH_PRESSURE: -120,
+  GEN_DEFICIT: -120,
 }
-let lastKomradBrownoutSec = -30
-let lastKomradAnyMsgSec = 0
-let nextKomradChatterDelaySec = 15
+let lastKomradBrownoutSec = -120
 let komradChatterBag: number[] = []
-let lastKomradOverheatSec = -30
-let lastKomradRadSec = -30
+let lastKomradOverheatSec = -120
+let lastKomradRadSec = -120
+let lastKomradSpentRodSec = -120
+let lastKomradOverDispatchSec = -120
+let lastKomradPraiseSec = -120
 let prevSpentRodCount = 0
 let lastBroadcastHour = 0
 let brownoutMismatchSeconds = 0
@@ -628,26 +648,24 @@ let prevAllSubstationsOk = true
 let mandateStableSeconds = 0
 let surplusOverloadSeconds = 0
 
-function rollNextChatterDelay(): number {
-  return 14 + (Math.abs(komradDispatchSeed * 7 + komradMsgCounter * 3) % 9)
-}
-
 function resetKomradTrackers(): void {
+  resetKomradSilenceState()
   shiftElapsedSeconds = 0
   lastKomradHazardSec = {
-    HIGH_VOID: -30,
-    HIGH_XENON: -30,
-    WATER_LOW: -30,
-    WATER_HIGH: -30,
-    HIGH_PRESSURE: -30,
-    GEN_DEFICIT: -30,
+    HIGH_VOID: -120,
+    HIGH_XENON: -120,
+    WATER_LOW: -120,
+    WATER_HIGH: -120,
+    HIGH_PRESSURE: -120,
+    GEN_DEFICIT: -120,
   }
-  lastKomradBrownoutSec = -30
-  lastKomradAnyMsgSec = 0
-  nextKomradChatterDelaySec = 15
+  lastKomradBrownoutSec = -120
   komradChatterBag = []
-  lastKomradOverheatSec = -30
-  lastKomradRadSec = -30
+  lastKomradOverheatSec = -120
+  lastKomradRadSec = -120
+  lastKomradSpentRodSec = -120
+  lastKomradOverDispatchSec = -120
+  lastKomradPraiseSec = -120
   prevSpentRodCount = 0
   lastBroadcastHour = 0
   brownoutMismatchSeconds = 0
@@ -975,11 +993,11 @@ const INITIAL_MAPPED = mapReactorToGameStateFields(
   'STEP_1_COOLING'
 )
 
-const INITIAL_KOMRAD_MESSAGES: KomradMessageEntry[] = createInitialKomradFeed()
-
 export const useGameStore = create<GameState>((set, get) => ({
   ...INITIAL_MAPPED,
   phase: 'playing',
+  isShiftControlReady: false,
+  komradOpeningDispatched: false,
   activeStation: 'overview',
   isSeatedAtDesk: false,
   canSitAtDesk: true,
@@ -1009,7 +1027,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   terminalLogs: INITIAL_ENTRIES.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
   terminalEntries: INITIAL_ENTRIES,
-  komradMessages: INITIAL_KOMRAD_MESSAGES,
+  komradMessages: [],
   ciaIntrusionActive: false,
   ciaIntrusionProgress: 0,
   komradOverrideLocked: false,
@@ -1022,6 +1040,29 @@ export const useGameStore = create<GameState>((set, get) => ({
   hoveredControlHint: null,
   diagFeedActive: false,
   radioBroadcastSubtitle: null,
+
+  setShiftControlReady: (ready: boolean) => {
+    set((state) =>
+      state.isShiftControlReady === ready ? state : { isShiftControlReady: ready }
+    )
+  },
+
+  launchKomradOpeningDispatch: () => {
+    set((state) => {
+      if (
+        state.komradOpeningDispatched ||
+        !state.isShiftControlReady ||
+        state.phase !== 'playing'
+      ) {
+        return state
+      }
+      const bootMsgs = createInitialKomradFeed()
+      return {
+        komradOpeningDispatched: true,
+        komradMessages: appendKomradFeed(state.komradMessages, ...bootMsgs),
+      }
+    })
+  },
 
   setActiveStation: (station: CameraStation) => {
     set({ activeStation: station })
@@ -1096,8 +1137,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           : KOMRAD_PRINTER_NORMAL_QUIPS[
               komradDispatchSeed % KOMRAD_PRINTER_NORMAL_QUIPS.length
             ]
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         lastDecisionFeedback: dispatchMsg,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
@@ -1264,7 +1303,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         msg,
         'normal'
       )
-      lastKomradAnyMsgSec = shiftElapsedSeconds
       return {
         ...mapped,
         phase: 'playing',
@@ -1306,9 +1344,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       `RBMK-1000 COLD START SEQUENCE INITIATED. ${mapped.tutorialPrompt.header}`,
       'normal'
     )
+    const controlReadyNow =
+      !pointerLockInteraction.mainMenuOpen &&
+      !pointerLockInteraction.shiftTransitionActive
     set((state) => ({
       ...mapped,
       phase: 'playing',
+      isShiftControlReady: controlReadyNow,
+      komradOpeningDispatched: false,
       isSeatedAtDesk: false,
       activeMandate: null,
       lastDecisionFeedback: mapped.tutorialPrompt.header,
@@ -1319,6 +1362,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       steamTransientImpulse: 0,
       voltageDipIntensity: 0,
       tutorialDrainSeconds: 0,
+      shiftTimeMinutes: 0,
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
       hoveredControlHint: null,
@@ -1329,7 +1373,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...state.terminalLogs.slice(-24),
         `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
       ],
-      komradMessages: createInitialKomradFeed(),
+      komradMessages: [],
     }))
   },
 
@@ -1346,10 +1390,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         'normal'
       ),
     ]
-    const freshKomrad = createInitialKomradFeed()
+    const controlReadyNow =
+      !pointerLockInteraction.mainMenuOpen &&
+      !pointerLockInteraction.shiftTransitionActive
     set((state) => ({
       ...mapped,
       phase: 'playing',
+      isShiftControlReady: controlReadyNow,
+      komradOpeningDispatched: false,
       isSeatedAtDesk: false,
       activeMandate: null,
       lastDecisionFeedback: mapped.tutorialPrompt.header,
@@ -1379,7 +1427,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       shiftTimeMinutes: 0,
       terminalEntries: freshEntries,
       terminalLogs: freshEntries.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
-      komradMessages: freshKomrad,
+      komradMessages: [],
     }))
   },
 
@@ -1411,8 +1459,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         : t0.tripped
           ? 'OUT-OF-PHASE BREAKER TRIP! THE COPPER BUSBARS JUST SANG THE INTERNATIONALE!'
           : 'MAIN BREAKER OPENED. SCHEDULED DARKNESS INITIATED FOR WORKER HUMILITY.'
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         phase: 'playing',
@@ -1459,8 +1505,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         msg,
         'normal'
       )
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         lastDecisionFeedback: msg,
@@ -1863,10 +1907,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       } else {
         feedbackMsg = `FUEL CRANE CYCLED — ALL CHANNELS NOMINAL (BORON TANK ${Math.round(nextReactor.boronTankLevel)}%).`
       }
-      if (komradRefuelMsg) {
-        lastKomradAnyMsgSec = shiftElapsedSeconds
-        nextKomradChatterDelaySec = rollNextChatterDelay()
-      }
       return {
         ...mapped,
         lastDecisionFeedback: feedbackMsg,
@@ -1983,8 +2023,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       const sealMsg =
         'ALL 4 MCP PUMPS ENGAGED & HERMETIC CONTAINMENT SCRUBBERS LOCKED!'
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         lastDecisionFeedback: sealMsg,
@@ -2104,8 +2142,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           warnMsg,
           'warn'
         )
-        lastKomradAnyMsgSec = shiftElapsedSeconds
-        nextKomradChatterDelaySec = rollNextChatterDelay()
         return {
           lastDecisionFeedback: warnMsg,
           terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
@@ -2136,8 +2172,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         msg,
         'warn'
       )
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         lastDecisionFeedback: msg,
@@ -2344,8 +2378,6 @@ export const useGameStore = create<GameState>((set, get) => ({
             : isForgery && decision === 'SHREDDED'
               ? `CIA FORGERY SHREDDED (${docTitle.slice(0, 20)})! LANGLEY COUNTERFEIT REDUCED TO STATE CONFETTI.`
               : `CATASTROPHE! THAT WATERMARK SAID "MADE IN LANGLEY" — CIA SABOTAGE APPROVED!`
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
       const nextPhase =
         !state.isGodMode && nextStrikes >= 3
           ? 'gulag'
@@ -2397,7 +2429,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   tickThermodynamics: (dtSeconds: number) => {
     const state = get()
-    if (state.phase !== 'playing' && state.phase !== 'boot') return
+    if ((state.phase !== 'playing' && state.phase !== 'boot') || !state.isShiftControlReady) {
+      return
+    }
     const frameDt = Math.max(0, Math.min(0.25, dtSeconds))
     if (frameDt === 0) return
 
@@ -2472,7 +2506,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     if (mapped.tutorialPhase !== prevTutorialPhase) {
       if (mapped.tutorialPhase === 'COMPLETED') {
-        pushKomradLiveDispatch(VOLKOV_FAREWELL_MESSAGE, 'normal', 'OPERATOR')
+        newLogs.push(
+          createLogEntry(
+            state.shiftTimeMinutes,
+            'OPERATOR',
+            VOLKOV_FAREWELL_MESSAGE,
+            'normal'
+          )
+        )
         pushKomradLiveDispatch(KOMRAD_TAKEOVER_MESSAGE, 'normal', 'K.O.M.R.A.D.-84')
       } else {
         const drillText = `>> VOLKOV DRILL: ${mapped.tutorialPrompt.header}`
@@ -2483,13 +2524,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
-    // Monitor newly spent TVS fuel channels across all phases
+    // Monitor newly spent TVS fuel channels across all phases (debounced & non-critical silence-aware)
     const spentCount = Object.keys(baseReactor.coreTileAnomalies).length
     if (spentCount > prevSpentRodCount && spentCount > 0) {
-      komradDispatchSeed += 1
-      const alertText =
-        KOMRAD_SPENT_ROD_QUIPS[komradDispatchSeed % KOMRAD_SPENT_ROD_QUIPS.length]
-      pushKomradLiveDispatch(alertText, spentCount >= 3 ? 'danger' : 'warn')
+      const isCrit = spentCount >= 3
+      const debounce = isCrit
+        ? SPENT_ROD_CRIT_DEBOUNCE_SEC
+        : SPENT_ROD_WARN_DEBOUNCE_SEC
+      if (
+        shiftElapsedSeconds - lastKomradSpentRodSec >= debounce &&
+        (isCrit || canEmitKomradNonCriticalWarning())
+      ) {
+        lastKomradSpentRodSec = shiftElapsedSeconds
+        komradDispatchSeed += 1
+        const alertText =
+          KOMRAD_SPENT_ROD_QUIPS[komradDispatchSeed % KOMRAD_SPENT_ROD_QUIPS.length]
+        pushKomradLiveDispatch(alertText, isCrit ? 'danger' : 'warn')
+      }
     }
     prevSpentRodCount = spentCount
 
@@ -2501,7 +2552,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       level: 'warn' | 'danger'
     ) => {
       if (hazardFired) return
-      if (shiftElapsedSeconds - lastKomradHazardSec[cat] >= 26) {
+      const isCrit = level === 'danger'
+      const debounce = isCrit
+        ? CRITICAL_HAZARD_DEBOUNCE_SEC
+        : NON_FATAL_HAZARD_DEBOUNCE_SEC
+      if (
+        shiftElapsedSeconds - lastKomradHazardSec[cat] >= debounce &&
+        (isCrit || canEmitKomradNonCriticalWarning())
+      ) {
         lastKomradHazardSec[cat] = shiftElapsedSeconds
         komradDispatchSeed += 1
         const text = pickReactorHazardDispatch(
@@ -2542,6 +2600,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         pushKomradLiveDispatch(text, level, 'K.O.M.R.A.D.-84', wallQuip)
         hazardFired = true
       }
+    }
+
+    const liveSilenceSnapshot = {
+      ...state,
+      ...mapped,
     }
 
     // =========================================================================
@@ -2628,23 +2691,37 @@ export const useGameStore = create<GameState>((set, get) => ({
         if (surplusOverloadSeconds >= 16) {
           surplusOverloadSeconds = 0
           nextInstability = Math.min(100, nextInstability + 10)
-          pushKomradLiveDispatch(
-            `⚡ [GRID OVER-DISPATCH: +${Math.round(deltaDispatchMWe)} MWe SURPLUS]: EXCESS LOAD DRAINING ACCUMULATOR! LOWER UNIT A ZONE LEVERS (+10% INSTABILITY)!`,
-            'warn',
-            'K.O.M.R.A.D.-84',
-            `OVER-DISPATCHING BY +${Math.round(deltaDispatchMWe)} MWe! THE COPPER BUSBARS ARE SINGING THE INTERNATIONALE!`
-          )
+          if (
+            shiftElapsedSeconds - lastKomradOverDispatchSec >=
+              OVER_DISPATCH_DEBOUNCE_SEC &&
+            canEmitKomradNonCriticalWarning()
+          ) {
+            lastKomradOverDispatchSec = shiftElapsedSeconds
+            pushKomradLiveDispatch(
+              `⚡ [GRID OVER-DISPATCH: +${Math.round(deltaDispatchMWe)} MWe SURPLUS]: EXCESS LOAD DRAINING ACCUMULATOR! LOWER UNIT A ZONE LEVERS (+10% INSTABILITY)!`,
+              'warn',
+              'K.O.M.R.A.D.-84',
+              `OVER-DISPATCHING BY +${Math.round(deltaDispatchMWe)} MWe! THE COPPER BUSBARS ARE SINGING THE INTERNATIONALE!`
+            )
+          }
         }
       } else {
         surplusOverloadSeconds = Math.max(0, surplusOverloadSeconds - dt * 1.5)
       }
 
-      // Situation D: All 6 substation quotas & power balance turn green after a change/brownout!
+      // Situation D: All 6 substation quotas & power balance turn green (debounced & respects silence)
       if (fullyBalanced && !prevAllSubstationsOk) {
         brownoutMismatchSeconds = 0
-        komradDispatchSeed += 1
-        const praise = pickQuotaCommendationDispatch(komradDispatchSeed)
-        pushKomradLiveDispatch(praise, 'normal')
+        if (
+          shiftElapsedSeconds - lastKomradPraiseSec >= PRAISE_DEBOUNCE_SEC &&
+          canEmitKomradIdleChatter(liveSilenceSnapshot, 'any')
+        ) {
+          lastKomradPraiseSec = shiftElapsedSeconds
+          reserveIdleChatterEmission()
+          komradDispatchSeed += 1
+          const praise = pickQuotaCommendationDispatch(komradDispatchSeed)
+          pushKomradLiveDispatch(praise, 'normal')
+        }
       }
       prevAllSubstationsOk = fullyBalanced
 
@@ -2660,13 +2737,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         )
       }
 
-      // Situation C: Substation Brownout / Quota Mismatch (> 15s mismatch, 28s cooldown)
+      // Situation C: Substation Brownout / Quota Mismatch (> 15s mismatch, 60s cooldown)
       if (failingSub) {
         brownoutMismatchSeconds += dt
         if (
           !hazardFired &&
           brownoutMismatchSeconds >= 15 &&
-          shiftElapsedSeconds - lastKomradBrownoutSec >= 28
+          shiftElapsedSeconds - lastKomradBrownoutSec >= BROWNOUT_DEBOUNCE_SEC &&
+          canEmitKomradNonCriticalWarning()
         ) {
           lastKomradBrownoutSec = shiftElapsedSeconds
           komradDispatchSeed += 1
@@ -2719,48 +2797,46 @@ export const useGameStore = create<GameState>((set, get) => ({
         baseReactor.drumPressure >= 86 ? 'danger' : 'warn'
       )
     }
-    if (
-      !hazardFired &&
-      baseReactor.coreTemp >= 680 &&
-      shiftElapsedSeconds - lastKomradOverheatSec >= 26
-    ) {
-      lastKomradOverheatSec = shiftElapsedSeconds
-      komradDispatchSeed += 1
-      const tempVal = Math.round(baseReactor.coreTemp)
+    if (!hazardFired && baseReactor.coreTemp >= 680) {
       const isCrit = baseReactor.coreTemp >= 850
-      const quipFn = isCrit
-        ? KOMRAD_CRIT_TEMP_QUIPS[komradDispatchSeed % KOMRAD_CRIT_TEMP_QUIPS.length]
-        : KOMRAD_HIGH_TEMP_QUIPS[komradDispatchSeed % KOMRAD_HIGH_TEMP_QUIPS.length]
-      pushKomradLiveDispatch(quipFn(tempVal), isCrit ? 'danger' : 'warn')
-      hazardFired = true
+      const debounce = isCrit
+        ? OVERHEAT_CRIT_DEBOUNCE_SEC
+        : OVERHEAT_WARN_DEBOUNCE_SEC
+      if (
+        shiftElapsedSeconds - lastKomradOverheatSec >= debounce &&
+        (isCrit || canEmitKomradNonCriticalWarning())
+      ) {
+        lastKomradOverheatSec = shiftElapsedSeconds
+        komradDispatchSeed += 1
+        const tempVal = Math.round(baseReactor.coreTemp)
+        const quipFn = isCrit
+          ? KOMRAD_CRIT_TEMP_QUIPS[komradDispatchSeed % KOMRAD_CRIT_TEMP_QUIPS.length]
+          : KOMRAD_HIGH_TEMP_QUIPS[komradDispatchSeed % KOMRAD_HIGH_TEMP_QUIPS.length]
+        pushKomradLiveDispatch(quipFn(tempVal), isCrit ? 'danger' : 'warn')
+        hazardFired = true
+      }
     }
-    if (
-      !hazardFired &&
-      baseReactor.roomRadiation >= 3.5 &&
-      shiftElapsedSeconds - lastKomradRadSec >= 30
-    ) {
-      lastKomradRadSec = shiftElapsedSeconds
-      komradDispatchSeed += 1
+    if (!hazardFired && baseReactor.roomRadiation >= 3.5) {
       const isCrit = baseReactor.roomRadiation >= 8.0
-      const radQuip =
-        KOMRAD_RAD_QUIPS[komradDispatchSeed % KOMRAD_RAD_QUIPS.length]
-      pushKomradLiveDispatch(radQuip, isCrit ? 'danger' : 'warn')
-      hazardFired = true
+      const debounce = isCrit ? RAD_CRIT_DEBOUNCE_SEC : RAD_WARN_DEBOUNCE_SEC
+      if (
+        shiftElapsedSeconds - lastKomradRadSec >= debounce &&
+        (isCrit || canEmitKomradNonCriticalWarning())
+      ) {
+        lastKomradRadSec = shiftElapsedSeconds
+        komradDispatchSeed += 1
+        const radQuip =
+          KOMRAD_RAD_QUIPS[komradDispatchSeed % KOMRAD_RAD_QUIPS.length]
+        pushKomradLiveDispatch(radQuip, isCrit ? 'danger' : 'warn')
+        hazardFired = true
+      }
     }
 
-    // Situation E: Random Satirical Night-Shift Chatter (~14-22s interval across all playing phases)
-    if (
-      state.phase === 'playing' &&
-      !hazardFired &&
-      shiftElapsedSeconds - lastKomradAnyMsgSec >= nextKomradChatterDelaySec
-    ) {
+    // Situation E: Idle Night-Shift Chatter (75-120s post-speech silence, paused during tutorial/alarms/orders)
+    if (!hazardFired && canEmitKomradIdleChatter(liveSilenceSnapshot, 'text')) {
+      reserveIdleChatterEmission()
       komradDispatchSeed += 1
       pushWallKomrad(pickNextNightShiftChatter(), 'normal', 'K.O.M.R.A.D.-84')
-    }
-
-    if (newKomradMsgs.length > 0) {
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
     }
 
     const nextPhase =
@@ -2853,8 +2929,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         msg,
         nextAz5 ? 'danger' : 'warn'
       )
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
         isBlackout: nextAz5 ? state.isBlackout : false,
@@ -2889,7 +2963,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         overrideMsg,
         'warn'
       )
-      lastKomradAnyMsgSec = shiftElapsedSeconds
       return {
         komradOverrideLocked: false,
         isBlackout: false,
@@ -2916,7 +2989,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         purgeMsg,
         'normal'
       )
-      lastKomradAnyMsgSec = shiftElapsedSeconds
       return {
         ciaIntrusionActive: false,
         ciaIntrusionProgress: 0,
@@ -2944,7 +3016,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         printMsg,
         'normal'
       )
-      lastKomradAnyMsgSec = shiftElapsedSeconds
       return {
         activeDirectives: [...state.activeDirectives, newDoc],
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
@@ -3039,8 +3110,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       const komradGodText = enabled
         ? 'POLITBURO IMMUNITY DECREE ACTIVE: REALITY SUBROUTINES TEMPORARILY SUPPRESSED.'
         : 'IMMUNITY DECREE REVOKED: STANDARD SOVIET THERMODYNAMICS RESTORED.'
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         isGodMode: enabled,
         isBlackout: enabled ? false : state.isBlackout,
@@ -3104,53 +3173,47 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   tick: () => {
     const state = get()
-    if (state.phase !== 'playing') return
+    if (state.phase !== 'playing' || !state.isShiftControlReady) return
 
     // 1. Advance clock continuously without stopping at 10 minutes (wraps around 360 in-game minutes)
     const SHIFT_MINUTES_PER_SECOND = 1 / 1.75
     const rawNextMinutes = state.shiftTimeMinutes + SHIFT_MINUTES_PER_SECOND
     const nextMinutes = rawNextMinutes % 360
 
-    // 2. Pravda Dot-Matrix Printer progress (strictly gated by 3D Inspector Desk single-paper & cooldown rules)
+    // 2. Legacy Pravda Dot-Matrix Printer progress (post-tutorial only, no wall CRT / VOX chatter spam)
     let nextPrinterProgress = state.printerProgress
     let nextDirectives = state.activeDirectives
     const tickKomradMsgs: KomradMessageEntry[] = []
-    if (state.activeDirectives.length === 0 && shiftElapsedSeconds >= 15) {
+    if (
+      state.tutorialPhase === 'COMPLETED' &&
+      state.activeDirectives.length === 0 &&
+      shiftElapsedSeconds >= 15
+    ) {
       nextPrinterProgress = Math.min(100, state.printerProgress + 3.5)
       if (nextPrinterProgress >= 100) {
         const spawned = createDirectiveInstance()
         nextDirectives = [spawned]
         nextPrinterProgress = 0
-        tickKomradMsgs.push(
-          createKomradMsg(
-            nextMinutes,
-            `PRAVDA MATRIX ORDER PRINTED: ${spawned.id} (${spawned.title}).`,
-            spawned.isCiaForgery ? 'warning' : 'normal',
-            'PRINTER'
-          )
-        )
       }
     }
 
-    // 3. Hourly Shift Broadcasts (01:00 -> 05:00)
+    // 3. Hourly Shift Broadcasts (01:00 -> 05:00): strictly obey global idle silence cooldown (drop, don't queue)
     const currentHour = Math.floor(nextMinutes / 60)
     if (currentHour === 0) {
       lastBroadcastHour = 0
     } else if (currentHour !== lastBroadcastHour && KOMRAD_HOURLY_LOGS[currentHour]) {
       lastBroadcastHour = currentHour
-      tickKomradMsgs.push(
-        createKomradMsg(
-          nextMinutes,
-          KOMRAD_HOURLY_LOGS[currentHour],
-          currentHour >= 4 ? 'warning' : 'normal',
-          'K.O.M.R.A.D.-84'
+      if (canEmitKomradIdleChatter(state, 'any')) {
+        reserveIdleChatterEmission()
+        tickKomradMsgs.push(
+          createKomradMsg(
+            nextMinutes,
+            KOMRAD_HOURLY_LOGS[currentHour],
+            currentHour >= 4 ? 'warning' : 'normal',
+            'K.O.M.R.A.D.-84'
+          )
         )
-      )
-    }
-
-    if (tickKomradMsgs.length > 0) {
-      lastKomradAnyMsgSec = shiftElapsedSeconds
-      nextKomradChatterDelaySec = rollNextChatterDelay()
+      }
     }
 
     const nextPhase =

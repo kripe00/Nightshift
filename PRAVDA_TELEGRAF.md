@@ -271,4 +271,18 @@
   >
   > *Hent fra Kreml (`npm run pravda`) og skru på radioen — MELTDOWN IS PROPAGANDA! 🎖️📻🎶☢️☭"*
 
+### [TELEGRAM #020 — STEMPLET: QUOTA-84 // 3D «ISKRA-84» KONTOR-PC, KOMRAD-84 FULL 1702-ORDS VOX-SYNTH & STASJONSSIKKERHET!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Fullverdig 3D `ISKRA-84` (`SOV-OS 84` / `P.O.S.T.-84`), 1702-ords Half-Life VOX-motor med 100 % orddekning, bobbleheads & stillhetsdisiplin!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Inspektoratet og Sektor 84 har nå rullet ut enda en gigantisk Stakhanovitt-leveranse til Kreml:*
+  > *1. **3D «ISKRA-84» Kontor-PC på Pulten (`DesktopComputer3D.tsx`, `desktopOsCanvas.ts` & `post84Mail.ts`):** Komplett fysisk 3D Bakelitt-mus, CRT-skjerm med `SOV-OS 84`, `P.O.S.T.-84` stats-teletype innboks med Kommissær Volkors strenge direktiver, sovjetisk kontorkomedie-arkiver og ekte post-tutorial ordre-loop knyttet direkte til reaktortelemetrien!*
+  > *2. **K.O.M.R.A.D.-84 Full 1702-ords VOX-stemmesyntese (`komradVoiceSynth.ts`, `build-komrad-vox.mjs` & `extract-missing-vox.mjs`):** Både `komrad84_vox_all.wav` (244 ord) og nye `komrad84_vox2_all.ogg` (1384 ord) pluss 74 høstede bonusord og 6 fulle monologklipp er pakket til kompakte 24kHz Ogg Vorbis (`6.92 MB` totalt) — med **1657 / 1657 (100 %) orddekning og 0 manglende ord** gjennom bunkernes PA-vocoder!*
+  > *3. **Ren oppstart & Sovjetisk Stillhetsdisiplin (`komradSilenceState.ts`):** K.O.M.R.A.D.-84 holder kjeft bak lasteskjermen til operatøren faktisk har kontroll i hallen (`isShiftControlReady`), og holder `75–120s` atmosfærisk pause mellom innfallene uten kø-spam!*
+  > *4. **3D Bobbleheads & Panopticon-overvåkning (`KomradBobbleheads3D.tsx` & `SovietPanopticonRig3D.tsx`):** Inspektoratets pult har fått interaktive nikke-figurer og bunker-overvåkningsrigg — godkjent med `0 feil` og `0 advarsler` i `npx tsc -b`, `npx oxlint`, `npm run kgb` og `npm run build`!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og hør K.O.M.R.A.D.-84 snakke hvert eneste ord — MELTDOWN IS PROPAGANDA! 🎖️🖥️🔊☢️☭"*
+
 

@@ -13,6 +13,12 @@ import { BuckshotDitherPass } from "./BuckshotDitherPass";
 import { CameraController, useCameraLookStore } from "./CameraController";
 import { CentralSkalaScreen3D } from "./CentralSkalaScreen3D";
 import { ExteriorDioramas3D, NOOP_RAYCAST } from "./ExteriorDioramas3D";
+import {
+  getKomradVowelBand,
+  stepKomradSpeech,
+  type KomradVowelKey,
+} from "./komradVoiceSynth";
+import { SovietPanopticonRig3D } from "./SovietPanopticonRig3D";
 import { SovietRadioTable3D } from "./SovietRadioTable3D";
 import { UnitCBatteryStorageDeck3D } from "./UnitCBatteryStorageDeck3D";
 import {
@@ -3089,7 +3095,7 @@ const WALL_KOMRAD_SPEAKER_SLOTS_GEO = mergeWallBoxParts([
   ),
 ]);
 
-type KomradPortraitPose = "idle" | "scan" | "blink" | "talk1" | "talk2";
+export type KomradPortraitPose = "idle" | "scan" | "blink" | "talk1" | "talk2";
 
 type KomradPixelPalette = readonly [
   readonly [number, number, number], // 0: Deep CRT Void
@@ -3702,14 +3708,14 @@ function bakeKomradPortraitCanvas(
   return canvas;
 }
 
-type KomradPixelSpriteBank = Record<
+export type KomradPixelSpriteBank = Record<
   KomradMood,
   Record<KomradPortraitPose, HTMLCanvasElement>
 >;
 
 let cachedKomradSpriteBank: KomradPixelSpriteBank | null = null;
 
-function getKomradPixelSprites(): KomradPixelSpriteBank {
+export function getKomradPixelSprites(): KomradPixelSpriteBank { // oxlint-disable-line react/only-export-components
   if (cachedKomradSpriteBank) return cachedKomradSpriteBank;
   const moods: readonly KomradMood[] = ["normal", "warning", "critical"];
   const poses: readonly KomradPortraitPose[] = [
@@ -3743,6 +3749,11 @@ function paintKomradWallTerminalCRT(
   typedCharCount: number,
   stepBucket: number,
   isBlackout: boolean,
+  vocalEnergy = 0,
+  activeVowel: KomradVowelKey | null = null,
+  spectrum16?: Uint8Array,
+  voxLoaded = false,
+  activeSpokenMsgId = "",
 ): void {
   if (isBlackout) {
     ctx.fillStyle = "#050706";
@@ -3871,12 +3882,27 @@ function paintKomradWallTerminalCRT(
   const barGap = 5;
   const barsStartX = specX + (specW - (bandCount * barW + (bandCount - 1) * barGap)) / 2;
   const barsBottomY = specY + 62;
+  const vowelPeakBand = getKomradVowelBand(activeVowel, bandCount);
   for (let bi = 0; bi < bandCount; bi++) {
-    const levelF = isTalking
-      ? 0.25 +
-        0.75 *
-          Math.abs(Math.sin(stepBucket * 1.45 + bi * 0.85) * Math.cos(bi * 0.42 - stepBucket * 0.7))
-      : 0.14 + 0.08 * Math.sin(stepBucket * 0.9 + bi * 0.5);
+    let levelF: number;
+    if (isTalking && voxLoaded && spectrum16) {
+      const binAmp = (spectrum16[bi] ?? 0) / 255;
+      levelF = Math.min(1, 0.08 + binAmp * 0.92);
+    } else {
+      const bandFocus = activeVowel
+        ? Math.max(0.28, 1 - Math.abs(bi - vowelPeakBand) * 0.12)
+        : 0.45;
+      levelF = isTalking
+        ? Math.min(
+            1,
+            0.1 +
+              vocalEnergy *
+                0.92 *
+                bandFocus *
+                (0.68 + 0.32 * Math.abs(Math.sin(stepBucket * 1.45 + bi * 0.85))),
+          )
+        : 0.14 + 0.08 * Math.sin(stepBucket * 0.9 + bi * 0.5);
+    }
     const segs = Math.max(1, Math.round(levelF * 7));
     for (let si = 0; si < 7; si++) {
       const sy = barsBottomY - (si + 1) * 7;
@@ -3892,16 +3918,17 @@ function paintKomradWallTerminalCRT(
 
   // Carrier Oscilloscope Trace
   const wfBaseY = specY + 92;
-  ctx.strokeStyle = isTalking ? palette.secondary : palette.dim;
+  ctx.strokeStyle = isTalking && vocalEnergy > 0.1 ? palette.secondary : palette.dim;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   const wfSamples = 32;
   for (let i = 0; i <= wfSamples; i++) {
     const px = specX + 14 + (i / wfSamples) * (specW - 28);
+    const amp = isTalking ? 4 + vocalEnergy * 16 : 2.5;
     const waveOffset = isTalking
       ? Math.sin(i * 0.95 + stepBucket * 2.2) *
         Math.cos(i * 0.38 - stepBucket * 1.3) *
-        18
+        amp
       : Math.sin(i * 0.45 + stepBucket * 0.5) * 2.5;
     if (i === 0) ctx.moveTo(px, wfBaseY + waveOffset);
     else ctx.lineTo(px, wfBaseY + waveOffset);
@@ -3950,7 +3977,14 @@ function paintKomradWallTerminalCRT(
   ctx.fillText("K.O.M.R.A.D.-84 DISPATCH LOG // SECTOR 84", rx + 16, ry + 37, rw - 32);
 
   const visibleMsgs = messages.slice(-5).reverse();
-  const latestMsg = visibleMsgs[0];
+  const activeMsg =
+    (isTalking && activeSpokenMsgId
+      ? messages.find((m) => m.id === activeSpokenMsgId)
+      : undefined) ?? visibleMsgs[0];
+  const historyMsgs = messages
+    .filter((m) => m.id !== activeMsg?.id)
+    .slice(-4)
+    .reverse();
   const cursorVisible = isTalking || stepBucket % 2 === 0;
 
   // Top Active Transmission Box (`y = 78..236`, `h = 158`) with Typewriter Reveal
@@ -3959,33 +3993,33 @@ function paintKomradWallTerminalCRT(
   const boxW = rw - 24;
   const boxH = 158;
   ctx.fillStyle =
-    latestMsg?.mood === "critical"
+    activeMsg?.mood === "critical"
       ? "#330a0a"
-      : latestMsg?.mood === "warning"
+      : activeMsg?.mood === "warning"
         ? "#2e1e06"
         : "#0a2915";
   ctx.fillRect(boxX, boxY, boxW, boxH);
   ctx.strokeStyle =
-    latestMsg?.mood === "critical"
+    activeMsg?.mood === "critical"
       ? "#ff4433"
-      : latestMsg?.mood === "warning"
+      : activeMsg?.mood === "warning"
         ? "#ffb32c"
         : palette.primary;
   ctx.lineWidth = 3;
   ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-  if (latestMsg) {
+  if (activeMsg) {
     const tagColor =
-      latestMsg.mood === "critical"
+      activeMsg.mood === "critical"
         ? "#ff6b57"
-        : latestMsg.mood === "warning"
+        : activeMsg.mood === "warning"
           ? "#ffd15c"
           : "#7bffa8";
     ctx.fillStyle = tagColor;
     ctx.font = 'bold 20px "Courier Prime", "Consolas", monospace';
     ctx.textAlign = "left";
     ctx.fillText(
-      `[${latestMsg.timestamp}] ${latestMsg.sender}`,
+      `[${activeMsg.timestamp}] ${activeMsg.sender}`,
       boxX + 12,
       boxY + 26,
       boxW - 150,
@@ -4000,8 +4034,11 @@ function paintKomradWallTerminalCRT(
 
     ctx.textAlign = "left";
     ctx.font = 'bold 24px "Courier Prime", "Consolas", monospace';
-    const visibleText = latestMsg.text.slice(0, typedCharCount);
-    const wrappedActive = wrapText(ctx, visibleText, boxW - 30).slice(0, 4);
+    const visibleText =
+      !activeSpokenMsgId || activeMsg.id === activeSpokenMsgId
+        ? activeMsg.text.slice(0, typedCharCount)
+        : activeMsg.text;
+    const wrappedActive = wrapText(ctx, visibleText, boxW - 30).slice(-4);
     ctx.fillStyle = "#ffffff";
     if (wrappedActive.length === 0 && cursorVisible) {
       ctx.fillText("█", boxX + 12, boxY + 60);
@@ -4028,7 +4065,7 @@ function paintKomradWallTerminalCRT(
 
   for (let slot = 0; slot < 4; slot++) {
     const cy = histStartY + slot * (cardH + cardGap);
-    const item = visibleMsgs[slot + 1];
+    const item = historyMsgs[slot];
     if (!item) {
       ctx.fillStyle = "rgba(8, 22, 13, 0.55)";
       ctx.fillRect(boxX, cy, boxW, cardH);
@@ -4102,10 +4139,9 @@ const SovietKomradCommsWallTerminal3D: React.FC = React.memo(() => {
   const kgbLensMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   const lastMsgIdRef = useRef("");
-  const msgStartSecRef = useRef(-10);
   const lastMoodRef = useRef<KomradMood>("normal");
   const lastBlackoutRef = useRef(false);
-  const lastStepBucketRef = useRef(-1);
+  const lastSigRef = useRef("");
 
   const crtTex = useMemo(
     () =>
@@ -4129,116 +4165,56 @@ const SovietKomradCommsWallTerminal3D: React.FC = React.memo(() => {
 
   useEffect(() => {
     return onKremlinFontReady(() => {
-      lastStepBucketRef.current = -1;
+      lastSigRef.current = "";
     });
   }, []);
 
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
+  useFrame((state, delta) => {
+    const t = state.clock.elapsedTime;
     const s = useGameStore.getState();
     const msgs = s.komradMessages;
-    const latestMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
-    const latestId = latestMsg?.id ?? "";
-    const latestIdChanged = latestId !== lastMsgIdRef.current;
-    if (latestIdChanged) {
-      lastMsgIdRef.current = latestId;
-      if (msgs.length > 0) {
-        msgStartSecRef.current = t;
-      }
-    }
-
-    const spentCount = Object.keys(s.coreTileAnomalies).length;
-    const anySubFailing = s.substations.some((sub) => !sub.quotaOk);
-    const totalAllocatedPower =
-      s.powerAllocation.cooling +
-      s.powerAllocation.defense +
-      s.powerAllocation.facility;
-
-    const liveCritical =
-      s.coreMeltdown ||
-      s.steamExplosion ||
-      s.drumPressure >= 86 ||
-      s.coreTemp >= 850 ||
-      s.drumWaterLevel < -145 ||
-      s.voidFraction > 0.56 ||
-      s.roomRadiation >= 8.0 ||
-      s.ciaIntrusionActive ||
-      s.az5Active ||
-      spentCount >= 3 ||
-      s.treasonStrikes >= 2 ||
-      totalAllocatedPower > s.maxSafePower;
-
-    const liveWarning =
-      !liveCritical &&
-      (spentCount >= 1 ||
-        s.coreTemp >= 680 ||
-        s.drumPressure > 79 ||
-        s.voidFraction > 0.38 ||
-        s.xenon > 38 ||
-        Math.abs(s.drumWaterLevel) > 130 ||
-        s.treasonStrikes >= 1 ||
-        anySubFailing);
-
-    let mood: KomradMood = liveCritical
-      ? "critical"
-      : liveWarning
-        ? "warning"
-        : "normal";
-
-    // Also reflect the mood of any active/recent (< 6s) transmission if more severe
-    const msgStillFresh = t < msgStartSecRef.current + 6.0;
-    if (latestMsg) {
-      if (latestMsg.mood === "critical" && (msgStillFresh || s.treasonStrikes > 0)) {
-        mood = "critical";
-      } else if (latestMsg.mood === "warning" && mood === "normal" && msgStillFresh) {
-        mood = "warning";
-      }
-    }
-
     const isBlackout = s.isBlackout && !s.isGodMode;
-    const typingDuration = latestMsg
-      ? THREE.MathUtils.clamp(latestMsg.text.length / 34, 1.8, 3.6)
-      : 0;
-    const isTalking =
-      !isBlackout &&
-      Boolean(latestMsg) &&
-      t < msgStartSecRef.current + typingDuration;
-    const typedCharCount = !latestMsg
-      ? 0
-      : isTalking
-        ? Math.max(
-            1,
-            Math.floor(
-              ((t - msgStartSecRef.current) / typingDuration) * latestMsg.text.length,
-            ),
-          )
-        : latestMsg.text.length;
+    const vocal = stepKomradSpeech(t, delta);
 
-    const stepBucket = isTalking ? Math.floor(t * 8) : Math.floor(t);
+    const mood = vocal.mood;
+    const isTalking = vocal.isTalking;
+    const typedCharCount = vocal.typedCharCount;
+    const stepBucket = isTalking ? Math.floor(t * 10) : Math.floor(t);
     const pose: KomradPortraitPose = isTalking
-      ? stepBucket % 4 === 2
+      ? vocal.mouthOpen === 2
         ? "talk2"
-        : stepBucket % 4 === 0
-          ? "idle"
-          : "talk1"
+        : vocal.mouthOpen === 1
+          ? "talk1"
+          : "idle"
       : stepBucket % 7 === 0
         ? "blink"
         : stepBucket % 5 === 2
           ? "scan"
           : "idle";
 
+    const energyBucket = Math.round(vocal.energy * 10);
+    const latestStoreMsgId = msgs.length > 0 ? msgs[msgs.length - 1].id : "";
+    const specSig =
+      isTalking && vocal.voxLoaded
+        ? `${Math.round(vocal.spectrum16[0] / 28)}-${Math.round(vocal.spectrum16[5] / 28)}-${Math.round(vocal.spectrum16[10] / 28)}-${Math.round(vocal.spectrum16[15] / 28)}`
+        : "";
+    const sig = `${vocal.activeMsgId}|${latestStoreMsgId}|${mood}|${isBlackout}|${isTalking}|${pose}|${typedCharCount}|${energyBucket}|${vocal.activeVowel ?? ""}|${vocal.voxLoaded ? 1 : 0}|${specSig}|${
+      isTalking ? stepBucket : stepBucket % 2
+    }`;
+
     if (
-      !latestIdChanged &&
+      sig === lastSigRef.current &&
       mood === lastMoodRef.current &&
       isBlackout === lastBlackoutRef.current &&
-      stepBucket === lastStepBucketRef.current
+      vocal.activeMsgId === lastMsgIdRef.current
     ) {
       return;
     }
 
+    lastSigRef.current = sig;
+    lastMsgIdRef.current = vocal.activeMsgId;
     lastMoodRef.current = mood;
     lastBlackoutRef.current = isBlackout;
-    lastStepBucketRef.current = stepBucket;
 
     if (kgbLensMatRef.current) {
       kgbLensMatRef.current.color.setHex(
@@ -4246,7 +4222,7 @@ const SovietKomradCommsWallTerminal3D: React.FC = React.memo(() => {
           ? 0x240a0a
           : mood === "critical" && stepBucket % 2 === 0
             ? 0xff3b2f
-            : isTalking
+            : isTalking && vocal.energy > 0.2
               ? 0xff2a2a
               : 0xa81616,
       );
@@ -4270,6 +4246,11 @@ const SovietKomradCommsWallTerminal3D: React.FC = React.memo(() => {
       typedCharCount,
       stepBucket,
       isBlackout,
+      vocal.energy,
+      vocal.activeVowel,
+      vocal.spectrum16,
+      vocal.voxLoaded,
+      vocal.activeMsgId,
     );
     tex.needsUpdate = true;
   });
@@ -10173,7 +10154,6 @@ export const ControlRoomScene: React.FC = React.memo(() => {
   const rightBayBWrapRef = useRef<THREE.Group>(null);
   const terminalWrapRef = useRef<THREE.Group>(null);
   const inspectorWrapRef = useRef<THREE.Group>(null);
-  const cloudTonedDownRef = useRef(false);
 
   const linoleumFloorTex = useMemo(() => {
     const tex = createNearestCanvasTexture(128, 128, (ctx, w, h) => {
@@ -10477,27 +10457,6 @@ export const ControlRoomScene: React.FC = React.memo(() => {
       });
     }
   }, []);
-
-  // Tone down the Inspector Desk pneumatic-tube particle cloud by ~60% without touching InspectorDesk3D.tsx
-  useFrame(() => {
-    if (cloudTonedDownRef.current) return;
-    const root = inspectorWrapRef.current;
-    if (!root || root.children.length === 0) return;
-    root.traverse((obj) => {
-      if (obj instanceof THREE.Points) {
-        obj.raycast = NOOP_RAYCAST;
-        if (!obj.userData.__cloudTonedDown) {
-          obj.userData.__cloudTonedDown = true;
-          if (obj.material instanceof THREE.PointsMaterial) {
-            obj.material.opacity *= 0.38;
-            obj.material.size *= 0.78;
-            obj.material.needsUpdate = true;
-          }
-        }
-      }
-    });
-    cloudTonedDownRef.current = true;
-  });
 
   const hallPillars = [
     { pos: [-5.86, -4.36] as const, plaqueNormal: null },
@@ -10891,6 +10850,9 @@ export const ControlRoomScene: React.FC = React.memo(() => {
 
       {/* Right-Window Duty Side Table & Vintage Soviet Radio (`OKEAN-84`) */}
       <SovietRadioTable3D />
+
+      {/* K.O.M.R.A.D.-84 Panopticon Rig: GLaDOS Overhead Tracking Turret + 4 KGB-TV-84 Cameras */}
+      <SovietPanopticonRig3D />
 
       {/* ============================================================
           ERGONOMIC INTERACTIVE STATIONS IN RBMK-1000 MCR HALL (Split Wing Consoles)

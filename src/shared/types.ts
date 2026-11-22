@@ -137,6 +137,8 @@ export interface OperationalMandate {
 export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspecting'> {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
+  isShiftControlReady: boolean
+  komradOpeningDispatched: boolean
   activeStation: CameraStation
   isSeatedAtDesk: boolean
   canSitAtDesk: boolean
@@ -231,6 +233,8 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   radioBroadcastSubtitle: string | null
 
   // Shared Actions
+  setShiftControlReady: (ready: boolean) => void
+  launchKomradOpeningDispatch: () => void
   setActiveStation: (station: CameraStation) => void
   setSeatedAtDesk: (seated: boolean) => void
   toggleSeatedAtDesk: () => void

@@ -27,10 +27,12 @@ function CenterReticle() {
       const gs = useGameStore.getState()
       const visible =
         gs.phase === 'playing' &&
+        gs.isShiftControlReady &&
         pointerLockInteraction.isPointerLocked &&
         !gs.isSeatedAtDesk &&
         !pointerLockInteraction.debugMenuOpen &&
-        !pointerLockInteraction.mainMenuOpen
+        !pointerLockInteraction.mainMenuOpen &&
+        !pointerLockInteraction.shiftTransitionActive
 
       root.style.display = visible ? 'flex' : 'none'
       if (!visible) return
@@ -112,10 +114,11 @@ function CenterReticle() {
 
 function RadioBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
   const phase = useGameStore((s) => s.phase)
+  const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
   const diagFeedActive = useGameStore((s) => s.diagFeedActive)
   const subtitle = useGameStore((s) => s.radioBroadcastSubtitle)
 
-  if (phase !== 'playing' || diagFeedActive || menusOpen || !subtitle) {
+  if (phase !== 'playing' || !isShiftControlReady || diagFeedActive || menusOpen || !subtitle) {
     return null
   }
 
@@ -150,6 +153,7 @@ function RadioBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
 
 export function App() {
   const phase = useGameStore((s) => s.phase)
+  const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
   const tick = useGameStore((s) => s.tick)
   const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk)
   const canSitAtDesk = useGameStore((s) => s.canSitAtDesk)
@@ -172,12 +176,12 @@ export function App() {
   }, [phase])
 
   useEffect(() => {
-    if (phase !== 'playing') return
+    if (phase !== 'playing' || !isShiftControlReady) return
     const interval = window.setInterval(() => {
       tick()
     }, 1000)
     return () => window.clearInterval(interval)
-  }, [phase, tick])
+  }, [phase, isShiftControlReady, tick])
 
   // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase,
   // or to re-close the Main Breaker during an active shift if it tripped open (isBlackout === true).
@@ -186,7 +190,7 @@ export function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Backspace') {
         const s = useGameStore.getState()
-        if (s.phase === 'playing' && s.tutorialStep !== 'DONE') {
+        if (s.phase === 'playing' && s.isShiftControlReady && s.tutorialStep !== 'DONE') {
           e.preventDefault()
           playSwitchClank(true)
           s.skipTutorial()
@@ -195,6 +199,7 @@ export function App() {
       }
       if (e.code === 'Space' || e.code === 'Enter') {
         const s = useGameStore.getState()
+        if (!s.isShiftControlReady) return
         const wantSandbox = e.shiftKey && e.code === 'Space'
         if (s.phase === 'boot') {
           e.preventDefault()
@@ -233,14 +238,14 @@ export function App() {
       <RadioBroadcastSubtitleHud menusOpen={menusOpen} />
 
       {/* Subtle Contextual [E] SIT AT DESK Prompt When Walking Near Inspector Desk */}
-      {phase === 'playing' && !isSeatedAtDesk && canSitAtDesk && !menusOpen && (
+      {phase === 'playing' && isShiftControlReady && !isSeatedAtDesk && canSitAtDesk && !menusOpen && (
         <div className="pointer-events-none fixed bottom-11 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#ffb000]/75 bg-[#07160c]/90 px-3 py-0.5 font-mono text-xs font-bold tracking-widest text-[#ffb000] shadow-md">
           [E] SIT AT DESK
         </div>
       )}
 
       {/* Discreet Control & Locomotion Hint Bar at Bottom of Screen */}
-      {phase === 'playing' && (
+      {phase === 'playing' && isShiftControlReady && (
         <div className="pointer-events-none fixed bottom-2.5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#28b862]/70 bg-[#051209]/90 px-4 py-1 font-mono text-xs font-bold tracking-wider text-[#39ff14] shadow-lg">
           {isSeatedAtDesk
             ? '[LMB]: GRAB & DRAG DESK TOOLS | [RMB]: ZOOM | [E / ESC]: STAND UP'

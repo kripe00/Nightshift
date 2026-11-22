@@ -155,6 +155,7 @@ function saveCurrentShiftToStorage(): void {
 
 export const MainMenuOverlay: React.FC = () => {
   const phase = useGameStore((s) => s.phase)
+  const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
   const shiftTimeMinutes = useGameStore((s) => s.shiftTimeMinutes)
 
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(true)
@@ -165,19 +166,32 @@ export const MainMenuOverlay: React.FC = () => {
   )
 
   const fxCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const powerUpTimersRef = useRef<number[]>([])
+
+  const clearPowerUpTimers = () => {
+    powerUpTimersRef.current.forEach((id) => window.clearTimeout(id))
+    powerUpTimersRef.current = []
+  }
+
+  useEffect(() => () => clearPowerUpTimers(), [])
 
   useEffect(() => {
-    updatePointerLockInteraction({ mainMenuOpen: isMenuOpen })
-    if (isMenuOpen && document.pointerLockElement) {
+    const transitionActive = powerUpStage > 0
+    updatePointerLockInteraction({
+      mainMenuOpen: isMenuOpen,
+      shiftTransitionActive: transitionActive,
+    })
+    useGameStore.getState().setShiftControlReady(!isMenuOpen && !transitionActive)
+    if ((isMenuOpen || transitionActive) && document.pointerLockElement) {
       document.exitPointerLock?.()
     }
-  }, [isMenuOpen])
+  }, [isMenuOpen, powerUpStage])
 
   // Continuously persist active shift progress in localStorage whenever shiftTimeMinutes advances
   useEffect(() => {
-    if (phase !== 'playing') return
+    if (phase !== 'playing' || !isShiftControlReady) return
     saveCurrentShiftToStorage()
-  }, [phase, shiftTimeMinutes])
+  }, [phase, isShiftControlReady, shiftTimeMinutes])
 
   // 60 FPS High-DPI Atmospheric Animation Canvas over the Propaganda Poster
   useEffect(() => {
@@ -353,26 +367,36 @@ export const MainMenuOverlay: React.FC = () => {
   const hasLiveOrSavedShift = phase === 'playing' || savedShift !== null
 
   const triggerThreeSecondBunkerPowerUp = () => {
+    clearPowerUpTimers()
     setPowerUpStage(1)
     playBunkerAirlockSlam()
-    window.setTimeout(() => {
-      playSwitchClank(true)
-      setPowerUpStage(2)
-    }, 750)
-    window.setTimeout(() => {
-      playKnifeSwitchSlam(true)
-      setPowerUpStage(3)
-    }, 1600)
-    window.setTimeout(() => {
-      playSwitchClank(false)
-      setPowerUpStage(4)
-    }, 2350)
-    window.setTimeout(() => {
-      setPowerUpStage(0)
-    }, 3000)
+    powerUpTimersRef.current = [
+      window.setTimeout(() => {
+        playSwitchClank(true)
+        setPowerUpStage(2)
+      }, 750),
+      window.setTimeout(() => {
+        playKnifeSwitchSlam(true)
+        setPowerUpStage(3)
+      }, 1600),
+      window.setTimeout(() => {
+        playSwitchClank(false)
+        setPowerUpStage(4)
+      }, 2350),
+      window.setTimeout(() => {
+        powerUpTimersRef.current = []
+        setPowerUpStage(0)
+      }, 3000),
+    ]
   }
 
   const handleNewGame = () => {
+    clearPowerUpTimers()
+    updatePointerLockInteraction({
+      mainMenuOpen: false,
+      shiftTransitionActive: true,
+    })
+    useGameStore.getState().setShiftControlReady(false)
     useDeskStore.getState().resetDeskStore()
     useGameStore.getState().resetShift()
     saveCurrentShiftToStorage()
@@ -383,18 +407,29 @@ export const MainMenuOverlay: React.FC = () => {
 
   const handleContinueGame = () => {
     if (!hasLiveOrSavedShift) return
+    clearPowerUpTimers()
+    setPowerUpStage(0)
     playSwitchClank(true)
+
+    updatePointerLockInteraction({
+      mainMenuOpen: false,
+      shiftTransitionActive: false,
+    })
 
     if (phase !== 'playing' && savedShift) {
       useGameStore.setState({
         ...savedShift.game,
         phase: 'playing',
+        isShiftControlReady: true,
+        komradOpeningDispatched: savedShift.game.shiftTimeMinutes > 0,
       })
       useDeskStore.setState({
         ...savedShift.desk,
       })
     } else if (phase === 'boot') {
       useGameStore.getState().startShift()
+    } else {
+      useGameStore.getState().setShiftControlReady(true)
     }
     setIsMenuOpen(false)
   }
@@ -440,6 +475,8 @@ export const MainMenuOverlay: React.FC = () => {
         <button
           type="button"
           onClick={() => {
+            clearPowerUpTimers()
+            setPowerUpStage(0)
             playSwitchClank(false)
             if (phase === 'playing') {
               saveCurrentShiftToStorage()
