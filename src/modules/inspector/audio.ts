@@ -1046,7 +1046,7 @@ export function playShredFinalClunk(): void {
 }
 
 /**
- * Crisp paper-scroll roll + machined brass capsule end-cap snap when packing a stamped directive into КАПСУЛА.
+ * Crisp paper-scroll roll + machined brass capsule end-cap snap when packing a stamped directive into CAPSULE.
  */
 export function playCapsulePackSound(): void {
   const audio = getAudioContext()
@@ -1082,7 +1082,7 @@ export function playCapsulePackSound(): void {
 }
 
 /**
- * Heavy curved brass/glass breech door hinge clank + pneumatic rubber gasket seal hiss when opening/closing ЛЮК КАМЕРЫ.
+ * Heavy curved brass/glass breech door hinge clank + pneumatic rubber gasket seal hiss when opening/closing BREECH HATCH.
  */
 export function playBreechHatchLatchSound(opening: boolean): void {
   const audio = getAudioContext()
@@ -1136,7 +1136,7 @@ export function playBreechHatchLatchSound(opening: boolean): void {
 }
 
 /**
- * Hollow brass cylinder slide + spring-detent catch when loading КАПСУЛА into the open pneumatic breech chamber.
+ * Hollow brass cylinder slide + spring-detent catch when loading CAPSULE into the open pneumatic breech chamber.
  */
 export function playCapsuleChamberLoadSound(): void {
   const audio = getAudioContext()
@@ -1345,7 +1345,7 @@ export function playScrollTickSound(): void {
 }
 
 /**
- * One 90ms-budget line-feed of the ПРАВДА-84: two dot-matrix impact pulses plus a short
+ * One 90ms-budget line-feed of the PRAVDA-84: two dot-matrix impact pulses plus a short
  * platen ratchet tick.
  */
 export function playLineFeedTick(stepIndex = 1): void {
@@ -1470,7 +1470,7 @@ export function playValveWheelSqueak(step = 1): void {
 }
 
 /**
- * Filtered white/pink-noise high-pressure steam roar while holding the СБРОС ПАРА lever.
+ * Filtered white/pink-noise high-pressure steam roar while holding the STEAM VENT lever.
  */
 export function playSteamVentHiss(intensity = 1.0): void {
   const audio = getAudioContext()
@@ -1519,7 +1519,7 @@ export function playSteamVentHiss(intensity = 1.0): void {
 }
 
 /**
- * Heavy ceramic rotary switch click when trimming the 50 ГЦ excitation dial.
+ * Heavy ceramic rotary switch click when trimming the 50 HZ excitation dial.
  */
 export function playRheostatDetentClick(step = 0): void {
   const audio = getAudioContext()
@@ -1559,7 +1559,7 @@ export function playRheostatDetentClick(step = 0): void {
 }
 
 /**
- * Hollow sheet-metal hinge clack & spring tension when flipping the АЗ-5 plexiglass cover.
+ * Hollow sheet-metal hinge clack & spring tension when flipping the AZ-5 plexiglass cover.
  */
 export function playSafetyCoverFlip(open = true): void {
   const audio = getAudioContext()
@@ -1714,7 +1714,7 @@ export function startIntroDriveAudio(): void {
   engineOsc2.start(now)
   lfoOsc.start(now)
 
-  // 2. Muffled Soviet Night-Shift AM Radio ("РАДИО МАЯК")
+  // 2. Muffled Soviet Night-Shift AM Radio ("RADIO MAYAK")
   const radioOsc = audio.createOscillator()
   const radioFilter = audio.createBiquadFilter()
   const radioGain = audio.createGain()
@@ -1855,7 +1855,7 @@ export function stopIntroDriveAudio(): void {
 }
 
 /**
- * Checkpoint КПП №4 electric barrier siren buzzer + hydraulic lift hum
+ * Checkpoint KPP-4 electric barrier siren buzzer + hydraulic lift hum
  */
 export function playBarrierBuzzerAndLift(): void {
   const audio = getAudioContext()
@@ -1926,7 +1926,7 @@ export function playBunkerAirlockSlam(): void {
 }
 
 /**
- * Distorted, crackling Soviet PA horn announcement (`ГРОМКОГОВОРИТЕЛЬ КПП-4`)
+ * Distorted, crackling Soviet PA horn announcement (`KPP-4 LOUDSPEAKER`)
  * Synthesizes an attention buzzer followed by bandpass-filtered voice-cadence squawks.
  */
 export function playCheckpointIntercomSquawk(): void {
@@ -1955,11 +1955,11 @@ export function playCheckpointIntercomSquawk(): void {
 
   // 2. Bandpass-filtered Russian intercom voice-cadence syllables + horn static
   const syllables = [
-    { delay: 0.38, dur: 0.16, f0: 155, f1: 120 }, // "СТОЙ!"
-    { delay: 0.62, dur: 0.11, f0: 142, f1: 148 }, // "ЗО-НА"
-    { delay: 0.76, dur: 0.14, f0: 135, f1: 118 }, // "РЕ-ЖИ-МА."
-    { delay: 0.96, dur: 0.15, f0: 150, f1: 132 }, // "ВСТАВЬ-ТЕ"
-    { delay: 1.15, dur: 0.18, f0: 145, f1: 108 }, // "ПРО-ПУСК!"
+    { delay: 0.38, dur: 0.16, f0: 155, f1: 120 }, // "HALT!"
+    { delay: 0.62, dur: 0.11, f0: 142, f1: 148 }, // "RE-STRICT-"
+    { delay: 0.76, dur: 0.14, f0: 135, f1: 118 }, // "ED ZONE."
+    { delay: 0.96, dur: 0.15, f0: 150, f1: 132 }, // "IN-SERT"
+    { delay: 1.15, dur: 0.18, f0: 145, f1: 108 }, // "YOUR PASS!"
   ]
 
   syllables.forEach((syl) => {
@@ -2006,7 +2006,7 @@ export function playCheckpointIntercomSquawk(): void {
 }
 
 /**
- * Distinct two-tone Soviet brass bell chime (`ЗВОНОК ПРЕДУПРЕЖДЕНИЯ`)
+ * Distinct two-tone Soviet brass bell chime (`WARNING BELL`)
  * Triggered the moment a Desk Annunciator threshold first crosses into Amber Warning.
  */
 export function playAmberWarningChime(): void {
@@ -2043,7 +2043,7 @@ export function playAmberWarningChime(): void {
 }
 
 /**
- * Slow, rhythmic low-frequency Soviet bunker klaxon pulse (`СИРЕНА АВАРИИ`)
+ * Slow, rhythmic low-frequency Soviet bunker klaxon pulse (`EMERGENCY KLAXON`)
  * Triggered when any Desk Annunciator tile enters Critical Red (with 6-second cooldown).
  */
 export function playCriticalRedKlaxonPulse(): void {
@@ -2086,7 +2086,7 @@ export function playCriticalRedKlaxonPulse(): void {
 }
 
 /**
- * Heavy hydraulic resistance chug & check-valve clank for manual Boron Piston hand-pumping (`НАСОС БОРА`)
+ * Heavy hydraulic resistance chug & check-valve clank for manual Boron Piston hand-pumping (`BORON PUMP`)
  */
 export function playBoronHydraulicPumpStroke(): void {
   const audio = getAudioContext()

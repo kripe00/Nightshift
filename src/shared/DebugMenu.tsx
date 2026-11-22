@@ -46,7 +46,7 @@ export const DebugMenu: React.FC = () => {
             KGB MINISTRY OVERRIDE [F2]
           </span>
           <span className="block text-xs text-[#9ca396]">
-            DECREE 84-Б // KOMRAD KRISTIANOV &amp; KOMRAD OLEG CLEARANCE
+            DECREE 84-B // KOMRAD KRISTIANOV &amp; KOMRAD OLEG CLEARANCE
           </span>
         </div>
         <button

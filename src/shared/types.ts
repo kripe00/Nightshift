@@ -192,19 +192,19 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   bubblerDraining: boolean // Toothed quadrant drain lever held on UNIT B
   sealToggles: [boolean, boolean, boolean] // [N2 PURGE, RAD FILTER, SEAL LOCK] on UNIT B
   containmentSealLocked: boolean // True when all 3 UNIT B seal toggles are locked
-  ventingSteam: boolean // Spring-loaded СБРОС ПАРА lever held down
+  ventingSteam: boolean // Spring-loaded STEAM VENT (BRU-K) lever held down
   turbineRpm: number // 0 to 3600 RPM
   gridHz: number // 45.0 to 55.0 Hz (Target 50.0 Hz)
   excitationTrim: number // -5.0 to +5.0 Hz rotary rheostat offset
   hzOutOfBoundsSeconds: number // > 10s outside [47.8, 52.2] or > 3450 RPM trips Main Breaker
-  ventilationActive: boolean // ВЕНТИЛЯЦИЯ guarded toggle (-1.2 R/h/s, +15 MW house load)
-  avrActive: boolean // АРВ ВОЗБУЖДЕНИЕ guarded toggle (+8 MW house load, stabilizes 50Hz & sync)
-  kgbLineActive: boolean // СВЯЗЬ КГБ guarded toggle (+10 MW house load, powers KGB Bunker trunk)
-  auxLoopBActive: boolean // ВАКУУМ КОНДЕНСАТОРА / TRIP RESET (+12 MW house load, condenser vacuum)
+  ventilationActive: boolean // VENTILATION guarded toggle (-1.2 R/h/s, +15 MW house load)
+  avrActive: boolean // AVR EXCITATION guarded toggle (+8 MW house load, stabilizes 50Hz & sync)
+  kgbLineActive: boolean // KGB LINE guarded toggle (+10 MW house load, powers KGB Bunker trunk)
+  auxLoopBActive: boolean // CONDENSER VACUUM / TRIP RESET (+12 MW house load, condenser vacuum)
   houseLoadMW: number // Total internal plant auxiliary load drawn from generator (MW)
   wetSteamPenalty: number // 0.0 to 1.0 turbine efficiency & vibration penalty from high drum level (> +100mm)
   batteryStoredPct: number // 0 to 100% accumulator storage charge level
-  boronCooldown: number // 0 to 30s recharge for БОРНАЯ КИСЛОТА plunger
+  boronCooldown: number // 0 to 30s recharge for BORIC ACID plunger
   az5Available: boolean
   az5Cooldown: number
   gridTransientImpulse: number // Immediate Hz/RPM kick when moving Sector MW levers

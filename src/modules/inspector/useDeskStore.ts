@@ -20,14 +20,14 @@ export const PAPER_COMPACT_W_3D = 0.22
 export const PAPER_COMPACT_H_3D = 0.28
 
 // Drop Zones in 3D Desk Local Coordinates (x, z)
-// Carrier Cylinder (`КАПСУЛА`) Cradle on Back-Left of Desk Mat
+// Carrier Cylinder (`CAPSULE`) Cradle on Back-Left of Desk Mat
 export const CAPSULE_CRADLE_POS_3D = {
   x: -0.74,
   y: 0.926,
   z: -0.22,
 } as const
 
-// Outer-Left Side-Mounted Pneumatic Breech Station (`ПНЕВМОПОЧТА // КАМЕРА ПУСКА`) tucked cleanly onto the left wing bolster
+// Outer-Left Side-Mounted Pneumatic Breech Station (`PNEUMO-TUBE // LAUNCH CHAMBER`) tucked cleanly onto the left wing bolster
 export const OUTBOX_BREECH_POS_3D = {
   x: -1.395,
   y: 0.918,
@@ -300,11 +300,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'vodka',
     preferredMW: 175,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
-    referenceCode: 'ГОСТ-84-42-МСМ',
+    referenceCode: 'GOST-84-42-MSM',
     dateString: '04.11.1984',
     rationaleText: 'STATE BOTTLING SURGE: RAISE RODS & TURBINE FOR +75 MW',
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'Е. П. СЛАВСКИЙ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'E. P. SLAVSKY',
     fontType: 'GOST_MONO',
     sealType: 'MINSREDMASH_ATOM',
     sealMicroDefect: 'NONE',
@@ -313,17 +313,17 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     isForgery: false,
     forgeryReason: null,
   },
-  // 2. FORGERY (Page 1 Seal Micro-Print Defect): 6-point star + CCCP-LATIN micro-ring! -> Single Target: 3. DUGA-1 RADAR
+  // 2. FORGERY (Page 1 Seal Micro-Print Defect): 6-point star + LANGLEY-FAKE micro-ring! -> Single Target: 3. DUGA-1 RADAR
   {
     titlePrefix: 'DIRECTIVE 44-Z',
     targetSector: 'duga',
     preferredMW: 250,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
-    referenceCode: 'ГОСТ-84-38-МСМ',
+    referenceCode: 'GOST-84-38-MSM',
     dateString: '04.11.1984',
     rationaleText: 'OVER-HORIZON RADAR SURGE TEST',
-    secretWatermark: 'CCCP-LATIN • SERIES-6',
-    signature: 'Б. Е. ЩЕРБИНА',
+    secretWatermark: 'LANGLEY-FAKE • SERIES-6',
+    signature: 'B. E. SHCHERBINA',
     fontType: 'GOST_MONO',
     sealType: 'MINSREDMASH_ATOM',
     sealMicroDefect: 'SIX_POINT_STAR',
@@ -331,7 +331,7 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     inkColor: 'SOVIET_CRIMSON',
     isForgery: true,
     forgeryReason:
-      'Forged Seal Micro-Print (6-Point Star & CCCP-LATIN Micro-Ring)',
+      'Forged Seal Micro-Print (6-Point Star & LANGLEY-FAKE Micro-Ring)',
   },
   // 3. VALID: State Committee for Atomic Energy + PRAVDA_BLOCK + MINSREDMASH_ATOM (NONE) + BUNKER_GREY + BUNKER_OLIVE -> Single Target: 3. DUGA-1 RADAR (SURGE TO 200 MW)
   {
@@ -339,11 +339,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'duga',
     preferredMW: 200,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
-    referenceCode: 'ГОСТ-84-68-ГКАЭ',
+    referenceCode: 'GOST-84-68-GKAE',
     dateString: '04.11.1984',
     rationaleText: 'IONOSPHERE SWEEP SURGE: BOOST REACTOR & TURBINE OUTPUT',
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'АКАД. В. ЛЕГАСОВ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'ACAD. V. LEGASOV',
     fontType: 'PRAVDA_BLOCK',
     sealType: 'MINSREDMASH_ATOM',
     sealMicroDefect: 'NONE',
@@ -358,11 +358,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'pripyat',
     preferredMW: 225,
     ministry: 'COUNCIL OF MINISTERS USSR',
-    referenceCode: 'ГОСТ-84-20-СМ',
+    referenceCode: 'GOST-84-20-SM',
     dateString: '04.11.1984',
     rationaleText: 'UNSCHEDULED MUNICIPAL FLOODLIGHT SURGE ORDER',
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'Н. А. ТИХОНОВ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'N. A. TIKHONOV',
     fontType: 'WESTERN_SERIF',
     sealType: 'USSR_STATE_SEAL',
     sealMicroDefect: 'NONE',
@@ -377,11 +377,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'pripyat',
     preferredMW: 175,
     ministry: 'COUNCIL OF MINISTERS USSR',
-    referenceCode: 'ГОСТ-84-48-СМ',
+    referenceCode: 'GOST-84-48-SM',
     dateString: '04.11.1984',
     rationaleText: 'WINTER HEATING SURGE: RAISE CORE RODS & TURBINE VALVE',
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'Н. А. ТИХОНОВ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'N. A. TIKHONOV',
     fontType: 'GOST_MONO',
     sealType: 'USSR_STATE_SEAL',
     sealMicroDefect: 'NONE',
@@ -396,11 +396,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'steel',
     preferredMW: 250,
     ministry: 'COUNCIL OF MINISTERS USSR',
-    referenceCode: 'ГОСТ-84-54-СМ',
+    referenceCode: 'GOST-84-54-SM',
     dateString: '04.11.1984',
     rationaleText: 'DIVERT MAXIMUM FURNACE BUS LOAD',
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'В. И. ДОЛГИХ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'V. I. DOLGIKH',
     fontType: 'GOST_MONO',
     sealType: 'USSR_STATE_SEAL',
     sealMicroDefect: 'NONE',
@@ -416,11 +416,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'kgb',
     preferredMW: 150,
     ministry: '5TH CHIEF DIRECTORATE',
-    referenceCode: 'ГОСТ-84-14-КГБ',
+    referenceCode: 'GOST-84-14-KGB',
     dateString: '04.11.1984',
     rationaleText: 'CLASSIFIED TELEMETRY DECRYPTION SWEEP (+50 MW)',
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'КОМИССАР ВОЛКОВ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'COMMISSAR VOLKOV',
     fontType: 'GOST_MONO',
     sealType: 'KGB_SWORD_SHIELD',
     sealMicroDefect: 'NONE',
@@ -435,11 +435,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'vodka',
     preferredMW: 225,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
-    referenceCode: 'ГОСТ-84-76-ГКАЭ',
+    referenceCode: 'GOST-84-76-GKAE',
     dateString: '04.11.1984',
     rationaleText: 'MIDNIGHT DISTILLERY VAT OVERLOAD ORDER',
-    secretWatermark: 'CCCP-LATIN • ORBIT-ERR',
-    signature: 'А. М. ПЕТРОСЬЯНЦ',
+    secretWatermark: 'LANGLEY-FAKE • ORBIT-ERR',
+    signature: 'A. M. PETROSYANTS',
     fontType: 'GOST_MONO',
     sealType: 'MINSREDMASH_ATOM',
     sealMicroDefect: 'BROKEN_ORBIT',
@@ -455,11 +455,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'kolkhoz',
     preferredMW: 50,
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
-    referenceCode: 'ГОСТ-84-24-МСМ',
+    referenceCode: 'GOST-84-24-MSM',
     dateString: '04.11.1984',
     rationaleText: 'LOAD SHEDDING: THROTTLE DOWN TURBINE OR DUMP STEAM',
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'Е. П. СЛАВСКИЙ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'E. P. SLAVSKY',
     fontType: 'GOST_MONO',
     sealType: 'MINSREDMASH_ATOM',
     sealMicroDefect: 'NONE',
@@ -474,11 +474,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'kolkhoz',
     preferredMW: 225,
     ministry: 'MINISTRY OF ATOMIC FREEDOM',
-    referenceCode: 'ГОСТ-84-82-МАФ',
+    referenceCode: 'GOST-84-82-MAF',
     dateString: '04.11.1984',
     rationaleText: 'OVERLOAD RURAL TRANSFORMER BANK NOW',
-    secretWatermark: 'CCCP-LATIN • USA-84',
-    signature: 'ДЖ. СМИТ',
+    secretWatermark: 'LANGLEY-FAKE • USA-84',
+    signature: 'J. SMITH',
     fontType: 'SLANTED_ITALIC',
     sealType: 'USSR_STATE_SEAL',
     sealMicroDefect: 'LATIN_RING_TEXT',
@@ -494,11 +494,11 @@ const SINGLE_TARGET_BLUEPRINTS: SingleTargetDirectiveBlueprint[] = [
     targetSector: 'steel',
     preferredMW: 200,
     ministry: 'STATE COMMITTEE FOR ATOMIC ENERGY',
-    referenceCode: 'ГОСТ-84-62-ГКАЭ',
+    referenceCode: 'GOST-84-62-GKAE',
     dateString: '04.11.1984',
     rationaleText: 'ELECTRIC ARC FURNACE SURGE (+100 MW FULL PLANT LOAD)',
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'АКАД. В. ЛЕГАСОВ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'ACAD. V. LEGASOV',
     fontType: 'PRAVDA_BLOCK',
     sealType: 'MINSREDMASH_ATOM',
     sealMicroDefect: 'NONE',
@@ -528,7 +528,7 @@ function buildSingleTargetDeskDocument(
       : {
           ...rawBlueprint,
           ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
-          secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
+          secretWatermark: 'USSR • GOST STANDARD • 1984',
           fontType: 'GOST_MONO',
           sealType: 'MINSREDMASH_ATOM',
           sealMicroDefect: 'NONE',
@@ -618,7 +618,7 @@ function buildTutorialDrillStep1Document(): DeskDocument {
     status: 'printing',
     title: 'DRILL ORDER 00-1 // RED OCTOBER',
     ministry: 'MINISTRY OF MEDIUM MACHINE BUILDING',
-    referenceCode: 'ГОСТ-84-01-МСМ',
+    referenceCode: 'GOST-84-01-MSM',
     dateString: '04.11.1984',
     content: 'DRILL 1: STAMP GREEN APPROVED',
     powerOrderText,
@@ -628,8 +628,8 @@ function buildTutorialDrillStep1Document(): DeskDocument {
       vodkaMW: nextTargets.vodka + nextTargets.steel,
       ...nextTargets,
     },
-    secretWatermark: 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'Е. П. СЛАВСКИЙ',
+    secretWatermark: 'USSR • GOST STANDARD • 1984',
+    signature: 'E. P. SLAVSKY',
     fontType: 'GOST_MONO',
     sealType: 'MINSREDMASH_ATOM',
     sealMicroDefect: 'NONE',
@@ -661,7 +661,7 @@ function buildTutorialDrillStep5Document(): DeskDocument {
     ministry: ENABLE_FORGERIES
       ? 'MINISTRY OF ENERGY AND ELECTRIFICATION'
       : 'MINISTRY OF MEDIUM MACHINE BUILDING',
-    referenceCode: 'ГОСТ-84-09-МЭЭ',
+    referenceCode: 'GOST-84-09-MEE',
     dateString: '04.11.1984',
     content: ENABLE_FORGERIES
       ? 'DRILL 5: FAKE SEAL SHRED'
@@ -675,8 +675,8 @@ function buildTutorialDrillStep5Document(): DeskDocument {
     },
     secretWatermark: ENABLE_FORGERIES
       ? 'LANGLEY-CIA • MKULTRA-84'
-      : 'СССР • ГОССТАНДАРТ • 1984',
-    signature: 'ГЕН. В. ФЕДОРЧУК',
+      : 'USSR • GOST STANDARD • 1984',
+    signature: 'GEN. V. FEDORCHUK',
     fontType: 'GOST_MONO',
     sealType: ENABLE_FORGERIES ? 'USSR_STATE_SEAL' : 'MINSREDMASH_ATOM',
     sealMicroDefect: ENABLE_FORGERIES ? 'FOUR_POINT_STAR' : 'NONE',
@@ -796,8 +796,8 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         pending: true,
         reason:
           stamp.type === 'APPROVED'
-            ? 'STAMPED ОДОБРЕНО — STEP 1: PACK PAPER INTO CARRIER CAPSULE (КАПСУЛА)!'
-            : 'STAMPED УНИЧТОЖЕНО — DROP IN УНИЧТОЖИТЕЛЬ-84 JAWS & PULL LEVER',
+            ? 'STAMPED APPROVED — STEP 1: PACK PAPER INTO CARRIER CAPSULE!'
+            : 'STAMPED SHREDDED — DROP IN SHREDDER-84 JAWS & PULL LEVER',
       }
 
       return {
@@ -1010,7 +1010,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
           correct: false,
           pending: true,
           reason:
-            'DRILL 1/5: THIS ORDER IS GENUINE! STAMP GREEN [ОДОБРЕНО] & PACK IN LEFT CAPSULE!',
+            'DRILL 1/5: THIS ORDER IS GENUINE! STAMP GREEN [APPROVED] & PACK IN LEFT CAPSULE!',
         },
       })
       return false
@@ -1100,13 +1100,13 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       set({
         lastVerdict: {
           docId: state.packedDoc?.id ?? 'CAPSULE-BUSY',
-          docTitle: state.packedDoc?.title ?? 'КАПСУЛА // CARRIER CYLINDER',
+          docTitle: state.packedDoc?.title ?? 'CAPSULE // CARRIER CYLINDER',
           decision: 'APPROVED',
           correct: true,
           pending: true,
           reason: state.hatchOpen
             ? 'CAPSULE ALREADY PACKED — STEP 3: DRAG OR CLICK CAPSULE INTO OPEN BREECH CHAMBER!'
-            : 'CAPSULE ALREADY PACKED — STEP 2: CLICK BREECH HATCH DOOR (ЛЮК КАМЕРЫ) TO OPEN!',
+            : 'CAPSULE ALREADY PACKED — STEP 2: CLICK BREECH HATCH DOOR TO OPEN!',
         },
       })
       return false
@@ -1135,7 +1135,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
           correct: false,
           pending: true,
           reason:
-            'DRILL 5/5: THIS ORDER IS A CIA FORGERY! STAMP RED [УНИЧТОЖЕНО] & DROP IN RIGHT SHREDDER!',
+            'DRILL 5/5: THIS ORDER IS A CIA FORGERY! STAMP RED [SHREDDED] & DROP IN RIGHT SHREDDER!',
         },
       })
       return false
@@ -1150,7 +1150,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
           decision: 'APPROVED',
           correct: false,
           pending: true,
-          reason: 'STAMP DOCUMENT [ОДОБРЕНО] BEFORE PACKING CARRIER CAPSULE!',
+          reason: 'STAMP DOCUMENT [APPROVED] BEFORE PACKING CARRIER CAPSULE!',
         },
       })
       return false
@@ -1167,8 +1167,8 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         correct: true,
         pending: true,
         reason: state.hatchOpen
-          ? 'CAPSULE PACKED (КАПСУЛА ЗАКРЫТА) — STEP 3: LOAD CAPSULE INTO OPEN BREECH CHAMBER!'
-          : 'CAPSULE PACKED (КАПСУЛА ЗАКРЫТА) — STEP 2: OPEN TUBE BREECH HATCH (ОТКРЫТЬ ЛЮК)!',
+          ? 'CAPSULE SEALED — STEP 3: LOAD CAPSULE INTO OPEN BREECH CHAMBER!'
+          : 'CAPSULE SEALED — STEP 2: OPEN TUBE BREECH HATCH!',
       },
     })
     return true
@@ -1181,18 +1181,18 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       typeof forceOpen === 'boolean' ? forceOpen : !state.hatchOpen
 
     let reason = nextOpen
-      ? 'BREECH HATCH OPEN (ЛЮК ОТКРЫТ) — PACK & LOAD CARRIER CAPSULE INTO CHAMBER'
-      : 'BREECH HATCH SEALED (ЛЮК ЗАКРЫТ)'
+      ? 'BREECH HATCH OPEN — PACK & LOAD CARRIER CAPSULE INTO CHAMBER'
+      : 'BREECH HATCH SEALED'
 
     if (state.capsuleState === 'CRADLE_PACKED' && nextOpen) {
       reason =
-        'BREECH HATCH OPEN (ЛЮК ОТКРЫТ) — STEP 3: DRAG OR CLICK CAPSULE INTO CHAMBER!'
+        'BREECH HATCH OPEN — STEP 3: DRAG OR CLICK CAPSULE INTO CHAMBER!'
     } else if (state.capsuleState === 'CHAMBER_LOADED' && !nextOpen) {
       reason =
-        'ГОТОВ К ПУСКУ // SEALED & READY — STEP 5: PULL DOWN VACUUM LAUNCH LEVER (РЫЧАГ ПУСКА)!'
+        'READY TO LAUNCH // SEALED — STEP 5: PULL DOWN VACUUM LAUNCH LEVER!'
     } else if (state.capsuleState === 'CHAMBER_LOADED' && nextOpen) {
       reason =
-        'CHAMBER LOADED — STEP 4: CLOSE & SEAL BREECH HATCH (ЗАКРЫТЬ ЛЮК) BEFORE LAUNCH!'
+        'CHAMBER LOADED — STEP 4: CLOSE & SEAL BREECH HATCH BEFORE LAUNCH!'
     }
 
     set({
@@ -1200,7 +1200,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       lastVerdict: {
         docId: state.packedDoc?.id ?? 'BREECH-HATCH',
         docTitle:
-          state.packedDoc?.title ?? 'ПНЕВМОПОЧТА // КАМЕРА ПУСКА',
+          state.packedDoc?.title ?? 'PNEUMO-TUBE // LAUNCH CHAMBER',
         decision: 'APPROVED',
         correct: true,
         pending: true,
@@ -1216,12 +1216,12 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
       set({
         lastVerdict: {
           docId: 'CAPSULE-EMPTY',
-          docTitle: 'КАПСУЛА // CARRIER CYLINDER',
+          docTitle: 'CAPSULE // CARRIER CYLINDER',
           decision: 'APPROVED',
           correct: false,
           pending: true,
           reason:
-            'STEP 1: STAMP PAPER [ОДОБРЕНО] & PACK INTO CARRIER CAPSULE FIRST!',
+            'STEP 1: STAMP PAPER [APPROVED] & PACK INTO CARRIER CAPSULE FIRST!',
         },
       })
       return false
@@ -1236,7 +1236,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
           correct: false,
           pending: true,
           reason:
-            'BREECH HATCH CLOSED! STEP 2: CLICK BREECH DOOR (ЛЮК КАМЕРЫ) TO OPEN HATCH FIRST!',
+            'BREECH HATCH CLOSED! STEP 2: CLICK BREECH DOOR TO OPEN HATCH FIRST!',
         },
       })
       return false
@@ -1251,7 +1251,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         correct: true,
         pending: true,
         reason:
-          'CAPSULE IN CHAMBER — STEP 4: CLICK BREECH HATCH TO CLOSE & SEAL (ЗАКРЫТЬ ЛЮК)!',
+          'CAPSULE IN CHAMBER — STEP 4: CLICK BREECH HATCH TO CLOSE & SEAL!',
       },
     })
     return true
@@ -1265,14 +1265,14 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         lastVerdict: {
           docId: state.packedDoc?.id ?? 'LAUNCH-ERR',
           docTitle:
-            state.packedDoc?.title ?? 'ПНЕВМОПОЧТА // РЫЧАГ ПУСКА',
+            state.packedDoc?.title ?? 'PNEUMO-TUBE // LAUNCH LEVER',
           decision: 'APPROVED',
           correct: false,
           pending: true,
           reason:
             state.capsuleState === 'CRADLE_PACKED'
               ? 'LOAD PACKED CAPSULE INTO BREECH CHAMBER & SEAL HATCH BEFORE PULLING LEVER!'
-              : 'CHAMBER EMPTY! PACK [ОДОБРЕНО] PAPER INTO CAPSULE & LOAD CHAMBER FIRST!',
+              : 'CHAMBER EMPTY! PACK [APPROVED] PAPER INTO CAPSULE & LOAD CHAMBER FIRST!',
         },
       })
       return false
@@ -1287,7 +1287,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
           correct: false,
           pending: true,
           reason:
-            'VACUUM SEAL OPEN! STEP 4: CLOSE BREECH HATCH (ЗАКРЫТЬ ЛЮК) FOR GREEN SEAL LIGHT!',
+            'VACUUM SEAL OPEN! STEP 4: CLOSE BREECH HATCH FOR GREEN SEAL LIGHT!',
         },
       })
       return false
@@ -1302,7 +1302,7 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         correct: true,
         pending: true,
         reason:
-          'ПНЕВМОПУСК! CAPSULE IN FLIGHT TO K.O.M.R.A.D.-84 MAINFRAME...',
+          'PNEUMO-LAUNCH! CAPSULE IN FLIGHT TO K.O.M.R.A.D.-84 MAINFRAME...',
       },
     })
     return true
@@ -1365,11 +1365,11 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
     set({
       lastVerdict: {
         docId: doc?.id ?? 'OUTBOX-ERR',
-        docTitle: doc?.title ?? 'ПНЕВМОПОЧТА // КАПСУЛА',
+        docTitle: doc?.title ?? 'PNEUMO-TUBE // CAPSULE',
         decision: 'APPROVED',
         correct: false,
         pending: true,
-        reason: 'STAMP DOCUMENT [ОДОБРЕНО] BEFORE PACKING CARRIER CAPSULE!',
+        reason: 'STAMP DOCUMENT [APPROVED] BEFORE PACKING CARRIER CAPSULE!',
       },
     })
   },

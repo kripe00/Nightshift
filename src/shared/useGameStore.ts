@@ -170,6 +170,8 @@ function cleanWheelText(text: string): string {
     .replace(/&\s*Wheel\s*\[C\]/gi, '(C auto-trims)')
     .replace(/3\.\s*Battery\s*Wheel\s*\[C\]/gi, '3. Unit C Auto-Drains')
     .replace(/\bTURN\s+WHEEL\b/gi, 'CHECK AUTO DRAIN')
+    .replace(/UNIT C \(RIGHT WALL\)/gi, 'UNIT C (LEFT WALL)')
+    .replace(/UNIT B \(FAR LEFT\)/gi, 'UNIT B (RIGHT WING)')
 }
 
 function evaluateWheelFreeTutorial(
@@ -205,23 +207,19 @@ function evaluateWheelFreeTutorial(
     }
   }
 
-  if (resolved.phase === 'COMPLETED') {
-    return {
-      ...resolved,
-      header: cleanWheelText(resolved.header),
-      body: cleanWheelText(resolved.body),
-      hint: cleanWheelText(resolved.hint),
-      panelKey: cleanWheelText(resolved.panelKey),
-      actionLine: cleanWheelText(resolved.actionLine),
-      whyLines: [
-        cleanWheelText(resolved.whyLines[0]),
-        cleanWheelText(resolved.whyLines[1]),
-      ],
-      volkovQuote: cleanWheelText(resolved.volkovQuote),
-    }
+  return {
+    ...resolved,
+    header: cleanWheelText(resolved.header),
+    body: cleanWheelText(resolved.body),
+    hint: cleanWheelText(resolved.hint),
+    panelKey: cleanWheelText(resolved.panelKey),
+    actionLine: cleanWheelText(resolved.actionLine),
+    whyLines: [
+      cleanWheelText(resolved.whyLines[0]),
+      cleanWheelText(resolved.whyLines[1]),
+    ],
+    volkovQuote: cleanWheelText(resolved.volkovQuote),
   }
-
-  return resolved
 }
 
 function mapReactorToGameStateFields(
@@ -362,15 +360,15 @@ export function getContextualDiagnosticHint(
         if (state.bubblerLevel >= 85) {
           return `🌊 BUBBLER POOL FULL (${Math.round(state.bubblerLevel)}%): PULL BUBBLER DRAIN LEVER ON UNIT B [KEY 3] TO RECYCLE CONDENSATE!`
         }
-        return '💧 DRUM WATER & RESERVOIR: BALANCE FEEDWATER (ПЭН) ON UNIT B [KEY 3] NEAR 0 MM (-100 TO +100 MM)!'
+        return '💧 DRUM WATER & RESERVOIR: BALANCE FEEDWATER (FW PUMP) ON UNIT B [KEY 3] NEAR 0 MM (-100 TO +100 MM)!'
       case 'gas_oil':
         if (state.graphiteTemp > 540) {
-          return `🔥 HOT GRAPHITE (${state.graphiteTemp}°C): INCREASE HELIUM-N2 / ПЭН WHEEL ON UNIT B [KEY 3] TO PREVENT MODERATION RUNAWAY!`
+          return `🔥 HOT GRAPHITE (${state.graphiteTemp}°C): INCREASE HELIUM-N2 / FW PUMP WHEEL ON UNIT B [KEY 3] TO PREVENT MODERATION RUNAWAY!`
         }
         if (!state.containmentSealLocked && state.thermalPower > 200) {
           return '☢️ CONTAINMENT SCRUBBERS OPEN: LOCK ALL 3 SEAL TOGGLES ON UNIT B [KEY 3] TO STOP RADIATION LEAK!'
         }
-        return '⚠️ HIGH STEAM PRESSURE (>76 BAR): INSERT BORON RODS (UNIT A-2) & VENT/DRAIN EXCESS STEAM (UNIT C / UNIT B)!'
+        return '⚠️ HIGH STEAM PRESSURE (>76 BAR): INSERT BORON RODS (UNIT A-2) & VENT/DRAIN EXCESS STEAM (UNIT B)!'
       case 'bearing':
         if (maxPumpHeat > 65 || state.lubeOilPressure < 42) {
           return `⚙️ PUMP BEARINGS HOT (${Math.round(20 + maxPumpHeat)}°C / OIL ${Math.round(state.lubeOilPressure)} PSI): OPEN BEARING COOLER VALVES ON UNIT A / A-2!`
@@ -384,7 +382,7 @@ export function getContextualDiagnosticHint(
         }
         return state.voidFraction > 0.35
           ? `⚠️ STEAM VOIDS (${Math.round(state.voidFraction * 100)}%): RAISE [FEEDWATER] (UNIT B) OR LOWER [RODS] (UNIT A-2), OR PRESS [BORON INJECTION] ON UNIT A!`
-          : `☢️ XENON POISONING (${Math.round(state.xenon)}%): RAISE [RODS (СУЗ)] (UNIT A-2) OR TRIM EXCESS [FEEDWATER] (UNIT B) TO BALANCE REACTIVITY!`
+          : `☢️ XENON POISONING (${Math.round(state.xenon)}%): RAISE [RODS] (UNIT A-2) OR TRIM EXCESS [FEEDWATER] (UNIT B) TO BALANCE REACTIVITY!`
       case 'grid':
         if (state.batteryStoredPct < 8) {
           return '🔋 BATTERY BANK LOW (<8%): WITHDRAW RODS (A-2) TO GENERATE >500 MW AND RECHARGE ACCUMULATORS!'
@@ -460,14 +458,14 @@ const DIRECTIVE_BLUEPRINTS: DirectiveBlueprint[] = [
     title: 'DIRECTIVE 104-A // TURBINE CONDENSER FLUSH',
     ministry: 'MINISTRY OF ATOMIC HARMONY — PLANT NO. 4',
     date: '04.11.1984',
-    authCode: 'CCCP-84-42-БГ',
-    authorizationCode: 'CCCP-84-42-БГ',
+    authCode: 'USSR-84-42-BG',
+    authorizationCode: 'USSR-84-42-BG',
     bodyText:
       'BY ORDER OF MINATOM-84: Authorize auxiliary cooling circulation in Loop B to maintain Socialist thermal equilibrium.',
     stampType: 'MINATOM_OFFICIAL',
     inkColor: 'SOVIET_CRIMSON',
-    watermarkText: 'GLORY TO LABOR 1984 // СЛАВА ТРУДУ',
-    watermark: 'GLORY TO LABOR 1984 // СЛАВА ТРУДУ',
+    watermarkText: 'GLORY TO LABOR 1984 // USSR GOST-84',
+    watermark: 'GLORY TO LABOR 1984 // USSR GOST-84',
     isCiaForgery: false,
     flawDescription: null,
     effectOnApprove: {
@@ -479,14 +477,14 @@ const DIRECTIVE_BLUEPRINTS: DirectiveBlueprint[] = [
     title: 'DECREE 88-B // FIVE-YEAR PLAN GRID INSPECTION',
     ministry: 'MINISTRY OF ATOMIC HARMONY — PLANT NO. 4',
     date: '04.11.1984',
-    authCode: 'CCCP-84-28-ЖД',
-    authorizationCode: 'CCCP-84-28-ЖД',
+    authCode: 'USSR-84-28-GD',
+    authorizationCode: 'USSR-84-28-GD',
     bodyText:
       'ROUTINE VERIFICATION: Confirm primary control rod graphite lubrication and log nominal megawatt distribution.',
     stampType: 'POLITBURO_URGENT',
     inkColor: 'BUREAU_VIOLET',
-    watermarkText: 'GLORY TO LABOR 1984 // СЛАВА ТРУДУ',
-    watermark: 'GLORY TO LABOR 1984 // СЛАВА ТРУДУ',
+    watermarkText: 'GLORY TO LABOR 1984 // USSR GOST-84',
+    watermark: 'GLORY TO LABOR 1984 // USSR GOST-84',
     isCiaForgery: false,
     flawDescription: null,
     effectOnApprove: {
@@ -497,14 +495,14 @@ const DIRECTIVE_BLUEPRINTS: DirectiveBlueprint[] = [
     title: 'PROTOCOL 19-K // CYBER FIREWALL REINFORCEMENT',
     ministry: 'KGB FOURTH DIRECTORATE — SECTOR 07',
     date: '04.11.1984',
-    authCode: 'CCCP-84-64-КП',
-    authorizationCode: 'CCCP-84-64-КП',
+    authCode: 'USSR-84-64-KP',
+    authorizationCode: 'USSR-84-64-KP',
     bodyText:
       'STATE SECURITY NOTICE: Rotate magnetic encryption keys on K.O.M.R.A.D.-84 telemetry lines immediately.',
     stampType: 'KGB_DIRECTORATE_4',
     inkColor: 'SOVIET_CRIMSON',
-    watermarkText: 'GLORY TO LABOR 1984 // СЛАВА ТРУДУ',
-    watermark: 'GLORY TO LABOR 1984 // СЛАВА ТРУДУ',
+    watermarkText: 'GLORY TO LABOR 1984 // USSR GOST-84',
+    watermark: 'GLORY TO LABOR 1984 // USSR GOST-84',
     isCiaForgery: false,
     flawDescription: null,
     effectOnApprove: {
@@ -512,11 +510,11 @@ const DIRECTIVE_BLUEPRINTS: DirectiveBlueprint[] = [
     },
   },
   {
-    title: 'DIRECTIVE 44-Ж // EMERGENCY COOLANT VENTING',
+    title: 'DIRECTIVE 44-G // EMERGENCY COOLANT VENTING',
     ministry: 'MINISTRY OF ATOMIC HARMONY — PLANT NO. 4',
     date: '11/04/1984',
-    authCode: 'CCCP-84-37-ДК',
-    authorizationCode: 'CCCP-84-37-ДК',
+    authCode: 'USSR-84-37-DK',
+    authorizationCode: 'USSR-84-37-DK',
     bodyText:
       'URGENT: Drain primary cooling loop for 45 seconds to purge bourgeois condensation from Turbine Hall B.',
     stampType: 'MINATOM_OFFICIAL',
@@ -537,8 +535,8 @@ const DIRECTIVE_BLUEPRINTS: DirectiveBlueprint[] = [
     title: 'ORDER 91-Z // PATRIOTIC OVERCLOCK TEST',
     ministry: 'MINISTRY OF NUCLEAR FREEDOM — PLANT NO. 4',
     date: '04.11.1984',
-    authCode: 'USA-84-19-БГ',
-    authorizationCode: 'USA-84-19-БГ',
+    authCode: 'USA-84-19-BG',
+    authorizationCode: 'USA-84-19-BG',
     bodyText:
       'BY ORDER OF THE COMMITTEE: Disable Pump A and divert all cooling power to test Western satellite detection.',
     stampType: 'forged_eagle',
@@ -559,8 +557,8 @@ const DIRECTIVE_BLUEPRINTS: DirectiveBlueprint[] = [
     title: 'MEMO 72-B // GRAPHITE CORE WARMING',
     ministry: 'MINISTRY OF ATOMIC HARMONY — PLANT NO. 4',
     date: '04.11.1983',
-    authCode: 'CCCP-84-51-ФЩ',
-    authorizationCode: 'CCCP-84-51-ФЩ',
+    authCode: 'USSR-84-51-FS',
+    authorizationCode: 'USSR-84-51-FS',
     bodyText:
       'WINTER DIRECTIVE: Increase reactor core temperature by 200°C to heat the Commissar swimming pool.',
     stampType: 'PLANT_INTERNAL',
@@ -593,7 +591,7 @@ const MANDATE_BLUEPRINTS: Array<Omit<OperationalMandate, 'id' | 'fulfilled'>> = 
   {
     code: 'PUMP_B_SEAL',
     title: 'MANDATE 71-K // CONTAINMENT LOCK & PUMP FLOW',
-    requirementText: 'ENGAGE ALL 4 ГЦН PUMPS ON UNIT B & MAINTAIN DRUM LEVEL AT 0 MM',
+    requirementText: 'ENGAGE ALL 4 MCP PUMPS ON UNIT B & MAINTAIN DRUM LEVEL AT 0 MM',
   },
   {
     code: 'FACILITY_BUBBLER',
@@ -1537,7 +1535,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'OPERATOR',
-        `MAIN CIRCULATION PUMP ГЦН-${pumpIdx + 1} ${nextMcp[pumpIdx] ? 'ENGAGED' : 'STOPPED'} (ACTIVE ${activeCount}/4).`,
+        `MAIN CIRCULATION PUMP MCP-${pumpIdx + 1} ${nextMcp[pumpIdx] ? 'ENGAGED' : 'STOPPED'} (ACTIVE ${activeCount}/4).`,
         nextMcp[pumpIdx] ? 'normal' : 'warn'
       )
       return {
@@ -1984,7 +1982,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const prevPhase = s.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       const sealMsg =
-        'ALL 4 ГЦН PUMPS ENGAGED & HERMETIC CONTAINMENT SCRUBBERS LOCKED!'
+        'ALL 4 MCP PUMPS ENGAGED & HERMETIC CONTAINMENT SCRUBBERS LOCKED!'
       lastKomradAnyMsgSec = shiftElapsedSeconds
       nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
@@ -2427,6 +2425,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         : Number((state.voltageDipIntensity * Math.exp(-dt * 3.1)).toFixed(3))
 
     const baseReactor = extractReactorState(state)
+    if (!baseReactor.az5Active) {
+      baseReactor.turbines[0].tripped = false
+      baseReactor.turbines[1].tripped = false
+    }
     stepReactorSimulation(baseReactor, dt, state.tutorialPhase)
 
     if (state.isGodMode) {
@@ -2827,7 +2829,18 @@ export const useGameStore = create<GameState>((set, get) => ({
                 electricalMW: 0,
               },
             ]
-          : base.turbines,
+          : [
+              {
+                ...base.turbines[0],
+                tripped: false,
+                gridConnected: base.energyCreatedMW > 20 || base.totalElectricalMW > 0,
+              },
+              {
+                ...base.turbines[1],
+                tripped: false,
+                gridConnected: base.energyCreatedMW > 20 || base.totalElectricalMW > 0,
+              },
+            ],
         totalElectricalMW: nextAz5 ? 0 : base.totalElectricalMW,
       }
       const mapped = mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
@@ -2844,6 +2857,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       nextKomradChatterDelaySec = rollNextChatterDelay()
       return {
         ...mapped,
+        isBlackout: nextAz5 ? state.isBlackout : false,
         lastDecisionFeedback: msg,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [

@@ -7,6 +7,10 @@ import {
 } from "../modules/inspector/audio";
 import { useCameraLookStore } from "./CameraController";
 import {
+  onKremlinFontReady,
+  registerKremlinCanvasRedraw,
+} from "./kremlinFontReady";
+import {
   getBrushedBrassTextures,
   getHammeredIronTextures,
   getWeatheredMahoganyTextures,
@@ -312,15 +316,15 @@ const RADIO_ANNOUNCEMENTS: readonly RadioAnnouncementSpec[] = [
 ];
 
 /**
- * Soviet OIRT УКВ broadcast stations across 66.0–74.0 МГц
+ * Soviet OIRT FM broadcast stations across 66.0–74.0 MHZ
  * (10 total songs distributed cleanly across 5 tunable stations + inter-song state broadcasts).
  */
 export const RADIO_STATIONS: readonly SovietRadioStationSpec[] = [ // oxlint-disable-line react/only-export-components
   {
     freqMHz: 66.8,
     bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "ГОСТЕЛЕРАДИО // СМЕНА-84",
-    city: "СМЕНА-84",
+    label: "STATE RADIO // STATE-84",
+    city: "STATE-84",
     tracks: [
       "/music/night-shift.mp3",
       "/audio/radio/songs/track_08_sector_84.wav",
@@ -329,8 +333,8 @@ export const RADIO_STATIONS: readonly SovietRadioStationSpec[] = [ // oxlint-dis
   {
     freqMHz: 68.4,
     bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "РАДИО МАЯК",
-    city: "МАЯК",
+    label: "RADIO MAYAK",
+    city: "MAYAK",
     tracks: [
       "/audio/radio/songs/track_09_sektor_84_1.wav",
       "/audio/radio/songs/track_01.wav",
@@ -339,8 +343,8 @@ export const RADIO_STATIONS: readonly SovietRadioStationSpec[] = [ // oxlint-dis
   {
     freqMHz: 70.0,
     bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "ГОЛОС МОСКВЫ",
-    city: "МОСКВА",
+    label: "SOVIET SYNTH // SYNTH-84",
+    city: "SYNTH-84",
     tracks: [
       "/audio/radio/songs/track_03_soviet_synthwave.wav",
       "/audio/radio/songs/track_02.wav",
@@ -349,8 +353,8 @@ export const RADIO_STATIONS: readonly SovietRadioStationSpec[] = [ // oxlint-dis
   {
     freqMHz: 71.6,
     bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "МИНСК УКВ",
-    city: "МИНСК",
+    label: "RADIO WAVE-84",
+    city: "WAVE-84",
     tracks: [
       "/audio/radio/songs/track_04.wav",
       "/audio/radio/songs/track_05.wav",
@@ -359,8 +363,8 @@ export const RADIO_STATIONS: readonly SovietRadioStationSpec[] = [ // oxlint-dis
   {
     freqMHz: 73.2,
     bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "РАДИО ВОЛНА-84",
-    city: "ВОЛНА-84",
+    label: "SECTOR-84 FM",
+    city: "SECTOR-84",
     tracks: [
       "/audio/radio/songs/track_06.wav",
       "/audio/radio/songs/track_07.wav",
@@ -369,7 +373,7 @@ export const RADIO_STATIONS: readonly SovietRadioStationSpec[] = [ // oxlint-dis
 ];
 
 const INITIAL_FREQ_MHZ = 66.8;
-const MHZ_PER_WHEEL_REV = 2.0; // 4 full turns across 66.00..74.00 МГц
+const MHZ_PER_WHEEL_REV = 2.0; // 4 full turns across 66.00..74.00 MHZ
 const INITIAL_WHEEL_ANGLE =
   ((INITIAL_FREQ_MHZ - RADIO_FREQ_MIN_MHZ) / MHZ_PER_WHEEL_REV) * Math.PI * 2;
 const DIAL_REDRAW_INTERVAL_MS = 72; // <= 15 Hz (~13.9 Hz) while actively dragging
@@ -409,6 +413,12 @@ function createPixelTexture(
   tex.generateMipmaps = false;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
+  if (draw) {
+    registerKremlinCanvasRedraw(canvas, tex, (c, w, h) => {
+      c.imageSmoothingEnabled = false;
+      draw(c, w, h);
+    });
+  }
   return tex;
 }
 
@@ -800,7 +810,7 @@ function paintRadioDialCanvas(
   ctx.lineWidth = 2;
   ctx.strokeRect(5, 5, w - 10, h - 10);
 
-  // Left 6Е1П Magic Eye Tube bay (x = 8..98, y = 8..184)
+  // Left 6E1P Magic Eye Tube bay (x = 8..98, y = 8..184)
   ctx.fillStyle = isPowered ? "#18291b" : "#473f33";
   ctx.fillRect(8, 8, 90, h - 16);
   ctx.strokeStyle = isPowered ? "#110c06" : "#2b241c";
@@ -874,7 +884,7 @@ function paintRadioDialCanvas(
   ctx.arc(eyeCx, eyeCy, eyeR, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Horizontal 6Е1П Magic Eye phosphor bar (x = 16..90, y = 114..128)
+  // Horizontal 6E1P Magic Eye phosphor bar (x = 16..90, y = 114..128)
   const barX = 16;
   const barY = 114;
   const barW = 74;
@@ -891,11 +901,11 @@ function paintRadioDialCanvas(
   ctx.lineWidth = 1.5;
   ctx.strokeRect(barX, barY, barW, barH);
 
-  // 6Е1П Header & Status
+  // 6E1P Header & Status
   ctx.textAlign = "center";
-  ctx.font = 'bold 18px "VT323", monospace';
+  ctx.font = 'bold 13px "Kremlin", "VT323", monospace';
   ctx.fillStyle = isPowered ? "#39ff7a" : "#e8dfc8";
-  ctx.fillText("ИНД. 6Е1П", eyeCx, 30);
+  ctx.fillText("IND. 6E1P", eyeCx, 30, 80);
 
   ctx.fillStyle = isPowered ? "#110c06" : "#383127";
   ctx.fillRect(14, 138, 78, 32);
@@ -911,17 +921,18 @@ function paintRadioDialCanvas(
     : strength > 0.65
       ? "#39ff7a"
       : "#fff6d6";
-  ctx.font = 'bold 19px "VT323", monospace';
+  ctx.font = 'bold 14px "Kremlin", "VT323", monospace';
   ctx.fillText(
     !isPowered
-      ? "ОТКЛ."
+      ? "OFF"
       : strength > 0.72
-        ? "ТОЧНО"
+        ? "LOCKED"
         : strength > 0.35
-          ? "СИГНАЛ"
-          : "ПОИСК",
+          ? "SIGNAL"
+          : "TUNING",
     eyeCx,
     160,
+    72,
   );
 
   // Right Dial Face Border & Header (x = 104..504)
@@ -936,13 +947,13 @@ function paintRadioDialCanvas(
 
   // Top-left scale title
   ctx.textAlign = "left";
-  ctx.font = 'bold 16px "Kremlin", "Courier Prime", monospace';
+  ctx.font = 'bold 15px "Kremlin", "Courier Prime", monospace';
   if (isPowered) {
     ctx.fillStyle = "#fff6d6";
-    ctx.fillText("УКВ • ОКЕАН-84", dialX + 11, 31);
+    ctx.fillText("OKEAN-84 // FM - SW", dialX + 11, 31, 204);
   }
   ctx.fillStyle = isPowered ? "#110c06" : "#e8dfc8";
-  ctx.fillText("УКВ • ОКЕАН-84", dialX + 10, 30);
+  ctx.fillText("OKEAN-84 // FM - SW", dialX + 10, 30, 204);
 
   // Large Live Frequency Readout Box (upper right)
   const boxX = 326;
@@ -965,8 +976,8 @@ function paintRadioDialCanvas(
     : nearest
       ? "#39ff7a"
       : "#fff6d6";
-  ctx.font = 'bold 26px "VT323", monospace';
-  ctx.fillText(`${freqMHz.toFixed(2)} МГц`, boxX + boxW / 2, boxY + 24);
+  ctx.font = 'bold 21px "Kremlin", "VT323", monospace';
+  ctx.fillText(`${freqMHz.toFixed(2)} MHZ`, boxX + boxW / 2, boxY + 24, boxW - 10);
 
   // Horizontal scale rail
   const railY = 98;
@@ -984,7 +995,7 @@ function paintRadioDialCanvas(
   ctx.lineTo(SCALE_PX_RIGHT + 4, railY);
   ctx.stroke();
 
-  // Minor (0.2 МГц), Odd (1.0 МГц) & Major (2.0 МГц) Ticks + Bold Numerals
+  // Minor (0.2 MHZ), Odd (1.0 MHZ) & Major (2.0 MHZ) Ticks + Bold Numerals
   for (let i = 0; i <= 40; i++) {
     const f = RADIO_FREQ_MIN_MHZ + i * 0.2;
     const tx = THREE.MathUtils.lerp(SCALE_PX_LEFT, SCALE_PX_RIGHT, i / 40);
@@ -1030,14 +1041,14 @@ function paintRadioDialCanvas(
 
   // Unit legend right of 74 mark
   ctx.textAlign = "center";
-  ctx.font = 'bold 16px "VT323", monospace';
+  ctx.font = 'bold 13px "Kremlin", "VT323", monospace';
   ctx.lineWidth = 3;
   ctx.strokeStyle = isPowered ? "#110c06" : "#2b241c";
-  ctx.strokeText("МГц", 491, railY - 12);
+  ctx.strokeText("MHZ", 491, railY - 12);
   ctx.fillStyle = isPowered ? "#fff6d6" : "#e8dfc8";
-  ctx.fillText("МГц", 491, railY - 12);
+  ctx.fillText("MHZ", 491, railY - 12);
 
-  // All 5 Station Markers & Bold Cyrillic Names Below Rail
+  // All 5 Station Markers & Bold English Station Names Below Rail
   for (let i = 0; i < RADIO_STATIONS.length; i++) {
     const st = RADIO_STATIONS[i];
     const ratio = frequencyToRatio(st.freqMHz);
@@ -1087,8 +1098,8 @@ function paintRadioDialCanvas(
       : isLocked
         ? "#39ff7a"
         : "#fff6d6";
-    ctx.font = 'bold 17px "VT323", monospace';
-    ctx.fillText(st.city, sx, pillY + 17);
+    ctx.font = 'bold 12px "Kremlin", "VT323", monospace';
+    ctx.fillText(st.city, sx, pillY + 16, pillW - 6);
   }
 
   // Lower band status bar
@@ -1112,15 +1123,16 @@ function paintRadioDialCanvas(
     : nearest
       ? "#39ff7a"
       : "#fff6d6";
-  ctx.font = 'bold 17px "VT323", monospace';
+  ctx.font = 'bold 14px "Kremlin", "VT323", monospace';
   ctx.fillText(
     !isPowered
-      ? "ПИТАНИЕ ОТКЛЮЧЕНО // НАЖМИТЕ «СЕТЬ»"
+      ? 'POWER OFF // PRESS "POWER"'
       : nearest
-        ? `★ ПРИЁМ: ${nearest.label} (${nearest.freqMHz.toFixed(2)} МГц)`
-        : "ДИАПАЗОН УКВ 66–74 МГц // НАСТРОЙКА",
+        ? `★ LOCKED: ${nearest.label} (${nearest.freqMHz.toFixed(2)} MHZ)`
+        : "FM BAND 66-74 MHZ // TUNING",
     barBottomX + 10,
     barBottomY + 18,
+    barBottomW - 18,
   );
 }
 
@@ -1184,7 +1196,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         ctx.strokeRect(3, 3, w - 6, h - 6);
       });
 
-      // Riveted Brass Inventory Tag (`ЗИП / ИНВ. № 84-19`)
+      // Riveted Brass Inventory Tag (`SPARES / INV. NO. 84-19`)
       const inventoryTag = createPixelTexture(256, 64, (ctx, w, h) => {
         ctx.fillStyle = "#2b2414";
         ctx.fillRect(0, 0, w, h);
@@ -1192,15 +1204,15 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         ctx.lineWidth = 4;
         ctx.strokeRect(2, 2, w - 4, h - 4);
         ctx.fillStyle = "#e6cf85";
-        ctx.font = 'bold 22px "Kremlin", "Courier Prime", monospace';
+        ctx.font = 'bold 19px "Kremlin", "Courier Prime", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("ЗИП / ИНВ. № 84-19", w / 2, 30);
+        ctx.fillText("SPARES / INV. NO. 84-19", w / 2, 30, w - 18);
         ctx.fillStyle = "#d9c698";
-        ctx.font = 'bold 18px "VT323", monospace';
-        ctx.fillText("БЩУ-4 • СТОЛ ДЕЖУРНОГО", w / 2, 52);
+        ctx.font = 'bold 15px "Kremlin", "VT323", monospace';
+        ctx.fillText("MCR-4 • DUTY TABLE", w / 2, 52, w - 18);
       });
 
-      // Radio Logbook Cover (`ЖУРНАЛ РАДИОЧАСТОТ`)
+      // Radio Logbook Cover (`RADIO FREQUENCY LOG`)
       const logbookCover = createPixelTexture(256, 192, (ctx, w, h) => {
         ctx.fillStyle = "#54493b";
         ctx.fillRect(0, 0, w, h);
@@ -1217,20 +1229,20 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         ctx.lineWidth = 3;
         ctx.strokeRect(52, 32, w - 80, 100);
         ctx.fillStyle = "#141414";
-        ctx.font = 'bold 14px "Courier Prime", monospace';
+        ctx.font = 'bold 12px "Kremlin", "Courier Prime", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("МИНЭНЕРГО СССР • БЩУ-4", 138, 54);
+        ctx.fillText("USSR MINENERGO • MCR-4", 138, 54, 160);
         ctx.fillStyle = "#8a1812";
         ctx.font = 'bold 17px "Kremlin", "Courier Prime", monospace';
-        ctx.fillText("ЖУРНАЛ", 138, 82);
-        ctx.fillText("РАДИОЧАСТОТ", 138, 104);
+        ctx.fillText("RADIO", 138, 82, 160);
+        ctx.fillText("FREQUENCY LOG", 138, 104, 160);
         ctx.fillStyle = "#141414";
-        ctx.font = 'bold 14px "Courier Prime", monospace';
-        ctx.fillText("1984 Г. // УКВ • КВ", 138, 124);
+        ctx.font = 'bold 12px "Kremlin", "Courier Prime", monospace';
+        ctx.fillText("1984 // FM - SW", 138, 124, 160);
         // Bottom ink smudge & number
         ctx.fillStyle = "#ded5b8";
-        ctx.font = 'bold 16px "VT323", monospace';
-        ctx.fillText("СЕКТОР 84  № 14-Р", 138, 166);
+        ctx.font = 'bold 15px "Kremlin", "VT323", monospace';
+        ctx.fillText("SECTOR 84  NO. 14-R", 138, 166, 176);
       });
 
       // Radio Woven Speaker Cloth
@@ -1259,7 +1271,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         ctx.fillRect(0, 0, w, h);
       });
 
-      // Raised Chrome/Red Radio Model Badge (`ОКЕАН-84 // УКВ • КВ`)
+      // Raised Chrome/Red Radio Model Badge (`OKEAN-84 // FM - SW`)
       const modelBadge = createPixelTexture(256, 64, (ctx, w, h) => {
         ctx.fillStyle = "#181c1a";
         ctx.fillRect(0, 0, w, h);
@@ -1269,15 +1281,15 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         ctx.lineWidth = 4;
         ctx.strokeRect(3, 3, w - 6, h - 6);
         ctx.fillStyle = "#ffffff";
-        ctx.font = 'bold 26px "Kremlin", "Courier Prime", monospace';
+        ctx.font = 'bold 24px "Kremlin", "Courier Prime", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("★ ОКЕАН-84", w / 2, 34);
+        ctx.fillText("★ OKEAN-84", w / 2, 34, w - 24);
         ctx.fillStyle = "#ffd980";
-        ctx.font = 'bold 16px "VT323", monospace';
-        ctx.fillText("УКВ • КВ1 • СВ • ДВ", w / 2, 53);
+        ctx.font = 'bold 14px "Kremlin", "VT323", monospace';
+        ctx.fillText("FM • SW1 • MW • LW", w / 2, 53, w - 24);
       });
 
-      // Push-Switch Legend Strip (`СЕТЬ  УКВ  ЭФИР  СВ  ДВ`)
+      // Push-Switch Legend Strip (`POWER  FM  BCAST  MW  LW`)
       const bandLegend = createPixelTexture(256, 36, (ctx, w, h) => {
         ctx.fillStyle = "#181c1a";
         ctx.fillRect(0, 0, w, h);
@@ -1285,9 +1297,9 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         ctx.lineWidth = 2;
         ctx.strokeRect(1, 1, w - 2, h - 2);
         ctx.fillStyle = "#e6dec3";
-        ctx.font = 'bold 16px "VT323", monospace';
+        ctx.font = 'bold 12px "Kremlin", "VT323", monospace';
         ctx.textAlign = "center";
-        const labels = ["СЕТЬ", "УКВ", "ЭФИР", "СВ", "ДВ"];
+        const labels = ["POWER", "FM", "BCAST", "MW", "LW"];
         labels.forEach((lbl, idx) => {
           ctx.fillStyle =
             idx === 0
@@ -1297,11 +1309,11 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
                 : idx === 2
                   ? "#39ff7a"
                   : "#e6dec3";
-          ctx.fillText(lbl, 28 + idx * 50, 23);
+          ctx.fillText(lbl, 28 + idx * 50, 23, 46);
         });
       });
 
-      // Tuning Dial Knob Plate (`НАСТРОЙКА`)
+      // Tuning Dial Knob Plate (`TUNING`)
       const tuningLabel = createPixelTexture(160, 40, (ctx, w, h) => {
         ctx.fillStyle = "#161a18";
         ctx.fillRect(0, 0, w, h);
@@ -1311,10 +1323,10 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         ctx.fillStyle = "#e6dec3";
         ctx.font = 'bold 20px "Kremlin", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("НАСТРОЙКА", w / 2, 27);
+        ctx.fillText("TUNING", w / 2, 27, w - 16);
       });
 
-      // Dynamic Backlit Glass Tuning Dial (starts ON & locked to Main Soundtrack 66.80 МГц)
+      // Dynamic Backlit Glass Tuning Dial (starts ON & locked to Main Soundtrack 66.80 MHZ)
       const dial = createPixelTexture(
         DIAL_CANVAS_W,
         DIAL_CANVAS_H,
@@ -1601,7 +1613,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       ];
       const tabletopTrim = mergeStaticGeometries(trimParts);
 
-      // 4. Merged slotted speaker louver grille on front of ОКЕАН-84
+      // 4. Merged slotted speaker louver grille on front of OKEAN-84
       const grilleParts: Array<{
         geometry: THREE.BufferGeometry;
         position?: readonly [number, number, number];
@@ -1640,7 +1652,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       }
       const wheelKnurls = mergeStaticGeometries(knurlParts);
 
-      // 6. Thick black insulated power cord looping from radio rear to wall outlet (`220В`)
+      // 6. Thick black insulated power cord looping from radio rear to wall outlet (`220V`)
       const cordCurve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(0.122, 0.835, -0.048),
         new THREE.Vector3(0.24, 0.805, -0.19),
@@ -2065,6 +2077,23 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       handleProgramEndedRef.current = advanceStationProgram;
     }, [advanceStationProgram]);
 
+    useEffect(() => {
+      return onKremlinFontReady(() => {
+        const dialCanvas = textures.dial.image as HTMLCanvasElement | undefined;
+        const ctx = dialCanvas?.getContext("2d");
+        if (dialCanvas && ctx) {
+          paintRadioDialCanvas(
+            ctx,
+            dialCanvas.width,
+            dialCanvas.height,
+            freqRef.current,
+            powerOnRef.current,
+          );
+          textures.dial.needsUpdate = true;
+        }
+      });
+    }, [textures.dial]);
+
     const syncTuningVisuals = useCallback((forceDialRedraw: boolean) => {
       const freq = freqRef.current;
       if (wheelGroupRef.current) {
@@ -2126,8 +2155,8 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           .getState()
           .setHoveredControlHint(
             nextPower
-              ? "РАДИО «ОКЕАН-84» (СЕТЬ): Click to Power OFF Radio"
-              : "РАДИО «ОКЕАН-84» (СЕТЬ): Click to Power ON Radio",
+              ? 'RADIO "OKEAN-84" (POWER): Click to Power OFF Radio'
+              : 'RADIO "OKEAN-84" (POWER): Click to Power ON Radio',
           );
       }
 
@@ -2492,7 +2521,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         rotation={[rotation[0], rotation[1], rotation[2]]}
       >
         {/* ============================================================
-            1. INDUSTRIAL SOVIET DUTY TABLE (`Столик дежурного`, 0.85m × 0.55m × 0.78m)
+            1. INDUSTRIAL SOVIET DUTY TABLE (Duty Table, 0.85m × 0.55m × 0.78m)
            ============================================================ */}
         <mesh
           geometry={geos.tableFrame}
@@ -2552,7 +2581,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           <boxGeometry args={[0.85, 0.032, 0.55]} />
         </mesh>
 
-        {/* Riveted Brass Inventory Tag (`ЗИП / ИНВ. № 84-19`) on Front Apron */}
+        {/* Riveted Brass Inventory Tag (`SPARES / INV. NO. 84-19`) on Front Apron */}
         <group position={[-0.265, 0.706, 0.264]}>
           <mesh
             material={mats.brass}
@@ -2574,7 +2603,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           </mesh>
         </group>
 
-        {/* Slightly Ajar Utility Drawer (`Ящик дежурного`) + Visible Tools Inside */}
+        {/* Slightly Ajar Utility Drawer (Duty Drawer) + Visible Tools Inside */}
         <group position={[0.09, 0.692, 0.075]}>
           {/* Drawer Tray Box */}
           <mesh
@@ -2639,7 +2668,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           >
             <cylinderGeometry args={[0.008, 0.008, 0.005, 10]} />
           </mesh>
-          {/* Visible Ajar Drawer Contents: ЗИП Box, Screwdriver & Paper Slip */}
+          {/* Visible Ajar Drawer Contents: Spares Box, Screwdriver & Paper Slip */}
           <mesh
             position={[-0.08, -0.012, 0.195]}
             rotation={[0, 0.14, 0]}
@@ -2682,7 +2711,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         {/* ============================================================
             LOWER SHELF PROPS (`y = 0.227m`)
            ============================================================ */}
-        {/* A. Metallic Tea-Glass Holder (`Подстаканник`) + 10-Faceted Tea Glass */}
+        {/* A. Metallic Tea-Glass Holder (`Podstakannik`) + 10-Faceted Tea Glass */}
         <group position={[-0.23, 0.227, 0.06]} rotation={[0, 0.35, 0]}>
           <mesh
             position={[0, 0.004, 0]}
@@ -2747,7 +2776,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           </mesh>
         </group>
 
-        {/* B. Battered Cardboard/Cloth Radio Logbook (`ЖУРНАЛ РАДИОЧАСТОТ`) */}
+        {/* B. Battered Cardboard/Cloth Radio Logbook (`RADIO FREQUENCY LOG`) */}
         <group position={[0.02, 0.227, 0.02]} rotation={[0, -0.18, 0]}>
           <mesh
             position={[0, 0.0025, 0]}
@@ -2854,7 +2883,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           </mesh>
         </group>
 
-        {/* Power Cord, Leg P-Clips & Wall Socket (`220В` on `+X` wainscot at `local z = -0.402`) */}
+        {/* Power Cord, Leg P-Clips & Wall Socket (`220V` on `+X` wainscot at `local z = -0.402`) */}
         <mesh
           geometry={geos.powerCord}
           material={mats.rubberBlack}
@@ -2900,7 +2929,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         </group>
 
         {/* ============================================================
-            2. VINTAGE SOVIET TABLETOP RADIO (`ОКЕАН-84 / ВЭФ` HYBRID RECEIVER)
+            2. VINTAGE SOVIET TABLETOP RADIO (`OKEAN-84 / VEF` HYBRID RECEIVER)
            ============================================================ */}
         <group
           ref={radioUnitGroupRef}
@@ -2958,7 +2987,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
             <boxGeometry args={[0.432, 0.016, 0.194]} />
           </mesh>
 
-          {/* Folded Chrome Top Carry Handle (`Ручка переноски`) */}
+          {/* Folded Chrome Top Carry Handle */}
           <group position={[0, 0.276, -0.02]}>
             {([-0.15, 0.15] as const).map((hx, idx) => (
               <mesh
@@ -3048,7 +3077,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
             raycast={NOOP_RAYCAST}
           />
 
-          {/* Raised Chrome & Red Soviet Model Badge (`ОКЕАН-84 // УКВ • КВ`) */}
+          {/* Raised Chrome & Red Soviet Model Badge (`OKEAN-84 // FM - SW`) */}
           <group position={[-0.066, 0.114, 0.106]}>
             <mesh
               material={mats.chrome}
@@ -3070,7 +3099,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
             </mesh>
           </group>
 
-          {/* Interactive `СЕТЬ` Power Push-Switch + Decorative Band Push-Switches (`УКВ`, `КВ1`, `СВ`, `ДВ`) */}
+          {/* Interactive `POWER` Push-Switch + Band Push-Switches (`FM`, `BCAST`, `MW`, `LW`) */}
           <mesh
             position={[-0.066, 0.043, 0.096]}
             castShadow={false}
@@ -3096,8 +3125,8 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
                 .getState()
                 .setHoveredControlHint(
                   powerOnRef.current
-                    ? "РАДИО «ОКЕАН-84» (СЕТЬ): Click to Power OFF Radio"
-                    : "РАДИО «ОКЕАН-84» (СЕТЬ): Click to Power ON Radio",
+                    ? 'RADIO "OKEAN-84" (POWER): Click to Power OFF Radio'
+                    : 'RADIO "OKEAN-84" (POWER): Click to Power ON Radio',
                 );
             }}
             onPointerOut={(e) => {
@@ -3132,7 +3161,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
               <boxGeometry args={[0.038, 0.014, 0.022]} />
             </mesh>
           </group>
-          {/* Interactive `ЭФИР` State Broadcast Push-Switch (Triggers / Advances `govorit_moskva` + `01`–`06`) */}
+          {/* Interactive `BCAST` State Broadcast Push-Switch (Triggers / Advances `govorit_moskva` + `01`–`06`) */}
           <group
             onPointerOver={(e) => {
               e.stopPropagation();
@@ -3143,7 +3172,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
               useGameStore
                 .getState()
                 .setHoveredControlHint(
-                  "РАДИО «ОКЕАН-84» (ЭФИР / СВОДКА): Click to Trigger / Skip State Broadcast",
+                  'RADIO "OKEAN-84" (BCAST): Click to Trigger / Skip State Broadcast',
                 );
             }}
             onPointerOut={(e) => {
@@ -3280,7 +3309,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           </group>
 
           {/* ============================================================
-              WARM BACKLIT GLASS TUNING DIAL + 6Е1П MAGIC EYE + 3D NEEDLE
+              WARM BACKLIT GLASS TUNING DIAL + 6E1P MAGIC EYE + 3D NEEDLE
               (Cleanly proud of z = 0.085 Bakelite front face, ZERO front glass cover,
                THREE.DoubleSide + toneMapped={false} + fog={false})
              ============================================================ */}
@@ -3385,7 +3414,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
 
           {/* ============================================================
               3. INTERACTIVE 3D KNURLED BAKELITE & BRASS TUNING WHEEL
-              (Tuning wheel & СЕТЬ power button are the ONLY raycastable colliders!)
+              (Tuning wheel, BCAST & POWER buttons are the ONLY raycastable colliders!)
              ============================================================ */}
           <mesh
             position={[0.158, 0.114, 0.102]}
@@ -3413,7 +3442,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
               useGameStore
                 .getState()
                 .setHoveredControlHint(
-                  "РАДИО «ОКЕАН-84» (НАСТРОЙКА УКВ): Drag Tuning Wheel or Scroll (66.00–74.00 МГц)",
+                  'RADIO "OKEAN-84" (TUNING FM): Drag Tuning Wheel or Scroll (66.00-74.00 MHZ)',
                 );
             }}
             onPointerOut={(e) => {

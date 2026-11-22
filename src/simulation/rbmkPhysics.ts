@@ -515,11 +515,11 @@ export function stepReactorSimulation(
   // Fuel Channel Burnup & Refueling Accounting (37 RBMK Fuel Channels on UNIT A-2)
   const spentCount = Object.keys(state.coreTileAnomalies).length;
   const fuelEfficiency = Math.max(0.55, 1 - spentCount * 0.065);
-  if (tutorialPhase === 'COMPLETED' && state.thermalPower > 300 && spentCount < 6) {
+  if (tutorialPhase === 'COMPLETED' && state.thermalPower > 300 && spentCount < 4) {
     const burnRate = 0.55 + 0.65 * (state.thermalPower / NOMINAL_THERMAL_MW);
     state.fuelBurnupTimer += burnRate * delta;
-    if (state.fuelBurnupTimer >= 42.0) {
-      state.fuelBurnupTimer -= 42.0;
+    if (state.fuelBurnupTimer >= 80.0) {
+      state.fuelBurnupTimer -= 80.0;
       let nextChannel: number | undefined = SPENT_FUEL_CHANNEL_ORDER.find(
         (ch) => !state.coreTileAnomalies[ch]
       );
@@ -738,17 +738,27 @@ export function stepReactorSimulation(
   if (state.drumPressure < 58 && state.drumWaterLevel > 45 && netWaterMassMWe > 0 && state.feedwaterValve <= 0.65) {
     // Startup high-level overflow weir returns cold excess smoothly during initial drum boil-up
     dWaterMmPerSec = (52 - state.drumWaterLevel) * 0.55;
-  } else if (Math.abs(netWaterMassMWe) < 34 && Math.abs(state.drumWaterLevel) < 68) {
-    // Gentle natural level self-centering within nominal ±34 MW balance band
+  } else if (Math.abs(netWaterMassMWe) <= 45) {
+    // Stronger automatic drum-separator level self-centering within ±45 MW balance band
     dWaterMmPerSec += -state.drumWaterLevel * 0.22;
+  } else {
+    // Proportional drum-separator overflow / automatic level damping across all operating pressures
+    dWaterMmPerSec += -state.drumWaterLevel * 0.045;
   }
 
-  state.drumWaterLevel = clamp(state.drumWaterLevel + dWaterMmPerSec * delta, -400, 400);
+  state.drumWaterLevel += dWaterMmPerSec * delta;
 
-  // Wet Steam Carryover (`drumWaterLevel > +100mm`): floods moisture separators and reduces charger efficiency
+  // Holding BUBBLER DRAIN on UNIT B actively dumps excess separator water (> +50 mm) into condensate return
+  if (state.bubblerDraining && state.drumWaterLevel > 50) {
+    state.drumWaterLevel -= 95 * delta;
+  }
+
+  state.drumWaterLevel = clamp(state.drumWaterLevel, -400, 400);
+
+  // Wet Steam Carryover (`drumWaterLevel > +180mm`): floods moisture separators and mildly reduces charger efficiency
   state.wetSteamSeverity =
-    state.drumWaterLevel > 100
-      ? clamp((state.drumWaterLevel - 100) / 170, 0, 1)
+    state.drumWaterLevel > 180
+      ? clamp((state.drumWaterLevel - 180) / 200, 0, 1)
       : 0;
 
   // 3. Bubbler Pool Back-Pressure, Automatic Steam Generator Intake & Relief
@@ -850,7 +860,7 @@ export function stepReactorSimulation(
   // ============================================================================
   // STAGE 4: STATION BATTERY STORAGE, SINGLE GRID WHEEL & RADIATION (UNIT C <-> UNIT A)
   // ============================================================================
-  const wetSteamEff = 1.0 - state.wetSteamSeverity * 0.25;
+  const wetSteamEff = 1.0 - state.wetSteamSeverity * 0.12;
   const vacEff = state.condenserVacActive ? 1.0 : 0.82;
   state.energyCreatedMW =
     state.az5Active || state.coreMeltdown || state.steamExplosion

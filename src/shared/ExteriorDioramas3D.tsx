@@ -1,6 +1,7 @@
 import { useFrame } from "@react-three/fiber";
 import React, { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { registerKremlinCanvasRedraw } from "./kremlinFontReady";
 import { useGameStore } from "./useGameStore";
 
 export const NOOP_RAYCAST = () => null;
@@ -65,7 +66,7 @@ function computeDioramaGridState(): DioramaGridState {
     }
   }
 
-  // Party Priority: State Vodka Distillery "КРИСТАЛЛ-84" draws VIP power + reserve
+  // Party Priority: State Vodka Distillery "KRISTALL-84" draws VIP power + reserve
   // batteries at 100% until BOTH grid output and battery sink below 12%, dying dead last.
   const vodkaSupply = s.isBlackout
     ? 0
@@ -183,6 +184,10 @@ function createNearestCanvasTexture(
   tex.generateMipmaps = false;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
+  registerKremlinCanvasRedraw(canvas, tex, (c, w, h) => {
+    c.imageSmoothingEnabled = false;
+    draw(c, w, h);
+  });
   return tex;
 }
 
@@ -217,7 +222,7 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           ctx.textAlign = "center";
           ctx.fillText(plaqueTitle, w / 2, 29, w - 24);
           ctx.fillStyle = "#e6dec3";
-          ctx.font = 'bold 17px "VT323", monospace';
+          ctx.font = 'bold 15px "Kremlin", "VT323", monospace';
           ctx.fillText(plaqueSub, w / 2, 54, w - 24);
         }),
       [plaqueTitle, plaqueSub],
@@ -402,7 +407,7 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
 /**
  * Distinct 3-wide Soviet Industrial Observation Window for Window 2 (`+Z` Back Wall):
  * 2 vertical steel mullions + upper horizontal transom bar with bolted gusset plates,
- * subtle corner frost/condensation strips, mullion-mounted `КГС-84` frost thermometer box,
+ * subtle corner frost/condensation strips, mullion-mounted `KGS-84` frost thermometer box,
  * and an interior painted-steel finned radiator pipe + cable conduit along the lower frame.
  * NO curtains, NO venetian blinds, NO squeegee, NO exterior catwalk.
  */
@@ -426,7 +431,7 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           ctx.textAlign = "center";
           ctx.fillText(plaqueTitle, w / 2, 29, w - 24);
           ctx.fillStyle = "#e6dec3";
-          ctx.font = 'bold 17px "VT323", monospace';
+          ctx.font = 'bold 15px "Kremlin", "VT323", monospace';
           ctx.fillText(plaqueSub, w / 2, 54, w - 24);
         }),
       [plaqueTitle, plaqueSub],
@@ -443,9 +448,9 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           ctx.fillStyle = "#e6dec3";
           ctx.fillRect(7, 8, w - 14, 72);
           ctx.fillStyle = "#141414";
-          ctx.font = 'bold 11px "VT323", monospace';
+          ctx.font = 'bold 11px "Kremlin", "VT323", monospace';
           ctx.textAlign = "center";
-          ctx.fillText("КГС-84", w / 2, 20);
+          ctx.fillText("KGS-84", w / 2, 20, w - 16);
           ctx.fillStyle = "#1c4a8a";
           ctx.fillRect(27, 25, 10, 44);
           ctx.fillStyle = "#3399ff";
@@ -603,7 +608,7 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           />
         </mesh>
 
-        {/* Mullion-Mounted Soviet Frost Thermometer & Dosimeter Box (КГС-84) */}
+        {/* Mullion-Mounted Soviet Frost Thermometer & Dosimeter Box (KGS-84) */}
         <group position={[mullionXs[0], -0.08, 0.12]}>
           <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
             <boxGeometry args={[0.125, 0.27, 0.045]} />
@@ -1749,9 +1754,9 @@ const WIN1_SCRATCH_OBJ = new THREE.Object3D();
 
 /**
  * Window 1 Elevated Bird's-Eye Industrial Panorama (`+X` Right Wall, 1:1 42m Deep Stage):
- * Tier 1 (`2m–14m`): Stepped RBMK turbine & reactor roofs, ВТ-2 lattice stack, 500kV switchyard, patrol trucks & Cherenkov glow.
+ * Tier 1 (`2m–14m`): Stepped RBMK turbine & reactor roofs, VT-2 lattice stack, 500kV switchyard, patrol trucks & Cherenkov glow.
  * Tier 2 (`15m–26m`): Ice-rimmed cooling reservoir, twin 11.5m hyperbolic cooling towers, VIP Vodka Pipeline & Spirit-Tanker train.
- * Tier 3 (`32m–39m`): Far industrial ridge & sprawling State Vodka Distillery «КРИСТАЛЛ-84» with rotating 3D Red Star.
+ * Tier 3 (`32m–39m`): Far industrial ridge & sprawling State Vodka Distillery "KRISTALL-84" with rotating 3D Red Star.
  */
 const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
   const stageGroupRef = useRef<THREE.Group>(null);
@@ -2160,12 +2165,12 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
         ctx.lineWidth = 5;
         ctx.strokeRect(3, 3, w - 6, h - 6);
         ctx.fillStyle = "#ffe89e";
-        ctx.font = 'bold 26px "Kremlin", "Consolas", monospace';
+        ctx.font = 'bold 24px "Kremlin", "Consolas", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("★ СЛАВА МИРНОМУ АТОМУ! ★", w / 2, 45);
+        ctx.fillText("★ GLORY TO PEACEFUL ATOM! ★", w / 2, 45, w - 28);
         ctx.fillStyle = "#ffffff";
-        ctx.font = 'bold 17px "VT323", monospace';
-        ctx.fillText("АЭС ИМ. ЛЕНИНА // КПП-4 // СЕКТОР 84", w / 2, 74);
+        ctx.font = 'bold 16px "Kremlin", "VT323", monospace';
+        ctx.fillText("V.I. LENIN NUCLEAR PLANT // GATE 4 // SECTOR 84", w / 2, 74, w - 28);
       }),
     [],
   );
@@ -2266,9 +2271,9 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
         ctx.fillStyle = "#c82b23";
         ctx.fillRect(0, 4, w, 7);
         ctx.fillStyle = "#ffe596";
-        ctx.font = 'bold 14px "Kremlin", "Consolas", monospace';
+        ctx.font = 'bold 14px "Kremlin", "VT323", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("ЦИСТЕРНА — СПИРТ", w / 2, 24);
+        ctx.fillText("SPIRIT TANKER", w / 2, 24, w - 10);
       }),
     [],
   );
@@ -2386,12 +2391,12 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.lineJoin = "round";
-        ctx.font = 'bold 94px "Kremlin", "Consolas", monospace';
+        ctx.font = 'bold 90px "Kremlin", "Consolas", monospace';
         ctx.strokeStyle = "#ff1e1e";
         ctx.lineWidth = 14;
-        ctx.strokeText("ЗАВОД ВОДКИ «КРИСТАЛЛ-84»", w / 2, h / 2 + 4);
+        ctx.strokeText('VODKA PLANT "KRISTALL-84"', w / 2, h / 2 + 4, w - 64);
         ctx.fillStyle = "#ffe680";
-        ctx.fillText("ЗАВОД ВОДКИ «КРИСТАЛЛ-84»", w / 2, h / 2 + 4);
+        ctx.fillText('VODKA PLANT "KRISTALL-84"', w / 2, h / 2 + 4, w - 64);
       }),
     [],
   );
@@ -2502,7 +2507,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
         { x: -0.6, y: Y(1.08), z: -16.45, size: 0.15 },
         { x: 2.15, y: Y(1.08), z: -19.2, size: 0.15 },
         { x: -0.6, y: Y(1.08), z: -21.95, size: 0.15 },
-        // 3 Staggered ВТ-2 Tall Ventilation Stack Beacons (+6.2, -7.5)
+        // 3 Staggered VT-2 Tall Ventilation Stack Beacons (+6.2, -7.5)
         { x: 6.2, y: Y(0.25), z: -7.1, size: 0.16 },
         { x: 6.2, y: Y(2.45), z: -7.1, size: 0.18 },
         { x: 6.2, y: Y(5.48), z: -7.5, size: 0.24 },
@@ -3135,7 +3140,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
       starHaloMatRef.current.opacity = 0.56 * vodkaFlicker;
     }
 
-    // 2. Slow-Moving Soviet Spirit-Tanker Train (ЦИСТЕРНА — СПИРТ) on Rail Spur (z = -24.2)
+    // 2. Slow-Moving Soviet Spirit-Tanker Train (SPIRIT TANKER) on Rail Spur (z = -24.2)
     const trainSpeed = vodkaFlicker > 0.05 ? (vodkaFlicker > 0.5 ? 1.15 : 0.45) : 0;
     spiritTrainPosXRef.current += trainSpeed * dt;
     if (spiritTrainPosXRef.current > 22.0) {
@@ -3413,7 +3418,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
 
         {/* 1:1 Meter 42m Deep Panoramic Industrial Props */}
         <group position={[0, -0.3, 0]}>
-          {/* TIER 1 (2m–14m Out, y = -10.9m to -4.75m): Sprawling Stepped RBMK Roofs, ВТ-2 Stack & 500kV Switchyard */}
+          {/* TIER 1 (2m–14m Out, y = -10.9m to -4.75m): Sprawling Stepped RBMK Roofs, VT-2 Stack & 500kV Switchyard */}
           <group>
             {/* Concrete Switchyard Apron Slab */}
             <mesh
@@ -3560,7 +3565,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
             </mesh>
 
-            {/* 5. Tall Red-and-White Lattice ВТ-2 Ventilation Stack (+6.2, -7.5, y = -4.75m up to +5.40m) */}
+            {/* 5. Tall Red-and-White Lattice VT-2 Ventilation Stack (+6.2, -7.5, y = -4.75m up to +5.40m) */}
             <group position={[6.2, Y(-4.75), -7.5]}>
               <mesh position={[0, 5.075, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
                 <cylinderGeometry args={[0.24, 0.44, 10.15, 12, 1, true]} />
@@ -3966,7 +3971,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               </mesh>
             </group>
 
-            {/* Floodlit "СЛАВА МИРНОМУ АТОМУ!" Roadside Propaganda Billboard */}
+            {/* Floodlit "GLORY TO PEACEFUL ATOM!" Roadside Propaganda Billboard */}
             <group position={[-0.2, Y(-9.45), -12.65]} rotation={[-0.22, -0.14, 0]}>
               <mesh position={[-1.4, -0.82, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
                 <planeGeometry args={[0.12, 1.2]} />
@@ -4301,7 +4306,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               <meshBasicMaterial color="#ffb048" toneMapped={false} fog={false} />
             </instancedMesh>
 
-            {/* Slow-Moving Soviet Spirit-Tanker Train (ЦИСТЕРНА — СПИРТ) */}
+            {/* Slow-Moving Soviet Spirit-Tanker Train (SPIRIT TANKER) */}
             <group ref={spiritTrainGroupRef} position={[-14.0, Y(-6.92), -24.2]}>
               {/* Lead Soviet Diesel Locomotive */}
               <group
@@ -4344,7 +4349,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 </mesh>
               </group>
 
-              {/* 6 Cylindrical ЦИСТЕРНА — СПИРТ Tank Cars */}
+              {/* 6 Cylindrical SPIRIT TANKER Cars */}
               {[-3.8, -2.35, -0.9, 0.55, 2.0, 3.45].map((cx, idx) => (
                 <group
                   key={`spirit-car-${idx}`}
@@ -4392,7 +4397,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             </group>
           </group>
 
-          {/* TIER 3 (32m–39m Out): Far Industrial Ridge & Sprawling State Vodka Distillery «КРИСТАЛЛ-84» */}
+          {/* TIER 3 (32m–39m Out): Far Industrial Ridge & Sprawling State Vodka Distillery "KRISTALL-84" */}
           <group>
             {/* Feathered Warm Amber/Crimson Light-Pollution Curved Horizon Arc Behind Distillery */}
             <mesh
@@ -4479,7 +4484,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               );
             })}
 
-            {/* SPRAWLING STATE VODKA DISTILLERY COMPLEX «КРИСТАЛЛ-84» (x = +1.5..+16.0, z = -34.2) */}
+            {/* SPRAWLING STATE VODKA DISTILLERY COMPLEX "KRISTALL-84" (x = +1.5..+16.0, z = -34.2) */}
             <group position={[0, distilleryBaseY, 0]}>
               {/* 3-Wing Red-Brick & Concrete Distillery Halls */}
               <mesh position={[5.6, 1.3, -34.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
@@ -4610,7 +4615,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 </mesh>
               ))}
 
-              {/* Monumental Rooftop Neon Sign: ЗАВОД ВОДКИ «КРИСТАЛЛ-84» */}
+              {/* Monumental Rooftop Neon Sign: VODKA PLANT "KRISTALL-84" */}
               <group position={[8.8, 4.35, -33.25]}>
                 <mesh position={[0, -0.95, -0.06]} raycast={NOOP_RAYCAST} frustumCulled={false}>
                   <planeGeometry args={[11.2, 0.62]} />
@@ -4788,9 +4793,9 @@ const SCRATCH_OBJ = new THREE.Object3D();
 
 /**
  * Window 2 Elevated Control-Tower Panorama (`+Z` Back Wall, 42m deep at 1:1 meters).
- * Features 3-wide industrial mullions, `КГС-84` frost box, finned radiator pipe,
+ * Features 3-wide industrial mullions, `KGS-84` frost box, finned radiator pipe,
  * unobstructed `0.11m` drip-lip, sweeping moonlit snow valley with winding river,
- * lit highway + 16 moving vehicles, railway viaduct, and distant 32m–39m city skyline.
+ * lit highway + 16 moving vehicles, railway viaduct, and distant 32m-39m city skyline.
  */
 const WorkerCityDiorama3D: React.FC = React.memo(() => {
   const stageGroupRef = useRef<THREE.Group>(null);
@@ -5111,19 +5116,19 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
         ctx.textBaseline = "middle";
         ctx.lineJoin = "round";
 
-        ctx.font = 'bold 62px "Kremlin", "Consolas", monospace';
+        ctx.font = 'bold 60px "Kremlin", "Consolas", monospace';
         ctx.strokeStyle = "#ff1a1a";
         ctx.lineWidth = 10;
-        ctx.strokeText("ПЛАН — ЗАКОН! //", w / 2, 62);
+        ctx.strokeText("QUOTA IS LAW! //", w / 2, 62, w - 48);
         ctx.fillStyle = "#ffe678";
-        ctx.fillText("ПЛАН — ЗАКОН! //", w / 2, 62);
+        ctx.fillText("QUOTA IS LAW! //", w / 2, 62, w - 48);
 
-        ctx.font = 'bold 70px "Kremlin", "Consolas", monospace';
+        ctx.font = 'bold 68px "Kremlin", "Consolas", monospace';
         ctx.strokeStyle = "#ff1a1a";
         ctx.lineWidth = 11;
-        ctx.strokeText("СЧАСТЬЕ: 100%", w / 2, 134);
+        ctx.strokeText("HAPPINESS: 100%", w / 2, 134, w - 48);
         ctx.fillStyle = "#ff4d3a";
-        ctx.fillText("СЧАСТЬЕ: 100%", w / 2, 134);
+        ctx.fillText("HAPPINESS: 100%", w / 2, 134, w - 48);
       }),
     [],
   );
@@ -6577,7 +6582,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               </mesh>
             </group>
 
-            {/* Outskirts District Heating Plant (ТЭЦ) With 3 Tall Striped Smokestacks + West Boiler Stack */}
+            {/* Outskirts District Heating Plant (TETs) With 3 Tall Striped Smokestacks + West Boiler Stack */}
             <group position={[20.8, cityLayout.heatGroundY, -35.8]}>
               <mesh position={[0, 0.68, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
                 <boxGeometry args={[3.6, 1.36, 1.25]} />

@@ -103,25 +103,25 @@ const BAY_STANDING_SPOTS: Record<CameraStation, BayStandingSpot> = {
     pitch: 0.06,
   },
   power: {
-    // [3] Right Operator Desk outer bay (`UNIT B`): Drum Separators & Coolant Loop (1.162x scale)
-    x: 4.22,
-    z: 0.35,
+    // [3] Right Operator Desk single bay (`UNIT B`): Drum Separators & Coolant Loop
+    x: 3.74,
+    z: 0.28,
     yaw: -(18 * Math.PI) / 180,
     pitch: -0.22,
   },
   inspector: {
-    // [4] Shift Supervisor Desk (`Стол НСБ`): standing on +Z side facing desk & console row
+    // [4] Shift Supervisor Desk (Post No. 4): standing on +Z side facing desk & console row
     x: 0.05,
     z: 2.56,
     yaw: 0,
     pitch: -0.56,
   },
   aux: {
-    // [5] Right Operator Desk (`UNIT C`): Energy Storage & Grid Dispatch (1.162x scale)
-    x: 2.58,
-    z: -0.19,
-    yaw: -(18 * Math.PI) / 180,
-    pitch: -0.22,
+    // [5] Left-Wall Switchgear (`UNIT C`): 1000 MWh Station Battery & Aux Bus
+    x: -3.88,
+    z: 1.42,
+    yaw: Math.PI / 2,
+    pitch: -0.14,
   },
 };
 
@@ -133,14 +133,6 @@ const UNIT_A2_SPOT: BayStandingSpot = {
   pitch: -0.24,
 };
 
-const UNIT_D_SPOT: BayStandingSpot = {
-  // [7] Left-Wall Electrical Switchgear (`UNIT D`): Main Breaker, Steam Vent & Fuses
-  x: -3.98,
-  z: 1.42,
-  yaw: Math.PI / 2,
-  pitch: -0.14,
-};
-
 interface ColliderOBB {
   cx: number;
   cz: number;
@@ -150,22 +142,22 @@ interface ColliderOBB {
 }
 
 const CONTROL_ROOM_COLLIDERS: readonly ColliderOBB[] = [
-  // Front Synoptic Wall (`Мнемосхема`) Monumental CRT Bay & Angled Wings
+  // Front Synoptic Wall Monumental CRT Bay & Angled Wings
   { cx: 0.0, cz: -3.86, halfW: 1.98, halfD: 0.42, rotY: 0 },
   { cx: -3.9, cz: -3.62, halfW: 1.88, halfD: 0.3, rotY: 0.21 },
   { cx: 3.9, cz: -3.62, halfW: 1.88, halfD: 0.3, rotY: -0.21 },
-  // Split Two-Wing Operator Console Desks (`Левое и Правое Крыло Пульта БЩУ`)
+  // Split Two-Wing Operator Console Desks (Left Dual-Bay & Right Single-Bay UNIT B)
   { cx: -3.61, cz: -1.49, halfW: 1.68, halfD: 0.68, rotY: (15 * Math.PI) / 180 },
-  { cx: 3.86, cz: -1.36, halfW: 1.78, halfD: 0.72, rotY: -(18 * Math.PI) / 180 },
-  // Shift Supervisor Desk (`Стол НСБ` — `InspectorDesk3D` at `(0, 0.06, +1.80)`)
+  { cx: 4.24, cz: -1.25, halfW: 0.96, halfD: 0.74, rotY: -(18 * Math.PI) / 180 },
+  // Shift Supervisor Desk (`InspectorDesk3D` at `(0, 0.06, +1.80)`)
   { cx: 0.0, cz: 1.8, halfW: 1.28, halfD: 0.46, rotY: 0 },
-  // Left-Wall Tucked-Back `UNIT D` HV Switchgear Enclosure (`x = -5.18, z = +1.42`)
-  { cx: -5.56, cz: 1.42, halfW: 0.72, halfD: 1.84, rotY: 0 },
-  // Corner `СМ-2М` Magnetic Tape Computer Cabinets & Rear Fire-Shield Sand Box
+  // Left-Wall `UNIT C` 1000 MWh Battery & HV Switchgear Alcove (`x = -5.16, z = +1.42`)
+  { cx: -5.36, cz: 1.42, halfW: 0.68, halfD: 1.92, rotY: 0 },
+  // Corner `SM-2M` Magnetic Tape Computer Cabinets & Rear Fire-Shield Sand Box
   { cx: -5.6, cz: -2.56, halfW: 0.36, halfD: 0.8, rotY: 0 },
   { cx: 5.56, cz: -2.5, halfW: 0.34, halfD: 0.56, rotY: 0 },
   { cx: -4.05, cz: 4.3, halfW: 0.52, halfD: 0.22, rotY: 0 },
-  // Right-Window Duty Radio Side Table (`Столик дежурного` + `ОКЕАН-84` at `x = +5.58, z = +1.58`)
+  // Right-Window Duty Radio Side Table (`OKEAN-84` at `x = +5.58, z = +1.58`)
   { cx: 5.58, cz: 1.58, halfW: 0.28, halfD: 0.43, rotY: 0 },
 ];
 
@@ -356,7 +348,7 @@ export const CameraController: React.FC = () => {
     updatePointerLockInteraction({ isHoveringControl: hovering });
   }, []);
 
-  // Glide smoothly to station standing spot when activeStation changes via [0]-[5] or UI
+  // Glide smoothly to station standing spot when activeStation changes via [0]-[6] or UI
   useEffect(() => {
     if (skipNextPoseSyncRef.current) {
       skipNextPoseSyncRef.current = false;
@@ -881,7 +873,7 @@ export const CameraController: React.FC = () => {
       } else if (e.key === "7") {
         e.preventDefault();
         leaveSeatedIfNeeded();
-        applyBaySpot(UNIT_D_SPOT, "aux");
+        syncStationSpot("aux");
       } else if (e.key === "0") {
         e.preventDefault();
         leaveSeatedIfNeeded();

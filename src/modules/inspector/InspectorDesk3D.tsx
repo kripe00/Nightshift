@@ -4,6 +4,10 @@ import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { useCameraLookStore } from '../../shared/CameraController'
 import {
+  onKremlinFontReady,
+  registerKremlinCanvasRedraw,
+} from '../../shared/kremlinFontReady'
+import {
   applySovietPBRToHierarchy,
   getBrushedBrassTextures,
   getHammeredIronTextures,
@@ -100,6 +104,21 @@ function createNearestCanvasTexture(
   tex.generateMipmaps = false
   tex.colorSpace = THREE.SRGBColorSpace
   tex.needsUpdate = true
+  if (draw) {
+    registerKremlinCanvasRedraw(
+      canvas,
+      tex,
+      (drawCtx, w, h) => {
+        drawCtx.imageSmoothingEnabled = false
+        draw(drawCtx, w, h)
+      },
+      bayerDither
+        ? (drawCtx, w, h) => {
+            apply16ColorBayerDither(drawCtx, w, h, 14)
+          }
+        : undefined
+    )
+  }
   return tex
 }
 
@@ -210,7 +229,7 @@ interface KomradBobbleheads3DProps {
 
 /**
  * PART 2: Interactive Soviet Easter Egg Bobblehead Figurines of
- * Chief Engineer KOMRAD KRISTIANOV ("КРИСТИАНОВ") and Senior KGB Inspector KOMRAD OLEG ("ОЛЕГ")!
+ * Chief Engineer KOMRAD KRISTIANOV ("KRISTIANOV") and Senior KGB Inspector KOMRAD OLEG ("OLEG")!
  * Features damped harmonic spring physics (`stiffness = 190`, `damping = 5.5`), coiled metal neck springs,
  * 16-color Bayer-dithered portraits, direct poke/swipe "boing!" SFX, and desk shockwave coupling.
  */
@@ -243,14 +262,14 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
   const kristianovPlateTex = useMemo(
     () =>
       createNearestCanvasTexture(256, 64, (ctx, w, h) => {
-        drawBobbleNameplateCanvas(ctx, w, h, 'КРИСТИАНОВ', 'ГЛ. ИНЖЕНЕР АЭС')
+        drawBobbleNameplateCanvas(ctx, w, h, 'KRISTIANOV', 'CHIEF ENG. NPP')
       }),
     []
   )
   const olegPlateTex = useMemo(
     () =>
       createNearestCanvasTexture(256, 64, (ctx, w, h) => {
-        drawBobbleNameplateCanvas(ctx, w, h, 'ОЛЕГ', 'СТ. ИНСПЕКТОР КГБ')
+        drawBobbleNameplateCanvas(ctx, w, h, 'OLEG', 'SR. KGB INSPECTOR')
       }),
     []
   )
@@ -314,8 +333,8 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
   return (
     <>
       {/* ============================================================
-          BOBBLEHEAD 1: CHIEF ENGINEER KOMRAD KRISTIANOV ("КРИСТИАНОВ")
-          Positioned between the green banker's lamp and the left edge of the ПУНКТ №4 status ticker
+          BOBBLEHEAD 1: CHIEF ENGINEER KOMRAD KRISTIANOV ("KRISTIANOV")
+          Positioned between the green banker's lamp and the left edge of the POST NO. 4 status ticker
          ============================================================ */}
       <group
         position={[-0.58, 0.926, -0.35]}
@@ -344,7 +363,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             metalness={0.8}
           />
         </mesh>
-        {/* Bright Brass Pedestal Nameplate ("КРИСТИАНОВ") */}
+        {/* Bright Brass Pedestal Nameplate ("KRISTIANOV") */}
         <mesh position={[0, 0.017, 0.072]} rotation={[-0.28, 0, 0]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.118, 0.036]} />
           <meshStandardMaterial
@@ -436,7 +455,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
           </mesh>
         ))}
 
-        {/* Spring-Mounted Oversized Bobble Head ("КРИСТИАНОВ") */}
+        {/* Spring-Mounted Oversized Bobble Head ("KRISTIANOV") */}
         <group ref={kristianovHeadRef} position={[0, 0.172, 0]}>
           <mesh position={[0, 0.036, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.076, 0.074, 0.072]} />
@@ -487,8 +506,8 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
       </group>
 
       {/* ============================================================
-          BOBBLEHEAD 2: SENIOR KGB INSPECTOR KOMRAD OLEG ("ОЛЕГ")
-          Positioned between the right edge of the ПУНКТ №4 status ticker and the KGB Manual / desk flag
+          BOBBLEHEAD 2: SENIOR KGB INSPECTOR KOMRAD OLEG ("OLEG")
+          Positioned between the right edge of the POST NO. 4 status ticker and the KGB Manual / desk flag
          ============================================================ */}
       <group
         position={[0.44, 0.926, -0.35]}
@@ -517,7 +536,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
             metalness={0.8}
           />
         </mesh>
-        {/* Bright Brass Pedestal Nameplate ("ОЛЕГ") */}
+        {/* Bright Brass Pedestal Nameplate ("OLEG") */}
         <mesh position={[0, 0.017, 0.072]} rotation={[-0.28, 0, 0]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.118, 0.036]} />
           <meshStandardMaterial
@@ -590,7 +609,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
           </mesh>
         </group>
 
-        {/* Right Arm holding a Miniature Red УНИЧТОЖЕНО Rubber Stamp */}
+        {/* Right Arm holding a Miniature Red SHREDDED Rubber Stamp */}
         <group position={[0.046, 0.102, 0.01]} rotation={[-0.48, 0, -0.26]}>
           <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.01, 0.011, 0.052, 8]} />
@@ -619,7 +638,7 @@ function KomradBobbleheads3D({ shockwaveRef }: KomradBobbleheads3DProps) {
           </mesh>
         ))}
 
-        {/* Spring-Mounted Oversized Bobble Head ("ОЛЕГ") */}
+        {/* Spring-Mounted Oversized Bobble Head ("OLEG") */}
         <group ref={olegHeadRef} position={[0, 0.172, 0]}>
           <mesh position={[0, 0.036, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.076, 0.074, 0.072]} />
@@ -811,6 +830,22 @@ function DraggablePaper3D({
     }
   }, [doc, docSig, onDocumentMutated])
 
+  useEffect(
+    () =>
+      onKremlinFontReady(() => {
+        const canvas = texture.image as HTMLCanvasElement | undefined
+        const ctx = canvas?.getContext('2d')
+        if (!canvas || !ctx) return
+        if (doc.isExpanded) {
+          drawFullDirectiveSheetCanvas(ctx, canvas.width, canvas.height, doc, false)
+        } else {
+          drawCompactTeletypeSlipCanvas(ctx, canvas.width, canvas.height, doc)
+        }
+        texture.needsUpdate = true
+      }),
+    [doc, texture]
+  )
+
   const width = doc.isExpanded ? PAPER_EXPANDED_W_3D : PAPER_COMPACT_W_3D
   const height = doc.isExpanded ? PAPER_EXPANDED_H_3D : PAPER_COMPACT_H_3D
   const paperHex = PAPER_COLOR_HEX[doc.paperColor]
@@ -902,7 +937,7 @@ function DraggablePaper3D({
         )
         kin.rotY = THREE.MathUtils.lerp(kin.rotY, kin.rotY * 0.96, dt * 2.5)
 
-        // Soft AABB / Hardware Boundary Repulsion (Mahogany Rim, ПРАВДА-84 Teletype, УНИЧТОЖИТЕЛЬ-84, KGB Manual)
+        // Soft AABB / Hardware Boundary Repulsion (Mahogany Rim, PRAVDA-84 Teletype, SHREDDER-84, KGB Manual)
         const halfW = width * 0.5
         const halfH = height * 0.5
         let bounced = false
@@ -937,7 +972,7 @@ function DraggablePaper3D({
           bounced = true
         }
 
-        // ПРАВДА-84 Teletype Casing Repulsion (lower-left: x < -0.56, z > 0.10)
+        // PRAVDA-84 Teletype Casing Repulsion (lower-left: x < -0.56, z > 0.10)
         if (kin.x - halfW * 0.6 < -0.56 && kin.z + halfH * 0.6 > 0.12) {
           const penX = -0.56 - (kin.x - halfW * 0.6)
           const penZ = kin.z + halfH * 0.6 - 0.12
@@ -1416,7 +1451,7 @@ export function InspectorDesk3D() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  // 1. ПРАВДА-84 Automatic 12-Step Wire Receiver & Physical Pull-Tension Tear State
+  // 1. PRAVDA-84 Automatic 12-Step Wire Receiver & Physical Pull-Tension Tear State
   const [printStep, setPrintStep] = useState<number>(0)
   const printStepRef = useRef<number>(0)
   const [printerReceiving, setPrinterReceiving] = useState<boolean>(false)
@@ -1519,7 +1554,7 @@ export function InspectorDesk3D() {
   })
   const lensDragOffsetRef = useRef<{ dx: number; dz: number }>({ dx: 0, dz: 0 })
 
-  // 4. Draggable 3D Wooden Rubber Stamps (`ОДОБРЕНО` & `УНИЧТОЖЕНО`) with Unified Whole-Stamp Hitbox
+  // 4. Draggable 3D Wooden Rubber Stamps (`APPROVED` & `SHREDDED`) with Unified Whole-Stamp Hitbox
   const approveStampGroupRef = useRef<THREE.Group | null>(null)
   const shredStampGroupRef = useRef<THREE.Group | null>(null)
   const approvePlungerRef = useRef<THREE.Group | null>(null)
@@ -1595,7 +1630,7 @@ export function InspectorDesk3D() {
     },
   })
 
-  // 5. 5-Detent УНИЧТОЖИТЕЛЬ-84 Document Shredder State
+  // 5. 5-Detent SHREDDER-84 Document Shredder State
   const shredLeverKnobRef = useRef<THREE.Group | null>(null)
   const shredDragRef = useRef<{
     dragging: boolean
@@ -1846,9 +1881,9 @@ export function InspectorDesk3D() {
     }
   }, [])
 
-  // 4 Glowing Orange ИН-14 Nixie Tube Filament Digit Textures ("1", "9", "8", "4")
+  // 4 Glowing Orange IN-14 Nixie Tube Filament Digit Textures ("8", "4", "-", "4")
   const nixieDigitTextures = useMemo(() => {
-    return ['8', '4', '№', '4'].map((digit) =>
+    return ['8', '4', '-', '4'].map((digit) =>
       createNearestCanvasTexture(64, 96, (ctx, w, h) => {
         ctx.clearRect(0, 0, w, h)
         // Fine dark cathode mesh grid lines
@@ -1872,7 +1907,7 @@ export function InspectorDesk3D() {
     )
   }, [])
 
-  // Mini Vacuum Manometer Dial Texture (`ВАКУУМ // КГС/СМ²`) for `ИСХОДЯЩИЕ` Pneumatic Tube
+  // Mini Vacuum Manometer Dial Texture (`VACUUM // KG/CM2`) for Outbox Pneumatic Tube
   const manometerDialTex = useMemo(
     () =>
       createNearestCanvasTexture(128, 128, (ctx, w, h) => {
@@ -1906,12 +1941,12 @@ export function InspectorDesk3D() {
         }
 
         ctx.fillStyle = '#141414'
-        ctx.font = 'bold 13px "Courier Prime", monospace'
+        ctx.font = 'bold 12px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('ВАКУУМ', cx, 44)
+        ctx.fillText('VACUUM', cx, 44, 74)
         ctx.fillStyle = '#8b1e1e'
-        ctx.font = 'bold 14px "VT323", monospace'
-        ctx.fillText('КГС/СМ²', cx, 94)
+        ctx.font = 'bold 12px "Kremlin", "VT323", monospace'
+        ctx.fillText('KG/CM2', cx, 94, 74)
       }),
     []
   )
@@ -1935,6 +1970,23 @@ export function InspectorDesk3D() {
   const lensTex = useMemo(() => createCrispDocumentCanvasTexture(512, 512), [])
   const shredPlateTex = useMemo(() => createNearestCanvasTexture(256, 96), [])
 
+  useEffect(
+    () =>
+      onKremlinFontReady(() => {
+        for (const tex of [
+          headerTickerTex,
+          printingSlipTex,
+          loadedSlipTex,
+          lensTex,
+          shredPlateTex,
+        ]) {
+          tex.userData.lastSig = ''
+        }
+        lensDirtyRef.current = true
+      }),
+    [headerTickerTex, printingSlipTex, loadedSlipTex, lensTex, shredPlateTex]
+  )
+
   // Static 16-Color Bayer-Dithered Hardware Plaques (Dither metal background first, then render crisp un-dithered text)
   const printerNameplateTex = useMemo(
     () =>
@@ -1947,12 +1999,12 @@ export function InspectorDesk3D() {
         apply16ColorBayerDither(ctx, w, h, 14)
 
         ctx.fillStyle = '#cfc6b0'
-        ctx.font = 'bold 22px "Courier Prime", monospace'
+        ctx.font = 'bold 17px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('ПРАВДА-84 // ТЕЛЕТАЙП', w / 2, 28)
+        ctx.fillText('PRAVDA-84 // TELETYPE', w / 2, 28, w - 16)
         ctx.fillStyle = '#b8a46b'
-        ctx.font = 'bold 16px "VT323", monospace'
-        ctx.fillText('АВТОМАТИЧЕСКИЙ ПРИЕМНИК', w / 2, 50)
+        ctx.font = 'bold 14px "Kremlin", "VT323", monospace'
+        ctx.fillText('AUTOMATIC RECEIVER', w / 2, 50, w - 16)
       }),
     []
   )
@@ -1968,12 +2020,12 @@ export function InspectorDesk3D() {
         apply16ColorBayerDither(ctx, w, h, 10)
 
         ctx.fillStyle = '#e6dec3'
-        ctx.font = 'bold 17px "Courier Prime", monospace'
+        ctx.font = 'bold 15px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('СССР // МОСМАШ-84', w / 2, 27)
+        ctx.fillText('USSR // MOSMASH-84', w / 2, 27, w - 16)
         ctx.fillStyle = '#d4be7f'
-        ctx.font = 'bold 15px "VT323", monospace'
-        ctx.fillText('СЕР. № 0481-ПТ // ГОС-КГБ', w / 2, 48)
+        ctx.font = 'bold 13px "Kremlin", "VT323", monospace'
+        ctx.fillText('SER. NO. 0481-PT // KGB', w / 2, 48, w - 16)
       }),
     []
   )
@@ -1994,15 +2046,15 @@ export function InspectorDesk3D() {
         apply16ColorBayerDither(ctx, w, h, 14)
 
         ctx.fillStyle = '#33ff66'
-        ctx.font = 'bold 24px "Courier Prime", monospace'
+        ctx.font = 'bold 19px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('ПНЕВМОПОЧТА // КАМЕРА ПУСКА', w / 2, 43)
+        ctx.fillText('PNEUMO-TUBE // LAUNCH CHAMBER', w / 2, 43, w - 38)
         ctx.fillStyle = '#e8dec3'
-        ctx.font = 'bold 19px "Courier Prime", monospace'
-        ctx.fillText('2. OPEN HATCH -> 3. LOAD -> 4. SEAL', w / 2, 86)
+        ctx.font = 'bold 15px "Kremlin", "Courier Prime", monospace'
+        ctx.fillText('2. OPEN HATCH -> 3. LOAD -> 4. SEAL', w / 2, 86, w - 28)
         ctx.fillStyle = '#ffb000'
-        ctx.font = 'bold 22px "VT323", monospace'
-        ctx.fillText('▼ 5. PULL DOWN RED LEVER [ПУСК] ▼', w / 2, 120)
+        ctx.font = 'bold 17px "Kremlin", "VT323", monospace'
+        ctx.fillText('▼ 5. PULL DOWN RED LEVER [LAUNCH] ▼', w / 2, 120, w - 28)
       }),
     []
   )
@@ -2018,15 +2070,15 @@ export function InspectorDesk3D() {
         apply16ColorBayerDither(ctx, w, h, 14)
 
         ctx.fillStyle = '#33ff66'
-        ctx.font = 'bold 24px "Courier Prime", monospace'
+        ctx.font = 'bold 20px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('КАПСУЛА // STEP 1: PACK PAPER', w / 2, 38)
+        ctx.fillText('CAPSULE // STEP 1: PACK PAPER', w / 2, 38, w - 24)
         ctx.fillStyle = '#e8dec3'
-        ctx.font = 'bold 20px "Courier Prime", monospace'
-        ctx.fillText('DRAG [ОДОБРЕНО] OR CLICK CYLINDER', w / 2, 74)
+        ctx.font = 'bold 16px "Kremlin", "Courier Prime", monospace'
+        ctx.fillText('DRAG [APPROVED] OR CLICK CYLINDER', w / 2, 74, w - 24)
         ctx.fillStyle = '#ffb000'
-        ctx.font = 'bold 22px "VT323", monospace'
-        ctx.fillText('THEN LOAD INTO OPEN BREECH CHAMBER', w / 2, 108)
+        ctx.font = 'bold 16px "Kremlin", "VT323", monospace'
+        ctx.fillText('THEN LOAD INTO OPEN BREECH CHAMBER', w / 2, 108, w - 24)
       }),
     []
   )
@@ -2064,22 +2116,22 @@ export function InspectorDesk3D() {
         ctx.lineWidth = 3
         ctx.strokeRect(2, 2, w - 4, h - 4)
         ctx.fillStyle = '#33ff66'
-        ctx.font = 'bold 16px "Courier Prime", monospace'
+        ctx.font = 'bold 15px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('ОДОБРЕНО', w / 2, 26)
+        ctx.fillText('APPROVED', w / 2, 26, w - 12)
       }),
     []
   )
 
-  // 3D Illuminated 6-Lamp Master Annunciator Strip (`ТАБЛО ТРЕВОГИ`) Textures & Refs
+  // 3D Illuminated 6-Lamp Master Annunciator Strip Textures & Refs
   const annunciatorTileSpecs = useMemo(() => {
     const specs = [
-      { id: 'core', title: '[CORE TEMP]', sub: 'ЯДРО >520/680°C' },
-      { id: 'water', title: '[WATER DROUGHT]', sub: 'ВОДА <45%/СУХО' },
-      { id: 'gas_oil', title: '[GAS / OIL SAT]', sub: 'ГАЗ>58 / МАСЛО<40' },
-      { id: 'bearing', title: '[PUMP BEARING]', sub: 'НАСОС >75/90°C' },
-      { id: 'grid', title: '[50HZ GRID]', sub: 'СЕТЬ ±0.8/1.5 ГЦ' },
-      { id: 'order', title: '[INCOMING ORDER]', sub: 'ПРИКАЗ ПРАВДА-84' },
+      { id: 'core', title: '[CORE TEMP]', sub: 'CORE >520/680C' },
+      { id: 'water', title: '[WATER DROUGHT]', sub: 'WATER <45%/DRY' },
+      { id: 'gas_oil', title: '[GAS / OIL SAT]', sub: 'GAS>58 / OIL<40' },
+      { id: 'bearing', title: '[PUMP BEARING]', sub: 'PUMP >75/90C' },
+      { id: 'grid', title: '[50HZ GRID]', sub: 'GRID +-0.8/1.5 HZ' },
+      { id: 'order', title: '[INCOMING ORDER]', sub: 'ORDER PRAVDA-84' },
     ]
     return specs.map((item) => ({
       ...item,
@@ -2090,12 +2142,12 @@ export function InspectorDesk3D() {
         ctx.lineWidth = 4
         ctx.strokeRect(3, 3, w - 6, h - 6)
         ctx.fillStyle = '#ffffff'
-        ctx.font = 'bold 18px "Courier Prime", monospace'
+        ctx.font = 'bold 15px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText(item.title, w / 2, 36)
+        ctx.fillText(item.title, w / 2, 36, w - 16)
         ctx.fillStyle = '#d8e6dc'
-        ctx.font = 'bold 16px "VT323", monospace'
-        ctx.fillText(item.sub, w / 2, 66)
+        ctx.font = 'bold 13px "Kremlin", "VT323", monospace'
+        ctx.fillText(item.sub, w / 2, 66, w - 16)
       }),
     }))
   }, [])
@@ -2116,9 +2168,9 @@ export function InspectorDesk3D() {
         ctx.lineWidth = 3
         ctx.strokeRect(2, 2, w - 4, h - 4)
         ctx.fillStyle = '#ff2a2a'
-        ctx.font = 'bold 16px "Courier Prime", monospace'
+        ctx.font = 'bold 15px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('УНИЧТОЖЕНО', w / 2, 26)
+        ctx.fillText('SHREDDED', w / 2, 26, w - 12)
       }),
     []
   )
@@ -2145,7 +2197,7 @@ export function InspectorDesk3D() {
     [documents]
   )
 
-  // Pneumatic Capsule Dispatch Station Refs & Multi-Step Animation State (`ПНЕВМОПОЧТА // КАПСУЛА + ЛЮК + РЫЧАГ ПУСКА`)
+  // Pneumatic Capsule Dispatch Station Refs & Multi-Step Animation State (`PNEUMO-TUBE // CAPSULE + HATCH + LAUNCH LEVER`)
   const cradleCapsuleGroupRef = useRef<THREE.Group | null>(null)
   const cradleTopCapRef = useRef<THREE.Group | null>(null)
   const cradleScrollRef = useRef<THREE.Group | null>(null)
@@ -2263,7 +2315,7 @@ export function InspectorDesk3D() {
     triggerPneumaticPackAnim(paperHex)
   }
 
-  // Step 1 & Step 3: Carrier Cylinder (`КАПСУЛА`) Click / Drag-to-Chamber Handlers
+  // Step 1 & Step 3: Carrier Cylinder (`CAPSULE`) Click / Drag-to-Chamber Handlers
   const moveCradleCapsule = (hit: { x: number; z: number }) => {
     if (!capsuleDragRef.current.dragging) return
     const dist = Math.hypot(
@@ -2390,7 +2442,7 @@ export function InspectorDesk3D() {
     finishCradleCapsuleUp()
   }
 
-  // Step 2 & Step 4: Hinged Curved Brass/Glass Breech Hatch (`ЛЮК КАМЕРЫ`) Click Handler
+  // Step 2 & Step 4: Hinged Curved Brass/Glass Breech Hatch (`BREECH HATCH`) Click Handler
   const handleBreechHatchClick = (e: ThreeEvent<MouseEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return
     e.stopPropagation()
@@ -2418,7 +2470,7 @@ export function InspectorDesk3D() {
     triggerBobbleShockwave(0.55)
   }
 
-  // Step 5: Heavy Vacuum Launch Lever (`РЫЧАГ ПУСКА`) Drag-Down Handler
+  // Step 5: Heavy Vacuum Launch Lever (`LAUNCH LEVER`) Drag-Down Handler
   const moveLaunchLever = (clientY: number) => {
     if (!launchLeverDragRef.current.dragging) return
     const deltaY = Math.max(0, clientY - launchLeverDragRef.current.startY)
@@ -2610,8 +2662,8 @@ export function InspectorDesk3D() {
     }
 
     // Pneumatic Breech Chamber Status Lamp:
-    // - Solid / Pulsing Emerald Green (`ГОТОВ К ПУСКУ // SEALED & READY`) when capsule is loaded & hatch is closed (or in flight)
-    // - Warm Amber (`#ffb000`) when hatch is open, capsule is packed on cradle, or paper is stamped ОДОБРЕНО
+    // - Solid / Pulsing Emerald Green (`READY TO LAUNCH // SEALED & READY`) when capsule is loaded & hatch is closed (or in flight)
+    // - Warm Amber (`#ffb000`) when hatch is open, capsule is packed on cradle, or paper is stamped APPROVED
     // - Dim dark green when idle
     if (pneumaticStatusLampMatRef.current) {
       if (pneumaticAnimRef.current.active || isSealedAndReady) {
@@ -2637,7 +2689,7 @@ export function InspectorDesk3D() {
       }
     }
 
-    // Step 1 Animation: Paper rolling into scroll & sliding inside Carrier Cylinder (`КАПСУЛА`) on Desk Cradle
+    // Step 1 Animation: Paper rolling into scroll & sliding inside Carrier Cylinder (`CAPSULE`) on Desk Cradle
     if (capsulePackAnimRef.current.active) {
       capsulePackAnimRef.current.progress = Math.min(
         1.0,
@@ -2734,7 +2786,7 @@ export function InspectorDesk3D() {
       }
     }
 
-    // Step 2 & Step 4 Animation: Hinged Curved Brass/Glass Breech Door (`ЛЮК КАМЕРЫ`) swings open ~85° (-1.48 rad)
+    // Step 2 & Step 4 Animation: Hinged Curved Brass/Glass Breech Door (`BREECH HATCH`) swings open ~85 deg (-1.48 rad)
     if (breechDoorGroupRef.current) {
       const targetDoorRotY = curHatchOpen ? -1.48 : 0
       breechDoorGroupRef.current.rotation.y = THREE.MathUtils.lerp(
@@ -2750,7 +2802,7 @@ export function InspectorDesk3D() {
         curCapsuleState === 'CHAMBER_LOADED'
     }
 
-    // Step 5 Animation: Vacuum Launch Lever (`РЫЧАГ ПУСКА`) rotation & In-Flight Capsule shooting along ceiling pipe to K.O.M.R.A.D.-84!
+    // Step 5 Animation: Vacuum Launch Lever (`LAUNCH LEVER`) rotation & In-Flight Capsule shooting along ceiling pipe to K.O.M.R.A.D.-84!
     if (launchLeverGroupRef.current) {
       const targetPull = pneumaticAnimRef.current.active
         ? Math.sin(
@@ -2793,7 +2845,7 @@ export function InspectorDesk3D() {
       flightCapsuleGroupRef.current.visible = false
     }
 
-    // Physical Pull-Tension & Vertex Bending on Emerging ПРАВДА-84 Paper Strip + Printer Recoil Jolt
+    // Physical Pull-Tension & Vertex Bending on Emerging PRAVDA-84 Paper Strip + Printer Recoil Jolt
     const grab = slipGrabRef.current
     if (!grab.dragging && (Math.abs(grab.pullDeltaX) > 0.0005 || Math.abs(grab.pullDeltaZ) > 0.0005 || grab.tension > 0.001)) {
       const snapLerp = Math.min(1, dt * 20)
@@ -2834,7 +2886,7 @@ export function InspectorDesk3D() {
           const posAttr = geo.attributes.position as THREE.BufferAttribute
           for (let i = 0; i < posAttr.count; i++) {
             const y0 = posAttr.getY(i)
-            // v = 0 at the bottom edge anchored inside the ПРАВДА-84 roller slot, v = 1 at the top free edge
+            // v = 0 at the bottom edge anchored inside the PRAVDA-84 roller slot, v = 1 at the top free edge
             const v = THREE.MathUtils.clamp(
               (y0 + stripLen * 0.5) / Math.max(0.01, stripLen),
               0,
@@ -2880,7 +2932,7 @@ export function InspectorDesk3D() {
       gameState.setInspectingDesk(isActivelyInspecting)
     }
 
-    // 0b. Update 3D Illuminated 6-Lamp Master Annunciator Strip (`ТАБЛО ТРЕВОГИ`) & Distinct Audio Warning Chimes
+    // 0b. Update 3D Illuminated 6-Lamp Master Annunciator Strip (`ALARM ANNUNCIATOR`) & Distinct Audio Warning Chimes
     const maxBearingC = 20 + Math.max(gameState.pumpAHeat, gameState.pumpBHeat)
     const waterInDrought =
       gameState.waterReservoir < 22 ||
@@ -2983,7 +3035,7 @@ export function InspectorDesk3D() {
       playCriticalRedKlaxonPulse()
     }
 
-    // 0c. 5-Stage KGB Operator Qualification Drill (`УЧЕБНАЯ ТРЕВОГА`):
+    // 0c. 5-Stage KGB Operator Qualification Drill (`TRAINING DRILL`):
     //     - Pulse required 3D hardware lamps/knobs with Amber-Gold -> Emerald (`Math.sin(t * 6)`)
     const curTutStep = gameState.tutorialStep
     if (prevTutorialStepRef.current !== curTutStep) {
@@ -3018,7 +3070,7 @@ export function InspectorDesk3D() {
       }
     }
 
-    // 2. Green Stamp [ОДОБРЕНО] Knob Pulse (Step 1B: paper on desk, not yet stamped APPROVED)
+    // 2. Green Stamp [APPROVED] Knob Pulse (Step 1B: paper on desk, not yet stamped APPROVED)
     if (approveKnobMatRef.current) {
       const highlightApprove =
         curTutStep === 1 &&
@@ -3092,7 +3144,7 @@ export function InspectorDesk3D() {
       }
     }
 
-    // 6. Red Stamp [УНИЧТОЖЕНО] & Shredder Lever Knob Pulse (Step 5)
+    // 6. Red Stamp [SHREDDED] & Shredder Lever Knob Pulse (Step 5)
     if (shredKnobMatRef.current) {
       const highlightShredStamp =
         curTutStep === 5 &&
@@ -3124,7 +3176,7 @@ export function InspectorDesk3D() {
       }
     }
 
-    // Compute concise Tutorial Prompt for Desk Ticker (`ПУНКТ №4 // DESK`)
+    // Compute concise Tutorial Prompt for Desk Ticker (`POST NO. 4 // DESK`)
     let tutorialTickerPrompt: string | null = null
     if (curTutStep === 1) {
       if (printingDoc !== null) {
@@ -3132,7 +3184,7 @@ export function InspectorDesk3D() {
           'DRILL 1/5 [DESK]: DRAG PAPER RIGHT TO TEAR FROM PRINTER -> PLACE ON DESK MAT.'
       } else if (!hasApprovedDocOnDesk && curCapsuleState === 'CRADLE_EMPTY') {
         tutorialTickerPrompt =
-          'DRILL 1/5 [DESK]: ORDER IS GENUINE! CLICK GREEN STAMP [ОДОБРЕНО] -> STAMP THE PAPER.'
+          'DRILL 1/5 [DESK]: ORDER IS GENUINE! CLICK GREEN STAMP [APPROVED] -> STAMP THE PAPER.'
       } else {
         tutorialTickerPrompt =
           'DRILL 1/5 [DESK]: PACK PAPER IN BRASS CAPSULE -> OPEN LEFT TUBE HATCH -> LOAD CAPSULE -> CLOSE HATCH & PULL RED LAUNCH LEVER!'
@@ -3150,7 +3202,7 @@ export function InspectorDesk3D() {
         'DRILL 4/5 [PRESS KEY 5 -> UNIT C]: POWER CHANGES SHIFT TURBINE FREQUENCY (48.8 HZ)! DRAG [50HZ RHEOSTAT] DIAL TO LOCK 50.0 HZ.'
     } else if (curTutStep === 5) {
       tutorialTickerPrompt =
-        'DRILL 5/5 [PRESS KEY 4 -> DESK]: INSPECT NEW ORDER WITH 2X LENS & K.O.M.R.A.D.-84! IT HAS A FAKE SEAL — STAMP RED [УНИЧТОЖЕНО], DROP IN SHREDDER & PULL HANDLE 5 TIMES!'
+        'DRILL 5/5 [PRESS KEY 4 -> DESK]: INSPECT NEW ORDER WITH 2X LENS & K.O.M.R.A.D.-84! IT HAS A FAKE SEAL - STAMP RED [SHREDDED], DROP IN SHREDDER & PULL HANDLE 5 TIMES!'
     }
 
     const contextualHint =
@@ -3251,22 +3303,24 @@ export function InspectorDesk3D() {
         ctx.lineWidth = 3
         ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6)
         ctx.fillStyle = '#b8a46b'
-        ctx.font = 'bold 17px "Courier Prime", monospace'
+        ctx.font = 'bold 16px "Kremlin", "Courier Prime", monospace'
         ctx.textAlign = 'center'
-        ctx.fillText('УНИЧТОЖИТЕЛЬ-84', canvas.width / 2, 22)
+        ctx.fillText('SHREDDER-84', canvas.width / 2, 22, canvas.width - 18)
         ctx.fillStyle = loadedDoc ? '#33ff66' : '#8f8772'
-        ctx.font = 'bold 14px "Courier Prime", monospace'
+        ctx.font = 'bold 13px "Kremlin", "Courier Prime", monospace'
         ctx.fillText(
-          loadedDoc ? '● ГОТОВ (READY)' : '○ ПУСТО (EMPTY)',
+          loadedDoc ? '● READY' : '○ EMPTY',
           canvas.width / 2,
-          46
+          46,
+          canvas.width - 18
         )
         ctx.fillStyle = '#cfc6b0'
-        ctx.font = 'bold 18px "VT323", monospace'
+        ctx.font = 'bold 16px "Kremlin", "VT323", monospace'
         ctx.fillText(
-          `ИЗМЕЛЬЧЕНО ${String(loadedDoc?.shredProgress ?? 0).padStart(3, '0')}%`,
+          `SHREDDED ${String(loadedDoc?.shredProgress ?? 0).padStart(3, '0')}%`,
           canvas.width / 2,
-          74
+          74,
+          canvas.width - 18
         )
         spTex.needsUpdate = true
       }
@@ -3936,7 +3990,7 @@ export function InspectorDesk3D() {
     },
   })
 
-  // 4. 5-Detent УНИЧТОЖИТЕЛЬ-84 Shredder Lever Handlers (Supports both 5-step drag & click-per-step, NEVER auto-shreds!)
+  // 4. 5-Detent SHREDDER-84 Shredder Lever Handlers (Supports both 5-step drag & click-per-step, NEVER auto-shreds!)
   const advanceShredBySteps = (stepsToAdvance: number) => {
     const store = useDeskStore.getState()
     const doc = store.documents.find((d) => d.status === 'loaded_in_shredder')
@@ -4251,15 +4305,20 @@ export function InspectorDesk3D() {
         }
       : null
 
+  const hasStripSource = stripSource !== null
+  const stripProgress = stripSource?.progress ?? 0
+  const stripPaperHex = stripSource?.paperHex ?? '#e6dec3'
+  const stripInkHex = stripSource?.inkHex ?? '#1a1a1a'
+
   useEffect(() => {
     const inst = shredStripsInstRef.current
-    if (!inst || !stripSource) return
+    if (!inst || !hasStripSource) return
     const dummy = new THREE.Object3D()
     const col = new THREE.Color()
     for (let i = 0; i < 15; i++) {
       const h =
         0.015 +
-        (stripSource.progress / 100) *
+        (stripProgress / 100) *
           0.065 *
           STRIP_VARIANCE[i % STRIP_VARIANCE.length]
       dummy.position.set(-0.16 + i * 0.019, -0.03 - h / 2, 0.148)
@@ -4267,12 +4326,12 @@ export function InspectorDesk3D() {
       dummy.scale.set(1, h, 1)
       dummy.updateMatrix()
       inst.setMatrixAt(i, dummy.matrix)
-      col.set(i % 3 === 0 ? stripSource.inkHex : stripSource.paperHex)
+      col.set(i % 3 === 0 ? stripInkHex : stripPaperHex)
       inst.setColorAt(i, col)
     }
     inst.instanceMatrix.needsUpdate = true
     if (inst.instanceColor) inst.instanceColor.needsUpdate = true
-  }, [stripSource?.progress, stripSource?.paperHex, stripSource?.inkHex])
+  }, [hasStripSource, stripProgress, stripPaperHex, stripInkHex])
 
   // Positioned directly in front of the central swivel chair ([0, 1.36, 0])
   // inside the 360-degree cockpit ring with uniform scale for distortion-free optics.
@@ -4311,7 +4370,7 @@ export function InspectorDesk3D() {
       {/* ============================================================
           1. EXPANDED SOVIET SENIOR INSPECTOR COMMAND DESK (2.48m × 1.36m)
           WITH WEATHERED MAHOGANY TRIM, WORN BAIZE MAT (#16241f), BRASS CORNER BRACKETS,
-          4 GLOWING ИН-14 NIXIE TUBES & BRAIDED CABLES
+          4 GLOWING IN-14 NIXIE TUBES & BRAIDED CABLES
          ============================================================ */}
       <mesh position={[0, 0.44, 0]}>
         <boxGeometry args={[2.36, 0.88, 1.26]} />
@@ -4568,7 +4627,7 @@ export function InspectorDesk3D() {
         ))}
       </group>
 
-      {/* Row of 4 Glowing Orange Glass ИН-14 Nixie-Style Indicator Tubes on Rear Console Riser next to ПУНКТ №4 */}
+      {/* Row of 4 Glowing Orange Glass IN-14 Nixie-Style Indicator Tubes on Rear Console Riser next to POST NO. 4 */}
       <group position={[-0.76, 0.926, -0.49]} rotation={[0, 0.16, 0]}>
         {/* Bolted Cast-Iron & Brass Nixie Manifold Base */}
         <mesh position={[0, 0.014, 0]} raycast={NOOP_RAYCAST}>
@@ -4633,7 +4692,7 @@ export function InspectorDesk3D() {
                   roughness={0.3}
                 />
               </mesh>
-              {/* Cylindrical ИН-14 Glass Envelope & Top Exhaust Pip */}
+              {/* Cylindrical IN-14 Glass Envelope & Top Exhaust Pip */}
               <mesh position={[0, 0.044, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.017, 0.017, 0.058, 12]} />
                 <meshStandardMaterial
@@ -4746,7 +4805,7 @@ export function InspectorDesk3D() {
       {/* PART 2: Interactive Bobbleheads of Komrad Kristianov & Komrad Oleg! */}
       <KomradBobbleheads3D shockwaveRef={bobbleShockwaveRef} />
 
-      {/* 3D Illuminated 6-Lamp Master Annunciator Strip (`ТАБЛО ТРЕВОГИ`) Mounted Above the Rear Desk Console in Peripheral View */}
+      {/* 3D Illuminated 6-Lamp Master Annunciator Strip (`ALARM ANNUNCIATOR`) Mounted Above the Rear Desk Console in Peripheral View */}
       <group position={[-0.07, 1.036, -0.562]} rotation={[-0.58, 0, 0]}>
         {/* Heavy Cast-Iron & Brushed-Brass Annunciator Housing Bar */}
         <mesh raycast={NOOP_RAYCAST}>
@@ -4884,7 +4943,7 @@ export function InspectorDesk3D() {
       </mesh>
 
       {/* ============================================================
-          2. ПРАВДА-84 TELETYPE PRINTER (INTRICATE MULTI-PART .GLB MODEL, LOWER-LEFT FOREGROUND)
+          2. PRAVDA-84 TELETYPE PRINTER (INTRICATE MULTI-PART .GLB MODEL, LOWER-LEFT FOREGROUND)
              Click-to-Print Failsafe: Clicking directly on the chassis when no paper is active forces next directive (cooldown = 0)!
          ============================================================ */}
       <group
@@ -4925,7 +4984,7 @@ export function InspectorDesk3D() {
         }}
       >
         <primitive object={teletypeModel} />
-        {/* Single clean invisible hitbox for ПРАВДА-84 printer failsafe click/hover */}
+        {/* Single clean invisible hitbox for PRAVDA-84 printer failsafe click/hover */}
         <mesh position={[0, 0.08, 0]}>
           <boxGeometry args={[0.6, 0.24, 0.44]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
@@ -5174,14 +5233,14 @@ export function InspectorDesk3D() {
       </group>
 
       {/* ============================================================
-          3. ПНЕВМОПОЧТА // OUTBOX PNEUMATIC CAPSULE DISPATCH SYSTEM
-          - Step 1: Desk Carrier Cylinder Cradle (`ЛОЖЕ КАПСУЛЫ`) & Draggable Brass/Bakelite Carrier Cylinder (`КАПСУЛА`)
-          - Step 2..4: Rear-Mounted Pneumatic Breech Station (`КАМЕРА ПУСКА`) behind Back-Left Desk Corner with Hinged Curved Breech Hatch (`ЛЮК КАМЕРЫ`)
-          - Step 5: Chunky Right-Flank Vacuum Launch Lever (`РЫЧАГ ПУСКА`) with Red Bakelite Ball Handle
+          3. PNEUMO-TUBE // OUTBOX PNEUMATIC CAPSULE DISPATCH SYSTEM
+          - Step 1: Desk Carrier Cylinder Cradle & Draggable Brass/Bakelite Carrier Cylinder (`CAPSULE`)
+          - Step 2..4: Rear-Mounted Pneumatic Breech Station (`LAUNCH CHAMBER`) behind Back-Left Desk Corner with Hinged Curved Breech Hatch (`BREECH HATCH`)
+          - Step 5: Chunky Right-Flank Vacuum Launch Lever (`LAUNCH LEVER`) with Red Bakelite Ball Handle
           - Continuous Segmented Glass-and-Brass Pipeline: Vertical Riser -> 90° Brass Ceiling Elbow -> Horizontal Ceiling Run -> Plunge Behind `K.O.M.R.A.D.-84`!
          ============================================================ */}
 
-      {/* 3A. DESK CARRIER CYLINDER CRADLE (`ЛОЖЕ КАПСУЛЫ`) ON BACK-LEFT OF DESK MAT */}
+      {/* 3A. DESK CARRIER CYLINDER CRADLE ON BACK-LEFT OF DESK MAT */}
       <group
         position={[
           CAPSULE_CRADLE_POS_3D.x,
@@ -5248,7 +5307,7 @@ export function InspectorDesk3D() {
             </mesh>
           </group>
         ))}
-        {/* Angled Front Brass Instruction Plaque (`КАПСУЛА // STEP 1: PACK PAPER`) Facing Operator (+Z, ~30° up) */}
+        {/* Angled Front Brass Instruction Plaque (`CAPSULE // STEP 1: PACK PAPER`) Facing Operator (+Z, ~30 deg up) */}
         <group position={[0, 0.026, 0.086]} rotation={[-Math.PI / 6, 0, 0]}>
           <mesh position={[0, -0.008, -0.012]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.18, 0.022, 0.024]} />
@@ -5283,7 +5342,7 @@ export function InspectorDesk3D() {
         </group>
       </group>
 
-      {/* 3B. INTERACTIVE BRASS & BAKELITE CARRIER CYLINDER (`КАПСУЛА`) ON CRADLE / DRAGGABLE TO CHAMBER */}
+      {/* 3B. INTERACTIVE BRASS & BAKELITE CARRIER CYLINDER (`CAPSULE`) ON CRADLE / DRAGGABLE TO CHAMBER */}
       <group
         ref={cradleCapsuleGroupRef}
         position={[
@@ -5396,7 +5455,7 @@ export function InspectorDesk3D() {
         </group>
       </group>
 
-      {/* 3C. LEFT-BOLSTER MOUNTED PNEUMATIC BREECH STATION (`ПНЕВМОПОЧТА // КАМЕРА ПУСКА`)
+      {/* 3C. LEFT-BOLSTER MOUNTED PNEUMATIC BREECH STATION (`PNEUMO-TUBE // LAUNCH CHAMBER`)
           Tucked cleanly onto the Left Desk Bolster beside the Carrier Cradle with zero clipping. */}
       <group
         position={[
@@ -5418,7 +5477,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
 
-        {/* Main Cast-Iron Breech Base Manifold (`КАМЕРА ПУСКА`) */}
+        {/* Main Cast-Iron Breech Base Manifold (`LAUNCH CHAMBER`) */}
         <mesh
           position={[0, 0.032, 0]}
           onClick={handleBreechChamberClick}
@@ -5463,7 +5522,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
 
-        {/* Angled Engraved Brass Front Plaque (`ПНЕВМОПОЧТА // КАМЕРА ПУСКА`) Facing Operator (+Z, ~30° up) */}
+        {/* Angled Engraved Brass Front Plaque (`PNEUMO-TUBE // LAUNCH CHAMBER`) Facing Operator (+Z, ~30 deg up) */}
         <group
           position={[0, 0.034, 0.116]}
           rotation={[-Math.PI / 6, 0, 0]}
@@ -5501,7 +5560,7 @@ export function InspectorDesk3D() {
           </mesh>
         </group>
 
-        {/* Step 2..4: Machined Brass Breech Chamber & Hinged Curved Brass/Glass Breech Door (`ЛЮК КАМЕРЫ`) */}
+        {/* Step 2..4: Machined Brass Breech Chamber & Hinged Curved Brass/Glass Breech Door (`BREECH HATCH`) */}
         <group position={[0, 0.175, -0.025]}>
           {/* Generous Invisible Hit-Box Around Breech Chamber & Door */}
           <mesh position={[0, 0, 0.03]} onClick={handleBreechChamberClick}>
@@ -5610,7 +5669,7 @@ export function InspectorDesk3D() {
             </mesh>
           </group>
 
-          {/* Hinged Curved Brass/Glass Breech Door (`ЛЮК КАМЕРЫ`) — Pivots ~85° on Left Hinge Pin when Clicked! */}
+          {/* Hinged Curved Brass/Glass Breech Door (`BREECH HATCH`) - Pivots ~85 deg on Left Hinge Pin when Clicked! */}
           <group
             ref={breechDoorGroupRef}
             position={[-0.066, 0, 0.024]}
@@ -5668,7 +5727,7 @@ export function InspectorDesk3D() {
                   />
                 </mesh>
               ))}
-              {/* Right-Edge Brass Latch Bar & Knurled Crimson/Brass Cam-Latch Handle (`ОТКРЫТЬ / ЗАКРЫТЬ ЛЮК`) */}
+              {/* Right-Edge Brass Latch Bar & Knurled Crimson/Brass Cam-Latch Handle (`OPEN / SEAL HATCH`) */}
               <group position={[0.064, 0, 0.036]}>
                 <mesh raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.016, 0.175, 0.016]} />
@@ -5703,7 +5762,7 @@ export function InspectorDesk3D() {
           </group>
         </group>
 
-        {/* Caged Jewel Status Lamp (`ГОТОВ К ПУСКУ // SEALED & READY`: Amber when open/unsealed, Solid Emerald Green when loaded & sealed!) */}
+        {/* Caged Jewel Status Lamp (`READY TO LAUNCH // SEALED & READY`: Amber when open/unsealed, Solid Emerald Green when loaded & sealed!) */}
         <group position={[0.105, 0.074, 0.035]}>
           <mesh raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.022, 0.026, 0.018, 12]} />
@@ -5740,7 +5799,7 @@ export function InspectorDesk3D() {
           ))}
         </group>
 
-        {/* Left-Flank Brass Vacuum Manometer Gauge (`ВАКУУМ // КГС/СМ²`) */}
+        {/* Left-Flank Brass Vacuum Manometer Gauge (`VACUUM // KG/CM2`) */}
         <group position={[-0.125, 0.115, 0.03]} rotation={[-0.25, 0.2, 0]}>
           <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.038, 0.042, 0.018, 14]} />
@@ -5783,7 +5842,7 @@ export function InspectorDesk3D() {
           </group>
         </group>
 
-        {/* Step 5: Right-Flank Heavy Vacuum Launch Gearbox & Pull-Down Lever (`РЫЧАГ ПУСКА`) with Red Bakelite Ball Handle */}
+        {/* Step 5: Right-Flank Heavy Vacuum Launch Gearbox & Pull-Down Lever (`LAUNCH LEVER`) with Red Bakelite Ball Handle */}
         <group position={[0.168, 0.155, -0.01]}>
           {/* Cast-Brass Ratchet Quadrant Housing */}
           <mesh
@@ -5805,7 +5864,7 @@ export function InspectorDesk3D() {
             <boxGeometry args={[0.032, 0.11, 0.11]} />
             <meshStandardMaterial color="#0d110f" roughness={0.92} />
           </mesh>
-          {/* Pivoting Chrome-Steel Launch Lever Shaft & Crimson Bakelite Ball Handle (`ПУСК`) */}
+          {/* Pivoting Chrome-Steel Launch Lever Shaft & Crimson Bakelite Ball Handle (`LAUNCH`) */}
           <group
             ref={launchLeverGroupRef}
             position={[0.022, 0.01, -0.02]}
@@ -6160,7 +6219,7 @@ export function InspectorDesk3D() {
             roughness={0.88}
           />
         </mesh>
-        {/* Hinged Metal Clamshell Lid Propped Open at 105° with ОДОБРЕНО Plaque */}
+        {/* Hinged Metal Clamshell Lid Propped Open at 105 deg with APPROVED Plaque */}
         <group position={[0, 0.014, -0.064]} rotation={[-1.83, 0, 0]}>
           <mesh position={[0, 0, 0.062]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.188, 0.006, 0.124]} />
@@ -6245,7 +6304,7 @@ export function InspectorDesk3D() {
             roughness={0.88}
           />
         </mesh>
-        {/* Hinged Metal Clamshell Lid Propped Open at 105° with УНИЧТОЖЕНО Plaque */}
+        {/* Hinged Metal Clamshell Lid Propped Open at 105 deg with SHREDDED Plaque */}
         <group position={[0, 0.014, -0.064]} rotation={[-1.83, 0, 0]}>
           <mesh position={[0, 0, 0.062]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.188, 0.006, 0.124]} />
@@ -6276,7 +6335,7 @@ export function InspectorDesk3D() {
         </group>
       </group>
 
-      {/* Draggable ОДОБРЕНО (APPROVED) Full-Size (scale=1.0) Wooden Rubber Stamp */}
+      {/* Draggable APPROVED Full-Size (scale=1.0) Wooden Rubber Stamp */}
       <group
         ref={approveStampGroupRef}
         position={[0.22, 0.935, -0.22]}
@@ -6384,7 +6443,7 @@ export function InspectorDesk3D() {
         </group>
       </group>
 
-      {/* Draggable УНИЧТОЖЕНО (SHREDDED) Full-Size (scale=1.0) Wooden Rubber Stamp */}
+      {/* Draggable SHREDDED Full-Size (scale=1.0) Wooden Rubber Stamp */}
       <group
         ref={shredStampGroupRef}
         position={[0.38, 0.935, -0.22]}
@@ -6493,7 +6552,7 @@ export function InspectorDesk3D() {
       </group>
 
       {/* ============================================================
-          7. УНИЧТОЖИТЕЛЬ-84 DOCUMENT SHREDDER (INTRICATE MULTI-PART .GLB MODEL, CENTER-RIGHT)
+          7. SHREDDER-84 DOCUMENT SHREDDER (INTRICATE MULTI-PART .GLB MODEL, CENTER-RIGHT)
           WITH OVERSIZED RED BAKELITE 5-STEP PULL-LEVER ARM (`#b82a24`) ON RIGHT FLANK!
          ============================================================ */}
       <group
@@ -6562,7 +6621,7 @@ export function InspectorDesk3D() {
             </mesh>
           </group>
         ))}
-        {/* Perforated Metal / Wire-Frame ОТХОДЫ Waste Bin Underneath */}
+        {/* Perforated Metal / Wire-Frame WASTE Bin Underneath */}
         <mesh position={[-0.03, -0.055, 0.04]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.34, 0.04, 0.24]} />
           <meshStandardMaterial
@@ -6574,7 +6633,7 @@ export function InspectorDesk3D() {
           />
         </mesh>
 
-        {/* Throat Opening & Yellow/Black ОПАСНО // НОЖИ Hazard Chevron Decal */}
+        {/* Throat Opening & Yellow/Black DANGER // BLADES Hazard Chevron Decal */}
         <mesh position={[-0.03, 0.102, -0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.3, 0.012, 0.065]} />
           <meshStandardMaterial color="#0d110f" roughness={0.92} />
@@ -6828,7 +6887,7 @@ export function InspectorDesk3D() {
           </mesh>
         ))}
 
-        {/* 2. Side Split-Clamp Tension Lug (ГОСТ Optical Rim Clamp at clampAng = -2.26 rad) */}
+        {/* 2. Side Split-Clamp Tension Lug (GOST Optical Rim Clamp at clampAng = -2.26 rad) */}
         <group
           position={[Math.cos(-2.26) * 0.178, 0.002, Math.sin(-2.26) * 0.178]}
           rotation={[0, 2.26, 0]}

@@ -236,7 +236,7 @@ function parseDirectiveOrderDisplay(doc: DeskDocument): {
 
 /**
  * Renders the 3 Official Soviet Seals (USSR State Seal, MinSredMash Atom, KGB Sword & Shield).
- * Giant, thick-lined (`4px–6px` lineWidth) with 2.5x larger bold ring text (`★ СССР ★ 1984 ★` vs `★ CCCP-LATIN ★`)
+ * Giant, thick-lined (`4px-6px` lineWidth) with 2.5x larger bold ring text (`★ USSR ★ 1984 ★` vs `★ LANGLEY-FAKE ★`)
  * so every seal detail is crystal clear at a glance on a MacBook screen.
  */
 export function drawOfficialSeal(
@@ -259,20 +259,20 @@ export function drawOfficialSeal(
     microDefect === 'SIX_POINT_STAR' ||
     microDefect === 'BROKEN_ORBIT'
 
-  const topRingText = hasLatinRing ? '★ CCCP-LATIN ★' : '★ СССР ★ 1984 ★'
+  const topRingText = hasLatinRing ? '★ LANGLEY-FAKE ★' : '★ USSR ★ 1984 ★'
 
   const bottomRingText =
     sealType === 'USSR_STATE_SEAL'
       ? hasLatinRing
         ? 'SOVMIN-WEST'
-        : 'СОВМИН СССР'
+        : 'SOVMIN USSR'
       : sealType === 'MINSREDMASH_ATOM'
         ? hasLatinRing
           ? 'ORBIT-FAKE'
-          : 'МИНСРЕДМАШ'
+          : 'MINSREDMASH'
         : hasLatinRing
           ? 'LANGLEY-5'
-          : 'КГБ СССР №4'
+          : 'KGB USSR NO.4'
 
   ctx.strokeStyle = inkHex
   ctx.fillStyle = inkHex
@@ -297,22 +297,22 @@ export function drawOfficialSeal(
   ctx.arc(0, 0, 56, 0, Math.PI * 2)
   ctx.stroke()
 
-  // 2.5x Larger Bold Ring Text (`★ СССР ★ 1984 ★` vs `★ CCCP-LATIN ★`) with `drawHeavyText`
+  // 2.5x Larger Bold Ring Text (`★ USSR ★ 1984 ★` vs `★ LANGLEY-FAKE ★`) with `drawHeavyText`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = '900 18.5px "Courier Prime", "Consolas", monospace'
-  drawHeavyText(ctx, topRingText, 0, -71, 18.5, inkHex, {
+  ctx.font = '900 16px "Kremlin", "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, topRingText, 0, -71, 16, inkHex, {
     maxWidth: 146,
     strokeWidth: 2.0,
   })
-  drawHeavyText(ctx, bottomRingText, 0, 72, 18.5, inkHex, {
+  drawHeavyText(ctx, bottomRingText, 0, 72, 16, inkHex, {
     maxWidth: 144,
     strokeWidth: 2.0,
   })
 
   // Left & Right Bold Rim Codes
-  ctx.font = '900 17px "Courier Prime", "Consolas", monospace'
-  const leftCode = microDefect === 'NONE' ? '№84' : 'ERR'
+  ctx.font = '900 15px "Kremlin", "Courier Prime", "Consolas", monospace'
+  const leftCode = microDefect === 'NONE' ? 'NO.84' : 'ERR'
   const rightCode =
     microDefect === 'NONE'
       ? '5★'
@@ -477,8 +477,8 @@ export function drawOfficialSeal(
 }
 
 /**
- * Draws a compact perforated teletype slip (used inside the ПРАВДА-84 roller slot,
- * in the left output tray, and when loaded into the УНИЧТОЖИТЕЛЬ-84 shredder jaws).
+ * Draws a compact perforated teletype slip (used inside the PRAVDA-84 roller slot,
+ * in the left output tray, and when loaded into the SHREDDER-84 jaws).
  */
 export function drawCompactTeletypeSlipCanvas(
   ctx: CanvasRenderingContext2D,
@@ -654,7 +654,7 @@ export function drawFullDirectiveSheetCanvas(
   // SECTION 1: TOP MINISTRY BANNER (Taller & Bolder, y: 26..136) + GOST & DATE ROW (y: 140..176)
   // - Removed tiny unreadable micro-line above the red banner.
   // - 40% taller coloured Ministry banner with +45% larger white + black-outlined strokes.
-  // - Single big, bold row for GOST code & Date (`ГОСТ-84-01  |  04.11.1984`) at +50% larger font size.
+  // - Single big, bold row for GOST code & Date (`GOST-84-01  |  04.11.1984`) at +50% larger font size.
   // ============================================================================
   const bannerX = 38
   const bannerY = 26
@@ -715,7 +715,7 @@ export function drawFullDirectiveSheetCanvas(
     )
   }
 
-  // Single Big, Bold Row for GOST Code & Date (`ГОСТ-84-01  |  04.11.1984`) at +50% larger font size
+  // Single Big, Bold Row for GOST Code & Date (`GOST-84-01  |  04.11.1984`) at +50% larger font size
   const gostRowY = 140
   const gostRowH = 38
   ctx.fillStyle = 'rgba(10, 10, 10, 0.08)'
@@ -819,8 +819,8 @@ export function drawFullDirectiveSheetCanvas(
   ctx.restore()
 
   // ============================================================================
-  // SECTION 4: EXPANDED BOTTOM METADATA, SIGNATURE & GIANT OFFICIAL SEAL (`ПЕЧАТЬ`) (y: 450..674)
-  // - Left Column (`ПОДПИСЬ`, `PAPER`, `INK`, `FONT`): +55% larger font with `drawHeavyText`, removed tiny micro-code.
+  // SECTION 4: EXPANDED BOTTOM METADATA, SIGNATURE & GIANT OFFICIAL SEAL (y: 450..674)
+  // - Left Column (`SIGNATURE`, `PAPER`, `INK`, `FONT`): +55% larger font with `drawHeavyText`, removed tiny micro-code.
   // - Right Column: Giant, thick-lined Official Seal (`radius = 104`, fills right half of lower box).
   // ============================================================================
   const footerTop = 450
@@ -835,8 +835,8 @@ export function drawFullDirectiveSheetCanvas(
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
 
-  ctx.font = '900 22px "Courier Prime", "Consolas", monospace'
-  drawHeavyText(ctx, 'ПОДПИСЬ:', leftX, footerTop + 26, 22, '#0a0a0a', {
+  ctx.font = '900 18px "Kremlin", "Courier Prime", "Consolas", monospace'
+  drawHeavyText(ctx, 'SIGNATURE:', leftX, footerTop + 26, 18, '#0a0a0a', {
     maxWidth: leftMaxW,
   })
 
@@ -882,7 +882,7 @@ export function drawFullDirectiveSheetCanvas(
     { maxWidth: leftMaxW }
   )
 
-  // Right Column — Giant, Thick-Lined Official Seal (`ПЕЧАТЬ`) filling the entire right half of the lower box
+  // Right Column - Giant, Thick-Lined Official Seal filling the entire right half of the lower box
   drawOfficialSeal(
     ctx,
     410,
@@ -896,7 +896,7 @@ export function drawFullDirectiveSheetCanvas(
 
   // ============================================================================
   // SECTION 5: UNCLIPPED BOTTOM BLACK INSTRUCTION BAR (y: 680..720)
-  // Shortened to `[ОДОБРЕНО] -> LEFT TUBE  |  [УНИЧТОЖЕНО] -> RIGHT SHREDDER`
+  // Shortened to `[APPROVED] -> LEFT TUBE  |  [SHREDDED] -> RIGHT SHREDDER`
   // centered cleanly inside the black bar with zero left/right clipping!
   // ============================================================================
   const bottomBarY = 680
@@ -909,13 +909,13 @@ export function drawFullDirectiveSheetCanvas(
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = '900 22px "VT323", "Courier Prime", monospace'
+  ctx.font = '900 17px "Kremlin", "VT323", "Courier Prime", monospace'
   drawHeavyText(
     ctx,
-    '[ОДОБРЕНО] -> LEFT TUBE  |  [УНИЧТОЖЕНО] -> RIGHT SHREDDER',
+    '[APPROVED] -> LEFT TUBE  |  [SHREDDED] -> RIGHT SHREDDER',
     LW / 2,
     bottomBarY + bottomBarH / 2 + 1,
-    22,
+    17,
     '#ffe066',
     {
       maxWidth: bannerW - 18,
@@ -941,19 +941,22 @@ export function drawFullDirectiveSheetCanvas(
     ctx.strokeRect(-118, -42, 236, 84)
     ctx.lineWidth = 3.0
     ctx.strokeRect(-108, -32, 216, 64)
-    ctx.font = '900 32px "Courier Prime", "Consolas", monospace'
+    ctx.font = '900 28px "Kremlin", "Courier Prime", "Consolas", monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     drawHeavyText(
       ctx,
-      stamp.type === 'APPROVED' ? 'ОДОБРЕНО' : 'УНИЧТОЖЕНО',
+      stamp.type === 'APPROVED' ? 'APPROVED' : 'SHREDDED',
       0,
       -8,
-      32,
-      stampColor
+      28,
+      stampColor,
+      { maxWidth: 204 }
     )
-    ctx.font = '900 20px "Courier Prime", "Consolas", monospace'
-    drawHeavyText(ctx, `${stamp.type} // №4`, 0, 20, 20, stampColor)
+    ctx.font = '900 15px "Kremlin", "Courier Prime", "Consolas", monospace'
+    drawHeavyText(ctx, 'SECTOR 84 // NO. 4', 0, 20, 15, stampColor, {
+      maxWidth: 204,
+    })
     ctx.restore()
   }
 
@@ -1145,7 +1148,7 @@ function drawManualSchematicIcon(
     ctx.textAlign = 'center'
     ctx.fillText('00->06h', 23, 55)
   } else if (kind === 'tear_inspect') {
-    // Card 2 (STEP 1: TEAR & INSPECT): ПРАВДА-84 teleprinter with perforated directive sheet
+    // Card 2 (STEP 1: TEAR & INSPECT): PRAVDA-84 teleprinter with perforated directive sheet
     // being ripped sideways (--> arrow) and inspected under a Magnifying Glass lens over a 5-point Soviet star seal.
     ctx.fillStyle = '#364940'
     ctx.strokeStyle = INK_BLACK
@@ -1159,9 +1162,9 @@ function drawManualSchematicIcon(
 
     // Printer nameplate
     ctx.fillStyle = '#e8dec3'
-    ctx.font = '800 10px "Courier Prime", monospace'
+    ctx.font = '800 9px "Kremlin", "Courier Prime", monospace'
     ctx.textAlign = 'center'
-    ctx.fillText('ПРАВДА-84', 0, 38)
+    ctx.fillText('PRAVDA-84', 0, 38, 78)
 
     // Perforated Directive Sheet emerging and ripping sideways
     ctx.fillStyle = '#f2ead4'
@@ -1237,8 +1240,8 @@ function drawManualSchematicIcon(
     ctx.fillText('TEAR -> 2x LENS', 0, 65)
   } else if (kind === 'stamp_tube_shred') {
     // Card 3 (STEP 2: STAMP & PNEUMATIC TUBE vs SHREDDER):
-    // Left: Wooden Rubber Stamp (ОДОБРЕНО) + vertical Pneumatic Outbox Tube (ИСХОДЯЩИЕ) with upward arrow (^).
-    // Right: Mechanical Shredder (УНИЧТОЖИТЕЛЬ) with gears and downward pull-handle (v x5).
+    // Left: Wooden Rubber Stamp (APPROVED) + vertical Pneumatic Outbox Tube (OUTBOX) with upward arrow (^).
+    // Right: Mechanical Shredder (SHREDDER-84) with gears and downward pull-handle (v x5).
     ctx.strokeStyle = INK_BLACK
     ctx.lineWidth = 1.8
     ctx.setLineDash([4, 3])
@@ -1277,7 +1280,7 @@ function drawManualSchematicIcon(
     ctx.closePath()
     ctx.fill()
 
-    // Wooden Rubber Stamp (ОДОБРЕНО) at bottom-left
+    // Wooden Rubber Stamp (APPROVED) at bottom-left
     ctx.fillStyle = INK_GREEN
     ctx.strokeStyle = INK_BLACK
     ctx.lineWidth = 2.2
@@ -2079,7 +2082,7 @@ function drawFieldGuideCard(
 }
 
 /**
- * Draws Komrad Oleg's 6-Page Soviet Control Room Master Folder (`ТЕХНИЧЕСКАЯ ПАПКА БЛОКА №4`):
+ * Draws Komrad Oleg's Master Security & Panel Manual (`UNIT 4 TECHNICAL DOSSIER`):
  * - SECTION I (`pages 1..3`): KGB Forgery Security Manual (`1. SEALS`, `2. FONTS`, `3. COLOURS`)
  * - SECTION II (`pages 4..6`): RBMK Control Panel Operating Manual (`4. UNIT A`, `5. UNIT A-2/B`, `6. GRID [5]`)
  */
@@ -2151,11 +2154,11 @@ export function drawSecurityManualCanvas(
       {
         type: 'USSR_STATE_SEAL',
         ink: '#111111',
-        title: '1. STATE SEAL (ГЕРБ СССР)',
+        title: '1. STATE SEAL (USSR EMBLEM)',
         ministry: 'Issuer: COUNCIL OF MINISTERS',
         rule1: '✓ 5-PT STAR crest (4/6-pt = Fake)',
-        rule2: '✓ СССР • ГОССТАНДАРТ 84 ring',
-        rule3: '✗ Shred CCCP-LATIN ring text!',
+        rule2: '✓ USSR • 1984 • SOVMIN ring',
+        rule3: '✗ Shred LANGLEY-FAKE ring text!',
         genuineLabel: '✓ GENUINE (5★)',
         fakeLabel: '✗ FAKE (4/6★)',
         defectKind: 'STAR',
@@ -2163,11 +2166,11 @@ export function drawSecurityManualCanvas(
       {
         type: 'MINSREDMASH_ATOM',
         ink: '#7a110a',
-        title: '2. ATOM SEAL (АТОМНЫЙ ЩИТ)',
+        title: '2. ATOM SEAL (ATOMIC SHIELD)',
         ministry: 'Issuer: MINSREDMASH & ATOM EN.',
         rule1: '✓ 2 SOLID ORBITS (Gap = Fake)',
-        rule2: '✓ 5-PT STAR & СССР micro-ring',
-        rule3: '✓ Rim code №84 / 5★ under lens',
+        rule2: '✓ 5-PT STAR & MINSREDMASH ring',
+        rule3: '✓ Rim code NO.84 / 5★ under lens',
         genuineLabel: '✓ SOLID ORBITS',
         fakeLabel: '✗ BROKEN ORBIT',
         defectKind: 'ORBIT',
@@ -2175,10 +2178,10 @@ export function drawSecurityManualCanvas(
       {
         type: 'KGB_SWORD_SHIELD',
         ink: '#7a110a',
-        title: '3. KGB SHIELD (ЩИТ И МЕЧ)',
+        title: '3. KGB SHIELD (SWORD & SHIELD)',
         ministry: 'Issuer: 5TH CHIEF DIRECTORATE',
         rule1: '✓ VERTICAL SWORD on shield axis',
-        rule2: '✓ 5-Е УПРАВЛЕНИЕ КГБ СССР ring',
+        rule2: '✓ KGB USSR NO.4 bottom ring',
         rule3: '✗ Shred any LANGLEY COPY ring!',
         genuineLabel: '✓ STRAIGHT AXIS',
         fakeLabel: '✗ CROOKED / 4★',
@@ -2317,7 +2320,7 @@ export function drawSecurityManualCanvas(
         ctx.lineTo(tx + 42, iconY - 10)
         ctx.stroke()
         ctx.fillStyle = '#094a20'
-        drawFittedCardLine(ctx, '90° + СССР', tx + 54, iconY + 5, boxW - 62, 16)
+        drawFittedCardLine(ctx, '90 DEG + USSR', tx + 54, iconY + 5, boxW - 62, 15)
 
         ctx.strokeStyle = '#7a110a'
         ctx.lineWidth = 3.0
@@ -2377,17 +2380,17 @@ export function drawSecurityManualCanvas(
     ctx.strokeStyle = '#111111'
     ctx.strokeRect(cardX, 408, cardW, 32)
     ctx.fillStyle = '#ffffff'
-    drawFittedCardLine(ctx, '✓ APPROVED SOVIET FONTS (ГОСТ 84):', 50, 430, maxW, 20)
+    drawFittedCardLine(ctx, '✓ APPROVED SOVIET FONTS (GOST 84):', 50, 430, maxW, 20)
 
     ctx.fillStyle = '#111111'
     ctx.font = getFontDeclaration('GOST_MONO', 22)
-    ctx.fillText('• GOST MONO: ДИРЕКТИВА №44', 50, 472, maxW)
+    ctx.fillText('• GOST MONO: DIRECTIVE NO. 44', 50, 472, maxW)
     ctx.fillStyle = '#094a20'
     drawFittedCardLine(ctx, '  Monospaced slab; flat terminals.', 50, 502, maxW, 21)
 
     ctx.fillStyle = '#111111'
     ctx.font = getFontDeclaration('PRAVDA_BLOCK', 22)
-    ctx.fillText('• PRAVDA BLOCK: ПРОТОКОЛ ГКАЭ', 50, 546, maxW)
+    ctx.fillText('• PRAVDA BLOCK: GKAE PROTOCOL', 50, 546, maxW)
     ctx.fillStyle = '#094a20'
     drawFittedCardLine(ctx, '  Heavy block strokes; zero slant.', 50, 578, maxW, 21)
 
@@ -2882,9 +2885,9 @@ export function drawSecurityManualCanvas(
     ctx.lineWidth = sec.active ? 3 : 2
     ctx.strokeRect(sx, 22, secW, 48)
     ctx.fillStyle = sec.active ? '#ffffff' : '#b5ad96'
-    ctx.font = 'bold 18px "Courier Prime", monospace'
+    ctx.font = 'bold 15px "Kremlin", "Courier Prime", monospace'
     ctx.textAlign = 'center'
-    ctx.fillText(sec.label, sx + secW / 2, 52)
+    ctx.fillText(sec.label, sx + secW / 2, 52, secW - 14)
   })
 
   // Row 2: Sub-Page Tabs (`1. SEALS | 2. FONTS | 3. COLOURS` or `4. HOW TO PLAY | 5. UNIT A | 6. UNIT A-2/B | 7. GRID [5]`)
@@ -3060,36 +3063,38 @@ export function drawDeskHeaderTickerCanvas(
 
   // Left Title in Phosphor Green / Brass (or Training Drill / Diagnostic Badge)
   ctx.fillStyle = activeBannerPrompt ? '#ffb000' : '#33ff66'
-  ctx.font = 'bold 17px "Courier Prime", monospace'
+  ctx.font = 'bold 16px "Kremlin", "Courier Prime", monospace'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
   ctx.fillText(
     isDrillMode
-      ? 'УЧЕБНАЯ ТРЕВОГА'
+      ? 'TRAINING DRILL'
       : diagnosticHint
-        ? 'ТАБЛО ТРЕВОГИ'
-        : 'ПУНКТ №4 // DESK',
+        ? 'ALARM ANNUNCIATOR'
+        : 'POST NO. 4 // DESK',
     16,
-    28
+    28,
+    186
   )
 
-  // Diegetic Desk Posture Pill ([E] РЕЖИМ: ЗА СТОЛОМ / СЕСТЬ ЗА СТОЛ)
+  // Diegetic Desk Posture Pill ([E] MODE: SEATED / SIT AT DESK)
   ctx.fillStyle = isSeatedAtDesk ? '#112e22' : '#3b280b'
   ctx.fillRect(210, 10, 344, 34)
   ctx.strokeStyle = isSeatedAtDesk ? '#33ff66' : '#ffb000'
   ctx.lineWidth = 2
   ctx.strokeRect(210, 10, 344, 34)
   ctx.fillStyle = isSeatedAtDesk ? '#33ff66' : '#ffb000'
-  ctx.font = 'bold 14px "Courier Prime", monospace'
+  ctx.font = 'bold 13px "Kremlin", "Courier Prime", monospace'
   ctx.textAlign = 'center'
   ctx.fillText(
     isDrillMode
       ? '[BACKSPACE] SKIP TRAINING DRILL'
       : isSeatedAtDesk
-        ? '[E] РЕЖИМ: ЗА СТОЛОМ (SEATED)'
-        : '[E] СЕСТЬ ЗА СТОЛ (SIT AT DESK)',
+        ? '[E] MODE: SEATED AT DESK'
+        : '[E] SIT AT DESK',
     382,
-    28
+    28,
+    330
   )
 
   // Mute Status Pill ([M] AUDIO)
@@ -3099,9 +3104,9 @@ export function drawDeskHeaderTickerCanvas(
   ctx.lineWidth = 2
   ctx.strokeRect(w - 504, 10, 118, 34)
   ctx.fillStyle = isMuted ? '#ff9999' : '#33ff66'
-  ctx.font = 'bold 14px "Courier Prime", monospace'
+  ctx.font = 'bold 13px "Kremlin", "Courier Prime", monospace'
   ctx.textAlign = 'center'
-  ctx.fillText(isMuted ? '[M] MUTED' : '[M] AUDIO ON', w - 445, 28)
+  ctx.fillText(isMuted ? '[M] MUTED' : '[M] AUDIO ON', w - 445, 28, 108)
 
   // Right Commendations & Citations Pills
   ctx.fillStyle = '#143820'
@@ -3109,16 +3114,16 @@ export function drawDeskHeaderTickerCanvas(
   ctx.strokeStyle = '#33ff66'
   ctx.strokeRect(w - 376, 10, 176, 34)
   ctx.fillStyle = '#33ff66'
-  ctx.font = 'bold 15px "Courier Prime", monospace'
+  ctx.font = 'bold 13px "Kremlin", "Courier Prime", monospace'
   ctx.textAlign = 'center'
-  ctx.fillText(`COMMENDATIONS: ${commendations}`, w - 288, 28)
+  ctx.fillText(`COMMENDATIONS: ${commendations}`, w - 288, 28, 164)
 
   ctx.fillStyle = '#3b1111'
   ctx.fillRect(w - 190, 10, 174, 34)
   ctx.strokeStyle = '#ff2a2a'
   ctx.strokeRect(w - 190, 10, 174, 34)
   ctx.fillStyle = '#ff5555'
-  ctx.fillText(`CITATIONS: ${citations}`, w - 103, 28)
+  ctx.fillText(`CITATIONS: ${citations}`, w - 103, 28, 162)
 
   // Bottom Verdict / Training Drill / Contextual Diagnostic Hint Ticker Row
   const tickerBg = activeBannerPrompt
@@ -3338,21 +3343,21 @@ export function drawBobbleNameplateCanvas(
   ctx.fillRect(10, h - 15, 5, 5)
   ctx.fillRect(w - 15, h - 15, 5, 5)
 
-  // Crisp, high-contrast dark engraved Cyrillic letters on bright brass (#b8a46b)
+  // Crisp, high-contrast dark engraved letters on bright brass (#b8a46b)
   ctx.fillStyle = '#0d110f'
-  ctx.font = 'bold 26px "Courier Prime", monospace'
+  ctx.font = 'bold 22px "Kremlin", "Courier Prime", monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(name, w / 2, 23)
+  ctx.fillText(name, w / 2, 23, w - 28)
   ctx.fillStyle = '#472b1e'
-  ctx.font = 'bold 14px "Courier Prime", monospace'
-  ctx.fillText(subtitle, w / 2, 46)
+  ctx.font = 'bold 12px "Kremlin", "Courier Prime", monospace'
+  ctx.fillText(subtitle, w / 2, 46, w - 24)
 
   ctx.restore()
 }
 
 /**
- * Draws industrial yellow/brass & black diagonal hazard stripes (`ОПАСНО`) for the shredder throat.
+ * Draws industrial yellow/brass & black diagonal hazard stripes (`DANGER`) for the shredder throat.
  * Dithers the metal chevron background first, then draws crisp un-dithered warning text.
  */
 export function drawHazardChevronCanvas(
@@ -3382,9 +3387,9 @@ export function drawHazardChevronCanvas(
   ctx.lineWidth = 2
   ctx.strokeRect(w / 2 - 58, 4, 116, h - 8)
   ctx.fillStyle = '#cfc6b0'
-  ctx.font = 'bold 13px "Courier Prime", monospace'
+  ctx.font = 'bold 12px "Kremlin", "Courier Prime", monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('ОПАСНО // НОЖИ', w / 2, h / 2)
+  ctx.fillText('DANGER // BLADES', w / 2, h / 2, 108)
   ctx.restore()
 }

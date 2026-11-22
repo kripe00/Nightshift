@@ -126,18 +126,18 @@ function RadioBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
     >
       <div
         className="mb-1 flex items-center justify-center gap-2 text-xs font-bold tracking-[0.18em] text-[#ffb000]"
-        style={{ fontFamily: '"VT323", "Courier Prime", monospace' }}
+        style={{ fontFamily: '"Kremlin", "VT323", monospace' }}
       >
         <span
           className="inline-block h-2 w-2 rounded-full bg-[#ff2a2a]"
           style={{ boxShadow: '0 0 6px #ff2a2a' }}
         />
-        <span>[ РАДИО СССР // BROADCAST ]</span>
+        <span>[ USSR STATE RADIO // BROADCAST ]</span>
       </div>
       <div
         className="text-base leading-snug tracking-[0.085em] text-[#f6ead0] uppercase sm:text-lg"
         style={{
-          fontFamily: '"Kremlin", sans-serif',
+          fontFamily: '"Kremlin", "VT323", monospace',
           textShadow:
             '0 2px 0 #070907, 0 0 8px rgba(0, 0, 0, 0.95), 0 0 14px rgba(255, 176, 0, 0.22)',
         }}
