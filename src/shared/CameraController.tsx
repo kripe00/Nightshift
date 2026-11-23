@@ -9,6 +9,7 @@ import {
   hasHoverableControlHandler,
   installSafePointerCaptureShim,
   isObjectTreeVisible,
+  playerCameraPose,
   pointerLockInteraction,
   subscribePointerLockInteraction,
   updatePointerLockInteraction,
@@ -1203,6 +1204,11 @@ export const CameraController: React.FC = () => {
       state.camera.rotation.set(look.currentPitch, look.currentYaw, 0, "YXZ");
       state.camera.rotation.z = 0;
     }
+
+    playerCameraPose.x = playerPos.x;
+    playerCameraPose.z = playerPos.z;
+    playerCameraPose.yaw = look.currentYaw;
+    playerCameraPose.isSeatedAtDesk = isSeated;
 
     const isRmbFocus =
       rmbHeldRef.current &&

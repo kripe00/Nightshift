@@ -1,0 +1,186 @@
+import type { TutorialPhase } from '../simulation/rbmkPhysics'
+import type { CrisisCoachId, KomradMood } from './types'
+
+export type TargetConsoleId = 'UNIT_A' | 'UNIT_A2' | 'UNIT_B' | 'UNIT_C'
+
+export interface ConsoleWorldTarget {
+  x: number
+  z: number
+  shortName: string
+  locationLabel: string
+  keyHint: string
+}
+
+export const CONSOLE_WORLD_TARGETS: Record<TargetConsoleId, ConsoleWorldTarget> = {
+  UNIT_A: {
+    x: -2.83,
+    z: -0.96,
+    shortName: 'UNIT A',
+    locationLabel: 'Front-Left Console',
+    keyHint: '[KEY 1]',
+  },
+  UNIT_A2: {
+    x: -4.3,
+    z: -1.35,
+    shortName: 'UNIT A-2',
+    locationLabel: 'Far-Left Console',
+    keyHint: '[KEY 6]',
+  },
+  UNIT_B: {
+    x: 4.15,
+    z: -0.98,
+    shortName: 'UNIT B',
+    locationLabel: 'Right Wing Console',
+    keyHint: '[KEY 3]',
+  },
+  UNIT_C: {
+    x: -5.16,
+    z: 1.42,
+    shortName: 'UNIT C',
+    locationLabel: 'Left Wall Batteries',
+    keyHint: '[KEY 5]',
+  },
+}
+
+export interface TutorialVoxSpec {
+  spokenVoxText: string
+  mood: KomradMood
+}
+
+export const TUTORIAL_VOX_BY_PHASE: Partial<
+  Record<TutorialPhase, TutorialVoxSpec>
+> = {
+  STEP_1_COOLING: {
+    spokenVoxText:
+      'ATTENTION COMRADE OPERATOR. GO TO UNIT ALPHA CONSOLE NOW. START COOLING PUMPS IMMEDIATELY. LOW WATER FLOW WILL BOIL THE REACTOR CORE.',
+    mood: 'warning',
+  },
+  STEP_2_PULL_RODS: {
+    spokenVoxText:
+      'NOTICE OPERATOR. CHECK UNIT ALPHA TWO CONSOLE. TURN THE CONTROL ROD WHEEL TO PULL RODS OUT AND RAISE THERMAL POWER OUTPUT. PUSH CONTROL RODS IN TO LOWER CORE TEMPERATURE.',
+    mood: 'warning',
+  },
+  STEP_6_BASELINE_600MW: {
+    spokenVoxText:
+      'CHECK UNIT ALPHA POWER PANEL. BALANCE ALL SIX GRID OUTPUT CHANNELS TO QUOTA DEMAND. CHECK UNIT CHARLIE BATTERY BANK FOR LOW POWER.',
+    mood: 'warning',
+  },
+  STEP_8_XENON_DRILL: {
+    spokenVoxText:
+      'WARNING COMRADE. AMBER SPENT FUEL ROD DETECTED ON UNIT ALPHA TWO CORE SCREEN. CLICK THE AMBER CHANNEL AND PULL THE REFUELING LEVER IMMEDIATELY.',
+    mood: 'warning',
+  },
+  STEP_3_BUILD_STEAM: {
+    spokenVoxText:
+      'CHECK UNIT BRAVO STEAM DRUM PANEL. RAISE FEEDWATER FLOW FOR LOW WATER LEVEL. OPEN STEAM VENT FOR HIGH DRUM PRESSURE.',
+    mood: 'warning',
+  },
+  STEP_7_VOID_DRILL: {
+    spokenVoxText:
+      'CRITICAL DANGER COMRADE. STEAM VOIDS RISING IN THE REACTOR CORE. RAISE FEEDWATER ON UNIT BRAVO AND COOLING PUMPS ON UNIT ALPHA IMMEDIATELY. WATCH HIGH XENON POISON AND USE ALPHA FIVE SCRAM ONLY FOR CRITICAL OVERHEATING.',
+    mood: 'critical',
+  },
+  COMPLETED: {
+    spokenVoxText:
+      'ATTENTION COMRADE OPERATOR. REACTOR START SEQUENCE COMPLETE. ALL SYSTEMS ONLINE AND NOMINAL. NIGHT SHIFT COMMENCING NOW.',
+    mood: 'normal',
+  },
+}
+
+export interface CrisisCoachSpec {
+  id: CrisisCoachId
+  title: string
+  badge: string
+  accent: 'red' | 'amber' | 'violet'
+  targetConsole: TargetConsoleId
+  whatHappening: string
+  howToFix: string
+  spokenVoxText: string
+  mood: KomradMood
+}
+
+export const CRISIS_COACH_CARDS: Record<CrisisCoachId, CrisisCoachSpec> = {
+  HIGH_VOID: {
+    id: 'HIGH_VOID',
+    title: 'HIGH STEAM VOIDS — RUNAWAY BOILING BUBBLES',
+    badge: 'VOID > 22%',
+    accent: 'red',
+    targetConsole: 'UNIT_B',
+    whatHappening:
+      'Water is boiling too fast inside the core. In a Soviet RBMK reactor, steam bubbles actually MULTIPLY heat even faster!',
+    howToFix:
+      '1) Raise Cooling Pumps (UNIT A) & Feedwater (UNIT B) to flood cold water in. 2) Push Control Rods IN (lower % on UNIT A-2) or hit Boron Injection (UNIT A)!',
+    spokenVoxText:
+      'CRITICAL DANGER COMRADE. STEAM VOIDS RISING IN THE REACTOR CORE. CORE OVERHEATING DETECTED. RAISE COOLING PUMPS ON UNIT ALPHA AND PUSH CONTROL RODS IN ON UNIT ALPHA TWO IMMEDIATELY.',
+    mood: 'critical',
+  },
+  HIGH_XENON: {
+    id: 'HIGH_XENON',
+    title: 'HIGH XENON POISONING — REACTOR EXHAUST CHOKE',
+    badge: 'XENON > 28%',
+    accent: 'violet',
+    targetConsole: 'UNIT_A2',
+    whatHappening:
+      'Dropping power quickly or over-cooling leaves invisible Xenon gas that suffocates the reaction and makes electricity sag.',
+    howToFix:
+      'DO NOT yank rods straight to 100% in panic! Keep water flowing, pull Control Rods OUT gradually (raise % on UNIT A-2) to burn Xenon away while UNIT C Batteries buffer the grid.',
+    spokenVoxText:
+      'WARNING OPERATOR. HIGH XENON POISON DETECTED IN THE CORE. THERMAL POWER IS DROPPING. DO NOT PULL ALL CONTROL RODS NOW. PULL CONTROL RODS ON UNIT ALPHA TWO AND CHECK UNIT CHARLIE BATTERY OUTPUT.',
+    mood: 'warning',
+  },
+  WATER_LOW: {
+    id: 'WATER_LOW',
+    title: 'LOW STEAM DRUM WATER — BOILER RUNNING DRY',
+    badge: 'DRUM < -90 MM',
+    accent: 'red',
+    targetConsole: 'UNIT_B',
+    whatHappening:
+      'Boiling steam is draining your water tank below safe level. Running dry exposes fuel channels and causes overheating.',
+    howToFix:
+      'Turn Feedwater Valve UP (UNIT B • [KEY 3]) above 55% and confirm Cooling Pumps A & B (UNIT A) are running to refill Drum Level toward 0 mm.',
+    spokenVoxText:
+      'CRITICAL WARNING COMRADE. STEAM DRUM WATER LEVEL IS LOW. CORE OVERHEATING DANGER. RAISE FEEDWATER VALVE ON UNIT BRAVO IMMEDIATELY.',
+    mood: 'critical',
+  },
+  HIGH_PRESSURE: {
+    id: 'HIGH_PRESSURE',
+    title: 'HIGH STEAM PRESSURE — PIPES OVERPRESSURIZING',
+    badge: 'PRESSURE > 78 BAR',
+    accent: 'amber',
+    targetConsole: 'UNIT_B',
+    whatHappening:
+      'Steam drum pressure is climbing past safe 70 BAR limits — too much pressure can burst pipes.',
+    howToFix:
+      'Hold Steam Vent briefly on UNIT B ([KEY 3]) to bleed pressure down to 65-70 BAR, and lower Control Rods slightly on UNIT A-2 if thermal power is above demand.',
+    spokenVoxText:
+      'WARNING OPERATOR. HIGH STEAM DRUM PRESSURE DETECTED. OPEN STEAM VENT ON UNIT BRAVO AND PUSH CONTROL RODS IN ON UNIT ALPHA TWO IMMEDIATELY.',
+    mood: 'warning',
+  },
+  SPENT_ROD: {
+    id: 'SPENT_ROD',
+    title: 'BURNED-OUT FUEL ROD — AMBER CORE CHANNEL',
+    badge: 'SPENT FUEL',
+    accent: 'amber',
+    targetConsole: 'UNIT_A2',
+    whatHappening:
+      'A fuel channel burned out and turned AMBER. Spent rods cut electrical output and 4+ spent rods make the core overheat.',
+    howToFix:
+      'Go to UNIT A-2 ([KEY 6]), click the glowing AMBER dot on the round RBMK CORE map to lock it, then drag the Rod Refueling Lever DOWN to reload.',
+    spokenVoxText:
+      'WARNING COMRADE. AMBER SPENT FUEL ROD DETECTED ON UNIT ALPHA TWO CORE SCREEN. CLICK THE AMBER CHANNEL AND PULL THE REFUELING LEVER IMMEDIATELY.',
+    mood: 'warning',
+  },
+  MELTDOWN_RISK: {
+    id: 'MELTDOWN_RISK',
+    title: 'CRITICAL CORE OVERHEAT (> 700°C) — EMERGENCY STOP',
+    badge: 'CORE > 700°C',
+    accent: 'red',
+    targetConsole: 'UNIT_A',
+    whatHappening: 'Core temperature is approaching meltdown limits!',
+    howToFix:
+      'Go to UNIT A ([KEY 1]): press BORON INJECTION first (safely cools reactivity), maximize Cooling Pumps, or flip the red cover and press AZ-5 SCRAM for full emergency shutdown!',
+    spokenVoxText:
+      'EMERGENCY ALERT. REACTOR CORE TEMPERATURE CRITICAL. MELTDOWN PROBABILITY HIGH. INJECT BORON AND PRESS ALPHA FIVE SCRAM ON UNIT ALPHA IMMEDIATELY.',
+    mood: 'critical',
+  },
+}

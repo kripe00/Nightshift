@@ -112,7 +112,22 @@ export interface KomradMessageEntry {
   timestamp: string // [HH:MM:SS] format
   sender: 'K.O.M.R.A.D.-84' | 'SYS.DEFENSE' | 'PRINTER' | 'OPERATOR'
   text: string
+  spokenVoxText?: string
+  forceInterrupt?: boolean
   mood: KomradMood
+}
+
+export type CrisisCoachId =
+  | 'HIGH_VOID'
+  | 'HIGH_XENON'
+  | 'WATER_LOW'
+  | 'HIGH_PRESSURE'
+  | 'SPENT_ROD'
+  | 'MELTDOWN_RISK'
+
+export interface ActiveCrisisCoach {
+  id: CrisisCoachId
+  expiresAtMs: number
 }
 
 export type HotspotSeverity = 'amber' | 'red' | 'cyan'
@@ -152,6 +167,9 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   activeMandate: OperationalMandate | null
   tutorialPhase: TutorialPhase
   tutorialPrompt: TutorialPrompt
+  tutorialHintsHidden: boolean
+  activeCrisisCoach: ActiveCrisisCoach | null
+  dismissedCrisisIds: CrisisCoachId[]
 
   // H2O Controls
   selectedH2OSubstationId: 1 | 3 | 5
@@ -242,6 +260,10 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   startShift: () => void
   resetShift: () => void
   skipTutorial: () => void
+  advanceTutorialStep: () => void
+  setTutorialHintsHidden: (hidden: boolean) => void
+  toggleTutorialHintsHidden: () => void
+  dismissCrisisCoach: () => void
   setTutorialStep: (step: TutorialStep) => void
   setHoveredDiagnosticId: (id: DiagnosticAlarmId | null) => void
   setHoveredControlHint: (hint: string | null) => void

@@ -1140,16 +1140,16 @@ export const SovietModularSteelCabinet3D: React.FC<
       // 1. Tutorial Target Check (Blinking Cherenkov-Blue Beacon)
       const isTutorialTarget =
         s.tutorialPhase !== "COMPLETED" &&
-        ((s.tutorialPhase === "STEP_1_COOLING" && unitCode === "B") ||
+        ((s.tutorialPhase === "STEP_1_COOLING" && unitCode === "A") ||
           (s.tutorialPhase === "STEP_2_PULL_RODS" && unitCode === "A2") ||
-          ((s.tutorialPhase === "STEP_3_BUILD_STEAM" ||
+          ((s.tutorialPhase === "STEP_6_BASELINE_600MW" ||
             s.tutorialPhase === "STEP_4_SPIN_TURBINE" ||
             s.tutorialPhase === "STEP_5_SYNC_GRID") &&
-            unitCode === "C") ||
-          (s.tutorialPhase === "STEP_6_BASELINE_600MW" && unitCode === "A") ||
+            unitCode === "A") ||
+          (s.tutorialPhase === "STEP_8_XENON_DRILL" && unitCode === "A2") ||
+          (s.tutorialPhase === "STEP_3_BUILD_STEAM" && unitCode === "B") ||
           (s.tutorialPhase === "STEP_7_VOID_DRILL" &&
-            (unitCode === "B" || unitCode === "A2")) ||
-          (s.tutorialPhase === "STEP_8_XENON_DRILL" && unitCode === "A2"));
+            (unitCode === "B" || unitCode === "A" || unitCode === "A2")));
 
       // 2. Continuous 0.0 -> 1.0 Stress Score + Culprit Tag Per Console
       const norm = (v: number, lo: number, hi: number): number =>
@@ -4086,9 +4086,10 @@ const SculptedPumpValveAssembly3D: React.FC<
     }
 
     const highlightPumpTut =
-      (state.tutorialStep === 3 &&
-        pumpIndex === 0 &&
-        state.pumpThrottle[0] <= 50) ||
+      (state.tutorialPhase === "STEP_1_COOLING" &&
+        (!isPumpOn || state.pumpThrottle[pumpIndex] < 50)) ||
+      (state.tutorialPhase === "STEP_7_VOID_DRILL" &&
+        state.voidFraction >= 0.2) ||
       (!state.isBlackout && state.coreTemp > 650);
     const isColdStandby =
       !isPumpOn &&
@@ -7119,7 +7120,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
     if (gasLampMatRef.current) {
       const highlightGasTut =
         variant === "rear" &&
-        s.tutorialPhase === "STEP_1_COOLING" &&
+        (s.tutorialPhase === "STEP_3_BUILD_STEAM" ||
+          s.tutorialPhase === "STEP_7_VOID_DRILL") &&
         s.feedwaterValve < 0.45;
       if (highlightGasTut) {
         const pulse = 0.5 + 0.5 * Math.sin(t * 6.0);

@@ -52,12 +52,12 @@ const BUBBLE_LANES: readonly [number, number, number][] = [
 ];
 
 const VOLKOV_STEPS: readonly string[] = [
-  "[1] COOL",
-  "[2] RODS",
-  "[3] STEAM",
-  "[4] GRID",
-  "[5] VOID",
-  "[6] FUEL",
+  "[1] PUMPS",
+  "[2] POWER",
+  "[3] GRID",
+  "[4] REFUEL",
+  "[5] DRUM",
+  "[6] CRISIS",
 ];
 
 const SECTOR_SHORT_NAMES: readonly string[] = [
@@ -112,46 +112,76 @@ function clampVal(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
-function getVolkovStepInfo(phase: TutorialPhase): VolkovStepInfo {
-  switch (phase) {
-    case "STEP_1_COOLING":
+function getVolkovStepInfo(
+  phase: TutorialPhase,
+  state?: ReturnType<typeof useGameStore.getState>,
+): VolkovStepInfo {
+  const normPhase: TutorialPhase =
+    phase === "STEP_0_PICKUP_WEPAD"
+      ? "STEP_1_COOLING"
+      : phase === "STEP_4_SPIN_TURBINE" || phase === "STEP_5_SYNC_GRID"
+        ? "STEP_6_BASELINE_600MW"
+        : phase;
+
+  switch (normPhase) {
+    case "STEP_1_COOLING": {
+      const pA = state ? Math.round(state.pumpThrottle[0]) : 0;
+      const pB = state ? Math.round(state.pumpThrottle[1]) : 0;
       return {
         step: 0,
-        highlight: "UNIT_B",
-        tag: "STARTUP 1/6: START 4X MCP PUMPS & 50% FEEDWATER [KEY 3 -> UNIT B]",
+        highlight: "UNIT_A",
+        tag: `STEP 1/6: COOLING WATER FIRST [UNIT A] — PUMP A ${pA}% / B ${pB}% (NEED >=50%)`,
       };
-    case "STEP_2_PULL_RODS":
+    }
+    case "STEP_2_PULL_RODS": {
+      const rods = state ? Math.round(state.controlRodLevel) : 0;
+      const mwt = state ? Math.round(state.thermalPower) : 0;
       return {
         step: 1,
         highlight: "UNIT_A2",
-        tag: "STARTUP 2/6: RAISE BORON RODS TO 55% [KEY 6 -> UNIT A-2]",
+        tag: `STEP 2/6: RAISE RODS OUT TO 55% [UNIT A-2] — RODS ${rods}% | ${mwt}/500 MWt`,
       };
-    case "STEP_3_BUILD_STEAM":
+    }
+    case "STEP_6_BASELINE_600MW": {
+      const matched = state
+        ? state.substations.filter(
+            (s) => Math.abs(s.allocatedMW - s.targetMW) <= 15,
+          ).length
+        : 0;
+      const outMW = state ? Math.round(state.totalElectricalMW) : 0;
       return {
         step: 2,
-        highlight: "UNIT_C",
-        tag: "STARTUP 3/6: BUILD STEAM >54 BAR & CHARGE BATTERY [KEY 5 -> UNIT C]",
+        highlight: "UNIT_A",
+        tag: `STEP 3/6: MATCH 6 GRID SLIDERS TO 100 MW [UNIT A] — ${matched}/6 OK (${outMW}/600 MW)`,
       };
-    case "STEP_4_SPIN_TURBINE":
-    case "STEP_5_SYNC_GRID":
-    case "STEP_6_BASELINE_600MW":
+    }
+    case "STEP_8_XENON_DRILL": {
+      const spent = state ? Object.keys(state.coreTileAnomalies).length : 1;
+      const locked = state && state.selectedRefuelChannel !== null;
       return {
         step: 3,
-        highlight: "UNIT_A",
-        tag: "STARTUP 4/6: SET ALL 6 SECTOR LEVERS TO 100 MW [KEY 1 -> UNIT A]",
+        highlight: "UNIT_A2",
+        tag: `STEP 4/6: CLICK AMBER ROD & PULL REFUEL LEVER [UNIT A-2] — SPENT: ${spent}${locked ? " (LOCKED! PULL LEVER)" : ""}`,
       };
-    case "STEP_7_VOID_DRILL":
+    }
+    case "STEP_3_BUILD_STEAM": {
+      const fw = state ? Math.round(state.feedwaterValve * 100) : 0;
+      const bar = state ? Math.round(state.drumPressure) : 0;
       return {
         step: 4,
-        highlight: "UNIT_B_A2",
-        tag: "STARTUP 5/6: MATCH FEEDWATER 50% TO CLEAR VOID <24% [KEY 3 -> UNIT B]",
+        highlight: "UNIT_B",
+        tag: `STEP 5/6: SET FEEDWATER ~50% (VENT IF >75 BAR) [UNIT B] — FW ${fw}% | ${bar} BAR`,
       };
-    case "STEP_8_XENON_DRILL":
+    }
+    case "STEP_7_VOID_DRILL": {
+      const vPct = state ? Math.round(state.voidFraction * 100) : 0;
+      const fw = state ? Math.round(state.feedwaterValve * 100) : 0;
       return {
         step: 5,
-        highlight: "UNIT_A2",
-        tag: "STARTUP 6/6: CLICK AMBER CHANNEL & PULL REFUEL LEVER [KEY 6 -> UNIT A-2]",
+        highlight: "UNIT_B_A2",
+        tag: `STEP 6/6: CLEAR VOIDS <20% [UNIT B FW UP / A BORON] — VOID ${vPct}% | FW ${fw}%`,
       };
+    }
     case "COMPLETED":
     default:
       return {
@@ -903,7 +933,7 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
     // 2. CENTER DECK (~54% HEIGHT, y = 166..512): 4-STAGE SECTOR 84 FLOW MIMIC
     //    UNIT B -> UNIT A-2 -> UNIT C -> UNIT A
     // =========================================================================
-    const volkovInfo = getVolkovStepInfo(state.tutorialPhase);
+    const volkovInfo = getVolkovStepInfo(state.tutorialPhase, state);
 
     const stageY = 166;
     const stageH = 346;

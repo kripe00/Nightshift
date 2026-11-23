@@ -12,6 +12,20 @@ export interface PointerLockInteractionSnapshot {
   shiftTransitionActive: boolean
 }
 
+export interface PlayerCameraPose {
+  x: number
+  z: number
+  yaw: number
+  isSeatedAtDesk: boolean
+}
+
+export const playerCameraPose: PlayerCameraPose = {
+  x: 0,
+  z: 0.52,
+  yaw: 0,
+  isSeatedAtDesk: false,
+}
+
 export const pointerLockInteraction: PointerLockInteractionSnapshot = {
   isPointerLocked: false,
   isHoveringControl: false,

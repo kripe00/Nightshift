@@ -12,6 +12,7 @@ import {
   pointerLockInteraction,
   subscribePointerLockInteraction,
 } from './shared/pointerLockState'
+import { TutorialCoachHud } from './shared/TutorialCoachHud'
 import { useGameStore } from './shared/useGameStore'
 
 function CenterReticle() {
@@ -190,11 +191,48 @@ export function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Backspace') {
         const s = useGameStore.getState()
-        if (s.phase === 'playing' && s.isShiftControlReady && s.tutorialStep !== 'DONE') {
+        if (s.phase === 'playing' && s.isShiftControlReady && s.tutorialPhase !== 'COMPLETED') {
           e.preventDefault()
           playSwitchClank(true)
           s.skipTutorial()
           return
+        }
+      }
+      if (e.code === 'KeyH') {
+        const s = useGameStore.getState()
+        if (
+          s.phase === 'playing' &&
+          s.isShiftControlReady &&
+          !pointerLockInteraction.mainMenuOpen &&
+          !pointerLockInteraction.debugMenuOpen &&
+          s.tutorialPhase !== 'COMPLETED'
+        ) {
+          e.preventDefault()
+          playSwitchClank(true)
+          s.toggleTutorialHintsHidden()
+          return
+        }
+      }
+      if (e.code === 'KeyN') {
+        const s = useGameStore.getState()
+        if (
+          s.phase === 'playing' &&
+          s.isShiftControlReady &&
+          !pointerLockInteraction.mainMenuOpen &&
+          !pointerLockInteraction.debugMenuOpen
+        ) {
+          if (s.tutorialPhase !== 'COMPLETED') {
+            e.preventDefault()
+            playSwitchClank(true)
+            s.advanceTutorialStep()
+            return
+          }
+          if (s.activeCrisisCoach !== null) {
+            e.preventDefault()
+            playSwitchClank(true)
+            s.dismissCrisisCoach()
+            return
+          }
         }
       }
       if (e.code === 'Space' || e.code === 'Enter') {
@@ -235,6 +273,7 @@ export function App() {
       <MainMenuOverlay />
       <DebugMenu />
       <CenterReticle />
+      <TutorialCoachHud menusOpen={menusOpen} />
       <RadioBroadcastSubtitleHud menusOpen={menusOpen} />
 
       {/* Subtle Contextual [E] SIT AT DESK Prompt When Walking Near Inspector Desk */}

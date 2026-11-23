@@ -141,7 +141,7 @@ export function createColdStartState(): ReactorState {
     rodTargetRate: 0,
     az5Active: false,
     mcpActive: [false, false, false, false],
-    pumpThrottle: [60, 60],
+    pumpThrottle: [0, 0],
     oilCoolerValve: 45,
     feedwaterValve: 0.0,
     nitrogenLoopValve: 0,
@@ -983,111 +983,94 @@ export function toggleGridBreaker(state: ReactorState, turbineIndex: 0 | 1 = 0):
 }
 
 /**
- * Volkov Training Drill & Live Multi-Panel Causal Order Guide (Steps 0–7 + Live Shift)
+ * Layman Training Curriculum & Live Shift Balance Helper (Steps 1-6 + Live Shift)
  */
 export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhase): TutorialPrompt {
   switch (currentPhase) {
     case 'STEP_0_PICKUP_WEPAD': {
-      if (state.wePadHeld) {
-        return evaluateTutorial(state, 'STEP_1_COOLING');
-      }
-      return {
-        phase: 'STEP_0_PICKUP_WEPAD',
-        header: '>> STEP 0/7 [DESK — WE-PAD 84]:',
-        body: 'ACTION: PRESS [E] (OR CLICK) TO PICK UP YOUR "WE-PAD 84" TABLET FROM THE DESK ([TAB] TO INSPECT CLOSE-UP).',
-        hint: 'WHY: Your WePad 84 links to Plant Director Volkov and tracks live RBMK-1000 physics across all consoles.',
-        panelKey: 'GO TO: [KEY 4] INSPECTOR DESK',
-        actionLine: 'PRESS [E] TO PICK UP WE-PAD 84',
-        whyLines: [
-          'Streams live core physics as you walk between consoles.',
-          'Hold [TAB] anytime to bring the screen close to your eyes.'
-        ],
-        volkovQuote:
-          '"Your predecessor left this tablet in the canteen. He now audits snowdrifts in Magadan."'
-      };
+      return evaluateTutorial(state, 'STEP_1_COOLING');
     }
 
     case 'STEP_1_COOLING': {
-      const activePumps = state.mcpActive.filter(Boolean).length;
-      if (activePumps >= 2 && state.feedwaterValve >= 0.45) {
+      const aOk = state.mcpActive[0] && state.pumpThrottle[0] >= 50;
+      const bOk = state.mcpActive[2] && state.pumpThrottle[1] >= 50;
+      const activeMcpCount = state.mcpActive.filter(Boolean).length;
+      if ((aOk && bOk) || (activeMcpCount >= 4 && state.feedwaterValve >= 0.45)) {
+        state.mcpActive = [true, true, true, true];
+        state.sealToggles = [true, true, true];
+        state.feedwaterValve = Math.max(state.feedwaterValve, 0.5);
+        state.nitrogenLoopValve = Math.max(state.nitrogenLoopValve, 50);
+        state.pumpThrottle = [
+          Math.max(55, state.pumpThrottle[0]),
+          Math.max(55, state.pumpThrottle[1]),
+        ];
         return evaluateTutorial(state, 'STEP_2_PULL_RODS');
       }
       return {
         phase: 'STEP_1_COOLING',
-        header: '>> STEP 1/7 [KEY 3 -> UNIT B // COOLING & GAS]:',
-        body: 'ACTION: ON [UNIT B], START ALL 4 "MAIN CIRC. PUMPS", SCROLL "FEEDWATER VALVE" TO 50%, AND VERIFY SCRUBBERS / HE-N2 GAS.',
-        hint: 'WHY: Flooded fuel tubes keep DRUM LEVEL near 0mm & STEAM VOID low; He-N2 & Scrubbers cool graphite bricks; Oil Cooler saves bearings.',
-        panelKey: 'GO TO: [KEY 3] UNIT B (FAR LEFT)',
-        actionLine: 'START 4 PUMPS & SET FEEDWATER 50%',
+        header: 'STEP 1/6 — COOLING WATER FIRST',
+        body: 'Drag or scroll PUMP THROTTLE levers UP above 50% on both COOLING PUMP A and COOLING PUMP B.',
+        hint: 'Water carries heat away from the fuel. Without moving water, boiling steam bubbles (Voids) make heat skyrocket!',
+        panelKey: 'UNIT A (Front-Left • [KEY 1])',
+        actionLine: 'Raise COOLING PUMP A & COOLING PUMP B levers >= 50%',
         whyLines: [
-          'Floods fuel tubes -> keeps DRUM LEVEL 0mm & STEAM VOID safe.',
-          'He-N2 + Scrubbers cool graphite; Oil Cooler saves bearings.'
+          'Water carries heat away from hot fuel inside the reactor core.',
+          'Without flowing water, steam bubbles (Voids) overheat the core!',
         ],
         volkovQuote:
-          '"Since the Ministry replaced our containment dome with a motivational banner, dry tubes & melted bearings come out of your pension."'
+          'ATTENTION COMRADE OPERATOR. GO TO UNIT ALPHA CONSOLE NOW. START COOLING PUMPS IMMEDIATELY.',
       };
     }
 
     case 'STEP_2_PULL_RODS': {
-      if (state.controlRods >= 0.50 && state.thermalPower >= 200) {
-        return evaluateTutorial(state, 'STEP_3_BUILD_STEAM');
+      if (state.controlRods >= 0.5 && state.thermalPower >= 500) {
+        return evaluateTutorial(state, 'STEP_6_BASELINE_600MW');
       }
       return {
         phase: 'STEP_2_PULL_RODS',
-        header: '>> STEP 2/7 [KEY 3 -> UNIT A-2 // BORON RODS]:',
-        body: 'ACTION: ON [UNIT A-2] LEFT BAY, SCROLL OR DRAG THE [CONTROL ROD DRIVE] WHEEL TO RAISE BORON RODS TO 55%.',
-        hint: 'WHY: Boron control rods act as neutron sponges. Pulling them UP raises REACTIVITY and heats core water (~1920 MWt).',
-        panelKey: 'GO TO: [KEY 3] UNIT A-2 (MID-LEFT)',
-        actionLine: 'TURN [CONTROL ROD DRIVE] WHEEL TO 55%',
+        header: 'STEP 2/6 — INCREASE & LOWER POWER',
+        body: 'Scroll or drag the big CONTROL ROD DRIVE wheel UP (raise RODS toward 55%) to make ~600 MW.',
+        hint: 'Control rods act like brakes: pulling rods OUT (higher %) releases heat & MORE MW; pushing rods IN (lower %) brakes & cools.',
+        panelKey: 'UNIT A-2 (Far-Left • [KEY 6])',
+        actionLine: 'Turn CONTROL ROD DRIVE wheel to 55% (Thermal > 500 MWt)',
         whyLines: [
-          'Boron rods act as neutron sponges inside the core.',
-          'Pulling them UP raises REACTIVITY & THERMAL MWt gauge.'
+          'Rods = reactor brakes: UP/OUT (higher %) = MORE heat & electricity.',
+          'DOWN/IN (lower %) puts brakes on to LOWER power & cool down.',
         ],
         volkovQuote:
-          '"Treat boron rods with Socialist respect, Comrade. Pull smoothly—Uranium-235 does not take five-minute tea breaks."'
+          'TURN CONTROL ROD WHEEL TO PULL RODS OUT AND RAISE THERMAL POWER OUTPUT.',
       };
     }
 
     case 'STEP_3_BUILD_STEAM': {
-      if (state.energyCreatedMW >= 420 && state.drumPressure >= 54) {
-        return evaluateTutorial(state, 'STEP_4_SPIN_TURBINE');
+      if (
+        state.feedwaterValve >= 0.45 &&
+        state.feedwaterValve <= 0.78 &&
+        state.drumPressure <= 78
+      ) {
+        state.feedwaterValve = 0.24;
+        state.nitrogenLoopValve = 24;
+        state.voidFraction = 0.36;
+        state.xenon = 12;
+        return evaluateTutorial(state, 'STEP_7_VOID_DRILL');
       }
       return {
         phase: 'STEP_3_BUILD_STEAM',
-        header: '>> STEP 3/7 [KEY 5 -> UNIT C // CHARGE BATTERY]:',
-        body: 'ACTION: PRESS [KEY 5] TO VIEW UNIT C ENERGY STORAGE AND WATCH "ENERGY CREATED" CLIMB TO ~600 MW AS STEAM CHARGES THE BATTERY.',
-        hint: 'WHY: Fission steam automatically spins the turbo-chargers into the Station Battery Bank, building stored energy before grid dispatch.',
-        panelKey: 'GO TO: [KEY 5] UNIT C (RIGHT WALL)',
-        actionLine: 'WATCH [ENERGY CREATED] & [ENERGY STORED] CLIMB',
+        header: 'STEP 5/6 — STEAM DRUM WATER & PRESSURE',
+        body: 'Turn FEEDWATER VALVE UP (~50%) to restore Drum Water toward 0 mm. Hold STEAM VENT if Pressure > 75 BAR.',
+        hint: 'Boiling turns water into steam. Too little water melts the core; too much pressure (> 75 BAR) stresses the pipes.',
+        panelKey: 'UNIT B (Right Wing • [KEY 3])',
+        actionLine: 'Set FEEDWATER VALVE to ~50% (and Steam Vent if > 78 BAR)',
         whyLines: [
-          'Core steam automatically creates ~600 MW into the Battery Bank.',
-          'Left gauge shows ENERGY CREATED; center shows ENERGY STORED %.'
+          'Feedwater refills the boiler drum so water stays safely near 0 mm.',
+          'Hold Steam Vent briefly if pressure climbs above 75 BAR.',
         ],
         volkovQuote:
-          '"No synchronizing flywheels in the dark anymore! Steam charges the giant Soviet Battery Bank—just watch the needle climb."'
+          'CHECK UNIT BRAVO STEAM DRUM PANEL. RAISE FEEDWATER FLOW FOR LOW WATER LEVEL.',
       };
     }
 
-    case 'STEP_4_SPIN_TURBINE': {
-      if (state.totalElectricalMW >= 550) {
-        return evaluateTutorial(state, 'STEP_6_BASELINE_600MW');
-      }
-      return {
-        phase: 'STEP_4_SPIN_TURBINE',
-        header: '>> STEP 4/7 [KEY 5 -> UNIT C // BATTERY TO GRID]:',
-        body: 'ACTION: TURN THE SINGLE [BATTERY -> GRID] WHEEL ON UNIT C TO 600 MW (60%) TO MATCH ENERGY DEMAND.',
-        hint: 'WHY: This single wheel controls how much power flows out of the Battery Bank to the 6 regional stations.',
-        panelKey: 'GO TO: [KEY 5] UNIT C (CENTER WHEEL)',
-        actionLine: 'TURN [BATTERY -> GRID] WHEEL TO 600 MW (60%)',
-        whyLines: [
-          'One wheel controls energy sent from Battery to Grid.',
-          'Match 600 MW ENERGY DEMAND while Battery buffers flow!'
-        ],
-        volkovQuote:
-          '"One wheel, Comrade! Even the Minister\'s nephew couldn\'t confuse this—turn it up to 600 MW so the grid stops complaining."'
-      };
-    }
-
+    case 'STEP_4_SPIN_TURBINE':
     case 'STEP_5_SYNC_GRID': {
       return evaluateTutorial(state, 'STEP_6_BASELINE_600MW');
     }
@@ -1097,72 +1080,75 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         (s) => Math.abs(s.allocatedMW - s.targetMW) <= 15
       );
       if (state.totalElectricalMW >= 550 && allLeversMatch) {
-        state.feedwaterValve = 0.24;
-        state.nitrogenLoopValve = 24;
-        state.voidFraction = 0.44;
-        state.coreTileAnomalies = {};
-        state.selectedRefuelChannel = null;
-        return evaluateTutorial(state, 'STEP_7_VOID_DRILL');
-      }
-      return {
-        phase: 'STEP_6_BASELINE_600MW',
-        header: '>> STEP 5/7 [KEY 1 -> UNIT A // 6 SECTOR LEVERS]:',
-        body: 'ACTION: GO TO UNIT A [KEY 1] AND SET ALL 6 SECTOR LEVERS TO 100 MW TO RECEIVE 600 MW FROM THE BATTERY.',
-        hint: 'WHY: The 6 sector levers allocate your 600 MW battery output to each Soviet sector cleanly.',
-        panelKey: 'GO TO: [KEY 1] UNIT A (6 LEVERS)',
-        actionLine: 'SET ALL 6 SECTOR LEVERS ON UNIT A TO 100 MW',
-        whyLines: [
-          'Distributes your 600 MW battery output across all 6 sectors.',
-          'Ensure UNIT C wheel stays near 600 MW ENERGY DEMAND.'
-        ],
-        volkovQuote:
-          '"Pull all six substation levers to 100 MW! Pripyat needs kettles, Duga needs radar, and the Vodka Plant needs pumps!"'
-      };
-    }
-
-    case 'STEP_7_VOID_DRILL': {
-      if (state.voidFraction < 0.24 && state.xenon < 24 && state.feedwaterValve >= 0.42) {
-        state.voidFraction = 0.10;
-        state.xenon = 6;
-        state.coreTileAnomalies = { 12: 'spent', 24: 'spent' };
+        state.coreTileAnomalies = { 18: 'spent' };
         state.selectedRefuelChannel = null;
         return evaluateTutorial(state, 'STEP_8_XENON_DRILL');
       }
       return {
-        phase: 'STEP_7_VOID_DRILL',
-        header: '>> STEP 6/7 [KEY 3 UNIT B & A-2 // ROD & WATER BALANCE]:',
-        body: 'ACTION: STEAM VOID (44%) FROM LOW FEEDWATER! TURN [FEEDWATER VALVE] ON UNIT B BACK TO ~50% TO MATCH YOUR 55% CONTROL RODS UNTIL VOID < 24%!',
-        hint: 'WHY: Feedwater & Control Rods must stay balanced together! Too little water for your rods raises VOID; too much cold water for your rods raises XENON!',
-        panelKey: 'GO TO: [KEY 3] UNIT B & UNIT A-2',
-        actionLine: 'MATCH FEEDWATER (~50%) TO RODS (~55%) UNTIL VOID < 24%',
+        phase: 'STEP_6_BASELINE_600MW',
+        header: 'STEP 3/6 — DELIVER ELECTRICITY TO GRID',
+        body: 'Drag or click all 6 bottom Power Sliders to match their green 100 MW targets (600 MW total).',
+        hint: 'Making heat is step one — you keep the region powered by matching each sector demand. UNIT C Batteries buffer sudden jumps!',
+        panelKey: 'UNIT A (Front-Left • [KEY 1])',
+        actionLine: 'Match all 6 Grid Power Sliders to green target MW (100 MW each)',
         whyLines: [
-          'Too much Rod heat vs. Feedwater -> Steam Void rises!',
-          'Too much cold Feedwater vs. Rods -> Xenon-135 rises!'
+          'Sending each sector its green target MW avoids blackouts & strikes.',
+          'UNIT C (Left Wall [KEY 5]) Batteries automatically buffer sudden spikes.',
         ],
         volkovQuote:
-          '"Rods and water are dance partners, Comrade! Starve the water and steam voids race; drown the rods and Xenon ash chokes the fire."'
+          'CHECK UNIT ALPHA POWER PANEL. BALANCE ALL SIX GRID OUTPUT CHANNELS TO QUOTA DEMAND.',
       };
     }
 
     case 'STEP_8_XENON_DRILL': {
       if (Object.keys(state.coreTileAnomalies).length === 0) {
-        state.xenon = 4;
+        state.xenon = 8;
+        state.selectedRefuelChannel = null;
+        state.feedwaterValve = 0.28;
+        state.nitrogenLoopValve = 28;
+        state.drumWaterLevel = -75;
+        state.drumPressure = Math.max(state.drumPressure, 74);
+        return evaluateTutorial(state, 'STEP_3_BUILD_STEAM');
+      }
+      return {
+        phase: 'STEP_8_XENON_DRILL',
+        header: 'STEP 4/6 — REFUEL BURNED-OUT RODS',
+        body: 'Click the glowing AMBER dot on the round RBMK CORE map, then drag the ROD REFUELING lever DOWN to load fresh fuel.',
+        hint: 'Spent uranium rods turn amber and weaken power output. 4+ un-refueled amber rods will overheat the core.',
+        panelKey: 'UNIT A-2 (Far-Left • [KEY 6])',
+        actionLine: 'Click AMBER core dot -> pull ROD REFUELING lever DOWN',
+        whyLines: [
+          'Burned-out amber fuel channels reduce power output (~6.5% each).',
+          'Lock the amber dot first, then pull the lever down to swap fresh fuel.',
+        ],
+        volkovQuote:
+          'WARNING COMRADE. AMBER SPENT FUEL ROD DETECTED ON UNIT ALPHA TWO CORE SCREEN.',
+      };
+    }
+
+    case 'STEP_7_VOID_DRILL': {
+      if (state.voidFraction < 0.2 && state.feedwaterValve >= 0.45) {
+        state.voidFraction = 0.1;
+        state.xenon = 8;
+        state.drumWaterLevel = 0;
+        state.drumPressure = 68;
+        state.coreTileAnomalies = {};
         state.selectedRefuelChannel = null;
         return evaluateTutorial(state, 'COMPLETED');
       }
       return {
-        phase: 'STEP_8_XENON_DRILL',
-        header: '>> STEP 7/7 [KEY 3 UNIT A-2 // ROD REFUELING]:',
-        body: 'ACTION: 2 FUEL RODS SPENT! CLICK A GLOWING AMBER TILE ON "RBMK CORE" (UNIT A-2) TO SELECT IT, THEN DRAG THE [ROD REFUELING LEVER] DOWN TO RELOAD BOTH!',
-        hint: 'WHY: Spent uranium rods cut MW output (~6.5% each) and 4+ spent rods overheat the core! Click an amber tile, then pull the Refueling Lever on UNIT A-2.',
-        panelKey: 'GO TO: [KEY 3] UNIT A-2 (CORE & LEVER)',
-        actionLine: 'CLICK AMBER CORE TILE -> PULL [ROD REFUELING LEVER] DOWN',
+        phase: 'STEP_7_VOID_DRILL',
+        header: 'STEP 6/6 — EMERGENCY DRILL: VOIDS, XENON & SCRAM',
+        body: 'STEAM VOIDS HIGH! Turn FEEDWATER VALVE UP (~50% on UNIT B) or press BORON INJECTION (UNIT A) until VOID drops below 20%.',
+        hint: 'High Voids = runaway boiling bubbles (flood water, lower rods or hit Boron). High Xenon = exhaust choke (pull rods out gradually + Battery).',
+        panelKey: 'UNIT B ([KEY 3]) / UNIT A ([KEY 1]) / UNIT A-2 ([KEY 6])',
+        actionLine: 'Clear Steam Void < 20% with Feedwater (~50%) or Boron Injection',
         whyLines: [
-          'Spent amber rods reduce MW created & drain the battery.',
-          '4+ un-refueled rods cause core heat buildup — refuel promptly!'
+          'High Voids (boiling bubbles) multiply heat -> Pumps/FW UP, Rods IN, Boron!',
+          'High Xenon (choke) -> Do NOT max rods; pull OUT slowly! >700C: Boron / AZ-5.',
         ],
         volkovQuote:
-          '"Refueling an RBMK while it runs at 2,000 megawatts is perfectly routine! Lock onto the amber cap and pull the crane lever."'
+          'CRITICAL DANGER COMRADE. STEAM VOIDS RISING IN THE REACTOR CORE.',
       };
     }
 
@@ -1203,28 +1189,28 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
           : !s3Ok
             ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
             : !s1Ok
-              ? 'GO TO: [KEY 3] UNIT A-2 (BORON RODS)'
+              ? 'GO TO: [KEY 6] UNIT A-2 (BORON RODS)'
               : 'GO TO: [KEY 3] UNIT B (FEEDWATER)';
         const nextAction = !s4Ok
-          ? `3. TURN BATTERY WHEEL [C] (${curWheelPct}% -> ${reqWheelPct}%) TO ${demandMW} MW`
+          ? `3. CHECK UNIT C AUTO-DRAIN (${curWheelPct}% -> ${reqWheelPct}%) TO ${demandMW} MW`
           : !s3Ok
-            ? `2. PULL ${unmetSub ? unmetSub.name : 'SECTOR'} LEVER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
+            ? `2. SET ${unmetSub ? unmetSub.name : 'SECTOR'} SLIDER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
             : !s1Ok
               ? `1. RODS UP (${curRodPct}%) -> ~${targetMWt} MWt TO RECHARGE BATTERY`
               : `1B. FEEDWATER UP ${curFwPct}% -> ${reqFeedwaterPct}%`;
         return {
           phase: 'COMPLETED',
           header: `>> ACTIVE +MW ORDER (OUT ${Math.round(dispatchedMW)} -> DEMAND ${demandMW} MW):`,
-          body: `${s1Ok && s2Ok ? '[OK]' : '[1]'} RODS UP [A-2] (${curRodPct}%) + WATER [B] (${curFwPct}%->${reqFeedwaterPct}%) | ${s3Ok ? '[OK]' : '[2]'} LEVER [A]`,
-          hint: `${s4Ok ? '[OK]' : '[3]'} TURN BATTERY WHEEL [C] (${curWheelPct}% -> ${reqWheelPct}%) SO GRID OUT (${Math.round(dispatchedMW)} MW) MATCHES DEMAND (${demandMW} MW)!`,
+          body: `${s1Ok && s2Ok ? '[OK]' : '[1]'} RODS UP [A-2] (${curRodPct}%) + WATER [B] (${curFwPct}%->${reqFeedwaterPct}%) | ${s3Ok ? '[OK]' : '[2]'} SLIDER [A]`,
+          hint: `${s4Ok ? '[OK]' : '[3]'} SET SECTOR SLIDERS [A] TO DEMAND (${demandMW} MW) — UNIT C BATTERY BUFFERS WHILE RODS CLIMB!`,
           panelKey: nextPanel,
           actionLine: nextAction,
           whyLines: [
-            '1. Rods [A-2] + Water [B] keep Battery charging at Demand.',
-            '2. Pull Lever [A] -> 3. Turn Battery Wheel [C] to Demand MW!'
+            '1. Rods [A-2] + Feedwater [B] recharge the Station Battery.',
+            '2. Set 6 Grid Sliders [A] -> UNIT C automatically buffers flow!',
           ],
           volkovQuote:
-            '"Battery buffers the grid while you raise the rods, Comrade—just dial the UNIT C wheel to match demand!"'
+            '"Battery buffers the grid while you raise the rods, Comrade—just match your UNIT A sliders to demand!"',
         };
       }
 
@@ -1233,30 +1219,30 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         const s1WheelOk = Math.abs(deltaMW) <= 25;
         const s2RodsOk = state.energyCreatedMW <= demandMW + 160 && state.drumPressure <= 76;
         const nextPanel = !s1LeversOk
-          ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
+          ? 'GO TO: [KEY 1] UNIT A (SECTOR SLIDER)'
           : !s1WheelOk
-            ? 'GO TO: [KEY 5] UNIT C (BATTERY WHEEL)'
-            : 'GO TO: [KEY 3] UNIT A-2 (PUSH RODS IN)';
+            ? 'GO TO: [KEY 1] UNIT A (SECTOR SLIDER)'
+            : 'GO TO: [KEY 6] UNIT A-2 (PUSH RODS IN)';
         const nextAction = !s1LeversOk
-          ? `1. LOWER ${unmetSub ? unmetSub.name : 'SECTOR'} LEVER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
+          ? `1. LOWER ${unmetSub ? unmetSub.name : 'SECTOR'} SLIDER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
           : !s1WheelOk
-            ? `1B. TURN BATTERY WHEEL (${curWheelPct}% -> ${reqWheelPct}%) TO ${demandMW} MW`
+            ? `1B. MATCH ALL 6 SLIDERS [A] TO ${demandMW} MW`
             : !s2RodsOk
-              ? `2. PUSH RODS IN (${curRodPct}%) SO BATTERY DOESN'T OVERCHARGE`
+              ? `2. LOWER RODS % (${curRodPct}%) SO STEAM DOES NOT OVERPRESSURIZE`
               : 'BATTERY & GRID BALANCED';
         return {
           phase: 'COMPLETED',
           header: `>> ACTIVE -MW ORDER (OUT ${Math.round(dispatchedMW)} -> DEMAND ${demandMW} MW):`,
-          body: `${s1LeversOk && s1WheelOk ? '[OK]' : '[1]'} LOWER SECTOR LEVER [A] & BATTERY WHEEL [C] (${curWheelPct}% -> ${reqWheelPct}%) TO ${demandMW} MW`,
-          hint: `${s2RodsOk ? '[OK]' : '[2]'} PUSH RODS IN [A-2] (${curRodPct}% -> ~${targetMWt} MWt) SO BATTERY DOESN'T OVERCHARGE!`,
+          body: `${s1LeversOk && s1WheelOk ? '[OK]' : '[1]'} LOWER SECTOR SLIDERS [A] TO ${demandMW} MW | ${s2RodsOk ? '[OK]' : '[2]'} LOWER RODS % [A-2]`,
+          hint: `${s2RodsOk ? '[OK]' : '[2]'} PUSH RODS IN (LOWER % ON [A-2] -> ~${targetMWt} MWt) SO BATTERY DOESN'T OVERCHARGE!`,
           panelKey: nextPanel,
           actionLine: nextAction,
           whyLines: [
-            '1. Lower Sector Lever [A] & Battery Wheel [C] to shed load.',
-            '2. Push Rods IN [A-2] to match Energy Created to Demand!'
+            '1. Lower Sector Sliders [A] to shed excess grid load.',
+            '2. Lower Rods % [A-2] to match Energy Created to Demand!',
           ],
           volkovQuote:
-            '"Ease back the UNIT C wheel to stop flooding the suburbs, then push Boron Rods in so the Battery Bank doesn\'t boil!"'
+            '"Ease back your grid sliders, then push Control Rods in so the Battery Bank doesn\'t overcharge!"',
         };
       }
 
@@ -1264,15 +1250,15 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         phase: 'COMPLETED',
         header: `>> BATTERY & GRID BALANCED (${Math.round(dispatchedMW)}/${Math.round(demandMW)} MW):`,
         body: `DISPATCHED OUTPUT MATCHES ENERGY DEMAND (${Math.round(state.batteryStoredMWh / 10)}% BATTERY STORED)! CHECK [KEY 4] DESK FOR PRAVDA ORDERS.`,
-        hint: '+MW: 1. Rods [A-2] + Water [B] -> 2. Lever [A] -> 3. Battery Wheel [C].  -MW: 1. Lower Lever [A] & Wheel [C] -> 2. Push Rods IN [A-2].',
+        hint: '+MW: Raise Rods % [A-2] + FW [B] + Sliders [A]. -MW: Lower Sliders [A] + Lower Rods % [A-2].',
         panelKey: 'CHECK: [KEY 4] DESK & [KEY 5] UNIT C',
         actionLine: 'AWAIT NEXT PRAVDA-84 POWER ORDER',
         whyLines: [
-          'ENERGY CREATED charges the Battery; single UNIT C wheel feeds Grid.',
-          'Tear incoming Pravda slips on [KEY 4] Desk to update quotas.'
+          'ENERGY CREATED charges the Battery; UNIT A sliders route power to sectors.',
+          'Inspect & stamp Pravda slips on [KEY 4] Desk to update quotas.',
         ],
         volkovQuote:
-          '"Battery banked, megawatts balanced, tea warm. Naturally, Moscow will ruin this peace with a teletype order any second."'
+          '"Battery banked, megawatts balanced, tea warm. Naturally, Moscow will ruin this peace with a teletype order any second."',
       };
     }
   }

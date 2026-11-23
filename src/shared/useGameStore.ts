@@ -29,10 +29,15 @@ import {
   reserveIdleChatterEmission,
   resetKomradSilenceState,
 } from './komradSilenceState'
+import {
+  CRISIS_COACH_CARDS,
+  TUTORIAL_VOX_BY_PHASE,
+} from './komradTutorialVox'
 import { pointerLockInteraction } from './pointerLockState'
 import type {
   AppliedStampMark,
   CameraStation,
+  CrisisCoachId,
   DiagnosticAlarmId,
   DirectiveDecision,
   DirectiveDocument,
@@ -188,32 +193,14 @@ function evaluateWheelFreeTutorial(
   const nonWePadPhase: TutorialPhase =
     tutorialPhase === 'STEP_0_PICKUP_WEPAD' ? 'STEP_1_COOLING' : tutorialPhase
   const effectivePhase: TutorialPhase =
-    nonWePadPhase === 'STEP_4_SPIN_TURBINE' ? 'STEP_6_BASELINE_600MW' : nonWePadPhase
-  const raw = evaluateTutorial(r, effectivePhase)
-  const resolved =
-    raw.phase === 'STEP_4_SPIN_TURBINE'
-      ? evaluateTutorial(r, 'STEP_6_BASELINE_600MW')
-      : raw
-
-  if (resolved.phase === 'STEP_6_BASELINE_600MW') {
-    return {
-      ...resolved,
-      phase: 'STEP_6_BASELINE_600MW',
-      header: '>> STEP 4/6 [KEY 1 -> UNIT A // 6 SECTOR LEVERS]:',
-      body:
-        'ACTION: GO TO UNIT A [KEY 1] AND SET ALL 6 SECTOR LEVERS TO 100 MW! UNIT C COPPER BUSBARS AUTOMATICALLY DRAIN BANKS A & B TO SUPPLY 600 MW.',
-      hint:
-        'WHY: Raising Unit A substation levers automatically draws matching MW from Unit C Accumulator Banks A & B.',
-      panelKey: 'GO TO: [KEY 1] UNIT A (6 LEVERS)',
-      actionLine:
-        'SET ALL 6 SECTOR LEVERS ON UNIT A TO 100 MW (UNIT C AUTO-DRAINS)',
-      whyLines: [
-        'Unit C copper busbars drain Accumulator Banks A & B automatically per Unit A lever demand.',
-        'Check [KEY 5] Unit C dial & VFD readout to monitor live zone drain.',
-      ],
-    }
+    nonWePadPhase === 'STEP_4_SPIN_TURBINE' ||
+    nonWePadPhase === 'STEP_5_SYNC_GRID'
+      ? 'STEP_6_BASELINE_600MW'
+      : nonWePadPhase
+  const resolved = evaluateTutorial(r, effectivePhase)
+  if (resolved.phase !== 'COMPLETED') {
+    return resolved
   }
-
   return {
     ...resolved,
     header: cleanWheelText(resolved.header),
@@ -709,7 +696,9 @@ function createKomradMsg(
   shiftTimeMinutes: number,
   text: string,
   mood: KomradMood = 'normal',
-  sender: KomradMessageEntry['sender'] = 'K.O.M.R.A.D.-84'
+  sender: KomradMessageEntry['sender'] = 'K.O.M.R.A.D.-84',
+  spokenVoxText?: string,
+  forceInterrupt?: boolean
 ): KomradMessageEntry {
   komradMsgCounter += 1
   return {
@@ -717,7 +706,74 @@ function createKomradMsg(
     timestamp: formatShiftClockHMS(shiftTimeMinutes),
     sender,
     text,
+    ...(spokenVoxText ? { spokenVoxText } : {}),
+    ...(forceInterrupt ? { forceInterrupt: true } : {}),
     mood,
+  }
+}
+
+const TUTORIAL_STEP_ORDER: readonly TutorialPhase[] = [
+  'STEP_1_COOLING',
+  'STEP_2_PULL_RODS',
+  'STEP_6_BASELINE_600MW',
+  'STEP_8_XENON_DRILL',
+  'STEP_3_BUILD_STEAM',
+  'STEP_7_VOID_DRILL',
+  'COMPLETED',
+]
+
+function buildTutorialPhaseKomradMsg(
+  shiftTimeMinutes: number,
+  phase: TutorialPhase
+): KomradMessageEntry | null {
+  const vox = TUTORIAL_VOX_BY_PHASE[phase]
+  if (!vox) return null
+  return createKomradMsg(
+    shiftTimeMinutes,
+    vox.spokenVoxText,
+    vox.mood,
+    'K.O.M.R.A.D.-84',
+    vox.spokenVoxText,
+    true
+  )
+}
+
+function withTutorialTransitionFeedback(
+  state: GameState,
+  prevPhase: TutorialPhase,
+  mapped: ReturnType<typeof mapReactorToGameStateFields>
+) {
+  if (mapped.tutorialPhase === prevPhase) {
+    return {
+      ...mapped,
+      lastDecisionFeedback: state.lastDecisionFeedback,
+      terminalEntries: state.terminalEntries,
+      terminalLogs: state.terminalLogs,
+      komradMessages: state.komradMessages,
+    }
+  }
+  const msg = buildTutorialPhaseKomradMsg(
+    state.shiftTimeMinutes,
+    mapped.tutorialPhase
+  )
+  const logText = msg?.text ?? mapped.tutorialPrompt.header
+  const entry = createLogEntry(
+    state.shiftTimeMinutes,
+    'K.O.M.R.A.D.-84',
+    logText,
+    mapped.tutorialPhase === 'STEP_7_VOID_DRILL' ? 'warn' : 'normal'
+  )
+  return {
+    ...mapped,
+    lastDecisionFeedback: mapped.tutorialPrompt.header,
+    terminalEntries: [...state.terminalEntries.slice(-24), entry],
+    terminalLogs: [
+      ...state.terminalLogs.slice(-24),
+      `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+    ],
+    komradMessages: msg
+      ? appendKomradFeed(state.komradMessages, msg)
+      : state.komradMessages,
   }
 }
 
@@ -1009,6 +1065,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   treasonStrikes: 0,
   lastDecisionFeedback: INITIAL_MAPPED.tutorialPrompt.header,
   activeMandate: null,
+  tutorialHintsHidden: false,
+  activeCrisisCoach: null,
+  dismissedCrisisIds: [],
 
   selectedH2OSubstationId: 1,
 
@@ -1057,6 +1116,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         return state
       }
       const bootMsgs = createInitialKomradFeed()
+      const tutMsg =
+        state.tutorialPhase !== 'COMPLETED'
+          ? buildTutorialPhaseKomradMsg(state.shiftTimeMinutes, state.tutorialPhase)
+          : null
+      if (tutMsg) {
+        bootMsgs.push(tutMsg)
+      }
       return {
         komradOpeningDispatched: true,
         komradMessages: appendKomradFeed(state.komradMessages, ...bootMsgs),
@@ -1296,7 +1362,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         steamExplosion: false,
       }
       const mapped = mapReactorToGameStateFields(liveReactor, 'COMPLETED')
-      const msg = KOMRAD_TAKEOVER_MESSAGE
+      const completedVox = TUTORIAL_VOX_BY_PHASE.COMPLETED
+      const msg = completedVox?.spokenVoxText ?? KOMRAD_TAKEOVER_MESSAGE
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
@@ -1307,6 +1374,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...mapped,
         phase: 'playing',
         tutorialDrainSeconds: 0,
+        tutorialHintsHidden: false,
+        activeCrisisCoach: null,
+        dismissedCrisisIds: [],
         redlineInstability: 0,
         treasonStrikes: 0,
         activeMandate: null,
@@ -1321,10 +1391,115 @@ export const useGameStore = create<GameState>((set, get) => ({
         ],
         komradMessages: appendKomradFeed(
           state.komradMessages,
-          createKomradMsg(state.shiftTimeMinutes, msg, 'normal', 'K.O.M.R.A.D.-84')
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            msg,
+            'normal',
+            'K.O.M.R.A.D.-84',
+            completedVox?.spokenVoxText,
+            true
+          )
         ),
       }
     })
+  },
+
+  advanceTutorialStep: () => {
+    set((state) => {
+      const normalized =
+        state.tutorialPhase === 'STEP_0_PICKUP_WEPAD'
+          ? 'STEP_1_COOLING'
+          : state.tutorialPhase === 'STEP_4_SPIN_TURBINE' ||
+              state.tutorialPhase === 'STEP_5_SYNC_GRID'
+            ? 'STEP_6_BASELINE_600MW'
+            : state.tutorialPhase
+      const curIdx = TUTORIAL_STEP_ORDER.indexOf(normalized)
+      if (curIdx < 0 || normalized === 'COMPLETED') {
+        return state
+      }
+      const nextTargetPhase =
+        TUTORIAL_STEP_ORDER[
+          Math.min(TUTORIAL_STEP_ORDER.length - 1, curIdx + 1)
+        ]
+      const nextReactor: ReactorState = extractReactorState(state)
+
+      if (nextTargetPhase === 'STEP_2_PULL_RODS') {
+        nextReactor.mcpActive = [true, true, true, true]
+        nextReactor.sealToggles = [true, true, true]
+        nextReactor.pumpThrottle = [60, 60]
+        nextReactor.feedwaterValve = 0.5
+        nextReactor.nitrogenLoopValve = 50
+      } else if (nextTargetPhase === 'STEP_6_BASELINE_600MW') {
+        nextReactor.mcpActive = [true, true, true, true]
+        nextReactor.sealToggles = [true, true, true]
+        nextReactor.pumpThrottle = [60, 60]
+        nextReactor.feedwaterValve = 0.5
+        nextReactor.nitrogenLoopValve = 50
+        nextReactor.controlRods = Math.max(nextReactor.controlRods, 0.55)
+        nextReactor.thermalPower = Math.max(nextReactor.thermalPower, 1920)
+        nextReactor.coreTemp = Math.max(nextReactor.coreTemp, 380)
+        nextReactor.drumPressure = Math.max(nextReactor.drumPressure, 58)
+        nextReactor.batteryStoredMWh = Math.max(nextReactor.batteryStoredMWh, 450)
+      } else if (nextTargetPhase === 'STEP_8_XENON_DRILL') {
+        nextReactor.substations = nextReactor.substations.map((s) => ({
+          ...s,
+          allocatedMW: s.targetMW,
+          quotaOk: true,
+        }))
+        nextReactor.batteryOutputValve = 0.6
+        nextReactor.totalElectricalMW = 600
+        nextReactor.coreTileAnomalies = { 18: 'spent' }
+        nextReactor.selectedRefuelChannel = null
+      } else if (nextTargetPhase === 'STEP_3_BUILD_STEAM') {
+        nextReactor.coreTileAnomalies = {}
+        nextReactor.selectedRefuelChannel = null
+        nextReactor.xenon = 8
+        nextReactor.feedwaterValve = 0.28
+        nextReactor.nitrogenLoopValve = 28
+        nextReactor.drumWaterLevel = -75
+        nextReactor.drumPressure = Math.max(nextReactor.drumPressure, 74)
+      } else if (nextTargetPhase === 'STEP_7_VOID_DRILL') {
+        nextReactor.feedwaterValve = 0.24
+        nextReactor.nitrogenLoopValve = 24
+        nextReactor.voidFraction = 0.36
+        nextReactor.xenon = 12
+        nextReactor.drumWaterLevel = 0
+      } else if (nextTargetPhase === 'COMPLETED') {
+        nextReactor.feedwaterValve = 0.5
+        nextReactor.nitrogenLoopValve = 50
+        nextReactor.voidFraction = 0.1
+        nextReactor.xenon = 8
+        nextReactor.drumWaterLevel = 0
+        nextReactor.drumPressure = 68
+        nextReactor.coreTileAnomalies = {}
+        nextReactor.selectedRefuelChannel = null
+      }
+
+      stepReactorSimulation(nextReactor, 0.001, nextTargetPhase)
+      const mapped = mapReactorToGameStateFields(nextReactor, nextTargetPhase)
+      return {
+        ...withTutorialTransitionFeedback(state, state.tutorialPhase, mapped),
+        tutorialHintsHidden: false,
+      }
+    })
+  },
+
+  setTutorialHintsHidden: (hidden: boolean) => {
+    set((state) =>
+      state.tutorialHintsHidden === hidden
+        ? state
+        : { tutorialHintsHidden: hidden }
+    )
+  },
+
+  toggleTutorialHintsHidden: () => {
+    set((state) => ({ tutorialHintsHidden: !state.tutorialHintsHidden }))
+  },
+
+  dismissCrisisCoach: () => {
+    set((state) =>
+      state.activeCrisisCoach === null ? state : { activeCrisisCoach: null }
+    )
   },
 
   setTutorialStep: (step) => {
@@ -1362,6 +1537,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       steamTransientImpulse: 0,
       voltageDipIntensity: 0,
       tutorialDrainSeconds: 0,
+      tutorialHintsHidden: false,
+      activeCrisisCoach: null,
+      dismissedCrisisIds: [],
       shiftTimeMinutes: 0,
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
@@ -1404,6 +1582,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       selectedH2OSubstationId: 1,
       treasonStrikes: 0,
       tutorialDrainSeconds: 0,
+      tutorialHintsHidden: false,
+      activeCrisisCoach: null,
+      dismissedCrisisIds: [],
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
       diagFeedActive: false,
@@ -1538,7 +1719,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      return mapped
+      return withTutorialTransitionFeedback(state, prevPhase, mapped)
     })
   },
 
@@ -1556,6 +1737,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         activeCount >= 2 && state.nitrogenLoopValve < 40
           ? 50
           : state.nitrogenLoopValve
+      const nextThrottle: [number, number] = [
+        state.pumpThrottle[0],
+        state.pumpThrottle[1],
+      ]
+      if ((pumpIdx === 0 || pumpIdx === 1) && nextMcp[pumpIdx]) {
+        nextThrottle[0] = Math.max(60, nextThrottle[0])
+      }
+      if ((pumpIdx === 2 || pumpIdx === 3) && nextMcp[pumpIdx]) {
+        nextThrottle[1] = Math.max(60, nextThrottle[1])
+      }
       const nextSeals: [boolean, boolean, boolean] = [
         state.sealToggles[0],
         state.sealToggles[1],
@@ -1570,12 +1761,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         mcpActive: nextMcp,
+        pumpThrottle: nextThrottle,
         feedwaterValve: nextFeedwater,
         nitrogenLoopValve: nextNitrogen,
         sealToggles: nextSeals,
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const withTut = withTutorialTransitionFeedback(state, prevPhase, mapped)
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'OPERATOR',
@@ -1583,10 +1776,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         nextMcp[pumpIdx] ? 'normal' : 'warn'
       )
       return {
-        ...mapped,
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        ...withTut,
+        terminalEntries: [...withTut.terminalEntries.slice(-24), entry],
         terminalLogs: [
-          ...state.terminalLogs.slice(-24),
+          ...withTut.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
       }
@@ -1636,7 +1829,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       stepReactorSimulation(nextReactor, 0.001)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      return mapped
+      return withTutorialTransitionFeedback(state, prevPhase, mapped)
     })
   },
 
@@ -1714,7 +1907,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       return {
-        ...mapped,
+        ...withTutorialTransitionFeedback(state, prevPhase, mapped),
         voltageDipIntensity: nextVoltageDip,
       }
     })
@@ -1722,9 +1915,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => {
     set((state) => {
-      if (state.tutorialPhase === 'STEP_1_COOLING') {
-        return state
-      }
       const idxA = pumpIndex === 0 ? 0 : 2
       const idxB = pumpIndex === 0 ? 1 : 3
       const curActive = Boolean(state.mcpActive[idxA] || state.mcpActive[idxB])
@@ -1737,22 +1927,33 @@ export const useGameStore = create<GameState>((set, get) => ({
         state.pumpThrottle[1],
       ]
       nextThrottle[pumpIndex] = target ? Math.max(60, nextThrottle[pumpIndex]) : 0
+      const activeCount = nextMcp.filter(Boolean).length
+      const nextFeedwater =
+        activeCount >= 2 && state.feedwaterValve < 0.40
+          ? 0.50
+          : state.feedwaterValve
+      const nextNitrogen =
+        activeCount >= 2 && state.nitrogenLoopValve < 40
+          ? 50
+          : state.nitrogenLoopValve
+      const nextSeals: [boolean, boolean, boolean] =
+        activeCount >= 2 ? [true, true, true] : [...state.sealToggles] as [boolean, boolean, boolean]
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         mcpActive: nextMcp,
         pumpThrottle: nextThrottle,
+        feedwaterValve: nextFeedwater,
+        nitrogenLoopValve: nextNitrogen,
+        sealToggles: nextSeals,
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      return mapped
+      return withTutorialTransitionFeedback(state, prevPhase, mapped)
     })
   },
 
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => {
     set((state) => {
-      if (state.tutorialPhase === 'STEP_1_COOLING') {
-        return state
-      }
       const clamped = Math.max(0, Math.min(100, Number(throttlePct.toFixed(1))))
       const idxA = pumpIndex === 0 ? 0 : 2
       const idxB = pumpIndex === 0 ? 1 : 3
@@ -1769,14 +1970,28 @@ export const useGameStore = create<GameState>((set, get) => ({
         state.pumpThrottle[1],
       ]
       nextThrottle[pumpIndex] = clamped
+      const activeCount = nextMcp.filter(Boolean).length
+      const nextFeedwater =
+        activeCount >= 2 && state.feedwaterValve < 0.40
+          ? 0.50
+          : state.feedwaterValve
+      const nextNitrogen =
+        activeCount >= 2 && state.nitrogenLoopValve < 40
+          ? 50
+          : state.nitrogenLoopValve
+      const nextSeals: [boolean, boolean, boolean] =
+        activeCount >= 2 ? [true, true, true] : [...state.sealToggles] as [boolean, boolean, boolean]
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         mcpActive: nextMcp,
         pumpThrottle: nextThrottle,
+        feedwaterValve: nextFeedwater,
+        nitrogenLoopValve: nextNitrogen,
+        sealToggles: nextSeals,
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      return mapped
+      return withTutorialTransitionFeedback(state, prevPhase, mapped)
     })
   },
 
@@ -1796,14 +2011,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextRods = Number((clampedPct / 100).toFixed(4))
       const delta = nextRods - state.controlRods
       if (Math.abs(delta) < 0.0005) return state
+      const shouldPrimeStartupFw =
+        state.tutorialPhase === 'STEP_1_COOLING' ||
+        state.tutorialPhase === 'STEP_2_PULL_RODS'
       const nextFeedwater =
-        state.tutorialPhase !== 'COMPLETED' &&
+        shouldPrimeStartupFw &&
         nextRods >= 0.20 &&
         state.feedwaterValve < 0.40
           ? 0.50
           : state.feedwaterValve
       const nextNitrogen =
-        state.tutorialPhase !== 'COMPLETED' &&
+        shouldPrimeStartupFw &&
         nextRods >= 0.20 &&
         state.nitrogenLoopValve < 40
           ? 50
@@ -1824,7 +2042,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      return mapped
+      return withTutorialTransitionFeedback(state, prevPhase, mapped)
     })
   },
 
@@ -1885,8 +2103,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       const res = refuelSelectedCoreChannel(nextReactor)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const withTut = withTutorialTransitionFeedback(state, prevPhase, mapped)
       let feedbackMsg: string
       let komradRefuelMsg: string | null = null
+      let komradSpokenMsg: string | undefined
       let feedMood: KomradMood = 'normal'
       if (res.refueledChannel !== null) {
         prevSpentRodCount = res.remainingSpent
@@ -1904,25 +2124,30 @@ export const useGameStore = create<GameState>((set, get) => ({
           'NO AMBER TILE SELECTED! CLICK A PULSING AMBER CORE TILE FIRST, THEN PULL [ROD REFUELING LEVER].'
         komradRefuelMsg =
           'SELECT AN AMBER DEPLETED CHANNEL BEFORE CRANKING THE REFUEL HOIST, COMRADE.'
+        komradSpokenMsg = CRISIS_COACH_CARDS.SPENT_ROD.spokenVoxText
       } else {
         feedbackMsg = `FUEL CRANE CYCLED — ALL CHANNELS NOMINAL (BORON TANK ${Math.round(nextReactor.boronTankLevel)}%).`
       }
+      const nextKomradFeed =
+        mapped.tutorialPhase !== prevPhase || !komradRefuelMsg
+          ? withTut.komradMessages
+          : appendKomradFeed(
+              withTut.komradMessages,
+              createKomradMsg(
+                state.shiftTimeMinutes,
+                komradRefuelMsg,
+                feedMood,
+                'K.O.M.R.A.D.-84',
+                komradSpokenMsg
+              )
+            )
       return {
-        ...mapped,
-        lastDecisionFeedback: feedbackMsg,
-        ...(komradRefuelMsg
-          ? {
-              komradMessages: appendKomradFeed(
-                state.komradMessages,
-                createKomradMsg(
-                  state.shiftTimeMinutes,
-                  komradRefuelMsg,
-                  feedMood,
-                  'K.O.M.R.A.D.-84'
-                )
-              ),
-            }
-          : {}),
+        ...withTut,
+        lastDecisionFeedback:
+          mapped.tutorialPhase !== prevPhase
+            ? withTut.lastDecisionFeedback
+            : feedbackMsg,
+        komradMessages: nextKomradFeed,
       }
     })
   },
@@ -1953,7 +2178,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      return mapped
+      return withTutorialTransitionFeedback(state, prevPhase, mapped)
     })
   },
 
@@ -2006,7 +2231,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
-      return mapped
+      return withTutorialTransitionFeedback(state, prevPhase, mapped)
     })
   },
 
@@ -2021,20 +2246,27 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const prevPhase = s.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const withTut = withTutorialTransitionFeedback(s, prevPhase, mapped)
       const sealMsg =
         'ALL 4 MCP PUMPS ENGAGED & HERMETIC CONTAINMENT SCRUBBERS LOCKED!'
       return {
-        ...mapped,
-        lastDecisionFeedback: sealMsg,
-        komradMessages: appendKomradFeed(
-          s.komradMessages,
-          createKomradMsg(
-            s.shiftTimeMinutes,
-            'MAIN CIRCULATION PUMPS ONLINE. LISTEN TO THOSE CAST-IRON IMPELLERS GRINDING FOR MOSCOW.',
-            'normal',
-            'K.O.M.R.A.D.-84'
-          )
-        ),
+        ...withTut,
+        lastDecisionFeedback:
+          mapped.tutorialPhase !== prevPhase
+            ? withTut.lastDecisionFeedback
+            : sealMsg,
+        komradMessages:
+          mapped.tutorialPhase !== prevPhase
+            ? withTut.komradMessages
+            : appendKomradFeed(
+                withTut.komradMessages,
+                createKomradMsg(
+                  s.shiftTimeMinutes,
+                  'MAIN CIRCULATION PUMPS ONLINE. LISTEN TO THOSE CAST-IRON IMPELLERS GRINDING FOR MOSCOW.',
+                  'normal',
+                  'K.O.M.R.A.D.-84'
+                )
+              ),
       }
     })
   },
@@ -2165,6 +2397,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       triggerBoronInjection(nextReactor)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
+      const withTut = withTutorialTransitionFeedback(state, prevPhase, mapped)
       const msg = `BORON INJECTION ENGAGED (-35% BORON -> ${Math.round(nextReactor.boronTankLevel)}%): VOIDS -35% (${Math.round(nextReactor.voidFraction * 100)}%), NEUTRON DAMPING FOR 8S!`
       const entry = createLogEntry(
         state.shiftTimeMinutes,
@@ -2173,22 +2406,28 @@ export const useGameStore = create<GameState>((set, get) => ({
         'warn'
       )
       return {
-        ...mapped,
-        lastDecisionFeedback: msg,
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        ...withTut,
+        lastDecisionFeedback:
+          mapped.tutorialPhase !== prevPhase
+            ? withTut.lastDecisionFeedback
+            : msg,
+        terminalEntries: [...withTut.terminalEntries.slice(-24), entry],
         terminalLogs: [
-          ...state.terminalLogs.slice(-24),
+          ...withTut.terminalLogs.slice(-24),
           `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
         ],
-        komradMessages: appendKomradFeed(
-          state.komradMessages,
-          createKomradMsg(
-            state.shiftTimeMinutes,
-            'LIQUID BORON FLOODED INTO CORE. COST OF ACID DEDUCTED FROM YOUR TEA VOUCHERS.',
-            'warning',
-            'K.O.M.R.A.D.-84'
-          )
-        ),
+        komradMessages:
+          mapped.tutorialPhase !== prevPhase
+            ? withTut.komradMessages
+            : appendKomradFeed(
+                withTut.komradMessages,
+                createKomradMsg(
+                  state.shiftTimeMinutes,
+                  'LIQUID BORON FLOODED INTO CORE. COST OF ACID DEDUCTED FROM YOUR TEA VOUCHERS.',
+                  'warning',
+                  'K.O.M.R.A.D.-84'
+                )
+              ),
       }
     })
   },
@@ -2486,10 +2725,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     const pushWallKomrad = (
       msg: string,
       level: 'normal' | 'warn' | 'danger' = 'normal',
-      sender: KomradMessageEntry['sender'] = 'K.O.M.R.A.D.-84'
+      sender: KomradMessageEntry['sender'] = 'K.O.M.R.A.D.-84',
+      spokenVoxText?: string,
+      forceInterrupt?: boolean
     ) => {
       newKomradMsgs.push(
-        createKomradMsg(state.shiftTimeMinutes, msg, mapLevelToMood(level), sender)
+        createKomradMsg(
+          state.shiftTimeMinutes,
+          msg,
+          mapLevelToMood(level),
+          sender,
+          spokenVoxText,
+          forceInterrupt
+        )
       )
     }
 
@@ -2497,14 +2745,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       msg: string,
       level: 'normal' | 'warn' | 'danger' = 'normal',
       sender: KomradMessageEntry['sender'] = 'K.O.M.R.A.D.-84',
-      wallOverrideMsg?: string
+      wallOverrideMsg?: string,
+      spokenVoxText?: string,
+      forceInterrupt?: boolean
     ) => {
       nextFeedback = msg
       newLogs.push(createLogEntry(state.shiftTimeMinutes, sender, msg, level))
-      pushWallKomrad(wallOverrideMsg ?? msg, level, sender)
+      pushWallKomrad(wallOverrideMsg ?? msg, level, sender, spokenVoxText, forceInterrupt)
     }
 
     if (mapped.tutorialPhase !== prevTutorialPhase) {
+      const tutVoxMsg = buildTutorialPhaseKomradMsg(
+        state.shiftTimeMinutes,
+        mapped.tutorialPhase
+      )
       if (mapped.tutorialPhase === 'COMPLETED') {
         newLogs.push(
           createLogEntry(
@@ -2514,13 +2768,28 @@ export const useGameStore = create<GameState>((set, get) => ({
             'normal'
           )
         )
-        pushKomradLiveDispatch(KOMRAD_TAKEOVER_MESSAGE, 'normal', 'K.O.M.R.A.D.-84')
-      } else {
-        const drillText = `>> VOLKOV DRILL: ${mapped.tutorialPrompt.header}`
-        nextFeedback = drillText
-        newLogs.push(
-          createLogEntry(state.shiftTimeMinutes, 'K.O.M.R.A.D.-84', drillText, 'normal')
+        pushKomradLiveDispatch(
+          KOMRAD_TAKEOVER_MESSAGE,
+          'normal',
+          'K.O.M.R.A.D.-84',
+          tutVoxMsg?.text ?? KOMRAD_TAKEOVER_MESSAGE,
+          tutVoxMsg?.spokenVoxText,
+          true
         )
+      } else {
+        const drillText = tutVoxMsg?.text ?? mapped.tutorialPrompt.header
+        nextFeedback = mapped.tutorialPrompt.header
+        newLogs.push(
+          createLogEntry(
+            state.shiftTimeMinutes,
+            'K.O.M.R.A.D.-84',
+            drillText,
+            mapped.tutorialPhase === 'STEP_7_VOID_DRILL' ? 'warn' : 'normal'
+          )
+        )
+        if (tutVoxMsg) {
+          newKomradMsgs.push(tutVoxMsg)
+        }
       }
     }
 
@@ -2539,12 +2808,66 @@ export const useGameStore = create<GameState>((set, get) => ({
         komradDispatchSeed += 1
         const alertText =
           KOMRAD_SPENT_ROD_QUIPS[komradDispatchSeed % KOMRAD_SPENT_ROD_QUIPS.length]
-        pushKomradLiveDispatch(alertText, isCrit ? 'danger' : 'warn')
+        pushKomradLiveDispatch(
+          alertText,
+          isCrit ? 'danger' : 'warn',
+          'K.O.M.R.A.D.-84',
+          alertText,
+          CRISIS_COACH_CARDS.SPENT_ROD.spokenVoxText
+        )
       }
     }
     prevSpentRodCount = spentCount
 
     let hazardFired = false
+    const nowMs = Date.now()
+    let nextCrisisCoach =
+      state.activeCrisisCoach && state.activeCrisisCoach.expiresAtMs > nowMs
+        ? state.activeCrisisCoach
+        : null
+    let nextDismissedCrisisIds = state.dismissedCrisisIds
+
+    if (mapped.tutorialPhase === 'COMPLETED') {
+      let detectedCrisis: CrisisCoachId | null = null
+      if (baseReactor.coreTemp >= 700) {
+        detectedCrisis = 'MELTDOWN_RISK'
+      } else if (baseReactor.voidFraction > 0.22) {
+        detectedCrisis = 'HIGH_VOID'
+      } else if (baseReactor.drumWaterLevel < -90) {
+        detectedCrisis = 'WATER_LOW'
+      } else if (baseReactor.xenon > 28) {
+        detectedCrisis = 'HIGH_XENON'
+      } else if (baseReactor.drumPressure > 78) {
+        detectedCrisis = 'HIGH_PRESSURE'
+      } else if (spentCount >= 1) {
+        detectedCrisis = 'SPENT_ROD'
+      }
+
+      if (
+        detectedCrisis &&
+        !nextDismissedCrisisIds.includes(detectedCrisis) &&
+        (!nextCrisisCoach ||
+          detectedCrisis === 'MELTDOWN_RISK' ||
+          detectedCrisis === 'HIGH_VOID')
+      ) {
+        const card = CRISIS_COACH_CARDS[detectedCrisis]
+        nextCrisisCoach = {
+          id: detectedCrisis,
+          expiresAtMs: nowMs + 8000,
+        }
+        nextDismissedCrisisIds = [...nextDismissedCrisisIds, detectedCrisis]
+        pushKomradLiveDispatch(
+          card.spokenVoxText,
+          card.mood === 'critical' ? 'danger' : 'warn',
+          'K.O.M.R.A.D.-84',
+          card.spokenVoxText,
+          card.spokenVoxText,
+          true
+        )
+        hazardFired = true
+      }
+    }
+
     const tryHazard = (
       cat: ReactorHazardCategory,
       valA: number,
@@ -2569,26 +2892,31 @@ export const useGameStore = create<GameState>((set, get) => ({
           komradDispatchSeed
         )
         let wallQuip = text
+        let spokenHazardVox: string | undefined
         if (cat === 'HIGH_PRESSURE') {
           wallQuip =
             KOMRAD_PRESSURE_QUIPS[komradDispatchSeed % KOMRAD_PRESSURE_QUIPS.length](
               Math.round(valA)
             )
+          spokenHazardVox = CRISIS_COACH_CARDS.HIGH_PRESSURE.spokenVoxText
         } else if (cat === 'HIGH_XENON') {
           wallQuip =
             KOMRAD_XENON_QUIPS[komradDispatchSeed % KOMRAD_XENON_QUIPS.length](
               Math.round(valA)
             )
+          spokenHazardVox = CRISIS_COACH_CARDS.HIGH_XENON.spokenVoxText
         } else if (cat === 'HIGH_VOID') {
           wallQuip =
             KOMRAD_VOID_QUIPS[komradDispatchSeed % KOMRAD_VOID_QUIPS.length](
               Math.round(valA)
             )
+          spokenHazardVox = CRISIS_COACH_CARDS.HIGH_VOID.spokenVoxText
         } else if (cat === 'WATER_LOW') {
           wallQuip =
             KOMRAD_WATER_LOW_QUIPS[komradDispatchSeed % KOMRAD_WATER_LOW_QUIPS.length](
               Math.round(valA)
             )
+          spokenHazardVox = CRISIS_COACH_CARDS.WATER_LOW.spokenVoxText
         } else if (cat === 'WATER_HIGH') {
           wallQuip =
             KOMRAD_WATER_HIGH_QUIPS[komradDispatchSeed % KOMRAD_WATER_HIGH_QUIPS.length](
@@ -2597,7 +2925,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         } else if (cat === 'GEN_DEFICIT') {
           wallQuip = `GRID SHORTFALL (${Math.round(valB)}/${Math.round(valA)} MWe)! TURBINES ARE UNDER-PRODUCING FOR THE FIVE-YEAR PLAN.`
         }
-        pushKomradLiveDispatch(text, level, 'K.O.M.R.A.D.-84', wallQuip)
+        pushKomradLiveDispatch(text, level, 'K.O.M.R.A.D.-84', wallQuip, spokenHazardVox)
         hazardFired = true
       }
     }
@@ -2812,7 +3140,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         const quipFn = isCrit
           ? KOMRAD_CRIT_TEMP_QUIPS[komradDispatchSeed % KOMRAD_CRIT_TEMP_QUIPS.length]
           : KOMRAD_HIGH_TEMP_QUIPS[komradDispatchSeed % KOMRAD_HIGH_TEMP_QUIPS.length]
-        pushKomradLiveDispatch(quipFn(tempVal), isCrit ? 'danger' : 'warn')
+        pushKomradLiveDispatch(
+          quipFn(tempVal),
+          isCrit ? 'danger' : 'warn',
+          'K.O.M.R.A.D.-84',
+          quipFn(tempVal),
+          CRISIS_COACH_CARDS.MELTDOWN_RISK.spokenVoxText
+        )
         hazardFired = true
       }
     }
@@ -2851,6 +3185,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({
         ...mapped,
         activeMandate: nextMandate,
+        activeCrisisCoach: nextCrisisCoach,
+        dismissedCrisisIds: nextDismissedCrisisIds,
         redlineInstability: nextInstability,
         gridTransientImpulse: nextGridImpulse,
         steamTransientImpulse: nextSteamImpulse,
@@ -2869,6 +3205,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({
         ...mapped,
         activeMandate: nextMandate,
+        ...(nextCrisisCoach !== state.activeCrisisCoach
+          ? { activeCrisisCoach: nextCrisisCoach }
+          : {}),
+        ...(nextDismissedCrisisIds !== state.dismissedCrisisIds
+          ? { dismissedCrisisIds: nextDismissedCrisisIds }
+          : {}),
         redlineInstability: nextInstability,
         gridTransientImpulse: nextGridImpulse,
         steamTransientImpulse: nextSteamImpulse,

@@ -1665,7 +1665,7 @@ function computeMessagePriority(
 }
 
 function isCriticalBypassMessage(msg: KomradMessageEntry): boolean {
-  if (msg.mood === "critical") return true;
+  if (msg.forceInterrupt || msg.mood === "critical") return true;
   return /NIGHT SHIFT COMMENCING|VOLKOV IS OFF SHIFT|TAKING DIRECT SUPERVISION|AZ-5|MELTDOWN|STEAM EXPLOSION/i.test(
     msg.text,
   );
@@ -2442,6 +2442,7 @@ function normalizeTextForClipMatch(text: string): string {
 }
 
 function findMatchingClipForMessage(msg: KomradMessageEntry): VoxClipEntry | null {
+  if (msg.spokenVoxText) return null;
   const clips = voxManifest?.clips;
   if (!clips?.length) return null;
 
@@ -2596,7 +2597,15 @@ function beginVoxUtterance(
   startOpenPaCarrierBed(audio, chain, uttGain, nodesSet);
 
   const wordMap = voxManifest?.words ?? {};
-  voxQueue = tokenizeToVoxQueue(msg.text, wordMap);
+  const speechSource = msg.spokenVoxText ?? msg.text;
+  voxQueue = tokenizeToVoxQueue(speechSource, wordMap);
+  if (msg.spokenVoxText && speechSource.length > 0 && msg.spokenVoxText !== msg.text) {
+    const scale = msg.text.length / speechSource.length;
+    for (let qi = 0; qi < voxQueue.length; qi++) {
+      const q = voxQueue[qi];
+      q.charEnd = Math.min(msg.text.length, Math.max(0, Math.round(q.charEnd * scale)));
+    }
+  }
   voxQueueCursor = 0;
   voxCursorAudioSec = audio.currentTime + 0.045;
   voxUtteranceEndAudioSec = voxCursorAudioSec;
@@ -3165,18 +3174,23 @@ export function stepKomradSpeech(
   // Handle newly arriving messages from the store: drop-don't-queue during speech or silence cooldown
   if (latestId !== lastSeenStoreMsgId) {
     lastSeenStoreMsgId = latestId;
-    const incomingPriority = computeMessagePriority(latestMsg, mood);
+    const msgMood = latestMsg.mood !== "normal" ? latestMsg.mood : mood;
+    const incomingPriority = computeMessagePriority(latestMsg, msgMood);
     const isBypass = isCriticalBypassMessage(latestMsg);
+    const msgMasterLevel = computeTargetMasterGain(latestMsg, msgMood);
     const currentlySpeaking =
       voxSpeakingAudioActive &&
       (!audioRunning || audio.currentTime < voxUtteranceEndAudioSec - 0.04);
 
     if (currentlySpeaking) {
-      if (isBypass && incomingPriority > activeUtterancePriority) {
+      if (
+        latestMsg.forceInterrupt ||
+        (isBypass && incomingPriority > activeUtterancePriority)
+      ) {
         pendingVoxMsg = null;
         pendingVoxMsgPriority = 0;
         if (speakAllowed && audioRunning) {
-          const chain = ensureVoiceChain(audio, targetMasterLevel);
+          const chain = ensureVoiceChain(audio, msgMasterLevel);
           charCursor = 0;
           vocalState.msgStartSec = elapsedSec;
           vocalState.activeMsgId = latestMsg.id;
@@ -3184,14 +3198,14 @@ export function stepKomradSpeech(
             audio,
             chain,
             latestMsg,
-            mood,
+            msgMood,
             incomingPriority,
-            targetMasterLevel,
+            msgMasterLevel,
           );
         } else {
           cancelActiveVoxUtterance(0.03);
           markKomradTransmissionEnd();
-          queuePendingMessage(latestMsg, mood, incomingPriority, elapsedSec);
+          queuePendingMessage(latestMsg, msgMood, incomingPriority, elapsedSec);
         }
       }
       // Otherwise: DROP speech — never queue back-to-back chatter behind an active transmission
@@ -3204,7 +3218,7 @@ export function stepKomradSpeech(
       charCursor = latestMsg.text.length;
       vocalState.activeMsgId = latestMsg.id;
     } else if (speakAllowed && audioRunning && voxReadyOrSettled) {
-      const chain = ensureVoiceChain(audio, targetMasterLevel);
+      const chain = ensureVoiceChain(audio, msgMasterLevel);
       charCursor = 0;
       pendingVoxMsg = null;
       pendingVoxMsgPriority = 0;
@@ -3214,9 +3228,9 @@ export function stepKomradSpeech(
         audio,
         chain,
         latestMsg,
-        mood,
+        msgMood,
         incomingPriority,
-        targetMasterLevel,
+        msgMasterLevel,
       );
     } else if (
       isBypass &&
@@ -3224,7 +3238,7 @@ export function stepKomradSpeech(
       !s.diagFeedActive &&
       (radioBlocked || !audioRunning || !voxReadyOrSettled)
     ) {
-      queuePendingMessage(latestMsg, mood, incomingPriority, elapsedSec);
+      queuePendingMessage(latestMsg, msgMood, incomingPriority, elapsedSec);
       visualTypingActive = false;
       if (speakAllowed && audioRunning && !voxReadyOrSettled) {
         charCursor = 0;

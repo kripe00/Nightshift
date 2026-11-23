@@ -299,3 +299,18 @@
   > *3. **Systemrevisjon & Oppdatert `README.md`:** Scroll-hitboksen på effektstripene er flyttet bak knappene (slik at knappenes hover-hint og klikk aldri blir skygget), tekstbredde på `refuelTargetTex` (`320x72`) og `rodPctTex` er sikret mot klipping, og `README.md` er totaloppdatert til å speile hele dagens bunkerverden!*
   >
   > *Hent fra Kreml (`npm run pravda`) og kjenn hvor smidig både kjerneladingen og 1000 MW-spakene glir nå — MELTDOWN IS PROPAGANDA! 🎖️🔧⚡☢️☭"*
+
+
+
+### [TELEGRAM #022 — STEMPLET: QUOTA-84 // FOLKELIG OPPLÆRING PÅ HOVEDSKJERM, KRISE-COACH & 100 % VOX-ORDDEKNING!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Total overhaling av opplæringen: Front-and-center HUD med retningspil, 8s kriseveileder for Voids & Xenon, `SKALA-84`-speiling og 100 % verifisert K.O.M.R.A.D.-84 VOX!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Playtest-rapporter om borgerlig forvirring i kontrollrommet er nå knust én gang for alle. Hele opplærings- og krisesystemet er overhalt:*
+  > *1. **Front-and-Center Hovedskjerm-HUD (`TutorialCoachHud.tsx` & `App.tsx`):** Stor, krystallklar «WHERE / WHAT / WHY»-banner øverst i senter uten å sperre siktet, komplett med **sanntids retningspil** (`◀ TURN LEFT` / `▶ TURN RIGHT` / `▲ WALK FORWARD`) mot riktig konsoll, live fremdriftsmåler og knappene `[ NEXT STEP • N ]`, `[ HIDE • H ]` og `[ SKIP • BKSP ]`!*
+  > *2. **6-Stegs Folkelig Læreplan & 8s Crisis Coach (`rbmkPhysics.ts` & `useGameStore.ts`):** Steg 1 åpner nå `UNIT A`-kjølepumpene direkte fra kaldstart; Steg 2 forklarer kontrollstaver som bremser med riktig polaritet; Steg 3 dekker 6-sektors MW-spaker & `UNIT C` batteribuffer; Steg 4 lærer kjernelading av amber staver; Steg 5 tar `UNIT B` trommelvann/trykk; og Steg 6 + automatisk **8s Crisis Coach** lærer forskjellen på **Steam Voids** («løpsk koking»), **Xenon-forgiftning** («eksos-kvelning») og **Boron / AZ-5 SCRAM**!*
+  > *3. **100 % Verifisert K.O.M.R.A.D.-84 VOX & Synkronisert `SKALA-84` (`komradTutorialVox.ts`, `komradVoiceSynth.ts` & `CentralSkalaScreen3D.tsx`):** Alle 13 nye opplærings- og krisevarsler bruker utelukkende innspilte ord fra `komrad_vox_manifest.json` (**100 % treff, 0 manglende ord**), bryter inn rent ved stegskifte og speiles live på både `SKALA-84` og taklampene!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og kjør en kaldstart fra bunn — nå forstår selv Ministerens nevø forskjellen på Steam Voids og Xenon! MELTDOWN IS PROPAGANDA! 🎖️📢🧠☢️☭"*
