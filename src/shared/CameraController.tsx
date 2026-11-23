@@ -298,6 +298,7 @@ export const CameraController: React.FC = () => {
   const rmbHeldRef = useRef<boolean>(false);
 
   const skipNextPoseSyncRef = useRef<boolean>(false);
+  const prevSeatedRef = useRef<boolean>(useGameStore.getState().isSeatedAtDesk);
   const activePointerIdRef = useRef<number | null>(null);
   const releaseRafRef = useRef<number>(0);
   const centerHoverRaycasterRef = useRef(new THREE.Raycaster());
@@ -988,6 +989,18 @@ export const CameraController: React.FC = () => {
     if (nearDesk !== gs.canSitAtDesk) {
       gs.setCanSitAtDesk(nearDesk);
     }
+
+    if (prevSeatedRef.current && !isSeated && !glide.active) {
+      look.targetYaw = setShortestTargetYaw(
+        look.currentYaw,
+        STAND_UP_SPOT.yaw,
+      );
+      look.targetPitch = -0.06;
+      glide.active = true;
+      glide.x = STAND_UP_SPOT.x;
+      glide.z = STAND_UP_SPOT.z;
+    }
+    prevSeatedRef.current = isSeated;
 
     if (isSeated) {
       glide.active = false;

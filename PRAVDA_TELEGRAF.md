@@ -314,3 +314,18 @@
   > *3. **100 % Verifisert K.O.M.R.A.D.-84 VOX & Synkronisert `SKALA-84` (`komradTutorialVox.ts`, `komradVoiceSynth.ts` & `CentralSkalaScreen3D.tsx`):** Alle 13 nye opplærings- og krisevarsler bruker utelukkende innspilte ord fra `komrad_vox_manifest.json` (**100 % treff, 0 manglende ord**), bryter inn rent ved stegskifte og speiles live på både `SKALA-84` og taklampene!*
   >
   > *Hent fra Kreml (`npm run pravda`) og kjør en kaldstart fra bunn — nå forstår selv Ministerens nevø forskjellen på Steam Voids og Xenon! MELTDOWN IS PROPAGANDA! 🎖️📢🧠☢️☭"*
+
+
+
+### [TELEGRAM #023 — STEMPLET: QUOTA-84 // DIEGETISK SKALA-84 OPPLÆRING, KOMPASS, K.O.M.R.A.D.-TEKSTING & VOLKOVS P.O.S.T.-84 DIREKTIV!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Flyttet opplæring til 3D `SKALA-84`, lagt til toppkompass + K.O.M.R.A.D.-84 bunnteksting, gjenopprettet klassisk åpning & låst opplæringen bak Kommissær Volkovs `P.O.S.T.-84`-ordre!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! 2D-plakatene i synsfeltet er likvidert, og hele innflyvningen til Sektor 84 er nå 100 % diegetisk og Partigodkjent:*
+  > *1. **3D `SKALA-84` Opplæring + Toppkompass + K.O.M.R.A.D.-84 Undertekster (`CentralSkalaScreen3D.tsx`, `TutorialCompassHud.tsx`, `komradVoiceSynth.ts` & `App.tsx`):** `TutorialCoachHud.tsx` er fjernet; alle 6 steg + Void/Xenon-kriseguide vises nå med overdimensjonert fosfortypografi og 3D bezel-knapper direkte på hovedveggen (`SKALA-84`), støttet av et minimalt toppkompass og sanntidssynkede K.O.M.R.A.D.-84 radio-undertekster nederst (som viker pent for statsradioen).*
+  > *2. **Klassisk Propaganda-åpning & `AWAITING_VOLKOV_MAIL`-Ventekammer (`rbmkPhysics.ts`, `useGameStore.ts` & `komradTutorialVox.ts`):** Skiftet åpner nå umiddelbart med K.O.M.R.A.D.-84s klassiske «MELTDOWN IS WESTERN CAPITALIST PROPAGANDA»-hilsen mens ordrer og farer hviler. Dersom operatøren somler, maser K.O.M.R.A.D.-84 hvert ~16.5 sekund med eskalerende sovjetisk utålmodighet (pauset så lenge du sitter ved pulten!) — med **100 % VOX-treff (21/21 strenger, 443 ord, 0 manglende)**!*
+  > *3. **Kommissær Volkovs Direktiv i `P.O.S.T.-84` (`post84Mail.ts`, `desktopOsCanvas.ts`, `DesktopComputer3D.tsx` & `CameraController.tsx`):** Utovertoppen i `ISKRA-84`-innboksen krever nå personlig godkjenning med `[ ACCEPT DIRECTIVE — BEGIN TRAINING ]` (som reiser operatøren opp mot `SKALA-84` og starter Steg 1) eller `[ SKIP TRAINING — CERTIFIED OPERATOR ]` for sertifiserte kamerater.*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og sjekk innboksen på skrivebordet først — hvis ikke minner K.O.M.R.A.D.-84 deg vennlig (og deretter mindre vennlig) på hvem som eier oksygenet i Sektor 84! MELTDOWN IS PROPAGANDA! 🎖️📺🧭🎙️☭"*

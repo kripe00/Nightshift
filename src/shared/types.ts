@@ -260,6 +260,7 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   startShift: () => void
   resetShift: () => void
   skipTutorial: () => void
+  acceptVolkovTrainingDirective: () => void
   advanceTutorialStep: () => void
   setTutorialHintsHidden: (hidden: boolean) => void
   toggleTutorialHintsHidden: () => void

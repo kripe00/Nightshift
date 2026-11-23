@@ -26,11 +26,9 @@ import {
   type DesktopTelemetrySnapshot,
 } from './desktopOsCanvas'
 import {
-  VOLKOR_TUTORIAL_MAIL_ID,
-  VOLKOR_WELCOME_MAIL_ID,
+  VOLKOV_ONBOARDING_MAIL_ID,
   createPost84OrderMessage,
   createShuffledOrderDeck,
-  createVolkorTutorialFollowupMail,
   evaluatePost84Order,
   type Post84LiveTelemetry,
   type Post84OrderTemplateId,
@@ -44,9 +42,6 @@ const MOUSE_TARGET_DEADZONE = 0.0028
 const MOUSE_SETTLE_EPS = 0.0005
 const MOUSE_DAMP_SEATED = 11
 const MOUSE_DAMP_RETURN = 9
-const VOLKOR_FOLLOWUP_AFTER_READ_SEC = 4.5
-const VOLKOR_FOLLOWUP_SEATED_FALLBACK_SEC = 9.5
-const MAIL_ALERT_FLASH_DURATION_SEC = 4.0
 const FIRST_ORDER_DELAY_AFTER_TUTORIAL_SEC = 20.0
 const ORDER_COOLDOWN_MIN_SEC = 45.0
 const ORDER_COOLDOWN_MAX_SEC = 60.0
@@ -129,6 +124,7 @@ function readTelemetrySnapshot(): { snapshot: DesktopTelemetrySnapshot; key: str
   const snapshot: DesktopTelemetrySnapshot = {
     shiftNumber: gs.shiftNumber,
     shiftTimeMinutes: gs.shiftTimeMinutes,
+    tutorialPhase: gs.tutorialPhase,
     isBlackout: gs.isBlackout,
     coreTemp: gs.coreTemp,
     pressureBar: gs.pressureBar,
@@ -159,6 +155,7 @@ function readTelemetrySnapshot(): { snapshot: DesktopTelemetrySnapshot; key: str
   const key = [
     snapshot.shiftNumber,
     Math.floor(snapshot.shiftTimeMinutes),
+    snapshot.tutorialPhase,
     snapshot.isBlackout ? 1 : 0,
     Math.round(snapshot.coreTemp),
     snapshot.pressureBar.toFixed(1),
@@ -220,9 +217,7 @@ export function DesktopComputer3D() {
   const telemetryAccumRef = useRef<number>(0)
   const dirtyRef = useRef<boolean>(true)
   const diskPulseRef = useRef<number>(0)
-  const volkorFollowupSentRef = useRef<boolean>(false)
-  const volkorWelcomeReadElapsedRef = useRef<number | null>(null)
-  const deskSeatedFallbackElapsedRef = useRef<number>(0)
+  const volkovPulseAccumRef = useRef<number>(0)
   const mailAlertFlashRef = useRef<number>(0)
   const alertBlinkStepRef = useRef<number>(-1)
   const tutorialCompletedSeenRef = useRef<boolean>(false)
@@ -322,9 +317,7 @@ export function DesktopComputer3D() {
       cursorPosRef.current = null
       mouseTargetRef.current.x = 0
       mouseTargetRef.current.z = 0
-      volkorFollowupSentRef.current = false
-      volkorWelcomeReadElapsedRef.current = null
-      deskSeatedFallbackElapsedRef.current = 0
+      volkovPulseAccumRef.current = 0
       mailAlertFlashRef.current = 0
       alertBlinkStepRef.current = -1
       tutorialCompletedSeenRef.current = false
@@ -336,39 +329,31 @@ export function DesktopComputer3D() {
       dirtyRef.current = true
     }
 
-    if (gs.isShiftControlReady && !volkorFollowupSentRef.current) {
-      if (volkorWelcomeReadElapsedRef.current !== null) {
-        volkorWelcomeReadElapsedRef.current += dt
-      } else if (gs.isSeatedAtDesk) {
-        deskSeatedFallbackElapsedRef.current += dt
-      }
-
-      if (
-        (volkorWelcomeReadElapsedRef.current !== null &&
-          volkorWelcomeReadElapsedRef.current >= VOLKOR_FOLLOWUP_AFTER_READ_SEC) ||
-        deskSeatedFallbackElapsedRef.current >= VOLKOR_FOLLOWUP_SEATED_FALLBACK_SEC
-      ) {
-        volkorFollowupSentRef.current = true
-        const { nextState, didDeliver } = deliverIncomingPost84Message(
-          osStateRef.current,
-          createVolkorTutorialFollowupMail(),
-          'NEW DISPATCH: VOLKOR'
-        )
-        if (didDeliver) {
-          osStateRef.current = nextState
-          mailAlertFlashRef.current = MAIL_ALERT_FLASH_DURATION_SEC
-          diskPulseRef.current = 0.65
-          playCarriageReturnDing()
-          if (cursorPosRef.current) {
-            const updatedHit = hitTestDesktopOs(
-              nextState,
-              cursorPosRef.current.x,
-              cursorPosRef.current.y
-            )
-            hoveredIdRef.current = updatedHit ? updatedHit.id : null
-          }
-          dirtyRef.current = true
+    if (gs.tutorialPhase !== 'AWAITING_VOLKOV_MAIL') {
+      const onboardingMsg = osStateRef.current.mailMessages.find(
+        (m) => m.id === VOLKOV_ONBOARDING_MAIL_ID
+      )
+      if (onboardingMsg?.trainingDirective?.state === 'pending') {
+        osStateRef.current = {
+          ...osStateRef.current,
+          mailMessages: osStateRef.current.mailMessages.map((m) =>
+            m.id === VOLKOV_ONBOARDING_MAIL_ID && m.trainingDirective
+              ? {
+                  ...m,
+                  status: 'read',
+                  trainingDirective: {
+                    state:
+                      gs.tutorialPhase === 'COMPLETED' ? 'skipped' : 'accepted',
+                  },
+                }
+              : m
+          ),
+          lastStatusNotice:
+            gs.tutorialPhase === 'COMPLETED'
+              ? 'CERTIFIED SKIP // LIVE SHIFT'
+              : 'TRAINING DIRECTIVE ACCEPTED',
         }
+        dirtyRef.current = true
       }
     }
 
@@ -517,8 +502,13 @@ export function DesktopComputer3D() {
     if (mailAlertFlashRef.current > 0) {
       mailAlertFlashRef.current = Math.max(0, mailAlertFlashRef.current - dt)
     }
-    const blinkStep =
-      mailAlertFlashRef.current > 0 ? Math.floor(mailAlertFlashRef.current * 4) : -1
+    let blinkStep = -1
+    if (mailAlertFlashRef.current > 0) {
+      blinkStep = Math.floor(mailAlertFlashRef.current * 4)
+    } else if (gs.tutorialPhase === 'AWAITING_VOLKOV_MAIL' && gs.isShiftControlReady) {
+      volkovPulseAccumRef.current += dt
+      blinkStep = Math.floor(volkovPulseAccumRef.current * 2) % 2
+    }
     if (blinkStep !== alertBlinkStepRef.current) {
       alertBlinkStepRef.current = blinkStep
       dirtyRef.current = true
@@ -663,24 +653,18 @@ export function DesktopComputer3D() {
     osStateRef.current = nextState
     diskPulseRef.current = 0.28
 
-    if (clickedRegion?.action.kind === 'mail_select') {
-      if (
-        clickedRegion.action.messageId === VOLKOR_WELCOME_MAIL_ID &&
-        volkorWelcomeReadElapsedRef.current === null &&
-        !volkorFollowupSentRef.current
-      ) {
-        volkorWelcomeReadElapsedRef.current = 0
-      }
-      if (
-        clickedRegion.action.messageId === VOLKOR_TUTORIAL_MAIL_ID &&
-        mailAlertFlashRef.current > 0
-      ) {
-        mailAlertFlashRef.current = 0
-        alertBlinkStepRef.current = -1
-      }
-    }
-
-    if (clickedRegion?.action.kind === 'mail_accept_order') {
+    if (clickedRegion?.action.kind === 'mail_accept_training') {
+      mailAlertFlashRef.current = 0
+      alertBlinkStepRef.current = -1
+      playOrderCompleteChime()
+      playSwitchClank(true)
+      useGameStore.getState().acceptVolkovTrainingDirective()
+    } else if (clickedRegion?.action.kind === 'mail_skip_training') {
+      mailAlertFlashRef.current = 0
+      alertBlinkStepRef.current = -1
+      playSwitchClank(true)
+      useGameStore.getState().skipTutorial()
+    } else if (clickedRegion?.action.kind === 'mail_accept_order') {
       const acceptedMessageId = clickedRegion.action.messageId
       mailAlertFlashRef.current = 0
       alertBlinkStepRef.current = -1
@@ -709,7 +693,10 @@ export function DesktopComputer3D() {
       playSwitchClank(false)
     } else if (clickedRegion?.action.kind === 'mail_accept_order') {
       playSwitchClank(true)
-    } else {
+    } else if (
+      clickedRegion?.action.kind !== 'mail_accept_training' &&
+      clickedRegion?.action.kind !== 'mail_skip_training'
+    ) {
       playDetentClick(1)
     }
 

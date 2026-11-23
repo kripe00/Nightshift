@@ -17,6 +17,8 @@ export type DesktopCursorAction =
   | { kind: 'mail_select'; messageId: string }
   | { kind: 'mail_scroll'; delta: number }
   | { kind: 'mail_accept_order'; messageId: string }
+  | { kind: 'mail_accept_training'; messageId: string }
+  | { kind: 'mail_skip_training'; messageId: string }
 
 export interface DesktopHitRegion {
   id: string
@@ -31,6 +33,7 @@ export interface DesktopHitRegion {
 export interface DesktopTelemetrySnapshot {
   shiftNumber: number
   shiftTimeMinutes: number
+  tutorialPhase: string
   isBlackout: boolean
   coreTemp: number
   pressureBar: number
@@ -89,7 +92,7 @@ export function createInitialDesktopOsState(): DesktopOsState {
     mailScrollOffset: 0,
     mailEarnedRub: 0,
     mailOrdersCompleted: 0,
-    lastStatusNotice: 'DESKTOP READY // CLICK P.O.S.T.-84',
+    lastStatusNotice: 'URGENT: VOLKOV MAIL UNREAD',
   }
 }
 
@@ -284,6 +287,27 @@ export function buildDesktopHitRegions(
         action: { kind: 'mail_accept_order', messageId: selected.id },
         windowScope: 'mail',
       })
+    } else if (selected?.trainingDirective?.state === 'pending') {
+      regions.push(
+        {
+          id: 'mail:accept_training',
+          x: rect.x + 300,
+          y: rect.y + 356,
+          w: 412,
+          h: 44,
+          action: { kind: 'mail_accept_training', messageId: selected.id },
+          windowScope: 'mail',
+        },
+        {
+          id: 'mail:skip_training',
+          x: rect.x + 300,
+          y: rect.y + 408,
+          w: 412,
+          h: 34,
+          action: { kind: 'mail_skip_training', messageId: selected.id },
+          windowScope: 'mail',
+        }
+      )
     }
   }
 
@@ -347,7 +371,20 @@ export function handleDesktopOsClick(
     mailMessages: state.mailMessages.map((msg) => ({
       ...msg,
       order: msg.order ? { ...msg.order } : undefined,
+      trainingDirective: msg.trainingDirective
+        ? { ...msg.trainingDirective }
+        : undefined,
     })),
+  }
+
+  const selectPendingTrainingIfUnselected = () => {
+    if (next.selectedMailId) return
+    const pendingTraining = next.mailMessages.find(
+      (m) => m.trainingDirective?.state === 'pending'
+    )
+    if (pendingTraining) {
+      next.selectedMailId = pendingTraining.id
+    }
   }
 
   const focusMailWindow = () => {
@@ -367,6 +404,7 @@ export function handleDesktopOsClick(
     case 'open_app':
     case 'focus_app': {
       focusMailWindow()
+      selectPendingTrainingIfUnselected()
       next.lastStatusNotice = 'OPEN: P.O.S.T.-84'
       break
     }
@@ -395,6 +433,7 @@ export function handleDesktopOsClick(
         next.lastStatusNotice = 'MINIMIZED: P.O.S.T.-84'
       } else {
         focusMailWindow()
+        selectPendingTrainingIfUnselected()
         next.lastStatusNotice = 'ACTIVE: P.O.S.T.-84'
       }
       break
@@ -405,7 +444,10 @@ export function handleDesktopOsClick(
       next.selectedMailId = targetMsgId
       const msg = next.mailMessages.find((m) => m.id === targetMsgId)
       if (msg) {
-        if (msg.status === 'unread') {
+        if (
+          msg.status === 'unread' &&
+          msg.trainingDirective?.state !== 'pending'
+        ) {
           msg.status = 'read'
         }
         next.lastStatusNotice = `READ: ${msg.sender}`
@@ -430,6 +472,28 @@ export function handleDesktopOsClick(
         msg.order.orderState = 'active'
         msg.order.holdProgressSec = 0
         next.lastStatusNotice = `ACTIVE: ${msg.subject.slice(0, 24)}`
+      }
+      break
+    }
+    case 'mail_accept_training': {
+      focusMailWindow()
+      next.selectedMailId = action.messageId
+      const msg = next.mailMessages.find((m) => m.id === action.messageId)
+      if (msg?.trainingDirective && msg.trainingDirective.state === 'pending') {
+        msg.status = 'read'
+        msg.trainingDirective.state = 'accepted'
+        next.lastStatusNotice = 'TRAINING DIRECTIVE ACCEPTED'
+      }
+      break
+    }
+    case 'mail_skip_training': {
+      focusMailWindow()
+      next.selectedMailId = action.messageId
+      const msg = next.mailMessages.find((m) => m.id === action.messageId)
+      if (msg?.trainingDirective && msg.trainingDirective.state === 'pending') {
+        msg.status = 'read'
+        msg.trainingDirective.state = 'skipped'
+        next.lastStatusNotice = 'CERTIFIED SKIP // LIVE SHIFT'
       }
       break
     }
@@ -755,7 +819,7 @@ export function paintDesktopOsCanvas(
     ctx.font = 'bold 20px "Courier Prime", monospace'
     ctx.fillText('X', cx + 20, cy + 16)
 
-    paintMailWindow(ctx, rect, state, telemetry, hoveredId)
+    paintMailWindow(ctx, rect, state, telemetry, hoveredId, mailAlertPhase)
   }
 
   // =========================================================================
@@ -875,7 +939,8 @@ function paintMailWindow(
   rect: { x: number; y: number; w: number; h: number },
   state: DesktopOsState,
   telemetry: DesktopTelemetrySnapshot,
-  hoveredId: string | null
+  hoveredId: string | null,
+  mailAlertPhase: 0 | 1 | 2
 ) {
   const unreadCount = state.mailMessages.filter((m) => m.status === 'unread').length
   ctx.textAlign = 'left'
@@ -993,6 +1058,59 @@ function paintMailWindow(
         : isUnread || os === 'active'
           ? '#ffb000'
           : '#33ff66'
+      ctx.font = 'bold 15px "Courier Prime", monospace'
+      ctx.fillText(fitEllipsis(ctx, msg.sender, 144), rx + 108, ry + 20)
+
+      ctx.fillStyle = '#e6dec3'
+      ctx.font = '15px "Courier Prime", monospace'
+      ctx.fillText(fitEllipsis(ctx, msg.subject, 244), rx + 8, ry + 45)
+    } else if (msg.trainingDirective) {
+      const tdState = msg.trainingDirective.state
+      const isPending = tdState === 'pending'
+      if (isSel) {
+        ctx.fillStyle = isPending && mailAlertPhase === 2 ? '#29300a' : '#144922'
+        ctx.strokeStyle = isHover ? '#e6dec3' : '#ffb000'
+      } else if (isPending) {
+        ctx.fillStyle = isHover
+          ? '#2c360b'
+          : mailAlertPhase === 2
+            ? '#2a2205'
+            : '#1b2408'
+        ctx.strokeStyle = isHover ? '#e6dec3' : '#ffb000'
+      } else {
+        ctx.fillStyle = isHover ? '#103b1c' : '#0b2813'
+        ctx.strokeStyle = isHover ? '#e6dec3' : '#22b549'
+      }
+      ctx.lineWidth = isSel || isHover || isPending ? 2.5 : 1.5
+      ctx.fillRect(rx, ry, 260, 64)
+      ctx.strokeRect(rx, ry, 260, 64)
+
+      if (isPending) {
+        ctx.fillStyle = mailAlertPhase === 2 ? '#33ff66' : '#ffb000'
+        ctx.fillRect(rx + 6, ry + 10, 96, 20)
+        ctx.fillStyle = '#061a0c'
+        ctx.font = 'bold 13px "Courier Prime", monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText('[DIRECTIVE]', rx + 54, ry + 20)
+        ctx.textAlign = 'left'
+      } else {
+        ctx.fillStyle = '#0a2e15'
+        ctx.fillRect(rx + 6, ry + 10, 96, 20)
+        ctx.strokeStyle = '#33ff66'
+        ctx.lineWidth = 1.5
+        ctx.strokeRect(rx + 6, ry + 10, 96, 20)
+        ctx.fillStyle = '#33ff66'
+        ctx.font = 'bold 13px "Courier Prime", monospace'
+        ctx.textAlign = 'center'
+        ctx.fillText(
+          tdState === 'accepted' ? '[ACCEPTED]' : '[SKIPPED]',
+          rx + 54,
+          ry + 20
+        )
+        ctx.textAlign = 'left'
+      }
+
+      ctx.fillStyle = isSel ? '#e6dec3' : isPending ? '#ffb000' : '#33ff66'
       ctx.font = 'bold 15px "Courier Prime", monospace'
       ctx.fillText(fitEllipsis(ctx, msg.sender, 144), rx + 108, ry + 20)
 
@@ -1264,6 +1382,145 @@ function paintMailWindow(
         '[COMPLETED] — PAYOUT & QUOTA CREDITED',
         rect.x + 506,
         rect.y + 419,
+        396
+      )
+    }
+    ctx.textAlign = 'left'
+    return
+  }
+
+  if (selected.trainingDirective) {
+    const tdState = selected.trainingDirective.state
+
+    // Metadata card
+    ctx.fillStyle = '#071d0e'
+    ctx.fillRect(rect.x + 300, rect.y + 66, 412, 82)
+    ctx.strokeStyle = tdState === 'pending' ? '#ffb000' : '#22b549'
+    ctx.lineWidth = 1.5
+    ctx.strokeRect(rect.x + 300, rect.y + 66, 412, 82)
+
+    ctx.fillStyle = '#ffb000'
+    ctx.font = 'bold 14px "Courier Prime", monospace'
+    ctx.fillText(
+      `FROM: ${selected.sender} [${selected.orgTag}]`,
+      rect.x + 308,
+      rect.y + 83,
+      396
+    )
+
+    ctx.fillStyle = '#e6dec3'
+    ctx.font = 'bold 14px "Courier Prime", monospace'
+    ctx.fillText(`SUBJ: ${selected.subject}`, rect.x + 308, rect.y + 108, 396)
+
+    ctx.fillStyle = '#22b549'
+    ctx.font = '14px "Courier Prime", monospace'
+    ctx.fillText(`DATE: ${selected.timestamp}`, rect.x + 308, rect.y + 132, 396)
+
+    // Body box
+    ctx.fillStyle = '#061a0c'
+    ctx.fillRect(rect.x + 300, rect.y + 154, 412, 194)
+    ctx.strokeStyle = '#164d25'
+    ctx.lineWidth = 1.5
+    ctx.strokeRect(rect.x + 300, rect.y + 154, 412, 194)
+
+    let bodyY = rect.y + 171
+    ctx.fillStyle = '#e6dec3'
+    ctx.font = '14px "Courier Prime", monospace'
+    for (const para of selected.bodyLines) {
+      const maxLines = Math.floor((rect.y + 342 - bodyY) / 17)
+      if (maxLines <= 0) break
+      const drawn = drawWrappedText(ctx, para, rect.x + 312, bodyY, 388, 17, maxLines)
+      bodyY += drawn * 17 + 6
+    }
+
+    if (tdState === 'pending') {
+      const acceptHover = hoveredId === 'mail:accept_training'
+      const pulseOn = mailAlertPhase === 2
+      ctx.fillStyle = acceptHover
+        ? '#33ff66'
+        : pulseOn
+          ? '#244d14'
+          : '#124a21'
+      ctx.fillRect(rect.x + 300, rect.y + 356, 412, 44)
+      ctx.strokeStyle = acceptHover
+        ? '#e6dec3'
+        : pulseOn
+          ? '#ffb000'
+          : '#33ff66'
+      ctx.lineWidth = 2.5
+      ctx.strokeRect(rect.x + 300, rect.y + 356, 412, 44)
+      ctx.textAlign = 'center'
+      ctx.fillStyle = acceptHover
+        ? '#061a0c'
+        : pulseOn
+          ? '#ffb000'
+          : '#e6dec3'
+      ctx.font = 'bold 15px "Courier Prime", monospace'
+      ctx.fillText(
+        '[ ACCEPT DIRECTIVE — BEGIN TRAINING ]',
+        rect.x + 506,
+        rect.y + 378,
+        396
+      )
+
+      const skipHover = hoveredId === 'mail:skip_training'
+      ctx.fillStyle = skipHover ? '#362908' : '#0a2111'
+      ctx.fillRect(rect.x + 300, rect.y + 408, 412, 34)
+      ctx.strokeStyle = skipHover ? '#ffb000' : '#438557'
+      ctx.lineWidth = 1.5
+      ctx.strokeRect(rect.x + 300, rect.y + 408, 412, 34)
+      ctx.fillStyle = skipHover ? '#ffb000' : '#8fd4a4'
+      ctx.font = 'bold 13px "Courier Prime", monospace'
+      ctx.fillText(
+        '[ SKIP TRAINING — CERTIFIED OPERATOR ]',
+        rect.x + 506,
+        rect.y + 425,
+        396
+      )
+    } else if (tdState === 'accepted') {
+      ctx.fillStyle = '#092913'
+      ctx.fillRect(rect.x + 300, rect.y + 356, 412, 86)
+      ctx.strokeStyle = '#33ff66'
+      ctx.lineWidth = 2
+      ctx.strokeRect(rect.x + 300, rect.y + 356, 412, 86)
+      ctx.textAlign = 'center'
+      ctx.fillStyle = '#33ff66'
+      ctx.font = 'bold 16px "Courier Prime", monospace'
+      ctx.fillText(
+        '[ACCEPTED] — CALIBRATION ACTIVE',
+        rect.x + 506,
+        rect.y + 388,
+        396
+      )
+      ctx.fillStyle = '#e6dec3'
+      ctx.font = '14px "Courier Prime", monospace'
+      ctx.fillText(
+        'STAND UP [E] & CHECK CENTRAL SKALA-84 CRT',
+        rect.x + 506,
+        rect.y + 416,
+        396
+      )
+    } else {
+      ctx.fillStyle = '#092913'
+      ctx.fillRect(rect.x + 300, rect.y + 356, 412, 86)
+      ctx.strokeStyle = '#ffb000'
+      ctx.lineWidth = 2
+      ctx.strokeRect(rect.x + 300, rect.y + 356, 412, 86)
+      ctx.textAlign = 'center'
+      ctx.fillStyle = '#ffb000'
+      ctx.font = 'bold 16px "Courier Prime", monospace'
+      ctx.fillText(
+        '[SKIPPED] — CERTIFIED LIVE SHIFT',
+        rect.x + 506,
+        rect.y + 388,
+        396
+      )
+      ctx.fillStyle = '#e6dec3'
+      ctx.font = '14px "Courier Prime", monospace'
+      ctx.fillText(
+        'FULL REACTOR OPERATIONS & ORDERS ACTIVE',
+        rect.x + 506,
+        rect.y + 416,
         396
       )
     }

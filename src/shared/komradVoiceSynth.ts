@@ -85,6 +85,7 @@ export type VoxQueueItem =
       word: string;
       entry: VoxWordEntry;
       charEnd: number;
+      speechCharEnd?: number;
       stressed: boolean;
     }
   | {
@@ -92,13 +93,21 @@ export type VoxQueueItem =
       durSec: number;
       terminator: "." | "!" | "?" | ",";
       charEnd: number;
+      speechCharEnd?: number;
     }
   | {
       kind: "fallback";
       rawWord: string;
       charEnd: number;
+      speechCharEnd?: number;
       stressed: boolean;
     };
+
+export interface KomradSubtitleSnapshot {
+  text: string | null;
+  mood: KomradMood;
+  isSpeaking: boolean;
+}
 
 type ConsonantKind = "none" | "sibilant" | "sh" | "stop" | "nasal" | "fricative" | "glide";
 
@@ -403,6 +412,8 @@ interface VoxTimelineSegment {
   endSec: number;
   prevCharEnd: number;
   charEnd: number;
+  speechCharEnd?: number;
+  clauseText?: string;
   word: string | null;
   stressed: boolean;
   terminator: "." | "!" | "?" | "," | "";
@@ -473,6 +484,142 @@ let steppedThisTick = false;
 let charCursor = 0;
 let charAccumSec = 0;
 let visualTypingActive = false;
+
+const KOMRAD_SUBTITLE_LINGER_MS = 600;
+const KOMRAD_SUBTITLE_MAX_LEN = 88;
+
+interface SubtitleClauseSpan {
+  start: number;
+  end: number;
+  text: string;
+}
+
+let activeSubtitleClauses: SubtitleClauseSpan[] = [];
+let subtitleSnapshot: KomradSubtitleSnapshot = {
+  text: null,
+  mood: "normal",
+  isSpeaking: false,
+};
+let subtitleHoldUntilMs = 0;
+const subtitleListeners = new Set<() => void>();
+
+export function getKomradSubtitleSnapshot(): KomradSubtitleSnapshot {
+  return subtitleSnapshot;
+}
+
+export function subscribeKomradSubtitle(listener: () => void): () => void {
+  subtitleListeners.add(listener);
+  return () => {
+    subtitleListeners.delete(listener);
+  };
+}
+
+function emitKomradSubtitle(
+  text: string | null,
+  mood: KomradMood,
+  isSpeaking: boolean,
+): void {
+  const cleanText = text && text.trim().length > 0 ? text.trim() : null;
+  if (
+    subtitleSnapshot.text === cleanText &&
+    subtitleSnapshot.mood === mood &&
+    subtitleSnapshot.isSpeaking === isSpeaking
+  ) {
+    return;
+  }
+  subtitleSnapshot = {
+    text: cleanText,
+    mood,
+    isSpeaking,
+  };
+  subtitleListeners.forEach((listener) => listener());
+}
+
+function clearKomradSubtitleNow(): void {
+  activeSubtitleClauses = [];
+  subtitleHoldUntilMs = 0;
+  emitKomradSubtitle(null, "normal", false);
+}
+
+function splitLongClauseChunk(
+  text: string,
+  baseOffset: number,
+  out: SubtitleClauseSpan[],
+): void {
+  let cursor = 0;
+  const len = text.length;
+  while (cursor < len) {
+    while (cursor < len && text[cursor] === " ") cursor += 1;
+    if (cursor >= len) break;
+
+    if (len - cursor <= KOMRAD_SUBTITLE_MAX_LEN) {
+      const piece = text.slice(cursor).trim();
+      if (piece.length > 0) {
+        out.push({ start: baseOffset + cursor, end: baseOffset + len, text: piece });
+      }
+      break;
+    }
+
+    const searchLimit = Math.min(len, cursor + KOMRAD_SUBTITLE_MAX_LEN);
+    let splitAt = -1;
+    for (let j = searchLimit; j >= cursor + 34; j--) {
+      const ch = text[j - 1];
+      if (ch === "," || ch === ";" || ch === ":") {
+        splitAt = j;
+        break;
+      }
+    }
+    if (splitAt < 0) {
+      for (let j = searchLimit; j >= cursor + 34; j--) {
+        if (text[j] === " ") {
+          splitAt = j;
+          break;
+        }
+      }
+    }
+    if (splitAt < 0) {
+      splitAt = searchLimit;
+    }
+    const piece = text.slice(cursor, splitAt).trim();
+    if (piece.length > 0) {
+      out.push({ start: baseOffset + cursor, end: baseOffset + splitAt, text: piece });
+    }
+    cursor = splitAt;
+  }
+}
+
+function splitTextIntoSubtitleClauses(text: string): SubtitleClauseSpan[] {
+  const out: SubtitleClauseSpan[] = [];
+  const sentenceRe = /[^.!?]+[.!?]+|[^.!?]+$/g;
+  let match: RegExpMatchArray | null;
+  while ((match = sentenceRe.exec(text)) !== null) {
+    const raw = match[0];
+    const trimStart = raw.search(/\S/);
+    if (trimStart < 0) continue;
+    const clean = raw.slice(trimStart).trim();
+    if (!clean) continue;
+    const startOff = (match.index ?? 0) + trimStart;
+    if (clean.length <= KOMRAD_SUBTITLE_MAX_LEN) {
+      out.push({ start: startOff, end: startOff + clean.length, text: clean });
+    } else {
+      splitLongClauseChunk(clean, startOff, out);
+    }
+  }
+  return out;
+}
+
+function lookupSubtitleClauseAtChar(
+  clauses: readonly SubtitleClauseSpan[],
+  charPos: number,
+): string | null {
+  if (clauses.length === 0) return null;
+  for (let i = 0; i < clauses.length; i++) {
+    if (charPos <= clauses[i].end) {
+      return clauses[i].text;
+    }
+  }
+  return clauses[clauses.length - 1].text;
+}
 
 export function getKomradVowelBand(
   vowel: KomradVowelKey | null,
@@ -2024,6 +2171,12 @@ function cancelActiveVoxUtterance(fadeSec = 0.03): void {
 
 function finishActiveUtterance(elapsedSec: number): void {
   lastUtteranceEndElapsedSec = elapsedSec;
+  if (subtitleSnapshot.text) {
+    subtitleHoldUntilMs =
+      (typeof performance !== "undefined" ? performance.now() : Date.now()) +
+      KOMRAD_SUBTITLE_LINGER_MS;
+    emitKomradSubtitle(subtitleSnapshot.text, subtitleSnapshot.mood, false);
+  }
   releaseActiveUtteranceNodes(0.04);
   markKomradTransmissionEnd();
 }
@@ -2530,11 +2683,13 @@ function beginVoxClipUtterance(
     const term: "." | "!" | "?" | "," | "" =
       lastCh === "!" ? "!" : lastCh === "?" ? "?" : lastCh === "," || lastCh === ":" ? "," : ".";
 
+    const cleanClause = cl.text.trim();
     voxTimeline.push({
       startSec: when + cl.start / rate,
       endSec: when + cl.end / rate,
       prevCharEnd,
       charEnd,
+      clauseText: cleanClause,
       word: labelWord,
       stressed: false,
       terminator: term,
@@ -2542,6 +2697,14 @@ function beginVoxClipUtterance(
     });
     prevCharEnd = charEnd;
   }
+
+  activeSubtitleClauses = [];
+  subtitleHoldUntilMs = 0;
+  emitKomradSubtitle(
+    voxTimeline[0]?.clauseText ?? clip.text,
+    mood,
+    true,
+  );
 
   voxQueue = [];
   voxQueueCursor = 0;
@@ -2599,6 +2762,9 @@ function beginVoxUtterance(
   const wordMap = voxManifest?.words ?? {};
   const speechSource = msg.spokenVoxText ?? msg.text;
   voxQueue = tokenizeToVoxQueue(speechSource, wordMap);
+  for (let qi = 0; qi < voxQueue.length; qi++) {
+    voxQueue[qi].speechCharEnd = voxQueue[qi].charEnd;
+  }
   if (msg.spokenVoxText && speechSource.length > 0 && msg.spokenVoxText !== msg.text) {
     const scale = msg.text.length / speechSource.length;
     for (let qi = 0; qi < voxQueue.length; qi++) {
@@ -2606,6 +2772,13 @@ function beginVoxUtterance(
       q.charEnd = Math.min(msg.text.length, Math.max(0, Math.round(q.charEnd * scale)));
     }
   }
+  activeSubtitleClauses = splitTextIntoSubtitleClauses(speechSource);
+  subtitleHoldUntilMs = 0;
+  emitKomradSubtitle(
+    activeSubtitleClauses[0]?.text ?? speechSource,
+    mood,
+    voxQueue.length > 0,
+  );
   voxQueueCursor = 0;
   voxCursorAudioSec = audio.currentTime + 0.045;
   voxUtteranceEndAudioSec = voxCursorAudioSec;
@@ -2656,6 +2829,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
         endSec: pEnd,
         prevCharEnd: item.charEnd,
         charEnd: item.charEnd,
+        speechCharEnd: item.speechCharEnd ?? item.charEnd,
         word: null,
         stressed: false,
         terminator: item.terminator,
@@ -2702,6 +2876,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
           endSec: when + playDur,
           prevCharEnd: item.charEnd,
           charEnd: item.charEnd,
+          speechCharEnd: item.speechCharEnd ?? item.charEnd,
           word: item.word,
           stressed: item.stressed,
           terminator: "",
@@ -2730,6 +2905,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
       endSec: when + fDur,
       prevCharEnd: item.charEnd,
       charEnd: item.charEnd,
+      speechCharEnd: item.speechCharEnd ?? item.charEnd,
       word: rawWord,
       stressed: item.stressed,
       terminator: "",
@@ -3051,6 +3227,7 @@ export function stepKomradSpeech(
     charCursor = 0;
     charAccumSec = 0;
     cancelActiveVoxUtterance(0.02);
+    clearKomradSubtitleNow();
   } else if (nextMonologueElapsedSec < 0) {
     nextMonologueElapsedSec =
       elapsedSec + MONOLOGUE_MIN_GAP_SEC + Math.random() * MONOLOGUE_EXTRA_GAP_SEC;
@@ -3092,6 +3269,7 @@ export function stepKomradSpeech(
     wasShiftControlReady = false;
     openingSettleElapsedSec = 0;
     cancelActiveVoxUtterance(0.03);
+    clearKomradSubtitleNow();
     pendingVoxMsg = null;
     pendingVoxMsgPriority = 0;
     lastSeenStoreMsgId = latestId;
@@ -3133,6 +3311,7 @@ export function stepKomradSpeech(
       markKomradTransmissionEnd();
     }
     cancelActiveVoxUtterance(0.03);
+    clearKomradSubtitleNow();
     pendingVoxMsg = null;
     pendingVoxMsgPriority = 0;
     lastSeenStoreMsgId = latestId;
@@ -3155,9 +3334,15 @@ export function stepKomradSpeech(
     voxSpeakingAudioActive
   ) {
     cancelActiveVoxUtterance(0.03);
+    clearKomradSubtitleNow();
     lastUtteranceEndElapsedSec = elapsedSec;
     charCursor = latestMsg.text.length;
     markKomradTransmissionEnd();
+  } else if (
+    (s.radioBroadcastSubtitle !== null || s.isMusicMuted || s.diagFeedActive) &&
+    subtitleSnapshot.text !== null
+  ) {
+    clearKomradSubtitleNow();
   }
 
   // Detect natural completion of active utterance independently of typewriter state
@@ -3381,6 +3566,15 @@ export function stepKomradSpeech(
         if (activeSeg.terminator) {
           vocalState.clauseTerminator = activeSeg.terminator;
         }
+        const subText =
+          activeSeg.clauseText ??
+          lookupSubtitleClauseAtChar(
+            activeSubtitleClauses,
+            activeSeg.speechCharEnd ?? activeSeg.charEnd,
+          );
+        if (subText) {
+          emitKomradSubtitle(subText, voxActiveMood, true);
+        }
       } else {
         vocalState.activeWord = null;
         vocalState.isStressed = false;
@@ -3401,6 +3595,15 @@ export function stepKomradSpeech(
       vocalState.isTalking = stillRunning;
       return vocalState;
     }
+  }
+
+  if (
+    subtitleSnapshot.text !== null &&
+    !voxSpeakingAudioActive &&
+    (typeof performance !== "undefined" ? performance.now() : Date.now()) >=
+      subtitleHoldUntilMs
+  ) {
+    clearKomradSubtitleNow();
   }
 
   // Muted / waiting on radio hold-off / idle: advance visual CRT reveal cleanly

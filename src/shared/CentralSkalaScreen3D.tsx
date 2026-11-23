@@ -10,7 +10,9 @@ import { useDeskStore } from "../modules/inspector/useDeskStore";
 import { playSwitchClank } from "../modules/reactor/audioSynth";
 import type { TutorialPhase } from "../simulation/rbmkPhysics";
 import { NOOP_RAYCAST } from "./ExteriorDioramas3D";
+import { CONSOLE_WORLD_TARGETS, CRISIS_COACH_CARDS } from "./komradTutorialVox";
 import { onKremlinFontReady } from "./kremlinFontReady";
+import type { CrisisCoachId } from "./types";
 import { useGameStore } from "./useGameStore";
 
 const CW = 1024;
@@ -124,6 +126,12 @@ function getVolkovStepInfo(
         : phase;
 
   switch (normPhase) {
+    case "AWAITING_VOLKOV_MAIL":
+      return {
+        step: 0,
+        highlight: null,
+        tag: "AWAITING VOLKOV DIRECTIVE APPROVAL ON DESK TERMINAL",
+      };
     case "STEP_1_COOLING": {
       const pA = state ? Math.round(state.pumpThrottle[0]) : 0;
       const pB = state ? Math.round(state.pumpThrottle[1]) : 0;
@@ -194,6 +202,496 @@ function getVolkovStepInfo(
 
 function kremlinFont(px: number): string {
   return `700 ${px}px "Kremlin", monospace`;
+}
+
+function wrapCanvasLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let cur = "";
+  for (let i = 0; i < words.length; i++) {
+    const candidate = cur ? `${cur} ${words[i]}` : words[i];
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      cur = candidate;
+    } else {
+      if (cur) {
+        lines.push(cur);
+        if (lines.length >= maxLines) return lines;
+      }
+      cur = words[i];
+    }
+  }
+  if (cur && lines.length < maxLines) {
+    lines.push(cur);
+  }
+  return lines;
+}
+
+function makeSkalaBezelButtonTex(
+  label: string,
+  accentHex: string,
+  bgHex: string,
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = bgHex;
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.strokeStyle = accentHex;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(4, 4, 248, 56);
+    ctx.font = '700 26px "Kremlin", "Courier Prime", monospace';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = accentHex;
+    ctx.fillText(label, 128, 33, 232);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+interface SkalaTutorialViewSpec {
+  stepNum: number;
+  title: string;
+  where: string;
+  doThis: string;
+  why: string;
+  pct: number;
+  liveReadout: string;
+  isSafetyDrill?: boolean;
+}
+
+function buildSkalaTutorialViewSpec(
+  state: ReturnType<typeof useGameStore.getState>,
+): SkalaTutorialViewSpec {
+  const rawPhase = state.tutorialPhase;
+  const normPhase: TutorialPhase =
+    rawPhase === "STEP_0_PICKUP_WEPAD"
+      ? "STEP_1_COOLING"
+      : rawPhase === "STEP_4_SPIN_TURBINE" || rawPhase === "STEP_5_SYNC_GRID"
+        ? "STEP_6_BASELINE_600MW"
+        : rawPhase;
+
+  switch (normPhase) {
+    case "AWAITING_VOLKOV_MAIL":
+      return {
+        stepNum: 0,
+        title: "AWAITING VOLKOV DIRECTIVE APPROVAL",
+        where: "SUPERVISOR DESK  •  [KEY 4] -> PRESS [E] TO SIT",
+        doThis:
+          "Open P.O.S.T.-84 on your desk monitor and read Commissar Volkov's unread directive.",
+        why: "Grid orders and reactor hazards stay paused until you Accept (or Skip) Volkov's directive.",
+        pct: 0,
+        liveReadout: "AWAITING VOLKOV DIRECTIVE APPROVAL ON DESK TERMINAL",
+      };
+    case "STEP_1_COOLING": {
+      const pA = Math.round(state.pumpThrottle[0]);
+      const pB = Math.round(state.pumpThrottle[1]);
+      const pct = Math.min(
+        100,
+        Math.round(((Math.min(50, pA) + Math.min(50, pB)) / 100) * 100),
+      );
+      return {
+        stepNum: 1,
+        title: "COOLING WATER FIRST",
+        where: "UNIT A — FRONT-LEFT CONSOLE  [KEY 1]",
+        doThis:
+          "Drag or scroll COOLING PUMP A and COOLING PUMP B levers UP above 50%.",
+        why: "Moving cold water carries heat out of fuel tubes so boiling steam bubbles (Voids) cannot form.",
+        pct,
+        liveReadout: `COOLING PUMPS: A ${pA}%  |  B ${pB}%  (NEED >= 50%)`,
+      };
+    }
+    case "STEP_2_PULL_RODS": {
+      const rods = Math.round(state.controlRodLevel);
+      const mwt = Math.round(state.thermalPower);
+      const pct = Math.min(
+        100,
+        Math.round(
+          ((Math.min(50, rods) / 50) * 0.5 + Math.min(1, mwt / 500) * 0.5) * 100,
+        ),
+      );
+      return {
+        stepNum: 2,
+        title: "HOW TO RAISE & LOWER POWER",
+        where: "UNIT A-2 — FAR-LEFT CONSOLE  [KEY 6]",
+        doThis:
+          "Scroll CONTROL ROD DRIVE wheel UP toward 55% (higher % = pull rods OUT = MORE MW).",
+        why: "Control rods act like brakes: pulling them OUT releases heat; pushing them IN (lower %) cools & slows power.",
+        pct,
+        liveReadout: `RODS OUT: ${rods}% -> 55%   |   POWER: ${mwt} / 500 MWt`,
+      };
+    }
+    case "STEP_6_BASELINE_600MW": {
+      const matched = state.substations.filter(
+        (sub) => Math.abs(sub.allocatedMW - sub.targetMW) <= 15,
+      ).length;
+      const outMW = Math.round(state.totalElectricalMW);
+      return {
+        stepNum: 3,
+        title: "DELIVER ELECTRICITY TO THE GRID",
+        where: "UNIT A — FRONT-LEFT CONSOLE (6 BOTTOM SLIDERS)  [KEY 1]",
+        doThis:
+          "Drag all 6 bottom Power Sliders to match their green 100 MW target demand.",
+        why: "Customers require exact target MW. UNIT C Batteries (Left Wall [KEY 5]) buffer sudden jumps!",
+        pct: Math.min(100, Math.round((matched / 6) * 100)),
+        liveReadout: `GRID MATCH: ${matched} / 6 SECTORS   |   OUT: ${outMW} / 600 MW`,
+      };
+    }
+    case "STEP_8_XENON_DRILL": {
+      const spent = Object.keys(state.coreTileAnomalies).length;
+      const sel = state.selectedRefuelChannel;
+      const pct = spent === 0 ? 100 : sel !== null ? 55 : 15;
+      return {
+        stepNum: 4,
+        title: "REFUEL BURNED-OUT RODS",
+        where: "UNIT A-2 — FAR-LEFT CONSOLE (37-DOT MAP & LEVER)  [KEY 6]",
+        doThis:
+          "Click the glowing AMBER dot on the RBMK CORE map, then drag ROD REFUELING lever DOWN.",
+        why: "Spent amber rods cut your power output — 4 or more un-refueled rods overheat the core.",
+        pct,
+        liveReadout:
+          spent === 0
+            ? "SPENT RODS: 0 — ALL 37 CHANNELS FRESH!"
+            : `SPENT RODS: ${spent} AMBER   |   LOCKED: ${sel !== null ? `CH #${sel + 1} -> PULL LEVER!` : "NONE (CLICK AMBER DOT)"}`,
+      };
+    }
+    case "STEP_3_BUILD_STEAM": {
+      const fw = Math.round(state.feedwaterValve * 100);
+      const mm = Math.round(state.drumWaterLevel);
+      const bar = Math.round(state.drumPressure);
+      return {
+        stepNum: 5,
+        title: "STEAM DRUM WATER & PRESSURE",
+        where: "UNIT B — RIGHT WING CONSOLE  [KEY 3]",
+        doThis:
+          "Turn FEEDWATER VALVE UP (~50%) to return Drum Level toward 0 mm. Hold STEAM VENT if > 75 BAR.",
+        why: "Boiling empties your water tank: too little water melts the core; > 75 BAR overpressurizes pipes.",
+        pct: Math.min(100, Math.round((Math.min(50, fw) / 50) * 100)),
+        liveReadout: `FEEDWATER: ${fw}% -> 50%   |   DRUM: ${mm > 0 ? `+${mm}` : mm} MM   |   ${bar} BAR`,
+      };
+    }
+    case "STEP_7_VOID_DRILL":
+    default: {
+      const vPct = Math.round(state.voidFraction * 100);
+      const fw = Math.round(state.feedwaterValve * 100);
+      const pct = Math.min(
+        100,
+        Math.max(0, Math.round((1 - Math.max(0, vPct - 20) / 20) * 100)),
+      );
+      return {
+        stepNum: 6,
+        title: "EMERGENCY SURVIVAL: VOIDS, XENON & SCRAM",
+        where: "UNIT B [KEY 3]  +  UNIT A [KEY 1]  +  UNIT A-2 [KEY 6]",
+        doThis:
+          "Steam Voids high! Turn FEEDWATER UP (UNIT B ~50%) or hit BORON INJECTION (UNIT A) until VOID < 20%.",
+        why: "Clear this Void surge to start your shift! Memorize Voids vs. Xenon vs. Boron / AZ-5 SCRAM above.",
+        pct,
+        liveReadout: `VOID / XENON: VOID ${vPct}% (NEED <20%)   |   XENON ${Math.round(state.xenon)}%   |   FW ${fw}%`,
+        isSafetyDrill: true,
+      };
+    }
+  }
+}
+
+function paintSkalaTutorialTakeover(
+  ctx: CanvasRenderingContext2D,
+  state: ReturnType<typeof useGameStore.getState>,
+  blinkOn: boolean,
+): void {
+  const spec = buildSkalaTutorialViewSpec(state);
+
+  // Outer phosphor header
+  ctx.fillStyle = "#0b2416";
+  ctx.fillRect(10, 10, CW - 20, 66);
+  ctx.strokeStyle = COL_GREEN;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(10, 10, CW - 20, 66);
+
+  ctx.font = kremlinFont(28);
+  ctx.textAlign = "left";
+  ctx.fillStyle = COL_GREEN;
+  ctx.fillText(
+    `SKALA-84 OPERATOR TRAINING // STEP ${spec.stepNum} OF 6`,
+    26,
+    53,
+    700,
+  );
+
+  ctx.font = kremlinFont(18);
+  ctx.textAlign = "right";
+  ctx.fillStyle = COL_AMBER;
+  ctx.fillText("[N] NEXT STEP  |  [BKSP] SKIP", CW - 26, 50, 270);
+
+  // 6-step horizontal progress pills (y = 84..122)
+  const gap = 8;
+  const stepW = (CW - 20 - gap * (VOLKOV_STEPS.length - 1)) / VOLKOV_STEPS.length;
+  for (let i = 0; i < VOLKOV_STEPS.length; i++) {
+    const bx = 10 + i * (stepW + gap);
+    const by = 84;
+    const bh = 36;
+    const done = i + 1 < spec.stepNum;
+    const curr = i + 1 === spec.stepNum;
+    ctx.fillStyle = done
+      ? COL_GREEN
+      : curr
+        ? blinkOn
+          ? "#3b2806"
+          : "#241804"
+        : "#08140d";
+    ctx.fillRect(bx, by, stepW, bh);
+    ctx.strokeStyle = done ? COL_GREEN : curr ? COL_AMBER : COL_DIM;
+    ctx.lineWidth = curr ? 6 : 3;
+    ctx.strokeRect(bx, by, stepW, bh);
+    ctx.font = kremlinFont(16);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = done ? COL_BG : curr ? COL_AMBER : COL_MUTED;
+    ctx.fillText(VOLKOV_STEPS[i], bx + stepW / 2, by + bh / 2 + 1, stepW - 10);
+    ctx.textBaseline = "alphabetic";
+  }
+
+  // WHERE block (y = 130..216)
+  ctx.fillStyle = "#191304";
+  ctx.fillRect(10, 130, CW - 20, 86);
+  ctx.strokeStyle = COL_AMBER;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(10, 130, CW - 20, 86);
+  ctx.font = kremlinFont(22);
+  ctx.textAlign = "left";
+  ctx.fillStyle = COL_AMBER;
+  ctx.fillText("WHERE:", 26, 162, 120);
+  ctx.font = kremlinFont(28);
+  ctx.fillStyle = COL_WHITE;
+  ctx.fillText(spec.where, 146, 164, CW - 172);
+  ctx.font = kremlinFont(20);
+  ctx.fillStyle = COL_AMBER;
+  ctx.fillText(`STEP ${spec.stepNum}: ${spec.title}`, 26, 200, CW - 52);
+
+  // DO THIS + Giant Telemetry Progress Bar
+  const doH = spec.isSafetyDrill ? 156 : 268;
+  ctx.fillStyle = "#08190f";
+  ctx.fillRect(10, 226, CW - 20, doH);
+  ctx.strokeStyle = COL_GREEN;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(10, 226, CW - 20, doH);
+
+  ctx.font = kremlinFont(24);
+  ctx.textAlign = "left";
+  ctx.fillStyle = COL_GREEN;
+  ctx.fillText("DO THIS:", 26, 260, 140);
+
+  ctx.font = kremlinFont(spec.isSafetyDrill ? 21 : 26);
+  ctx.fillStyle = "#ebffef";
+  const doLines = wrapCanvasLines(ctx, spec.doThis, CW - 196, 2);
+  for (let li = 0; li < doLines.length; li++) {
+    ctx.fillText(doLines[li], 168, 260 + li * (spec.isSafetyDrill ? 28 : 34), CW - 196);
+  }
+
+  const barY = spec.isSafetyDrill ? 308 : 348;
+  const barH = spec.isSafetyDrill ? 34 : 44;
+  const barX = 26;
+  const barW = CW - 52;
+  ctx.fillStyle = "#051008";
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.fillStyle = spec.pct >= 98 ? COL_GREEN : COL_AMBER;
+  ctx.fillRect(
+    barX + 4,
+    barY + 4,
+    Math.round(((barW - 8) * clampVal(spec.pct, 0, 100)) / 100),
+    barH - 8,
+  );
+  ctx.strokeStyle = COL_GREEN;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(barX, barY, barW, barH);
+
+  ctx.font = kremlinFont(spec.isSafetyDrill ? 20 : 25);
+  ctx.textAlign = "center";
+  ctx.fillStyle = COL_WHITE;
+  ctx.fillText(
+    spec.liveReadout,
+    CW / 2,
+    spec.isSafetyDrill ? 368 : 444,
+    CW - 64,
+  );
+
+  // Step 6 extra 3-card survival reference strip (y = 390..526)
+  if (spec.isSafetyDrill) {
+    const cards = [
+      {
+        title: "HIGH VOIDS (BUBBLES)",
+        body: "Water boils too fast & multiplies heat! Pumps/FW UP, Rods IN or hit Boron.",
+        col: COL_VOID,
+        bg: "#261204",
+      },
+      {
+        title: "HIGH XENON (CHOKE)",
+        body: "Do NOT yank rods to 100%! Pull rods OUT slowly + use UNIT C Battery.",
+        col: COL_XENON,
+        bg: "#1e0c2e",
+      },
+      {
+        title: "MELTDOWN (>700C)",
+        body: "UNIT A red cover: BORON INJECTION first, or AZ-5 SCRAM full shutdown!",
+        col: COL_RED,
+        bg: "#2b0807",
+      },
+    ];
+    const cw = (CW - 36) / 3;
+    for (let ci = 0; ci < cards.length; ci++) {
+      const cx = 10 + ci * (cw + 8);
+      const cy = 390;
+      const ch = 136;
+      const card = cards[ci];
+      ctx.fillStyle = card.bg;
+      ctx.fillRect(cx, cy, cw, ch);
+      ctx.strokeStyle = card.col;
+      ctx.lineWidth = 5;
+      ctx.strokeRect(cx, cy, cw, ch);
+      ctx.font = kremlinFont(17);
+      ctx.textAlign = "left";
+      ctx.fillStyle = card.col;
+      ctx.fillText(card.title, cx + 12, cy + 28, cw - 24);
+      ctx.font = kremlinFont(15);
+      ctx.fillStyle = "#f2efe4";
+      const lines = wrapCanvasLines(ctx, card.body, cw - 24, 3);
+      for (let k = 0; k < lines.length; k++) {
+        ctx.fillText(lines[k], cx + 12, cy + 58 + k * 24, cw - 24);
+      }
+    }
+  }
+
+  // WHY footer block
+  const whyY = spec.isSafetyDrill ? 536 : 504;
+  const whyH = 630 - whyY;
+  ctx.fillStyle = "#061b1c";
+  ctx.fillRect(10, whyY, CW - 20, whyH);
+  ctx.strokeStyle = COL_GHOST;
+  ctx.lineWidth = 5;
+  ctx.strokeRect(10, whyY, CW - 20, whyH);
+  ctx.font = kremlinFont(22);
+  ctx.textAlign = "left";
+  ctx.fillStyle = COL_GHOST;
+  ctx.fillText("WHY:", 26, whyY + 34, 84);
+  ctx.font = kremlinFont(spec.isSafetyDrill ? 18 : 22);
+  ctx.fillStyle = "#dcfbff";
+  const whyLines = wrapCanvasLines(ctx, spec.why, CW - 144, 2);
+  for (let wi = 0; wi < whyLines.length; wi++) {
+    ctx.fillText(whyLines[wi], 112, whyY + 34 + wi * 30, CW - 134);
+  }
+}
+
+function paintSkalaCrisisTakeover(
+  ctx: CanvasRenderingContext2D,
+  state: ReturnType<typeof useGameStore.getState>,
+  crisisId: CrisisCoachId,
+  blinkOn: boolean,
+): void {
+  const card = CRISIS_COACH_CARDS[crisisId];
+  const loc = CONSOLE_WORLD_TARGETS[card.targetConsole];
+  const accent =
+    card.accent === "red"
+      ? COL_RED
+      : card.accent === "violet"
+        ? COL_XENON
+        : COL_AMBER;
+  const headerBg =
+    card.accent === "red"
+      ? "#380808"
+      : card.accent === "violet"
+        ? "#230c38"
+        : "#2e1f05";
+
+  ctx.fillStyle = blinkOn ? headerBg : "#120707";
+  ctx.fillRect(10, 10, CW - 20, 74);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 7;
+  ctx.strokeRect(10, 10, CW - 20, 74);
+
+  ctx.font = kremlinFont(28);
+  ctx.textAlign = "left";
+  ctx.fillStyle = accent;
+  ctx.fillText("SKALA-84 EMERGENCY RECOVERY PROTOCOL", 26, 56, 690);
+  ctx.font = kremlinFont(20);
+  ctx.textAlign = "right";
+  ctx.fillStyle = COL_WHITE;
+  ctx.fillText(`${card.badge}  |  [N] CLEAR`, CW - 26, 54, 260);
+
+  // Station WHERE block
+  ctx.fillStyle = "#181305";
+  ctx.fillRect(10, 96, CW - 20, 86);
+  ctx.strokeStyle = COL_AMBER;
+  ctx.lineWidth = 5;
+  ctx.strokeRect(10, 96, CW - 20, 86);
+  ctx.font = kremlinFont(22);
+  ctx.textAlign = "left";
+  ctx.fillStyle = COL_AMBER;
+  ctx.fillText("GO TO:", 26, 134, 110);
+  ctx.font = kremlinFont(28);
+  ctx.fillStyle = COL_WHITE;
+  ctx.fillText(
+    `${loc.shortName} — ${loc.locationLabel.toUpperCase()}  ${loc.keyHint}`,
+    136,
+    136,
+    CW - 160,
+  );
+  ctx.font = kremlinFont(20);
+  ctx.fillStyle = accent;
+  ctx.fillText(card.title, 26, 168, CW - 52);
+
+  // WHAT'S HAPPENING
+  ctx.fillStyle = "#120b0b";
+  ctx.fillRect(10, 194, CW - 20, 128);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 5;
+  ctx.strokeRect(10, 194, CW - 20, 128);
+  ctx.font = kremlinFont(22);
+  ctx.fillStyle = accent;
+  ctx.fillText("PROBLEM:", 26, 232, 140);
+  ctx.font = kremlinFont(23);
+  ctx.fillStyle = "#f7eaea";
+  const whatLines = wrapCanvasLines(ctx, card.whatHappening, CW - 190, 2);
+  for (let i = 0; i < whatLines.length; i++) {
+    ctx.fillText(whatLines[i], 168, 232 + i * 36, CW - 190);
+  }
+
+  // HOW TO FIX + live readout
+  ctx.fillStyle = "#081b10";
+  ctx.fillRect(10, 334, CW - 20, 294);
+  ctx.strokeStyle = COL_GREEN;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(10, 334, CW - 20, 294);
+  ctx.font = kremlinFont(24);
+  ctx.fillStyle = COL_GREEN;
+  ctx.fillText("DO THIS NOW:", 26, 376, 190);
+  ctx.font = kremlinFont(24);
+  ctx.fillStyle = COL_WHITE;
+  const fixLines = wrapCanvasLines(ctx, card.howToFix, CW - 230, 3);
+  for (let i = 0; i < fixLines.length; i++) {
+    ctx.fillText(fixLines[i], 216, 376 + i * 38, CW - 236);
+  }
+
+  const liveStats = `CORE ${Math.round(state.coreTemp)}C   |   VOID ${Math.round(state.voidFraction * 100)}%   |   XENON ${Math.round(state.xenon)}%   |   DRUM ${Math.round(state.drumWaterLevel)} MM   |   ${Math.round(state.drumPressure)} BAR`;
+  ctx.fillStyle = "#040f08";
+  ctx.fillRect(26, 536, CW - 52, 68);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(26, 536, CW - 52, 68);
+  ctx.font = kremlinFont(23);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ffe58f";
+  ctx.fillText(liveStats, CW / 2, 578, CW - 80);
 }
 
 function drawChevronsH(
@@ -296,6 +794,28 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
       s.komradOverrideLocked ||
       s.phase !== "playing",
   );
+  const showTutorialBezelControls = useGameStore(
+    (s) =>
+      s.phase === "playing" &&
+      s.tutorialPhase !== "COMPLETED" &&
+      s.tutorialPhase !== "AWAITING_VOLKOV_MAIL",
+  );
+
+  const nextBtnTex = useMemo(
+    () => makeSkalaBezelButtonTex("NEXT STEP", "#39ff7a", "#0c2817"),
+    [],
+  );
+  const skipBtnTex = useMemo(
+    () => makeSkalaBezelButtonTex("SKIP TRAIN", "#ffb833", "#2b1905"),
+    [],
+  );
+
+  useEffect(() => {
+    return () => {
+      nextBtnTex.dispose();
+      skipBtnTex.dispose();
+    };
+  }, [nextBtnTex, skipBtnTex]);
 
   const crtMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const diagOverlayMeshRef = useRef<THREE.Mesh>(null);
@@ -692,6 +1212,46 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
     ctx.strokeStyle = outerAlert && blinkOn ? COL_RED : COL_DIM;
     ctx.lineWidth = 7;
     ctx.strokeRect(3.5, 3.5, CW - 7, CH - 7);
+
+    if (
+      state.phase === "playing" &&
+      !state.ciaIntrusionActive &&
+      !state.komradOverrideLocked
+    ) {
+      if (
+        state.tutorialPhase !== "COMPLETED" &&
+        state.tutorialPhase !== "AWAITING_VOLKOV_MAIL"
+      ) {
+        paintSkalaTutorialTakeover(ctx, state, blinkOn);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
+        for (let sy = 0; sy < CH; sy += 4) {
+          ctx.fillRect(0, sy, CW, 1);
+        }
+        activeCrtTex.needsUpdate = true;
+        return;
+      }
+
+      let liveCrisisId: CrisisCoachId | null =
+        state.activeCrisisCoach?.id ?? null;
+      if (!liveCrisisId) {
+        if (state.coreTemp >= 720) {
+          liveCrisisId = "MELTDOWN_RISK";
+        } else if (state.voidFraction > 0.36) {
+          liveCrisisId = "HIGH_VOID";
+        } else if (state.xenon > 38) {
+          liveCrisisId = "HIGH_XENON";
+        }
+      }
+      if (liveCrisisId) {
+        paintSkalaCrisisTakeover(ctx, state, liveCrisisId, blinkOn);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.16)";
+        for (let sy = 0; sy < CH; sy += 4) {
+          ctx.fillRect(0, sy, CW, 1);
+        }
+        activeCrtTex.needsUpdate = true;
+        return;
+      }
+    }
 
     // =========================================================================
     // 1. TOP DECK (~24% HEIGHT, y = 8..160): REACTIVITY TUG-OF-WAR & BULLSEYE
@@ -1693,7 +2253,21 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
         : `[KGB DECODE] GENUINE (${activeDeskDoc.sealType.toUpperCase()}) -> STAMP APPROVED & LAUNCH [KEY 4]`;
       ctx.fillText(kgbText, CW / 2, 553, CW - 56);
 
-      if (state.tutorialPhase !== "COMPLETED") {
+      if (state.tutorialPhase === "AWAITING_VOLKOV_MAIL") {
+        ctx.fillStyle = "#1c1304";
+        ctx.fillRect(18, 578, CW - 36, 44);
+        ctx.strokeStyle = blinkOn ? COL_AMBER : COL_DIM;
+        ctx.lineWidth = 5;
+        ctx.strokeRect(18, 578, CW - 36, 44);
+        ctx.font = kremlinFont(16);
+        ctx.fillStyle = COL_AMBER;
+        ctx.fillText(
+          "AWAITING VOLKOV DIRECTIVE APPROVAL ON DESK TERMINAL ([KEY 4] -> [E] -> P.O.S.T.-84)",
+          CW / 2,
+          606,
+          CW - 56,
+        );
+      } else if (state.tutorialPhase !== "COMPLETED") {
         ctx.fillStyle = "#1c1304";
         ctx.fillRect(18, 578, CW - 36, 44);
         ctx.strokeStyle = COL_AMBER;
@@ -1754,6 +2328,29 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
           kgbRightCrit ? "#360808" : "#291b04",
         );
       }
+    } else if (state.tutorialPhase === "AWAITING_VOLKOV_MAIL") {
+      ctx.fillStyle = "#1b1203";
+      ctx.fillRect(18, 524, CW - 36, 98);
+      ctx.strokeStyle = blinkOn ? COL_AMBER : COL_DIM;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(18, 524, CW - 36, 98);
+      ctx.textAlign = "center";
+      ctx.font = kremlinFont(23);
+      ctx.fillStyle = COL_AMBER;
+      ctx.fillText(
+        "AWAITING VOLKOV DIRECTIVE APPROVAL ON DESK TERMINAL",
+        CW / 2,
+        563,
+        CW - 56,
+      );
+      ctx.font = kremlinFont(15);
+      ctx.fillStyle = COL_WHITE;
+      ctx.fillText(
+        "WALK TO SUPERVISOR DESK [KEY 4] -> PRESS [E] TO SIT -> OPEN P.O.S.T.-84",
+        CW / 2,
+        599,
+        CW - 56,
+      );
     } else if (state.tutorialPhase !== "COMPLETED") {
       // Startup 1-6 Bold Progress Bar + Action Tag
       const stepCount = VOLKOV_STEPS.length;
@@ -2103,6 +2700,75 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
           <planeGeometry args={[2.28, 0.34]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
+      )}
+      {showTutorialBezelControls && (
+        <group
+          position={[0, 0.965, 0.195]}
+          userData={{ isDvk84Replacement: true }}
+        >
+          <mesh raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[1.18, 0.125, 0.036]} />
+            <meshStandardMaterial color="#181e1b" roughness={0.55} metalness={0.65} />
+          </mesh>
+          <group
+            position={[-0.31, 0, 0.025]}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              useGameStore
+                .getState()
+                .setHoveredControlHint(
+                  "SKALA-84 TRAINING: Click or press [N] to advance to next step",
+                );
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              useGameStore.getState().setHoveredControlHint(null);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              playSwitchClank(true);
+              useGameStore.getState().advanceTutorialStep();
+            }}
+          >
+            <mesh>
+              <boxGeometry args={[0.42, 0.088, 0.024]} />
+              <meshStandardMaterial color="#133320" roughness={0.42} metalness={0.35} />
+            </mesh>
+            <mesh position={[0, 0, 0.014]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.39, 0.072]} />
+              <meshBasicMaterial map={nextBtnTex} toneMapped={false} />
+            </mesh>
+          </group>
+          <group
+            position={[0.31, 0, 0.025]}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              useGameStore
+                .getState()
+                .setHoveredControlHint(
+                  "SKALA-84 TRAINING: Click or press [Backspace] to skip training",
+                );
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              useGameStore.getState().setHoveredControlHint(null);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              playSwitchClank(true);
+              useGameStore.getState().skipTutorial();
+            }}
+          >
+            <mesh>
+              <boxGeometry args={[0.42, 0.088, 0.024]} />
+              <meshStandardMaterial color="#361f08" roughness={0.42} metalness={0.35} />
+            </mesh>
+            <mesh position={[0, 0, 0.014]} raycast={NOOP_RAYCAST}>
+              <planeGeometry args={[0.39, 0.072]} />
+              <meshBasicMaterial map={skipBtnTex} toneMapped={false} />
+            </mesh>
+          </group>
+        </group>
       )}
     </>
   );

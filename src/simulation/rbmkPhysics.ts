@@ -93,6 +93,7 @@ export interface ReactorState {
 }
 
 export type TutorialPhase =
+  | 'AWAITING_VOLKOV_MAIL'
   | 'STEP_0_PICKUP_WEPAD'
   | 'STEP_1_COOLING'
   | 'STEP_2_PULL_RODS'
@@ -310,6 +311,10 @@ export function stepReactorSimulation(
   tutorialPhase: TutorialPhase = 'COMPLETED'
 ): void {
   const delta = Math.min(dt, 0.1);
+
+  if (tutorialPhase === 'AWAITING_VOLKOV_MAIL') {
+    return;
+  }
 
   if (state.boronDampingTimer > 0) {
     state.boronDampingTimer = Math.max(0, state.boronDampingTimer - delta);
@@ -987,6 +992,23 @@ export function toggleGridBreaker(state: ReactorState, turbineIndex: 0 | 1 = 0):
  */
 export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhase): TutorialPrompt {
   switch (currentPhase) {
+    case 'AWAITING_VOLKOV_MAIL': {
+      return {
+        phase: 'AWAITING_VOLKOV_MAIL',
+        header: 'AWAITING VOLKOV DIRECTIVE APPROVAL ON DESK TERMINAL',
+        body: "Walk to the Supervisor Desk ([KEY 4]), press [E] to sit, open P.O.S.T.-84, and read Commissar Volkov's unread directive.",
+        hint: "Click [ ACCEPT DIRECTIVE — BEGIN TRAINING ] inside Volkov's mail to start SKALA-84 calibration, or [ SKIP TRAINING ] for live shift.",
+        panelKey: 'INSPECTOR DESK ([KEY 4] • PRESS [E] TO SIT)',
+        actionLine: 'Open P.O.S.T.-84 on ISKRA-84 Desk CRT -> Accept Volkov Directive',
+        whyLines: [
+          'Grid orders and reactor hazards remain paused until Volkov directive is approved.',
+          'Check the flashing amber P.O.S.T.-84 inbox on the Supervisor Desk computer.',
+        ],
+        volkovQuote:
+          'ATTENTION COMRADE OPERATOR. CHECK YOUR DESK TERMINAL NOW. NEW STATE DIRECTIVE FROM COMMISSAR VOLKOV.',
+      };
+    }
+
     case 'STEP_0_PICKUP_WEPAD': {
       return evaluateTutorial(state, 'STEP_1_COOLING');
     }

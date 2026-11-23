@@ -2,6 +2,8 @@ export type Post84MessageStatus = 'unread' | 'read'
 
 export type Post84OrderState = 'pending' | 'active' | 'completed'
 
+export type Post84TrainingDirectiveState = 'pending' | 'accepted' | 'skipped'
+
 export type Post84OrderTemplateId =
   | 'vodka_batch'
   | 'tractor_foundry'
@@ -52,6 +54,9 @@ export interface Post84Message {
   bodyLines: string[]
   status: Post84MessageStatus
   order?: Post84OrderSpec
+  trainingDirective?: {
+    state: Post84TrainingDirectiveState
+  }
 }
 
 export interface Post84OrderEvaluation {
@@ -60,6 +65,7 @@ export interface Post84OrderEvaluation {
   detailLine: string
 }
 
+export const VOLKOV_ONBOARDING_MAIL_ID = 'mail-volkov-calibration-directive'
 export const VOLKOR_WELCOME_MAIL_ID = 'mail-volkor-welcome'
 export const VOLKOR_TUTORIAL_MAIL_ID = 'mail-volkor-komrad84'
 
@@ -75,10 +81,26 @@ export const POST84_ORDER_TEMPLATE_IDS: Post84OrderTemplateId[] = [
 
 /**
  * Period-authentic 1984 Soviet bureaucratic teletype memos for P.O.S.T.-84.
- * Non-directive internal workplace dispatches; index 0 starts UNREAD from Director Volkor.
+ * Index 0 starts UNREAD with Commissar Volkov's mandatory SKALA-84 calibration directive.
  */
 export function createInitialPost84Inbox(): Post84Message[] {
   return [
+    {
+      id: VOLKOV_ONBOARDING_MAIL_ID,
+      sender: 'COMMISSAR VOLKOV',
+      orgTag: 'SECTOR-84 COMMAND',
+      subject: 'MANDATORY RBMK-1000 CALIBRATION // SKALA-84',
+      timestamp: '04.11.1984 // 00:00',
+      bodyLines: [
+        'Comrade Operator! Before regional grid orders begin tonight, Politburo Decree 84-C requires mandatory RBMK-1000 Operator Calibration.',
+        'Click ACCEPT below, then watch the giant central SKALA-84 wall CRT to calibrate cooling pumps, rods, 6 grid sectors, fuel refueling, steam pressure, Voids & Xenon.',
+        'Click ACCEPT to begin SKALA-84 training now, or SKIP if you are already a certified Soviet operator.',
+      ],
+      status: 'unread',
+      trainingDirective: {
+        state: 'pending',
+      },
+    },
     {
       id: VOLKOR_WELCOME_MAIL_ID,
       sender: 'DIRECTOR VOLKOR',
@@ -90,7 +112,7 @@ export function createInitialPost84Inbox(): Post84Message[] {
         'Your predecessor sighed near a pressure gauge and was demoted to counting snowflakes in Siberia. Glowing green mist is merely patriotic fervor.',
         'Sit straight and await further orders. Meltdown is Propaganda. -- Dir. Volkor',
       ],
-      status: 'unread',
+      status: 'read',
     },
     {
       id: 'mail-canteen-cabbage',

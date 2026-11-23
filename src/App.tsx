@@ -7,12 +7,17 @@ import {
 import { playSwitchClank } from './modules/reactor/audioSynth'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
+import {
+  getKomradSubtitleSnapshot,
+  subscribeKomradSubtitle,
+  type KomradSubtitleSnapshot,
+} from './shared/komradVoiceSynth'
 import { MainMenuOverlay } from './shared/MainMenuOverlay'
 import {
   pointerLockInteraction,
   subscribePointerLockInteraction,
 } from './shared/pointerLockState'
-import { TutorialCoachHud } from './shared/TutorialCoachHud'
+import { TutorialCompassHud } from './shared/TutorialCompassHud'
 import { useGameStore } from './shared/useGameStore'
 
 function CenterReticle() {
@@ -113,6 +118,83 @@ function CenterReticle() {
   )
 }
 
+function KomradBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
+  const phase = useGameStore((s) => s.phase)
+  const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
+  const diagFeedActive = useGameStore((s) => s.diagFeedActive)
+  const radioSubtitle = useGameStore((s) => s.radioBroadcastSubtitle)
+  const [sub, setSub] = useState<KomradSubtitleSnapshot>(() =>
+    getKomradSubtitleSnapshot(),
+  )
+
+  useEffect(() => {
+    const sync = () => {
+      setSub(getKomradSubtitleSnapshot())
+    }
+    const timer = window.setTimeout(sync, 0)
+    const unsub = subscribeKomradSubtitle(sync)
+    return () => {
+      window.clearTimeout(timer)
+      unsub()
+    }
+  }, [])
+
+  if (
+    phase !== 'playing' ||
+    !isShiftControlReady ||
+    diagFeedActive ||
+    menusOpen ||
+    radioSubtitle !== null ||
+    !sub.text
+  ) {
+    return null
+  }
+
+  const accentHex =
+    sub.mood === 'critical'
+      ? '#ff3b2f'
+      : sub.mood === 'warning'
+        ? '#ffb000'
+        : '#33ff66'
+
+  return (
+    <div
+      className="pointer-events-none fixed bottom-20 left-1/2 z-25 w-max max-w-[min(92vw,48rem)] -translate-x-1/2 rounded border px-4 py-2 text-center shadow-[0_6px_22px_rgba(0,0,0,0.85)] select-none"
+      style={{
+        backgroundColor: 'rgba(10, 12, 10, 0.84)',
+        borderColor: `${accentHex}a6`,
+      }}
+    >
+      <div
+        className="mb-1 flex items-center justify-center gap-2 text-xs font-bold tracking-[0.18em]"
+        style={{
+          color: accentHex,
+          fontFamily: '"Kremlin", "VT323", monospace',
+        }}
+      >
+        <span
+          className={`inline-block h-2 w-2 rounded-full ${sub.isSpeaking ? 'animate-pulse' : ''}`}
+          style={{
+            backgroundColor: accentHex,
+            boxShadow: `0 0 6px ${accentHex}`,
+          }}
+        />
+        <span>[ K.O.M.R.A.D.-84 // SECTOR 84 PA ]</span>
+      </div>
+      <div
+        className="text-base leading-snug tracking-[0.085em] text-[#f6ead0] uppercase sm:text-lg"
+        style={{
+          fontFamily: '"Kremlin", "VT323", monospace',
+          textShadow:
+            '0 2px 0 #070907, 0 0 8px rgba(0, 0, 0, 0.95), 0 0 14px rgba(51, 255, 102, 0.22)',
+        }}
+      >
+        {sub.text}
+      </div>
+    </div>
+  )
+}
+
 function RadioBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
   const phase = useGameStore((s) => s.phase)
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
@@ -198,21 +280,6 @@ export function App() {
           return
         }
       }
-      if (e.code === 'KeyH') {
-        const s = useGameStore.getState()
-        if (
-          s.phase === 'playing' &&
-          s.isShiftControlReady &&
-          !pointerLockInteraction.mainMenuOpen &&
-          !pointerLockInteraction.debugMenuOpen &&
-          s.tutorialPhase !== 'COMPLETED'
-        ) {
-          e.preventDefault()
-          playSwitchClank(true)
-          s.toggleTutorialHintsHidden()
-          return
-        }
-      }
       if (e.code === 'KeyN') {
         const s = useGameStore.getState()
         if (
@@ -221,7 +288,10 @@ export function App() {
           !pointerLockInteraction.mainMenuOpen &&
           !pointerLockInteraction.debugMenuOpen
         ) {
-          if (s.tutorialPhase !== 'COMPLETED') {
+          if (
+            s.tutorialPhase !== 'COMPLETED' &&
+            s.tutorialPhase !== 'AWAITING_VOLKOV_MAIL'
+          ) {
             e.preventDefault()
             playSwitchClank(true)
             s.advanceTutorialStep()
@@ -273,7 +343,8 @@ export function App() {
       <MainMenuOverlay />
       <DebugMenu />
       <CenterReticle />
-      <TutorialCoachHud menusOpen={menusOpen} />
+      <TutorialCompassHud menusOpen={menusOpen} />
+      <KomradBroadcastSubtitleHud menusOpen={menusOpen} />
       <RadioBroadcastSubtitleHud menusOpen={menusOpen} />
 
       {/* Subtle Contextual [E] SIT AT DESK Prompt When Walking Near Inspector Desk */}

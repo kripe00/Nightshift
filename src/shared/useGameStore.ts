@@ -26,11 +26,16 @@ import {
 import {
   canEmitKomradIdleChatter,
   canEmitKomradNonCriticalWarning,
+  isKomradTransmitting,
   reserveIdleChatterEmission,
   resetKomradSilenceState,
 } from './komradSilenceState'
 import {
   CRISIS_COACH_CARDS,
+  KOMRAD_OPENING_PROPAGANDA_VOX,
+  KOMRAD_VOLKOV_ACCEPT_VOX,
+  KOMRAD_VOLKOV_MAIL_HASSLES,
+  KOMRAD_VOLKOV_SKIP_VOX,
   TUTORIAL_VOX_BY_PHASE,
 } from './komradTutorialVox'
 import { pointerLockInteraction } from './pointerLockState'
@@ -635,8 +640,27 @@ let prevAllSubstationsOk = true
 let mandateStableSeconds = 0
 let surplusOverloadSeconds = 0
 
+const VOLKOV_HASSLE_INITIAL_DELAY_SEC = 13.5
+const VOLKOV_HASSLE_REPEAT_SEC = 16.5
+const VOLKOV_OPENER_FALLBACK_SEC = 8.0
+
+let volkovOpenerFinished = false
+let volkovOpenerSawSpeaking = false
+let volkovOpenerFallbackElapsed = 0
+let volkovHassleCooldownSec = 0
+let volkovHassleCount = 0
+
+function resetVolkovHassleTrackers(): void {
+  volkovOpenerFinished = false
+  volkovOpenerSawSpeaking = false
+  volkovOpenerFallbackElapsed = 0
+  volkovHassleCooldownSec = 0
+  volkovHassleCount = 0
+}
+
 function resetKomradTrackers(): void {
   resetKomradSilenceState()
+  resetVolkovHassleTrackers()
   shiftElapsedSeconds = 0
   lastKomradHazardSec = {
     HIGH_VOID: -120,
@@ -876,9 +900,17 @@ const KOMRAD_BOOT_LINES: readonly string[] = [
 ]
 
 function createInitialKomradFeed(): KomradMessageEntry[] {
-  return KOMRAD_BOOT_LINES.map((line) =>
-    createKomradMsg(0, line, 'normal', 'K.O.M.R.A.D.-84')
-  )
+  return KOMRAD_BOOT_LINES.map((line, idx) => {
+    const isPropagandaOpener = idx === KOMRAD_BOOT_LINES.length - 1
+    return createKomradMsg(
+      0,
+      line,
+      'normal',
+      'K.O.M.R.A.D.-84',
+      isPropagandaOpener ? KOMRAD_OPENING_PROPAGANDA_VOX : undefined,
+      isPropagandaOpener ? true : undefined
+    )
+  })
 }
 
 const KOMRAD_SPENT_ROD_QUIPS: readonly string[] = [
@@ -1046,7 +1078,7 @@ const INITIAL_ENTRIES: TerminalLogEntry[] = [
 const INITIAL_COLD_REACTOR = createColdStartState()
 const INITIAL_MAPPED = mapReactorToGameStateFields(
   INITIAL_COLD_REACTOR,
-  'STEP_1_COOLING'
+  'AWAITING_VOLKOV_MAIL'
 )
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -1117,7 +1149,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const bootMsgs = createInitialKomradFeed()
       const tutMsg =
-        state.tutorialPhase !== 'COMPLETED'
+        state.tutorialPhase !== 'COMPLETED' &&
+        state.tutorialPhase !== 'AWAITING_VOLKOV_MAIL'
           ? buildTutorialPhaseKomradMsg(state.shiftTimeMinutes, state.tutorialPhase)
           : null
       if (tutMsg) {
@@ -1362,8 +1395,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         steamExplosion: false,
       }
       const mapped = mapReactorToGameStateFields(liveReactor, 'COMPLETED')
+      const isFromVolkovGate = state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
       const completedVox = TUTORIAL_VOX_BY_PHASE.COMPLETED
-      const msg = completedVox?.spokenVoxText ?? KOMRAD_TAKEOVER_MESSAGE
+      const msg = isFromVolkovGate
+        ? KOMRAD_VOLKOV_SKIP_VOX
+        : (completedVox?.spokenVoxText ?? KOMRAD_TAKEOVER_MESSAGE)
+      const spokenVox = isFromVolkovGate
+        ? KOMRAD_VOLKOV_SKIP_VOX
+        : completedVox?.spokenVoxText
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
@@ -1373,6 +1412,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       return {
         ...mapped,
         phase: 'playing',
+        isSeatedAtDesk: false,
+        activeStation: 'overview',
         tutorialDrainSeconds: 0,
         tutorialHintsHidden: false,
         activeCrisisCoach: null,
@@ -1396,7 +1437,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             msg,
             'normal',
             'K.O.M.R.A.D.-84',
-            completedVox?.spokenVoxText,
+            spokenVox,
             true
           )
         ),
@@ -1404,8 +1445,55 @@ export const useGameStore = create<GameState>((set, get) => ({
     })
   },
 
+  acceptVolkovTrainingDirective: () => {
+    set((state) => {
+      resetVolkovHassleTrackers()
+      volkovOpenerFinished = true
+      if (state.tutorialPhase !== 'AWAITING_VOLKOV_MAIL') {
+        return {
+          isSeatedAtDesk: false,
+          activeStation: 'overview',
+        }
+      }
+      const cold = createColdStartState()
+      const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING')
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'K.O.M.R.A.D.-84',
+        KOMRAD_VOLKOV_ACCEPT_VOX,
+        'normal'
+      )
+      const komradMsg = createKomradMsg(
+        state.shiftTimeMinutes,
+        KOMRAD_VOLKOV_ACCEPT_VOX,
+        'normal',
+        'K.O.M.R.A.D.-84',
+        KOMRAD_VOLKOV_ACCEPT_VOX,
+        true
+      )
+      return {
+        ...mapped,
+        phase: 'playing',
+        isSeatedAtDesk: false,
+        activeStation: 'overview',
+        tutorialHintsHidden: false,
+        activeCrisisCoach: null,
+        lastDecisionFeedback: mapped.tutorialPrompt.header,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(state.komradMessages, komradMsg),
+      }
+    })
+  },
+
   advanceTutorialStep: () => {
     set((state) => {
+      if (state.tutorialPhase === 'AWAITING_VOLKOV_MAIL') {
+        return state
+      }
       const normalized =
         state.tutorialPhase === 'STEP_0_PICKUP_WEPAD'
           ? 'STEP_1_COOLING'
@@ -1512,11 +1600,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   startShift: () => {
     resetKomradTrackers()
     const cold = createColdStartState()
-    const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING')
+    const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const entry = createLogEntry(
       0,
       'K.O.M.R.A.D.-84',
-      `RBMK-1000 COLD START SEQUENCE INITIATED. ${mapped.tutorialPrompt.header}`,
+      KOMRAD_OPENING_PROPAGANDA_VOX,
       'normal'
     )
     const controlReadyNow =
@@ -1558,13 +1646,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   resetShift: () => {
     resetKomradTrackers()
     const cold = createColdStartState()
-    const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING')
-    const resetText = `RBMK-1000 COLD START RESET BY OPERATOR. ${mapped.tutorialPrompt.header}`
+    const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const freshEntries = [
       createLogEntry(
         0,
         'K.O.M.R.A.D.-84',
-        resetText,
+        KOMRAD_OPENING_PROPAGANDA_VOX,
         'normal'
       ),
     ]
@@ -2679,6 +2766,85 @@ export const useGameStore = create<GameState>((set, get) => ({
     const dt = Math.min(0.25, thermoTickAccumSeconds)
     thermoTickAccumSeconds = 0
 
+    if (state.tutorialPhase === 'AWAITING_VOLKOV_MAIL') {
+      const volkovLogs: TerminalLogEntry[] = []
+      const volkovKomradMsgs: KomradMessageEntry[] = []
+      let volkovFeedback = state.lastDecisionFeedback
+
+      if (state.phase === 'playing' && state.komradOpeningDispatched) {
+        if (!volkovOpenerFinished) {
+          if (isKomradTransmitting()) {
+            volkovOpenerSawSpeaking = true
+          } else if (volkovOpenerSawSpeaking) {
+            volkovOpenerFinished = true
+            volkovHassleCooldownSec = VOLKOV_HASSLE_INITIAL_DELAY_SEC
+          } else {
+            volkovOpenerFallbackElapsed += dt
+            if (volkovOpenerFallbackElapsed >= VOLKOV_OPENER_FALLBACK_SEC) {
+              volkovOpenerFinished = true
+              volkovHassleCooldownSec = VOLKOV_HASSLE_INITIAL_DELAY_SEC
+            }
+          }
+        } else if (
+          !state.isSeatedAtDesk &&
+          !isKomradTransmitting() &&
+          state.radioBroadcastSubtitle === null
+        ) {
+          volkovHassleCooldownSec -= dt
+          if (volkovHassleCooldownSec <= 0) {
+            const hassleText =
+              KOMRAD_VOLKOV_MAIL_HASSLES[
+                volkovHassleCount % KOMRAD_VOLKOV_MAIL_HASSLES.length
+              ]
+            const hassleMood: KomradMood =
+              volkovHassleCount >= 2 ? 'warning' : 'normal'
+            const hassleLevel: TerminalLogEntry['level'] =
+              volkovHassleCount >= 2 ? 'warn' : 'normal'
+            volkovHassleCount += 1
+            volkovHassleCooldownSec = VOLKOV_HASSLE_REPEAT_SEC
+            volkovFeedback = hassleText
+            volkovLogs.push(
+              createLogEntry(
+                state.shiftTimeMinutes,
+                'K.O.M.R.A.D.-84',
+                hassleText,
+                hassleLevel
+              )
+            )
+            volkovKomradMsgs.push(
+              createKomradMsg(
+                state.shiftTimeMinutes,
+                hassleText,
+                hassleMood,
+                'K.O.M.R.A.D.-84',
+                hassleText,
+                true
+              )
+            )
+          }
+        }
+      }
+
+      if (volkovLogs.length > 0 || volkovKomradMsgs.length > 0) {
+        const updatedEntries = [
+          ...state.terminalEntries.slice(-24),
+          ...volkovLogs,
+        ]
+        set({
+          lastDecisionFeedback: volkovFeedback,
+          terminalEntries: updatedEntries,
+          terminalLogs: updatedEntries.map(
+            (e) => `[${e.timestamp}] ${e.sender}: ${e.text}`
+          ),
+          komradMessages: appendKomradFeed(
+            state.komradMessages,
+            ...volkovKomradMsgs
+          ),
+        })
+      }
+      return
+    }
+
     if (state.phase === 'playing') {
       shiftElapsedSeconds += dt
     }
@@ -3515,7 +3681,13 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   tick: () => {
     const state = get()
-    if (state.phase !== 'playing' || !state.isShiftControlReady) return
+    if (
+      state.phase !== 'playing' ||
+      !state.isShiftControlReady ||
+      state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
+    ) {
+      return
+    }
 
     // 1. Advance clock continuously without stopping at 10 minutes (wraps around 360 in-game minutes)
     const SHIFT_MINUTES_PER_SECOND = 1 / 1.75
