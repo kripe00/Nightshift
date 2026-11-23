@@ -1543,7 +1543,7 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
     ctx.fillRect(s3X + 3, stageY + 3, s3W - 6, 26);
     ctx.font = kremlinFont(13);
     ctx.fillStyle = COL_GREEN;
-    ctx.fillText("[5] UNIT C: 1000 MWH BAT", s3X + s3W / 2, stageY + 21, s3W - 14);
+    ctx.fillText("[5] UNIT C: 3000 MWH BAT", s3X + s3W / 2, stageY + 21, s3W - 14);
 
     // Stage 4 Frame: [1] UNIT A: 6 SUBSTATIONS
     const anySubFail = state.substations.some((sub) => !sub.quotaOk);
@@ -2581,7 +2581,7 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
           p2Y,
           pillW,
           pillH,
-          "1000 MWH BATTERY & 6 SUBSTATIONS NOMINAL",
+          "3000 MWH BATTERY & 6 SUBSTATIONS NOMINAL",
           false,
           COL_MUTED,
           "#08140d",

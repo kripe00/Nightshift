@@ -18,6 +18,10 @@ import {
   stepKomradSpeech,
   type KomradVowelKey,
 } from "./komradVoiceSynth";
+import {
+  notifyPlayerControlInteraction,
+  registerKomradControlObject,
+} from "./komradArmController";
 import { SovietPanopticonRig3D } from "./SovietPanopticonRig3D";
 import { SovietRadioTable3D } from "./SovietRadioTable3D";
 import { UnitCBatteryStorageDeck3D } from "./UnitCBatteryStorageDeck3D";
@@ -5017,10 +5021,10 @@ const SovietLeftWallSwitchgearAlcove3D: React.FC = React.memo(() => {
         ctx.fillText("6 KV SWITCHGEAR // UNIT C", w / 2, 62, w - 52);
         ctx.fillStyle = "#c81919";
         ctx.font = 'bold 28px "Kremlin", "VT323", monospace';
-        ctx.fillText("1000 MWH STATION BATTERY", w / 2, 150, w - 44);
+        ctx.fillText("3000 MWH STATION BATTERY", w / 2, 150, w - 44);
         ctx.fillStyle = "#141414";
         ctx.font = 'bold 22px "Kremlin", "VT323", monospace';
-        ctx.fillText("UNIT C // 1000 MWH STATION BATTERY", w / 2, 212, w - 44);
+        ctx.fillText("UNIT C // 3000 MWH STATION BATTERY", w / 2, 212, w - 44);
       }),
     [],
   );
@@ -6278,6 +6282,41 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
 
   const toggleLampRefs = [toggleLamp0, toggleLamp1, toggleLamp2, toggleLamp3];
   const toggleBatRefs = [toggleBat0, toggleBat1, toggleBat2, toggleBat3];
+  const auxKomradIds = [
+    "auxVentilation",
+    "auxAudioMute",
+    "auxKgbLine",
+    "auxCondenserVac",
+  ] as const;
+
+  useEffect(() => {
+    registerKomradControlObject("auxVentilation", toggleBat0.current, [
+      0,
+      0,
+      0.055,
+    ]);
+    registerKomradControlObject("auxAudioMute", toggleBat1.current, [
+      0,
+      0,
+      0.055,
+    ]);
+    registerKomradControlObject("auxKgbLine", toggleBat2.current, [
+      0,
+      0,
+      0.055,
+    ]);
+    registerKomradControlObject("auxCondenserVac", toggleBat3.current, [
+      0,
+      0,
+      0.055,
+    ]);
+    return () => {
+      registerKomradControlObject("auxVentilation", null);
+      registerKomradControlObject("auxAudioMute", null);
+      registerKomradControlObject("auxKgbLine", null);
+      registerKomradControlObject("auxCondenserVac", null);
+    };
+  }, []);
 
   // Load High-Detail Soviet `.glb` Mainframe Hardware from `public/models/`
   const terminalHousingGltf = useGLTF("./models/komrad_terminal_housing.glb");
@@ -6315,7 +6354,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   const rightHeaderPlateTex = useMemo(
     () =>
       makePlaqueTex(
-        "UNIT C // 1000 MWH STATION BATTERY",
+        "UNIT C // 3000 MWH STATION BATTERY",
         "ENERGY CREATED  •  BATTERY STORED  •  GRID DEMAND  •  AUX BUS",
         {
           width: 960,
@@ -6831,6 +6870,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                const auxId = auxKomradIds[tIdx];
+                if (auxId) notifyPlayerControlInteraction(auxId, true);
                 toggleDragIdxRef.current = tIdx;
                 (e.target as Element | null)?.setPointerCapture?.(e.pointerId);
               }}
@@ -6838,6 +6879,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
                 if (toggleDragIdxRef.current !== tIdx) return;
                 e.stopPropagation();
                 toggleDragIdxRef.current = null;
+                const auxId = auxKomradIds[tIdx];
+                if (auxId) notifyPlayerControlInteraction(auxId, false);
                 (e.target as Element | null)?.releasePointerCapture?.(
                   e.pointerId,
                 );

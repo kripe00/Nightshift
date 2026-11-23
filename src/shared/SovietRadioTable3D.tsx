@@ -7,6 +7,10 @@ import {
 } from "../modules/inspector/audio";
 import { useCameraLookStore } from "./CameraController";
 import {
+  notifyPlayerControlInteraction,
+  registerKomradControlObject,
+} from "./komradArmController";
+import {
   onKremlinFontReady,
   registerKremlinCanvasRedraw,
 } from "./kremlinFontReady";
@@ -32,13 +36,17 @@ export interface SovietRadioTable3DProps {
 
 export const RADIO_FREQ_MIN_MHZ = 66.0;
 export const RADIO_FREQ_MAX_MHZ = 74.0;
+export const AMBIENT_SOUNDTRACK_SRC = "/music/night-shift.mp3";
 
 const STATION_CAPTURE_HALF_MHZ = 0.42;
-const STATION_WAKE_HALF_MHZ = 0.45;
-const STATION_LOCK_ZONE_MHZ = 0.10;
-const STATION_SWEET_SPOT_MHZ = 0.08;
-const SUBTITLE_MIN_SIGNAL_STRENGTH = 0.25;
 const BASE_MUSIC_VOLUME = 0.82;
+const AMBIENT_TARGET_GAIN = 0.16;
+const AUDIO_CROSSFADE_SEC = 0.6;
+const DEFAULT_RADIO_VOLUME_PCT = 65;
+const RADIO_FLOOR_STATIC_LEVEL = 0.004;
+const VOLUME_KNOB_ANGLE_MIN = -Math.PI * 0.75;
+const VOLUME_KNOB_ANGLE_MAX = Math.PI * 0.75;
+const DETENT_TICK_MIN_INTERVAL_MS = 22;
 
 interface RadioSingletonWindow extends Window {
   __mipActiveRadioEngineCleanup?: () => void;
@@ -316,66 +324,60 @@ const RADIO_ANNOUNCEMENTS: readonly RadioAnnouncementSpec[] = [
 ];
 
 /**
- * Soviet OIRT FM broadcast stations across 66.0–74.0 MHZ
- * (10 total songs distributed cleanly across 5 tunable stations + inter-song state broadcasts).
+ * Unified Sector-84 State Radio song pool (9 tracks; ambient `/music/night-shift.mp3`
+ * is strictly excluded from radio rotation and plays quietly whenever radio is OFF).
+ */
+export const RADIO_UNIFIED_SONGS: readonly string[] = [ // oxlint-disable-line react/only-export-components
+  "/audio/radio/songs/track_08_sector_84.wav",
+  "/audio/radio/songs/track_09_sektor_84_1.wav",
+  "/audio/radio/songs/track_01.wav",
+  "/audio/radio/songs/track_03_soviet_synthwave.wav",
+  "/audio/radio/songs/track_02.wav",
+  "/audio/radio/songs/track_04.wav",
+  "/audio/radio/songs/track_05.wav",
+  "/audio/radio/songs/track_06.wav",
+  "/audio/radio/songs/track_07.wav",
+];
+
+/**
+ * Picks the next unified station track while enforcing a strict FIFO cooldown
+ * across the last 2 played songs (prevents `A -> A` and `A -> B -> A` repeats).
+ */
+export function pickNextUnifiedRadioSong( // oxlint-disable-line react/only-export-components
+  recentPlayedIds: string[],
+  rng: () => number = Math.random,
+): string {
+  const pool = RADIO_UNIFIED_SONGS;
+  const eligible =
+    pool.length >= 3
+      ? pool.filter((src) => !recentPlayedIds.includes(src))
+      : pool.filter((src) => src !== recentPlayedIds[recentPlayedIds.length - 1]);
+  const candidates = eligible.length > 0 ? eligible : pool;
+  const rawRoll = rng();
+  const norm = Number.isFinite(rawRoll)
+    ? Math.min(0.999999, Math.max(0, rawRoll))
+    : 0;
+  const chosen = candidates[Math.floor(norm * candidates.length)] ?? pool[0];
+  recentPlayedIds.push(chosen);
+  while (recentPlayedIds.length > 2) {
+    recentPlayedIds.shift();
+  }
+  return chosen;
+}
+
+/**
+ * Single unified OIRT FM broadcast station with all 9 songs + inter-song state broadcasts.
  */
 export const RADIO_STATIONS: readonly SovietRadioStationSpec[] = [ // oxlint-disable-line react/only-export-components
   {
-    freqMHz: 66.8,
-    bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "STATE RADIO // STATE-84",
-    city: "STATE-84",
-    tracks: [
-      "/music/night-shift.mp3",
-      "/audio/radio/songs/track_08_sector_84.wav",
-    ],
-  },
-  {
-    freqMHz: 68.4,
-    bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "RADIO MAYAK",
-    city: "MAYAK",
-    tracks: [
-      "/audio/radio/songs/track_09_sektor_84_1.wav",
-      "/audio/radio/songs/track_01.wav",
-    ],
-  },
-  {
     freqMHz: 70.0,
     bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "SOVIET SYNTH // SYNTH-84",
-    city: "SYNTH-84",
-    tracks: [
-      "/audio/radio/songs/track_03_soviet_synthwave.wav",
-      "/audio/radio/songs/track_02.wav",
-    ],
-  },
-  {
-    freqMHz: 71.6,
-    bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "RADIO WAVE-84",
-    city: "WAVE-84",
-    tracks: [
-      "/audio/radio/songs/track_04.wav",
-      "/audio/radio/songs/track_05.wav",
-    ],
-  },
-  {
-    freqMHz: 73.2,
-    bandwidth: STATION_CAPTURE_HALF_MHZ,
-    label: "SECTOR-84 FM",
+    label: "STATE RADIO // SECTOR-84",
     city: "SECTOR-84",
-    tracks: [
-      "/audio/radio/songs/track_06.wav",
-      "/audio/radio/songs/track_07.wav",
-    ],
+    tracks: RADIO_UNIFIED_SONGS,
   },
 ];
 
-const INITIAL_FREQ_MHZ = 66.8;
-const MHZ_PER_WHEEL_REV = 2.0; // 4 full turns across 66.00..74.00 MHZ
-const INITIAL_WHEEL_ANGLE =
-  ((INITIAL_FREQ_MHZ - RADIO_FREQ_MIN_MHZ) / MHZ_PER_WHEEL_REV) * Math.PI * 2;
 const DIAL_REDRAW_INTERVAL_MS = 72; // <= 15 Hz (~13.9 Hz) while actively dragging
 
 // Dial mesh & canvas layout (exact 1:1 needle-to-pixel calibration)
@@ -508,27 +510,29 @@ function mergeStaticGeometries(
   return merged;
 }
 
-function frequencyToRatio(freqMHz: number): number {
-  return THREE.MathUtils.clamp(
-    (freqMHz - RADIO_FREQ_MIN_MHZ) /
-      (RADIO_FREQ_MAX_MHZ - RADIO_FREQ_MIN_MHZ),
-    0,
-    1,
+function volumePctToRatio(volPct: number): number {
+  return THREE.MathUtils.clamp(volPct / 100, 0, 1);
+}
+
+function volumePctToKnobAngle(volPct: number): number {
+  return THREE.MathUtils.lerp(
+    VOLUME_KNOB_ANGLE_MIN,
+    VOLUME_KNOB_ANGLE_MAX,
+    volumePctToRatio(volPct),
   );
 }
 
-function frequencyToNeedleX(freqMHz: number): number {
+function volumePctToNeedleX(volPct: number): number {
   return THREE.MathUtils.lerp(
     NEEDLE_MIN_X,
     NEEDLE_MAX_X,
-    frequencyToRatio(freqMHz),
+    volumePctToRatio(volPct),
   );
 }
 
-interface StationProgramState {
-  freqMHz: number;
-  tracks: readonly string[];
-  trackIndex: number;
+interface UnifiedRadioProgram {
+  currentSongSrc: string;
+  recentPlayedIds: string[];
   phase: RadioProgramPhase;
   announcementIdx: number;
   savedOffsetSec: number;
@@ -539,8 +543,8 @@ interface RadioAudioEngine {
   staticGain: GainNode;
   staticSource: AudioBufferSourceNode;
   player: HTMLAudioElement;
-  stations: StationProgramState[];
-  activeStationIndex: number;
+  ambientPlayer: HTMLAudioElement;
+  program: UnifiedRadioProgram;
   loadedSrcKey: string | null;
   nextAnnouncementIdx: number;
   isPlaying: boolean;
@@ -551,18 +555,21 @@ interface RadioAudioEngine {
   onMetadata: (() => void) | null;
   onEnded: () => void;
   onError: () => void;
+  ambientPlayInFlight: boolean;
+  ambientPlaySeq: number;
   disposed: boolean;
 }
 
-function getStationTargetSrc(st: StationProgramState): string {
-  if (st.phase === "chime") {
+function getUnifiedProgramTargetSrc(program: UnifiedRadioProgram): string {
+  if (program.phase === "chime") {
     return GOVORIT_MOSKVA_SRC;
   }
-  if (st.phase === "announcement") {
-    const ann = RADIO_ANNOUNCEMENTS[st.announcementIdx % RADIO_ANNOUNCEMENTS.length];
+  if (program.phase === "announcement") {
+    const ann =
+      RADIO_ANNOUNCEMENTS[program.announcementIdx % RADIO_ANNOUNCEMENTS.length];
     return ann.audioSrc;
   }
-  return st.tracks[st.trackIndex % st.tracks.length];
+  return program.currentSongSrc;
 }
 
 function findSubtitleCueText(
@@ -586,31 +593,37 @@ function clearEngineMetadataListener(engine: RadioAudioEngine): void {
   engine.pendingSeekSec = null;
 }
 
+function stopAndReleaseMediaElement(el: HTMLMediaElement): void {
+  el.volume = 0;
+  try {
+    el.pause();
+  } catch {
+    // ignore
+  }
+  el.removeAttribute("src");
+  el.src = "";
+  try {
+    el.load();
+  } catch {
+    // ignore
+  }
+  unregisterTrackedMedia(el);
+}
+
 function disposeRadioEngineInstance(engine: RadioAudioEngine): void {
   if (engine.disposed) return;
   engine.disposed = true;
   engine.playSeq += 1;
+  engine.ambientPlaySeq += 1;
   clearEngineMetadataListener(engine);
   engine.player.removeEventListener("ended", engine.onEnded);
   engine.player.removeEventListener("error", engine.onError);
   engine.isPlaying = false;
   engine.playInFlight = false;
-  engine.activeStationIndex = -1;
+  engine.ambientPlayInFlight = false;
   engine.loadedSrcKey = null;
-  engine.player.volume = 0;
-  try {
-    engine.player.pause();
-  } catch {
-    // ignore
-  }
-  engine.player.removeAttribute("src");
-  engine.player.src = "";
-  try {
-    engine.player.load();
-  } catch {
-    // ignore
-  }
-  unregisterTrackedMedia(engine.player);
+  stopAndReleaseMediaElement(engine.player);
+  stopAndReleaseMediaElement(engine.ambientPlayer);
   try {
     engine.staticSource.stop();
   } catch {
@@ -680,39 +693,6 @@ function createAnalogStaticBuffer(ctx: AudioContext): AudioBuffer {
   return buf;
 }
 
-function computeStationMusicLevel(dist: number): number {
-  if (dist <= STATION_SWEET_SPOT_MHZ) return 1.0;
-  if (dist < STATION_CAPTURE_HALF_MHZ) {
-    const t =
-      (dist - STATION_SWEET_SPOT_MHZ) /
-      (STATION_CAPTURE_HALF_MHZ - STATION_SWEET_SPOT_MHZ);
-    return 0.5 * (1 + Math.cos(Math.PI * t));
-  }
-  return 0.0;
-}
-
-function computeStaticHissLevel(minDist: number): number {
-  if (minDist <= STATION_SWEET_SPOT_MHZ) {
-    return THREE.MathUtils.lerp(
-      0.003,
-      0.018,
-      minDist / STATION_SWEET_SPOT_MHZ,
-    );
-  }
-  if (minDist <= 0.2) {
-    const t = (minDist - STATION_SWEET_SPOT_MHZ) / (0.2 - STATION_SWEET_SPOT_MHZ);
-    return 0.018 + (0.155 - 0.018) * 0.5 * (1 - Math.cos(Math.PI * t));
-  }
-  if (minDist <= 0.28) {
-    return 0.155;
-  }
-  if (minDist < 0.46) {
-    const t = (minDist - 0.28) / (0.46 - 0.28);
-    return 0.062 + (0.155 - 0.062) * 0.5 * (1 + Math.cos(Math.PI * t));
-  }
-  return 0.062;
-}
-
 function computeDistanceGain(
   camPos: THREE.Vector3,
   radioPos: THREE.Vector3,
@@ -732,43 +712,49 @@ function computeDistanceGain(
   return 0.43;
 }
 
-function computeSignalStrength(freqMHz: number): {
-  strength: number;
-  nearest: SovietRadioStationSpec | null;
-} {
-  let bestStrength = 0;
-  let nearest: SovietRadioStationSpec | null = null;
-  for (let i = 0; i < RADIO_STATIONS.length; i++) {
-    const st = RADIO_STATIONS[i];
-    const dist = Math.abs(freqMHz - st.freqMHz);
-    const captureHalf = Math.max(STATION_LOCK_ZONE_MHZ + 0.02, st.bandwidth);
-    let s = 0;
-    if (dist <= STATION_LOCK_ZONE_MHZ) {
-      s = 1;
-    } else if (dist < captureHalf) {
-      const t =
-        (dist - STATION_LOCK_ZONE_MHZ) / (captureHalf - STATION_LOCK_ZONE_MHZ);
-      s = 0.5 * (1 + Math.cos(Math.PI * t));
-    }
-    if (s > bestStrength) {
-      bestStrength = s;
-      if (dist <= 0.3) {
-        nearest = st;
-      }
-    }
-  }
-  return { strength: THREE.MathUtils.clamp(bestStrength, 0, 1), nearest };
+function playVolumeDetentTick(
+  engine: RadioAudioEngine | null,
+  lastDetentMsRef: React.MutableRefObject<number>,
+): void {
+  if (!engine || engine.disposed || engine.ctx.state !== "running") return;
+  if (useGameStore.getState().isMusicMuted) return;
+  const nowMs = performance.now();
+  if (nowMs - lastDetentMsRef.current < DETENT_TICK_MIN_INTERVAL_MS) return;
+  lastDetentMsRef.current = nowMs;
+
+  const ctx = engine.ctx;
+  const t0 = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(640, t0);
+  osc.frequency.exponentialRampToValueAtTime(220, t0 + 0.008);
+
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(0.022, t0 + 0.0015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.009);
+
+  osc.connect(g);
+  g.connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + 0.011);
+  osc.onended = () => {
+    osc.disconnect();
+    g.disconnect();
+  };
 }
 
 function paintRadioDialCanvas(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  freqMHz: number,
-  isPowered = true,
+  volumePct: number,
+  isPowered = false,
 ): void {
   ctx.imageSmoothingEnabled = false;
-  const { strength, nearest } = computeSignalStrength(freqMHz);
+  const clampedVol = Math.max(0, Math.min(100, Math.round(volumePct)));
+  const volRatio = volumePctToRatio(clampedVol);
+  const aboveSubThreshold = clampedVol >= 35;
 
   // Full-bleed bright amber-gold background (ON) or medium warm-parchment card (OFF)
   // Designed to resist BuckshotDitherPass dark-crush quantization cleanly.
@@ -831,9 +817,9 @@ function paintRadioDialCanvas(
   ctx.fill();
 
   if (isPowered) {
-    const shadowHalfRad = THREE.MathUtils.lerp(0.92, 0.08, strength);
-    const brightGreen = strength > 0.65 ? "#9effbe" : "#39ff7a";
-    const midGreen = strength > 0.65 ? "#39ff7a" : "#24c958";
+    const shadowHalfRad = THREE.MathUtils.lerp(0.92, 0.08, volRatio);
+    const brightGreen = aboveSubThreshold ? "#9effbe" : "#39ff7a";
+    const midGreen = aboveSubThreshold ? "#39ff7a" : "#24c958";
 
     const eyeGrad = ctx.createRadialGradient(
       eyeCx,
@@ -891,13 +877,20 @@ function paintRadioDialCanvas(
   const barH = 14;
   ctx.fillStyle = isPowered ? "#0c2212" : "#2b251e";
   ctx.fillRect(barX, barY, barW, barH);
-  if (isPowered) {
-    const halfSeg = Math.max(8, Math.round((barW * 0.48) * (0.25 + 0.75 * strength)));
-    ctx.fillStyle = "#39ff7a";
+  if (isPowered && clampedVol > 0) {
+    const halfSeg = Math.max(
+      4,
+      Math.round(barW * 0.48 * (0.14 + 0.86 * volRatio)),
+    );
+    ctx.fillStyle = aboveSubThreshold ? "#39ff7a" : "#ffb000";
     ctx.fillRect(barX + 2, barY + 2, halfSeg, barH - 4);
     ctx.fillRect(barX + barW - 2 - halfSeg, barY + 2, halfSeg, barH - 4);
   }
-  ctx.strokeStyle = isPowered ? "#39ff7a" : "#e8dfc8";
+  ctx.strokeStyle = isPowered
+    ? aboveSubThreshold
+      ? "#39ff7a"
+      : "#ffb000"
+    : "#e8dfc8";
   ctx.lineWidth = 1.5;
   ctx.strokeRect(barX, barY, barW, barH);
 
@@ -909,27 +902,31 @@ function paintRadioDialCanvas(
 
   ctx.fillStyle = isPowered ? "#110c06" : "#383127";
   ctx.fillRect(14, 138, 78, 32);
-  ctx.strokeStyle = isPowered
-    ? strength > 0.65
-      ? "#39ff7a"
-      : "#fff6d6"
-    : "#e8dfc8";
+  ctx.strokeStyle = !isPowered
+    ? "#e8dfc8"
+    : clampedVol === 0
+      ? "#ff5c4d"
+      : aboveSubThreshold
+        ? "#39ff7a"
+        : "#ffb000";
   ctx.lineWidth = 1.5;
   ctx.strokeRect(14, 138, 78, 32);
   ctx.fillStyle = !isPowered
     ? "#e8dfc8"
-    : strength > 0.65
-      ? "#39ff7a"
-      : "#fff6d6";
+    : clampedVol === 0
+      ? "#ff5c4d"
+      : aboveSubThreshold
+        ? "#39ff7a"
+        : "#ffb000";
   ctx.font = 'bold 14px "Kremlin", "VT323", monospace';
   ctx.fillText(
     !isPowered
       ? "OFF"
-      : strength > 0.72
-        ? "LOCKED"
-        : strength > 0.35
-          ? "SIGNAL"
-          : "TUNING",
+      : clampedVol === 0
+        ? "MUTE"
+        : aboveSubThreshold
+          ? "ACTIVE"
+          : "LOW VOL",
     eyeCx,
     160,
     72,
@@ -950,34 +947,34 @@ function paintRadioDialCanvas(
   ctx.font = 'bold 15px "Kremlin", "Courier Prime", monospace';
   if (isPowered) {
     ctx.fillStyle = "#fff6d6";
-    ctx.fillText("OKEAN-84 // FM - SW", dialX + 11, 31, 204);
+    ctx.fillText("OKEAN-84 // SECTOR-84", dialX + 11, 31, 204);
   }
   ctx.fillStyle = isPowered ? "#110c06" : "#e8dfc8";
-  ctx.fillText("OKEAN-84 // FM - SW", dialX + 10, 30, 204);
+  ctx.fillText("OKEAN-84 // SECTOR-84", dialX + 10, 30, 204);
 
-  // Large Live Frequency Readout Box (upper right)
-  const boxX = 326;
+  // Large Live Volume Readout Box (upper right)
+  const boxX = 318;
   const boxY = 12;
-  const boxW = 170;
+  const boxW = 178;
   const boxH = 32;
   ctx.fillStyle = isPowered ? "#110c06" : "#383127";
   ctx.fillRect(boxX, boxY, boxW, boxH);
   ctx.strokeStyle = !isPowered
     ? "#e8dfc8"
-    : nearest
+    : aboveSubThreshold
       ? "#39ff7a"
-      : "#fff6d6";
+      : "#ffb000";
   ctx.lineWidth = 2;
   ctx.strokeRect(boxX, boxY, boxW, boxH);
 
   ctx.textAlign = "center";
   ctx.fillStyle = !isPowered
     ? "#e8dfc8"
-    : nearest
+    : aboveSubThreshold
       ? "#39ff7a"
-      : "#fff6d6";
-  ctx.font = 'bold 21px "Kremlin", "VT323", monospace';
-  ctx.fillText(`${freqMHz.toFixed(2)} MHZ`, boxX + boxW / 2, boxY + 24, boxW - 10);
+      : "#ffb000";
+  ctx.font = 'bold 20px "Kremlin", "VT323", monospace';
+  ctx.fillText(`VOLUME: ${clampedVol}%`, boxX + boxW / 2, boxY + 23, boxW - 10);
 
   // Horizontal scale rail
   const railY = 98;
@@ -995,25 +992,25 @@ function paintRadioDialCanvas(
   ctx.lineTo(SCALE_PX_RIGHT + 4, railY);
   ctx.stroke();
 
-  // Minor (0.2 MHZ), Odd (1.0 MHZ) & Major (2.0 MHZ) Ticks + Bold Numerals
-  for (let i = 0; i <= 40; i++) {
-    const f = RADIO_FREQ_MIN_MHZ + i * 0.2;
-    const tx = THREE.MathUtils.lerp(SCALE_PX_LEFT, SCALE_PX_RIGHT, i / 40);
-    const isEvenMHz = i % 10 === 0;
-    const isOneMHz = i % 5 === 0;
-    const tickTop = isEvenMHz ? railY - 22 : isOneMHz ? railY - 14 : railY - 8;
-    const tickBottom = isEvenMHz ? railY + 5 : railY + 2;
+  // Minor (5%), Medium (10%) & Major (25%) Volume Ticks + Bold Numerals (0..100%)
+  for (let i = 0; i <= 20; i++) {
+    const pct = i * 5;
+    const tx = THREE.MathUtils.lerp(SCALE_PX_LEFT, SCALE_PX_RIGHT, i / 20);
+    const isMajor = i % 5 === 0;
+    const isTen = i % 2 === 0;
+    const tickTop = isMajor ? railY - 22 : isTen ? railY - 14 : railY - 8;
+    const tickBottom = isMajor ? railY + 5 : railY + 2;
 
-    if (isEvenMHz || isOneMHz) {
+    if (isMajor || isTen) {
       ctx.strokeStyle = isPowered ? "#110c06" : "#2b241c";
-      ctx.lineWidth = isEvenMHz ? 6 : 4;
+      ctx.lineWidth = isMajor ? 6 : 4;
       ctx.beginPath();
       ctx.moveTo(tx, tickTop);
       ctx.lineTo(tx, tickBottom);
       ctx.stroke();
 
       ctx.strokeStyle = isPowered ? "#fff6d6" : "#e8dfc8";
-      ctx.lineWidth = isEvenMHz ? 4 : 2.5;
+      ctx.lineWidth = isMajor ? 4 : 2.5;
       ctx.beginPath();
       ctx.moveTo(tx, tickTop);
       ctx.lineTo(tx, tickBottom);
@@ -1027,9 +1024,9 @@ function paintRadioDialCanvas(
       ctx.stroke();
     }
 
-    if (isEvenMHz) {
-      const label = Math.round(f).toString();
-      ctx.font = 'bold 26px "VT323", monospace';
+    if (isMajor) {
+      const label = pct.toString();
+      ctx.font = 'bold 24px "VT323", monospace';
       ctx.textAlign = "center";
       ctx.lineWidth = 4;
       ctx.strokeStyle = isPowered ? "#110c06" : "#2b241c";
@@ -1039,68 +1036,57 @@ function paintRadioDialCanvas(
     }
   }
 
-  // Unit legend right of 74 mark
+  // Unit legend right of 100 mark
   ctx.textAlign = "center";
-  ctx.font = 'bold 13px "Kremlin", "VT323", monospace';
+  ctx.font = 'bold 14px "Kremlin", "VT323", monospace';
   ctx.lineWidth = 3;
   ctx.strokeStyle = isPowered ? "#110c06" : "#2b241c";
-  ctx.strokeText("MHZ", 491, railY - 12);
+  ctx.strokeText("PCT", 491, railY - 12);
   ctx.fillStyle = isPowered ? "#fff6d6" : "#e8dfc8";
-  ctx.fillText("MHZ", 491, railY - 12);
+  ctx.fillText("PCT", 491, railY - 12);
 
-  // All 5 Station Markers & Bold English Station Names Below Rail
-  for (let i = 0; i < RADIO_STATIONS.length; i++) {
-    const st = RADIO_STATIONS[i];
-    const ratio = frequencyToRatio(st.freqMHz);
-    const sx = THREE.MathUtils.lerp(SCALE_PX_LEFT, SCALE_PX_RIGHT, ratio);
-    const isLocked = isPowered && nearest?.freqMHz === st.freqMHz;
+  // Subtle 35% subtitle priority threshold marker below scale rail
+  const subThreshX = THREE.MathUtils.lerp(SCALE_PX_LEFT, SCALE_PX_RIGHT, 0.35);
+  ctx.fillStyle = isPowered && aboveSubThreshold ? "#39ff7a" : "#ffb000";
+  ctx.beginPath();
+  ctx.moveTo(subThreshX, railY + 4);
+  ctx.lineTo(subThreshX - 5, railY + 13);
+  ctx.lineTo(subThreshX + 5, railY + 13);
+  ctx.closePath();
+  ctx.fill();
 
-    ctx.fillStyle = !isPowered
-      ? "#e8dfc8"
-      : isLocked
-        ? "#39ff7a"
-        : "#110c06";
-    ctx.beginPath();
-    ctx.moveTo(sx, railY + 4);
-    ctx.lineTo(sx - 5, railY + 13);
-    ctx.lineTo(sx + 5, railY + 13);
-    ctx.closePath();
-    ctx.fill();
+  const threshPillW = 74;
+  const threshPillH = 21;
+  const threshPillX = subThreshX - threshPillW / 2;
+  const threshPillY = railY + 18;
+  ctx.fillStyle = isPowered ? "#110c06" : "#383127";
+  ctx.fillRect(threshPillX, threshPillY, threshPillW, threshPillH);
+  ctx.strokeStyle = isPowered && aboveSubThreshold ? "#39ff7a" : "#ffb000";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(threshPillX, threshPillY, threshPillW, threshPillH);
+  ctx.textAlign = "center";
+  ctx.fillStyle = isPowered && aboveSubThreshold ? "#39ff7a" : "#ffb000";
+  ctx.font = 'bold 11px "Kremlin", "VT323", monospace';
+  ctx.fillText("35% SUBS", subThreshX, threshPillY + 15, threshPillW - 6);
 
-    ctx.strokeStyle = !isPowered
-      ? "#e8dfc8"
-      : isLocked
-        ? "#39ff7a"
-        : "#110c06";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(sx, railY + 13);
-    ctx.lineTo(sx, railY + 20);
-    ctx.stroke();
-
-    const pillW = 66;
-    const pillH = 23;
-    const pillX = sx - pillW / 2;
-    const pillY = railY + 20;
-    ctx.fillStyle = isPowered ? "#110c06" : "#383127";
-    ctx.fillRect(pillX, pillY, pillW, pillH);
-    ctx.strokeStyle = !isPowered
-      ? "#e8dfc8"
-      : isLocked
-        ? "#39ff7a"
-        : "#fff6d6";
-    ctx.lineWidth = isLocked ? 2 : 1.5;
-    ctx.strokeRect(pillX, pillY, pillW, pillH);
-
-    ctx.textAlign = "center";
-    ctx.fillStyle = !isPowered
-      ? "#e8dfc8"
-      : isLocked
-        ? "#39ff7a"
-        : "#fff6d6";
-    ctx.font = 'bold 12px "Kremlin", "VT323", monospace';
-    ctx.fillText(st.city, sx, pillY + 16, pillW - 6);
-  }
+  // Unified State Radio Band Pill
+  const bandPillX = 304;
+  const bandPillY = railY + 18;
+  const bandPillW = 190;
+  const bandPillH = 21;
+  ctx.fillStyle = isPowered ? "#110c06" : "#383127";
+  ctx.fillRect(bandPillX, bandPillY, bandPillW, bandPillH);
+  ctx.strokeStyle = isPowered ? "#39ff7a" : "#e8dfc8";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(bandPillX, bandPillY, bandPillW, bandPillH);
+  ctx.fillStyle = isPowered ? "#39ff7a" : "#e8dfc8";
+  ctx.font = 'bold 12px "Kremlin", "VT323", monospace';
+  ctx.fillText(
+    "STATE RADIO // SECTOR-84",
+    bandPillX + bandPillW / 2,
+    bandPillY + 15,
+    bandPillW - 10,
+  );
 
   // Lower band status bar
   const barBottomX = 110;
@@ -1111,25 +1097,23 @@ function paintRadioDialCanvas(
   ctx.fillRect(barBottomX, barBottomY, barBottomW, barBottomH);
   ctx.strokeStyle = !isPowered
     ? "#e8dfc8"
-    : nearest
+    : aboveSubThreshold
       ? "#39ff7a"
-      : "#fff6d6";
+      : "#ffb000";
   ctx.lineWidth = 1.5;
   ctx.strokeRect(barBottomX, barBottomY, barBottomW, barBottomH);
 
   ctx.textAlign = "left";
   ctx.fillStyle = !isPowered
     ? "#e8dfc8"
-    : nearest
+    : aboveSubThreshold
       ? "#39ff7a"
-      : "#fff6d6";
+      : "#ffb000";
   ctx.font = 'bold 14px "Kremlin", "VT323", monospace';
   ctx.fillText(
     !isPowered
-      ? 'POWER OFF // PRESS "POWER"'
-      : nearest
-        ? `★ LOCKED: ${nearest.label} (${nearest.freqMHz.toFixed(2)} MHZ)`
-        : "FM BAND 66-74 MHZ // TUNING",
+      ? 'POWER OFF // PRESS "POWER" (AMBIENT BED ACTIVE)'
+      : `★ STATE RADIO // SECTOR-84  •  VOLUME: ${clampedVol}%`,
     barBottomX + 10,
     barBottomY + 18,
     barBottomW - 18,
@@ -1149,16 +1133,22 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
     const broadcastBtnMeshRef = useRef<THREE.Mesh>(null);
     const dialMatRef = useRef<THREE.MeshBasicMaterial>(null);
     const needleTipMatRef = useRef<THREE.MeshStandardMaterial>(null);
-    const freqRef = useRef<number>(INITIAL_FREQ_MHZ);
-    const wheelAngleRef = useRef<number>(INITIAL_WHEEL_ANGLE);
-    const powerOnRef = useRef<boolean>(true);
+    const volumePctRef = useRef<number>(DEFAULT_RADIO_VOLUME_PCT);
+    const wheelAngleRef = useRef<number>(
+      volumePctToKnobAngle(DEFAULT_RADIO_VOLUME_PCT),
+    );
+    const powerOnRef = useRef<boolean>(false);
     const duckedRef = useRef<boolean>(false);
-    const masterGainRef = useRef<number>(0.48);
+    const distanceGainRef = useRef<number>(0.48);
+    const ambientFadeRef = useRef<number>(0);
+    const radioFadeRef = useRef<number>(0);
     const needsGestureUnlockRef = useRef<boolean>(false);
-    const lastAudioTickRef = useRef<number>(-1);
+    const gestureUnlockAttachedRef = useRef<boolean>(false);
+    const installUnlockListenersRef = useRef<() => void>(() => {});
+    const lastDialDrawMsRef = useRef<number>(0);
+    const lastDetentMsRef = useRef<number>(-1000);
     const radioWorldPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
     const audioEngineRef = useRef<RadioAudioEngine | null>(null);
-    const lastDialDrawMsRef = useRef<number>(0);
     const wheelFlushTimerRef = useRef<number>(0);
     const broadcastPressTimerRef = useRef<number>(0);
     const hoveredRef = useRef<boolean>(false);
@@ -1313,7 +1303,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         });
       });
 
-      // Tuning Dial Knob Plate (`TUNING`)
+      // Volume Knob Plate (`VOLUME`)
       const tuningLabel = createPixelTexture(160, 40, (ctx, w, h) => {
         ctx.fillStyle = "#161a18";
         ctx.fillRect(0, 0, w, h);
@@ -1323,14 +1313,15 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         ctx.fillStyle = "#e6dec3";
         ctx.font = 'bold 20px "Kremlin", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("TUNING", w / 2, 27, w - 16);
+        ctx.fillText("VOLUME", w / 2, 27, w - 16);
       });
 
-      // Dynamic Backlit Glass Tuning Dial (starts ON & locked to Main Soundtrack 66.80 MHZ)
+      // Dynamic Backlit Glass Volume & Band Dial (starts OFF at 65% volume)
       const dial = createPixelTexture(
         DIAL_CANVAS_W,
         DIAL_CANVAS_H,
-        (ctx, w, h) => paintRadioDialCanvas(ctx, w, h, INITIAL_FREQ_MHZ, true),
+        (ctx, w, h) =>
+          paintRadioDialCanvas(ctx, w, h, DEFAULT_RADIO_VOLUME_PCT, false),
       );
 
       return {
@@ -1685,27 +1676,16 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       const gs = useGameStore.getState();
       if (
         !powerOnRef.current ||
+        volumePctRef.current <= 0 ||
         duckedRef.current ||
         gs.diagFeedActive ||
         gs.isMusicMuted ||
         gs.phase !== "playing" ||
         !engine ||
         engine.disposed ||
-        engine.activeStationIndex < 0 ||
+        engine.program.phase === "song" ||
         engine.player.paused
       ) {
-        publishSubtitle(null);
-        return;
-      }
-
-      const { strength } = computeSignalStrength(freqRef.current);
-      if (strength <= SUBTITLE_MIN_SIGNAL_STRENGTH) {
-        publishSubtitle(null);
-        return;
-      }
-
-      const st = engine.stations[engine.activeStationIndex];
-      if (!st || st.phase === "song") {
         publishSubtitle(null);
         return;
       }
@@ -1716,13 +1696,15 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         return;
       }
 
-      if (st.phase === "chime") {
+      if (engine.program.phase === "chime") {
         publishSubtitle(findSubtitleCueText(SUBTITLE_CUES.govorit_moskva, cur));
         return;
       }
 
       const ann =
-        RADIO_ANNOUNCEMENTS[st.announcementIdx % RADIO_ANNOUNCEMENTS.length];
+        RADIO_ANNOUNCEMENTS[
+          engine.program.announcementIdx % RADIO_ANNOUNCEMENTS.length
+        ];
       const cues = ann ? SUBTITLE_CUES[ann.id] : undefined;
       publishSubtitle(cues ? findSubtitleCueText(cues, cur) : null);
     }, [publishSubtitle]);
@@ -1761,22 +1743,30 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       player.loop = false;
       player.volume = 0;
 
-      const stations: StationProgramState[] = RADIO_STATIONS.map((st) => ({
-        freqMHz: st.freqMHz,
-        tracks: st.tracks,
-        trackIndex: 0,
-        phase: "song",
-        announcementIdx: 0,
-        savedOffsetSec: 0,
-      }));
+      // Dedicated off-radio ambient soundtrack (`night-shift.mp3`) — marked exempt from legacy silencer BEFORE setting src
+      const ambientPlayer = new Audio();
+      ambientPlayer.dataset.okean84Radio = "1";
+      ambientPlayer.preload = "auto";
+      ambientPlayer.loop = true;
+      ambientPlayer.volume = 0;
+      ambientPlayer.src = resolvePublicAudioUrl(AMBIENT_SOUNDTRACK_SRC);
+
+      const recentPlayedIds: string[] = [];
+      const firstSong = pickNextUnifiedRadioSong(recentPlayedIds);
 
       const engine: RadioAudioEngine = {
         ctx,
         staticGain,
         staticSource,
         player,
-        stations,
-        activeStationIndex: -1,
+        ambientPlayer,
+        program: {
+          currentSongSrc: firstSong,
+          recentPlayedIds,
+          phase: "song",
+          announcementIdx: 0,
+          savedOffsetSec: 0,
+        },
         loadedSrcKey: null,
         nextAnnouncementIdx: 0,
         isPlaying: false,
@@ -1791,6 +1781,8 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         onError: () => {
           handleProgramEndedRef.current(true);
         },
+        ambientPlayInFlight: false,
+        ambientPlaySeq: 0,
         disposed: false,
       };
       player.addEventListener("ended", engine.onEnded);
@@ -1806,220 +1798,263 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       return engine;
     }, []);
 
-    const syncRadioAudio = useCallback(
-      (freqMHz: number, masterGain: number, isActive: boolean) => {
+    const syncUnifiedAudio = useCallback(
+      (dt: number, distanceGain: number) => {
         const engine = audioEngineRef.current;
         if (!engine || engine.disposed) {
           publishSubtitle(null);
           return;
         }
 
-        if (!isActive) {
-          if (engine.activeStationIndex >= 0) {
-            if (engine.pendingSeekSec !== null) {
-              engine.stations[engine.activeStationIndex].savedOffsetSec =
-                engine.pendingSeekSec;
-            } else if (
-              Number.isFinite(engine.player.currentTime) &&
-              engine.player.currentTime > 0
-            ) {
-              engine.stations[engine.activeStationIndex].savedOffsetSec =
-                engine.player.currentTime;
-            }
+        const gs = useGameStore.getState();
+        const shouldDuck =
+          gs.diagFeedActive || gs.isMusicMuted || gs.phase !== "playing";
+        duckedRef.current = shouldDuck;
+
+        const radioWantOn = !shouldDuck && powerOnRef.current;
+        const ambientWantOn = !shouldDuck && !powerOnRef.current;
+
+        const step = dt > 0 ? dt / AUDIO_CROSSFADE_SEC : 0;
+        if (step > 0) {
+          if (ambientFadeRef.current < (ambientWantOn ? 1 : 0)) {
+            ambientFadeRef.current = Math.min(1, ambientFadeRef.current + step);
+          } else if (ambientFadeRef.current > (ambientWantOn ? 1 : 0)) {
+            ambientFadeRef.current = Math.max(0, ambientFadeRef.current - step);
           }
-          engine.playSeq += 1;
-          clearEngineMetadataListener(engine);
-          engine.player.volume = 0;
-          if (engine.isPlaying || !engine.player.paused) {
-            engine.player.pause();
+          if (radioFadeRef.current < (radioWantOn ? 1 : 0)) {
+            radioFadeRef.current = Math.min(1, radioFadeRef.current + step);
+          } else if (radioFadeRef.current > (radioWantOn ? 1 : 0)) {
+            radioFadeRef.current = Math.max(0, radioFadeRef.current - step);
           }
-          engine.isPlaying = false;
-          engine.playInFlight = false;
-          engine.staticGain.gain.setTargetAtTime(0, engine.ctx.currentTime, 0.015);
-          if (engine.ctx.state === "running") {
-            void engine.ctx.suspend().catch(() => {});
-          }
-          publishSubtitle(null);
-          return;
         }
 
-        if (engine.ctx.state === "suspended" && !needsGestureUnlockRef.current) {
+        const wantAnyAudio =
+          !shouldDuck && (ambientFadeRef.current > 0.001 || radioWantOn || radioFadeRef.current > 0.001);
+        if (
+          wantAnyAudio &&
+          engine.ctx.state === "suspended" &&
+          !needsGestureUnlockRef.current
+        ) {
           void engine.ctx.resume().catch(() => {});
+        } else if (
+          !wantAnyAudio &&
+          engine.ctx.state === "running" &&
+          !powerOnRef.current
+        ) {
+          void engine.ctx.suspend().catch(() => {});
         }
 
-        let minDist = Infinity;
-        let nearestIdx = -1;
-        for (let i = 0; i < engine.stations.length; i++) {
-          const dist = Math.abs(freqMHz - engine.stations[i].freqMHz);
-          if (dist < minDist) {
-            minDist = dist;
-            if (dist <= STATION_WAKE_HALF_MHZ) {
-              nearestIdx = i;
-            }
-          }
-        }
+        // 1. Control-Room Ambient Soundtrack (active whenever radio is OFF)
+        const targetAmbientVol = shouldDuck
+          ? 0
+          : THREE.MathUtils.clamp(
+              ambientFadeRef.current * AMBIENT_TARGET_GAIN,
+              0,
+              1,
+            );
+        engine.ambientPlayer.volume = targetAmbientVol;
 
-        if (nearestIdx !== engine.activeStationIndex) {
-          if (engine.activeStationIndex >= 0) {
-            if (engine.pendingSeekSec !== null) {
-              engine.stations[engine.activeStationIndex].savedOffsetSec =
-                engine.pendingSeekSec;
-            } else if (
-              Number.isFinite(engine.player.currentTime) &&
-              engine.player.currentTime > 0
-            ) {
-              engine.stations[engine.activeStationIndex].savedOffsetSec =
-                engine.player.currentTime;
-            }
-          }
-          engine.playSeq += 1;
-          clearEngineMetadataListener(engine);
-          if (engine.isPlaying || !engine.player.paused) {
-            engine.player.pause();
-          }
-          engine.isPlaying = false;
-          engine.playInFlight = false;
-          engine.activeStationIndex = nearestIdx;
-        }
-
-        if (nearestIdx >= 0) {
-          const st = engine.stations[nearestIdx];
-          const musicLevel = computeStationMusicLevel(minDist);
-          const targetVol = THREE.MathUtils.clamp(
-            musicLevel * masterGain * BASE_MUSIC_VOLUME,
-            0,
-            1,
-          );
-          engine.player.volume = targetVol;
-
-          const targetSrc = getStationTargetSrc(st);
-          const srcChanged = engine.loadedSrcKey !== targetSrc;
-          if (srcChanged) {
-            engine.playSeq += 1;
-            clearEngineMetadataListener(engine);
-            if (!engine.player.paused) {
-              engine.player.pause();
-            }
-            engine.isPlaying = false;
-            engine.playInFlight = false;
-            engine.loadedSrcKey = targetSrc;
-            engine.pendingSeekSec =
-              st.savedOffsetSec > 0.05 ? st.savedOffsetSec : null;
-            engine.player.src = resolvePublicAudioUrl(targetSrc);
-          }
-
-          if (
-            !engine.isPlaying &&
-            !engine.playInFlight &&
-            engine.player.paused &&
-            !needsGestureUnlockRef.current
-          ) {
-            engine.isPlaying = true;
-            engine.playInFlight = true;
-            const seq = ++engine.playSeq;
-
-            const desiredOffset =
-              engine.pendingSeekSec !== null
-                ? engine.pendingSeekSec
-                : srcChanged
-                  ? 0
-                  : st.savedOffsetSec;
-
-            if (desiredOffset > 0.05) {
-              const applyOffset = () => {
-                if (
-                  engine.disposed ||
-                  engine.activeStationIndex !== nearestIdx ||
-                  engine.loadedSrcKey !== targetSrc
-                ) {
-                  return;
-                }
-                const dur = engine.player.duration;
-                if (Number.isFinite(dur) && dur > 0) {
-                  engine.player.currentTime =
-                    desiredOffset < dur - 0.25 ? desiredOffset : 0;
-                  engine.pendingSeekSec = null;
-                }
-              };
-              if (
-                Number.isFinite(engine.player.duration) &&
-                engine.player.duration > 0
-              ) {
-                applyOffset();
-              } else if (!engine.onMetadata) {
-                const onMeta = () => {
-                  engine.onMetadata = null;
-                  applyOffset();
-                };
-                engine.onMetadata = onMeta;
-                engine.player.addEventListener("loadedmetadata", onMeta, {
-                  once: true,
-                });
-              }
-            } else if (
-              Number.isFinite(engine.player.duration) &&
-              engine.player.currentTime > 0.05 &&
-              srcChanged
-            ) {
-              engine.player.currentTime = 0;
-              engine.pendingSeekSec = null;
-            } else {
-              engine.pendingSeekSec = null;
-            }
-
-            const playPromise = engine.player.play();
-            if (playPromise !== undefined) {
-              playPromise
+        if (
+          !shouldDuck &&
+          (ambientWantOn || ambientFadeRef.current > 0.001) &&
+          !needsGestureUnlockRef.current
+        ) {
+          if (engine.ambientPlayer.paused && !engine.ambientPlayInFlight) {
+            engine.ambientPlayInFlight = true;
+            const seq = ++engine.ambientPlaySeq;
+            const ambPromise = engine.ambientPlayer.play();
+            if (ambPromise !== undefined) {
+              ambPromise
                 .then(() => {
-                  if (engine.playSeq !== seq) return;
-                  engine.playInFlight = false;
-                  engine.consecutiveErrors = 0;
+                  if (engine.ambientPlaySeq !== seq) return;
+                  engine.ambientPlayInFlight = false;
                   if (
                     engine.disposed ||
-                    !engine.isPlaying ||
-                    engine.activeStationIndex !== nearestIdx
+                    duckedRef.current ||
+                    (powerOnRef.current && ambientFadeRef.current <= 0.0005)
                   ) {
-                    engine.player.pause();
+                    engine.ambientPlayer.pause();
                     return;
                   }
                   needsGestureUnlockRef.current = false;
-                  updateBroadcastSubtitle();
                 })
                 .catch((err: unknown) => {
-                  if (engine.playSeq !== seq) return;
-                  engine.playInFlight = false;
-                  if (!engine.disposed) {
-                    engine.isPlaying = false;
-                    const errName = (err as { name?: string } | null)?.name;
-                    if (errName === "NotAllowedError") {
-                      needsGestureUnlockRef.current = true;
-                    }
-                    publishSubtitle(null);
+                  if (engine.ambientPlaySeq !== seq) return;
+                  engine.ambientPlayInFlight = false;
+                  const errName = (err as { name?: string } | null)?.name;
+                  if (errName === "NotAllowedError") {
+                    needsGestureUnlockRef.current = true;
+                    installUnlockListenersRef.current();
                   }
                 });
             } else {
-              engine.playInFlight = false;
-              engine.consecutiveErrors = 0;
+              engine.ambientPlayInFlight = false;
             }
-          } else if (!engine.player.paused) {
-            engine.isPlaying = true;
           }
-        } else {
-          engine.player.volume = 0;
-          publishSubtitle(null);
+        } else if (
+          (shouldDuck || ambientFadeRef.current <= 0.0005) &&
+          !engine.ambientPlayer.paused
+        ) {
+          engine.ambientPlayer.pause();
         }
 
-        const staticLevel = computeStaticHissLevel(minDist);
-        const targetStatic = THREE.MathUtils.clamp(
-          staticLevel * masterGain,
-          0,
-          1,
-        );
+        // 2. Unified State Radio (Okean-84) + Subtle Floor Static
+        const volRatio = volumePctToRatio(volumePctRef.current);
+        const targetRadioVol = shouldDuck
+          ? 0
+          : THREE.MathUtils.clamp(
+              volRatio * distanceGain * radioFadeRef.current * BASE_MUSIC_VOLUME,
+              0,
+              1,
+            );
+        engine.player.volume = targetRadioVol;
+
+        const targetStatic = radioWantOn
+          ? THREE.MathUtils.clamp(
+              RADIO_FLOOR_STATIC_LEVEL *
+                volRatio *
+                distanceGain *
+                radioFadeRef.current,
+              0,
+              1,
+            )
+          : 0;
         engine.staticGain.gain.setTargetAtTime(
           targetStatic,
           engine.ctx.currentTime,
           0.02,
         );
+
+        if (!radioWantOn) {
+          if (shouldDuck || radioFadeRef.current <= 0.0005) {
+            if (engine.pendingSeekSec !== null) {
+              engine.program.savedOffsetSec = engine.pendingSeekSec;
+            } else if (
+              Number.isFinite(engine.player.currentTime) &&
+              engine.player.currentTime > 0
+            ) {
+              engine.program.savedOffsetSec = engine.player.currentTime;
+            }
+            engine.playSeq += 1;
+            clearEngineMetadataListener(engine);
+            if (engine.isPlaying || !engine.player.paused) {
+              engine.player.pause();
+            }
+            engine.isPlaying = false;
+            engine.playInFlight = false;
+          }
+          publishSubtitle(null);
+          return;
+        }
+
+        const targetSrc = getUnifiedProgramTargetSrc(engine.program);
+        const srcChanged = engine.loadedSrcKey !== targetSrc;
+        if (srcChanged) {
+          engine.playSeq += 1;
+          clearEngineMetadataListener(engine);
+          if (!engine.player.paused) {
+            engine.player.pause();
+          }
+          engine.isPlaying = false;
+          engine.playInFlight = false;
+          engine.loadedSrcKey = targetSrc;
+          engine.pendingSeekSec =
+            engine.program.savedOffsetSec > 0.05
+              ? engine.program.savedOffsetSec
+              : null;
+          engine.player.src = resolvePublicAudioUrl(targetSrc);
+        }
+
+        if (
+          !engine.isPlaying &&
+          !engine.playInFlight &&
+          engine.player.paused &&
+          !needsGestureUnlockRef.current
+        ) {
+          engine.isPlaying = true;
+          engine.playInFlight = true;
+          const seq = ++engine.playSeq;
+
+          const desiredOffset =
+            engine.pendingSeekSec !== null
+              ? engine.pendingSeekSec
+              : srcChanged
+                ? 0
+                : engine.program.savedOffsetSec;
+
+          if (desiredOffset > 0.05) {
+            const applyOffset = () => {
+              if (engine.disposed || engine.loadedSrcKey !== targetSrc) {
+                return;
+              }
+              const dur = engine.player.duration;
+              if (Number.isFinite(dur) && dur > 0) {
+                engine.player.currentTime =
+                  desiredOffset < dur - 0.25 ? desiredOffset : 0;
+                engine.pendingSeekSec = null;
+              }
+            };
+            if (
+              Number.isFinite(engine.player.duration) &&
+              engine.player.duration > 0
+            ) {
+              applyOffset();
+            } else if (!engine.onMetadata) {
+              const onMeta = () => {
+                engine.onMetadata = null;
+                applyOffset();
+              };
+              engine.onMetadata = onMeta;
+              engine.player.addEventListener("loadedmetadata", onMeta, {
+                once: true,
+              });
+            }
+          } else if (
+            Number.isFinite(engine.player.duration) &&
+            engine.player.currentTime > 0.05 &&
+            srcChanged
+          ) {
+            engine.player.currentTime = 0;
+            engine.pendingSeekSec = null;
+          } else {
+            engine.pendingSeekSec = null;
+          }
+
+          const playPromise = engine.player.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                if (engine.playSeq !== seq) return;
+                engine.playInFlight = false;
+                engine.consecutiveErrors = 0;
+                if (engine.disposed || !engine.isPlaying || !powerOnRef.current) {
+                  engine.player.pause();
+                  return;
+                }
+                needsGestureUnlockRef.current = false;
+                updateBroadcastSubtitle();
+              })
+              .catch((err: unknown) => {
+                if (engine.playSeq !== seq) return;
+                engine.playInFlight = false;
+                if (!engine.disposed) {
+                  engine.isPlaying = false;
+                  const errName = (err as { name?: string } | null)?.name;
+                  if (errName === "NotAllowedError") {
+                    needsGestureUnlockRef.current = true;
+                    installUnlockListenersRef.current();
+                  }
+                  publishSubtitle(null);
+                }
+              });
+          } else {
+            engine.playInFlight = false;
+            engine.consecutiveErrors = 0;
+          }
+        } else if (!engine.player.paused) {
+          engine.isPlaying = true;
+        }
+
         updateBroadcastSubtitle();
       },
       [publishSubtitle, updateBroadcastSubtitle],
@@ -2028,7 +2063,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
     const advanceStationProgram = useCallback(
       (isError = false) => {
         const engine = audioEngineRef.current;
-        if (!engine || engine.disposed || engine.activeStationIndex < 0) return;
+        if (!engine || engine.disposed) return;
 
         if (isError) {
           if (!engine.player.getAttribute("src")) return;
@@ -2043,22 +2078,20 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           engine.consecutiveErrors = 0;
         }
 
-        const st = engine.stations[engine.activeStationIndex];
-        if (!st) return;
-
-        if (st.phase === "song") {
-          st.phase = "chime";
-          st.announcementIdx = engine.nextAnnouncementIdx;
+        const prog = engine.program;
+        if (prog.phase === "song") {
+          prog.phase = "chime";
+          prog.announcementIdx = engine.nextAnnouncementIdx;
           engine.nextAnnouncementIdx =
             (engine.nextAnnouncementIdx + 1) % RADIO_ANNOUNCEMENTS.length;
-          st.savedOffsetSec = 0;
-        } else if (st.phase === "chime") {
-          st.phase = "announcement";
-          st.savedOffsetSec = 0;
+          prog.savedOffsetSec = 0;
+        } else if (prog.phase === "chime") {
+          prog.phase = "announcement";
+          prog.savedOffsetSec = 0;
         } else {
-          st.trackIndex = (st.trackIndex + 1) % st.tracks.length;
-          st.phase = "song";
-          st.savedOffsetSec = 0;
+          prog.currentSongSrc = pickNextUnifiedRadioSong(prog.recentPlayedIds);
+          prog.phase = "song";
+          prog.savedOffsetSec = 0;
         }
 
         engine.playSeq += 1;
@@ -2067,10 +2100,9 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         engine.loadedSrcKey = null;
         engine.pendingSeekSec = null;
 
-        const isActive = powerOnRef.current && !duckedRef.current;
-        syncRadioAudio(freqRef.current, masterGainRef.current, isActive);
+        syncUnifiedAudio(0, distanceGainRef.current);
       },
-      [publishSubtitle, syncRadioAudio],
+      [publishSubtitle, syncUnifiedAudio],
     );
 
     useEffect(() => {
@@ -2086,7 +2118,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
             ctx,
             dialCanvas.width,
             dialCanvas.height,
-            freqRef.current,
+            volumePctRef.current,
             powerOnRef.current,
           );
           textures.dial.needsUpdate = true;
@@ -2094,13 +2126,13 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       });
     }, [textures.dial]);
 
-    const syncTuningVisuals = useCallback((forceDialRedraw: boolean) => {
-      const freq = freqRef.current;
+    const syncVolumeVisuals = useCallback((forceDialRedraw: boolean) => {
+      const volPct = volumePctRef.current;
       if (wheelGroupRef.current) {
         wheelGroupRef.current.rotation.z = -wheelAngleRef.current;
       }
       if (needleGroupRef.current) {
-        needleGroupRef.current.position.x = frequencyToNeedleX(freq);
+        needleGroupRef.current.position.x = volumePctToNeedleX(volPct);
       }
 
       const now = performance.now();
@@ -2120,116 +2152,101 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           ctx,
           DIAL_CANVAS_W,
           DIAL_CANVAS_H,
-          freq,
+          volPct,
           powerOnRef.current,
         );
         tex.needsUpdate = true;
       }
     }, []);
 
+    const syncPowerButtonVisuals = useCallback(
+      (nextPower: boolean) => {
+        if (powerBtnMeshRef.current) {
+          powerBtnMeshRef.current.position.set(
+            -0.162,
+            nextPower ? 0.0235 : 0.029,
+            nextPower ? 0.0965 : 0.104,
+          );
+          powerBtnMeshRef.current.rotation.x = nextPower ? 0.19 : 0.05;
+        }
+        if (dialMatRef.current) {
+          dialMatRef.current.color.set("#ffffff");
+        }
+        if (needleTipMatRef.current) {
+          needleTipMatRef.current.emissiveIntensity = nextPower ? 0.65 : 0.05;
+        }
+        if (powerHoveredRef.current) {
+          useGameStore
+            .getState()
+            .setHoveredControlHint(
+              nextPower
+                ? 'RADIO "OKEAN-84" (POWER): Click to Power OFF Radio'
+                : 'RADIO "OKEAN-84" (POWER): Click to Power ON Radio',
+            );
+        }
+        syncVolumeVisuals(true);
+      },
+      [syncVolumeVisuals],
+    );
+
     const setRadioPower = (
       nextPower: boolean,
       cameraPosition?: THREE.Vector3,
     ) => {
       powerOnRef.current = nextPower;
+      useGameStore.getState().setRadioOn(nextPower);
       needsGestureUnlockRef.current = false;
+      syncPowerButtonVisuals(nextPower);
 
-      if (powerBtnMeshRef.current) {
-        powerBtnMeshRef.current.position.set(
-          -0.162,
-          nextPower ? 0.0235 : 0.029,
-          nextPower ? 0.0965 : 0.104,
+      ensureAudioEngine();
+      if (cameraPosition && radioUnitGroupRef.current) {
+        radioUnitGroupRef.current.getWorldPosition(radioWorldPosRef.current);
+        distanceGainRef.current = computeDistanceGain(
+          cameraPosition,
+          radioWorldPosRef.current,
         );
-        powerBtnMeshRef.current.rotation.x = nextPower ? 0.19 : 0.05;
       }
+      syncUnifiedAudio(0, distanceGainRef.current);
+    };
 
-      if (dialMatRef.current) {
-        dialMatRef.current.color.set("#ffffff");
+    const applyVolumePct = (nextPct: number, forceDialRedraw: boolean) => {
+      const clamped = Math.max(0, Math.min(100, Math.round(nextPct)));
+      if (clamped !== volumePctRef.current) {
+        volumePctRef.current = clamped;
+        wheelAngleRef.current = volumePctToKnobAngle(clamped);
+        useGameStore.getState().setRadioVolume(clamped);
+        playVolumeDetentTick(audioEngineRef.current, lastDetentMsRef);
       }
-      if (needleTipMatRef.current) {
-        needleTipMatRef.current.emissiveIntensity = nextPower ? 0.65 : 0.05;
-      }
-
-      if (powerHoveredRef.current) {
+      if (hoveredRef.current) {
         useGameStore
           .getState()
           .setHoveredControlHint(
-            nextPower
-              ? 'RADIO "OKEAN-84" (POWER): Click to Power OFF Radio'
-              : 'RADIO "OKEAN-84" (POWER): Click to Power ON Radio',
+            `RADIO "OKEAN-84" (VOLUME: ${clamped}%): Drag or Scroll to Adjust (0-100%)`,
           );
       }
-
-      syncTuningVisuals(true);
-
-      if (nextPower) {
-        ensureAudioEngine();
-        const gs = useGameStore.getState();
-        const shouldDuck =
-          gs.diagFeedActive || gs.isMusicMuted || gs.phase !== "playing";
-        duckedRef.current = shouldDuck;
-        if (shouldDuck) {
-          masterGainRef.current = 0;
-          syncRadioAudio(freqRef.current, 0, false);
-          return;
-        }
-        let initialGain = masterGainRef.current;
-        if (cameraPosition && radioUnitGroupRef.current) {
-          radioUnitGroupRef.current.getWorldPosition(radioWorldPosRef.current);
-          initialGain = computeDistanceGain(
-            cameraPosition,
-            radioWorldPosRef.current,
-          );
-        }
-        masterGainRef.current = initialGain;
-        syncRadioAudio(freqRef.current, initialGain, true);
-      } else {
-        duckedRef.current = false;
-        syncRadioAudio(freqRef.current, 0, false);
-      }
+      syncVolumeVisuals(forceDialRedraw);
+      syncUnifiedAudio(0, distanceGainRef.current);
     };
 
-    const applyFrequencyDelta = (
-      deltaMHz: number,
-      forceDialRedraw: boolean,
-    ) => {
-      const prev = freqRef.current;
-      const next = THREE.MathUtils.clamp(
-        prev + deltaMHz,
-        RADIO_FREQ_MIN_MHZ,
-        RADIO_FREQ_MAX_MHZ,
-      );
-      const actualDelta = next - prev;
-      freqRef.current = next;
-      wheelAngleRef.current +=
-        (actualDelta / MHZ_PER_WHEEL_REV) * Math.PI * 2;
-      syncTuningVisuals(forceDialRedraw);
-      if (powerOnRef.current && !duckedRef.current) {
-        syncRadioAudio(next, masterGainRef.current, true);
-      }
-    };
-
-    useFrame((state) => {
-      if (!powerOnRef.current) return;
-      const t = state.clock.elapsedTime;
-      if (
-        lastAudioTickRef.current >= 0 &&
-        t - lastAudioTickRef.current < 0.1
-      ) {
-        return;
-      }
-      lastAudioTickRef.current = t;
-
+    useFrame((state, delta) => {
+      const dt = Math.min(Math.max(delta, 0), 0.1);
       const gs = useGameStore.getState();
-      const shouldDuck =
-        gs.diagFeedActive || gs.isMusicMuted || gs.phase !== "playing";
-      if (shouldDuck) {
-        if (!duckedRef.current) {
-          duckedRef.current = true;
-          masterGainRef.current = 0;
-          syncRadioAudio(freqRef.current, 0, false);
+
+      if (gs.radioOn !== powerOnRef.current) {
+        powerOnRef.current = gs.radioOn;
+        syncPowerButtonVisuals(gs.radioOn);
+        if (gs.radioOn && !gs.isMusicMuted) {
+          ensureAudioEngine();
         }
-        return;
+      }
+      if (gs.radioVolume !== volumePctRef.current && !draggingRef.current) {
+        volumePctRef.current = gs.radioVolume;
+        wheelAngleRef.current = volumePctToKnobAngle(gs.radioVolume);
+        syncVolumeVisuals(true);
+      }
+
+      if (gs.phase === "playing" && !gs.isMusicMuted && !audioEngineRef.current) {
+        ensureAudioEngine();
       }
 
       if (radioUnitGroupRef.current) {
@@ -2239,76 +2256,95 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         state.camera.position,
         radioWorldPosRef.current,
       );
-      const nextGain = duckedRef.current
-        ? targetGain
-        : THREE.MathUtils.lerp(masterGainRef.current, targetGain, 0.45);
-      duckedRef.current = false;
-      masterGainRef.current = nextGain;
-      syncRadioAudio(freqRef.current, nextGain, true);
+      distanceGainRef.current = THREE.MathUtils.lerp(
+        distanceGainRef.current,
+        targetGain,
+        Math.min(1, dt * 8),
+      );
+
+      syncUnifiedAudio(dt, distanceGainRef.current);
     });
 
     useEffect(() => {
       let unmounted = false;
       silenceAllLegacyGlobalBgm();
 
+      const gsInit = useGameStore.getState();
+      powerOnRef.current = gsInit.radioOn;
+      volumePctRef.current = gsInit.radioVolume;
+      wheelAngleRef.current = volumePctToKnobAngle(gsInit.radioVolume);
+      radioFadeRef.current = gsInit.radioOn ? 1 : 0;
+      ambientFadeRef.current = 0;
+      syncPowerButtonVisuals(gsInit.radioOn);
+
       if (typeof document !== "undefined" && document.fonts?.ready) {
         void document.fonts.ready.then(() => {
           if (!unmounted) {
-            syncTuningVisuals(true);
+            syncVolumeVisuals(true);
           }
         });
       }
 
-      if (powerOnRef.current) {
-        const eng = ensureAudioEngine();
-        const gs = useGameStore.getState();
-        const shouldDuck =
-          gs.diagFeedActive || gs.isMusicMuted || gs.phase !== "playing";
-        duckedRef.current = shouldDuck;
-        if (eng && !shouldDuck) {
-          syncRadioAudio(freqRef.current, masterGainRef.current, true);
-        }
+      ensureAudioEngine();
+      registerKomradControlObject("radioPower", powerBtnMeshRef.current);
+      registerKomradControlObject("radioVolume", wheelGroupRef.current, [
+        0,
+        0,
+        0.033,
+      ]);
+      if (gsInit.phase === "playing" && !gsInit.isMusicMuted && !gsInit.diagFeedActive) {
+        syncUnifiedAudio(0, distanceGainRef.current);
       }
 
       const removeUnlockListeners = () => {
+        if (!gestureUnlockAttachedRef.current) return;
+        gestureUnlockAttachedRef.current = false;
         window.removeEventListener("pointerdown", unlockRadioOnGesture);
         window.removeEventListener("keydown", unlockRadioOnGesture);
       };
 
-      function unlockRadioOnGesture() {
-        removeUnlockListeners();
-        if (unmounted || !powerOnRef.current) return;
-        const gs = useGameStore.getState();
-        const shouldDuck =
-          gs.diagFeedActive || gs.isMusicMuted || gs.phase !== "playing";
-        if (shouldDuck) return;
+      const installUnlockListeners = () => {
+        if (unmounted || gestureUnlockAttachedRef.current) return;
+        gestureUnlockAttachedRef.current = true;
+        window.addEventListener("pointerdown", unlockRadioOnGesture, {
+          passive: true,
+        });
+        window.addEventListener("keydown", unlockRadioOnGesture);
+      };
+      installUnlockListenersRef.current = installUnlockListeners;
 
-        duckedRef.current = false;
-        needsGestureUnlockRef.current = false;
+      function unlockRadioOnGesture() {
+        if (unmounted) {
+          removeUnlockListeners();
+          return;
+        }
+        const gs = useGameStore.getState();
         const eng = ensureAudioEngine();
         if (!eng || eng.disposed) return;
+
+        needsGestureUnlockRef.current = false;
         if (eng.ctx.state === "suspended") {
           void eng.ctx.resume().catch(() => {});
         }
-        const nearStation = eng.stations.some(
-          (st) => Math.abs(freqRef.current - st.freqMHz) <= STATION_WAKE_HALF_MHZ,
-        );
-        if (nearStation && eng.player.paused && !eng.playInFlight) {
-          eng.isPlaying = false;
-          syncRadioAudio(freqRef.current, masterGainRef.current, true);
+
+        const shouldDuck =
+          gs.diagFeedActive || gs.isMusicMuted || gs.phase !== "playing";
+        if (shouldDuck) {
+          return;
+        }
+
+        syncUnifiedAudio(0.05, distanceGainRef.current);
+        if (eng.ctx.state === "running" && !needsGestureUnlockRef.current) {
+          removeUnlockListeners();
         }
       }
 
-      window.addEventListener("pointerdown", unlockRadioOnGesture, {
-        once: true,
-        passive: true,
-      });
-      window.addEventListener("keydown", unlockRadioOnGesture, {
-        once: true,
-      });
+      installUnlockListeners();
 
       return () => {
         unmounted = true;
+        registerKomradControlObject("radioPower", null);
+        registerKomradControlObject("radioVolume", null);
         removeUnlockListeners();
         if (wheelFlushTimerRef.current) {
           window.clearTimeout(wheelFlushTimerRef.current);
@@ -2339,11 +2375,19 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         (window as RadioSingletonWindow).__mipActiveRadioEngineCleanup =
           undefined;
       };
-    }, [ensureAudioEngine, publishSubtitle, syncRadioAudio, syncTuningVisuals]);
+    }, [
+      ensureAudioEngine,
+      publishSubtitle,
+      syncPowerButtonVisuals,
+      syncUnifiedAudio,
+      syncVolumeVisuals,
+    ]);
 
     const handlePowerButtonPointerDown = (e: ThreeEvent<PointerEvent>) => {
       if (useCameraLookStore.getState().isFreeLookMode) return;
       e.stopPropagation();
+      notifyPlayerControlInteraction("radioPower", true);
+      notifyPlayerControlInteraction("radioPower", false);
       setRadioPower(!powerOnRef.current, e.camera.position);
     };
 
@@ -2375,35 +2419,22 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       if (eng.ctx.state === "suspended") {
         void eng.ctx.resume().catch(() => {});
       }
-      if (eng.activeStationIndex < 0) {
-        const nearestIdx = eng.stations.findIndex(
-          (st) => Math.abs(freqRef.current - st.freqMHz) <= STATION_WAKE_HALF_MHZ,
-        );
-        if (nearestIdx >= 0) {
-          eng.activeStationIndex = nearestIdx;
-        }
-      }
-      if (eng.activeStationIndex >= 0) {
-        advanceStationProgram(false);
-      }
+      advanceStationProgram(false);
     };
 
-    const handleTuningWheelPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    const handleVolumeKnobPointerDown = (e: ThreeEvent<PointerEvent>) => {
       if (useCameraLookStore.getState().isFreeLookMode) return;
       e.stopPropagation();
       dragCleanupRef.current?.();
       needsGestureUnlockRef.current = false;
 
-      if (!powerOnRef.current) {
-        setRadioPower(true, e.camera.position);
-      } else {
-        const eng = audioEngineRef.current;
-        if (eng && eng.ctx.state === "suspended") {
-          void eng.ctx.resume().catch(() => {});
-        }
+      const eng = ensureAudioEngine();
+      if (eng && eng.ctx.state === "suspended") {
+        void eng.ctx.resume().catch(() => {});
       }
 
       draggingRef.current = true;
+      notifyPlayerControlInteraction("radioVolume", true);
       document.body.style.cursor = "grabbing";
 
       const r3fTarget = e.target as unknown as {
@@ -2433,6 +2464,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       let prevAngle = hasValidAngle
         ? Math.atan2(prevY - centerY, prevX - centerX)
         : 0;
+      let accumPct = volumePctRef.current;
 
       const handleMove = (ev: PointerEvent) => {
         const stepDX = ev.clientX - prevX;
@@ -2443,7 +2475,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         const rx = ev.clientX - centerX;
         const ry = ev.clientY - centerY;
         const r = Math.hypot(rx, ry);
-        const fineScale = ev.shiftKey ? 0.3 : 1.0;
+        const fineScale = ev.shiftKey ? 0.35 : 1.0;
 
         let dAngle = 0;
         if (r >= 14) {
@@ -2451,30 +2483,34 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           if (!hasValidAngle) {
             hasValidAngle = true;
             prevAngle = curAngle;
-            dAngle = (stepDX - stepDY) * 0.016;
+            dAngle = (stepDX - stepDY) * 0.022;
           } else {
             let dTheta = curAngle - prevAngle;
             while (dTheta > Math.PI) dTheta -= Math.PI * 2;
             while (dTheta < -Math.PI) dTheta += Math.PI * 2;
             prevAngle = curAngle;
 
-            // Blend seamlessly between circular swivel and linear drag
+            // Blend seamlessly between circular rotary swivel and vertical/horizontal drag
             const radialDot = Math.abs((rx * stepDX + ry * stepDY) / r);
             const tangDot = Math.abs((-ry * stepDX + rx * stepDY) / r);
             if (tangDot >= radialDot * 0.45 && Math.abs(dTheta) < 0.7) {
               dAngle = dTheta;
             } else {
-              dAngle = (stepDX - stepDY) * 0.016;
+              dAngle = (stepDX - stepDY) * 0.022;
             }
           }
         } else {
           hasValidAngle = false;
-          dAngle = (stepDX - stepDY) * 0.016;
+          dAngle = (stepDX - stepDY) * 0.022;
         }
 
-        const deltaMHz =
-          ((dAngle * fineScale) / (Math.PI * 2)) * MHZ_PER_WHEEL_REV;
-        applyFrequencyDelta(deltaMHz, false);
+        const sweepSpan = VOLUME_KNOB_ANGLE_MAX - VOLUME_KNOB_ANGLE_MIN;
+        const dPct = ((dAngle * fineScale) / sweepSpan) * 100;
+        accumPct = THREE.MathUtils.clamp(accumPct + dPct, 0, 100);
+        const stepped = Math.round(accumPct);
+        if (stepped !== volumePctRef.current) {
+          applyVolumePct(stepped, false);
+        }
       };
 
       const finishDrag = () => {
@@ -2484,12 +2520,13 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         dragCleanupRef.current = null;
         r3fTarget?.releasePointerCapture?.(e.pointerId);
         draggingRef.current = false;
+        notifyPlayerControlInteraction("radioVolume", false);
         document.body.style.cursor = hoveredRef.current
           ? "grab"
           : powerHoveredRef.current || broadcastHoveredRef.current
             ? "pointer"
             : "auto";
-        syncTuningVisuals(true);
+        syncVolumeVisuals(true);
       };
 
       dragCleanupRef.current = finishDrag;
@@ -2498,20 +2535,19 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       window.addEventListener("pointercancel", finishDrag);
     };
 
-    const handleTuningWheelScroll = (e: ThreeEvent<WheelEvent>) => {
+    const handleVolumeKnobScroll = (e: ThreeEvent<WheelEvent>) => {
       if (useCameraLookStore.getState().isFreeLookMode) return;
       e.stopPropagation();
       e.nativeEvent?.stopImmediatePropagation?.();
-      const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
-      const stepMHz = (e.deltaY < 0 ? 1 : -1) * (fine ? 0.03 : 0.15);
-      applyFrequencyDelta(stepMHz, false);
+      const deltaPct = e.deltaY < 0 ? 1 : -1;
+      applyVolumePct(volumePctRef.current + deltaPct, false);
 
       if (wheelFlushTimerRef.current) {
         window.clearTimeout(wheelFlushTimerRef.current);
       }
       wheelFlushTimerRef.current = window.setTimeout(() => {
         wheelFlushTimerRef.current = 0;
-        syncTuningVisuals(true);
+        syncVolumeVisuals(true);
       }, DIAL_REDRAW_INTERVAL_MS + 8);
     };
 
@@ -3152,8 +3188,8 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
             </mesh>
             <mesh
               ref={powerBtnMeshRef}
-              position={[-0.162, 0.0235, 0.0965]}
-              rotation={[0.19, 0, 0]}
+              position={[-0.162, 0.029, 0.104]}
+              rotation={[0.05, 0, 0]}
               material={mats.crimson}
               castShadow={false}
               raycast={NOOP_RAYCAST}
@@ -3374,7 +3410,11 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           {/* Physical 3D Red-Tipped Sliding Dial Needle (`z = 0.103`, +0.008m proud of dial scale) */}
           <group
             ref={needleGroupRef}
-            position={[frequencyToNeedleX(INITIAL_FREQ_MHZ), DIAL_CENTER_Y, 0.103]}
+            position={[
+              volumePctToNeedleX(DEFAULT_RADIO_VOLUME_PCT),
+              DIAL_CENTER_Y,
+              0.103,
+            ]}
           >
             {/* Brass top pulley carriage */}
             <mesh
@@ -3405,7 +3445,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
                 ref={needleTipMatRef}
                 color="#ff2a2a"
                 emissive="#ff2a2a"
-                emissiveIntensity={0.65}
+                emissiveIntensity={0.05}
                 roughness={0.35}
                 metalness={0.1}
               />
@@ -3413,8 +3453,8 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           </group>
 
           {/* ============================================================
-              3. INTERACTIVE 3D KNURLED BAKELITE & BRASS TUNING WHEEL
-              (Tuning wheel, BCAST & POWER buttons are the ONLY raycastable colliders!)
+              3. INTERACTIVE 3D KNURLED BAKELITE & BRASS VOLUME WHEEL (0%..100%)
+              (Volume wheel, BCAST & POWER buttons are the ONLY raycastable colliders!)
              ============================================================ */}
           <mesh
             position={[0.158, 0.114, 0.102]}
@@ -3442,7 +3482,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
               useGameStore
                 .getState()
                 .setHoveredControlHint(
-                  'RADIO "OKEAN-84" (TUNING FM): Drag Tuning Wheel or Scroll (66.00-74.00 MHZ)',
+                  `RADIO "OKEAN-84" (VOLUME: ${volumePctRef.current}%): Drag or Scroll to Adjust (0-100%)`,
                 );
             }}
             onPointerOut={(e) => {
@@ -3456,10 +3496,10 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
               }
               useGameStore.getState().setHoveredControlHint(null);
             }}
-            onWheel={handleTuningWheelScroll}
-            onPointerDown={handleTuningWheelPointerDown}
+            onWheel={handleVolumeKnobScroll}
+            onPointerDown={handleVolumeKnobPointerDown}
           >
-            {/* Single Clean Raycast Hitbox Around Tuning Wheel */}
+            {/* Single Clean Raycast Hitbox Around Volume Wheel */}
             <mesh
               position={[0, 0, 0.016]}
               rotation={[Math.PI / 2, 0, 0]}
@@ -3479,10 +3519,10 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
               <cylinderGeometry args={[0.048, 0.05, 0.008, 20]} />
             </mesh>
 
-            {/* Rotating Knurled Bakelite & Brass Tuning Wheel */}
+            {/* Rotating Knurled Bakelite & Brass Volume Wheel */}
             <group
               ref={wheelGroupRef}
-              rotation={[0, 0, -INITIAL_WHEEL_ANGLE]}
+              rotation={[0, 0, -volumePctToKnobAngle(DEFAULT_RADIO_VOLUME_PCT)]}
             >
               <mesh
                 position={[0, 0, 0.016]}

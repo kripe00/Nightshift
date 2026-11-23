@@ -761,11 +761,11 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
     );
     const bankAStatusTex = makeSmallTagTex(
       "CELL TEMP: NOMINAL",
-      "500 MWH BANK A",
+      "1500 MWH BANK A",
     );
     const bankBStatusTex = makeSmallTagTex(
       "CELL TEMP: NOMINAL",
-      "500 MWH BANK B",
+      "1500 MWH BANK B",
     );
     const chargeHeaderTex = makeSmallTagTex("CHARGE %");
     const bankFootTex = makeSmallTagTex("400V DC BUS");
@@ -1131,7 +1131,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
     const g = useGameStore.getState();
     g.setHoveredDiagnosticId("grid");
     g.setHoveredControlHint(
-      "BATTERY - GRID AUTO TELEMETRY (0–1000 MW): Copper busbars automatically discharge Banks A & B to supply active Unit A substation levers",
+      "BATTERY - GRID AUTO TELEMETRY (0–1000 MW / 3000 MWh): Copper busbars automatically discharge Banks A & B to supply active Unit A substation levers",
     );
   };
 

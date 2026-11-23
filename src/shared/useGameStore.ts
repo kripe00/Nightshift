@@ -1,6 +1,8 @@
 // Shared Contract: Cross-module Zustand store
 import { create } from 'zustand'
 import {
+  INITIAL_BATTERY_STORED_MWH,
+  MAX_BATTERY_CAPACITY_MWH,
   createColdStartState,
   evaluateTutorial,
   stepReactorSimulation,
@@ -40,6 +42,7 @@ import {
 } from './komradTutorialVox'
 import { pointerLockInteraction } from './pointerLockState'
 import type {
+  ActivePost84PowerOrder,
   AppliedStampMark,
   CameraStation,
   CrisisCoachId,
@@ -63,6 +66,71 @@ const SECTOR_TO_SUB_ID: Record<SectorNodeId, number> = {
   kgb: 4,
   vodka: 5,
   steel: 6,
+}
+
+const SUB_ID_TO_SECTOR: Record<number, SectorNodeId> = {
+  1: 'pripyat',
+  2: 'duga',
+  3: 'kolkhoz',
+  4: 'kgb',
+  5: 'vodka',
+  6: 'steel',
+}
+
+function snapSubstationMW(val: number): number {
+  return Math.max(0, Math.min(250, Math.round(val / 25) * 25))
+}
+
+function applyPost84OrderToSubstations(
+  substations: readonly SubstationQuota[],
+  baseTargets: Record<SectorNodeId, number>,
+  order: ActivePost84PowerOrder | null
+): SubstationQuota[] {
+  const hasAnyMinRule =
+    order !== null &&
+    (order.minTotalMW !== undefined ||
+      (order.sectorMinMW !== undefined &&
+        Object.keys(order.sectorMinMW).length > 0))
+
+  return substations.map((sub) => {
+    const sector = SUB_ID_TO_SECTOR[sub.id]
+    const base = snapSubstationMW(sector ? baseTargets[sector] : sub.targetMW)
+    if (!order || !sector) {
+      return {
+        ...sub,
+        targetMW: base,
+        quotaMode: undefined,
+      }
+    }
+    const minReq = order.sectorMinMW?.[sector]
+    const maxReq = order.sectorMaxMW?.[sector]
+    if (typeof minReq === 'number') {
+      return {
+        ...sub,
+        targetMW: Math.max(base, snapSubstationMW(minReq)),
+        quotaMode: 'min',
+      }
+    }
+    if (typeof maxReq === 'number') {
+      return {
+        ...sub,
+        targetMW: Math.min(base, snapSubstationMW(maxReq)),
+        quotaMode: 'max',
+      }
+    }
+    if (hasAnyMinRule) {
+      return {
+        ...sub,
+        targetMW: base,
+        quotaMode: 'min',
+      }
+    }
+    return {
+      ...sub,
+      targetMW: base,
+      quotaMode: undefined,
+    }
+  })
 }
 
 type MandateComplianceListener = (
@@ -306,7 +374,9 @@ function mapReactorToGameStateFields(
     houseLoadMW: Number(r.houseLoadMW.toFixed(1)),
     energyCreatedMW: Math.round(r.energyCreatedMW),
     batteryStoredMWh: Number(r.batteryStoredMWh.toFixed(1)),
-    batteryStoredPct: Math.round(Math.max(0, Math.min(100, r.batteryStoredMWh / 10))),
+    batteryStoredPct: Math.round(
+      Math.max(0, Math.min(100, (r.batteryStoredMWh / MAX_BATTERY_CAPACITY_MWH) * 100))
+    ),
     batteryOutputValve: Number(r.batteryOutputValve.toFixed(3)),
     energyDemandMW: Math.round(r.energyDemandMW),
     wetSteamPenalty: Number(r.wetSteamSeverity.toFixed(2)),
@@ -584,18 +654,18 @@ const MANDATE_BLUEPRINTS: Array<Omit<OperationalMandate, 'id' | 'fulfilled'>> = 
   },
   {
     code: 'DEFENSE_HZ',
-    title: 'MANDATE 19-B // DUGA-1 OTH RADAR & KGB-07 SWEEP',
-    requirementText: 'SET [2. DUGA-1] 200 MW & [4. KGB-07] 150 MW & LOCK GRID AT 50.0 HZ',
+    title: 'MANDATE 19-B // DUGA-1 OTH RADAR & KGB-07 SURGE',
+    requirementText: 'DELIVER [2. DUGA-1] >= 200 MW & [4. KGB-07] >= 150 MW ON UNIT A',
   },
   {
     code: 'PUMP_B_SEAL',
-    title: 'MANDATE 71-K // CONTAINMENT LOCK & PUMP FLOW',
-    requirementText: 'ENGAGE ALL 4 MCP PUMPS ON UNIT B & MAINTAIN DRUM LEVEL AT 0 MM',
+    title: 'MANDATE 71-K // SIX-SECTOR PEAK DISPATCH QUOTA',
+    requirementText: 'DELIVER >= 750 MW TOTAL ACROSS ALL 6 UNIT A SUBSTATION LEVERS',
   },
   {
     code: 'FACILITY_BUBBLER',
-    title: 'MANDATE 88-B // RED OCTOBER VODKA & H2O SUPPLY',
-    requirementText: 'SET [5. VODKA] 150 MW (UNIT A) & 85% H2O ON K.O.M.P.A.S.-04',
+    title: 'MANDATE 88-B // RED OCTOBER VODKA & STEEL SURGE',
+    requirementText: 'DELIVER [5. VODKA] >= 175 MW & [6. STEEL] >= 150 MW ON UNIT A',
   },
 ]
 
@@ -639,6 +709,7 @@ let brownoutMismatchSeconds = 0
 let prevAllSubstationsOk = true
 let mandateStableSeconds = 0
 let surplusOverloadSeconds = 0
+let preOrderSectorTargets: Record<SectorNodeId, number> | null = null
 
 const VOLKOV_HASSLE_INITIAL_DELAY_SEC = 13.5
 const VOLKOV_HASSLE_REPEAT_SEC = 16.5
@@ -683,6 +754,7 @@ function resetKomradTrackers(): void {
   prevAllSubstationsOk = true
   mandateStableSeconds = 0
   surplusOverloadSeconds = 0
+  preOrderSectorTargets = null
 }
 
 function createNextMandate(): OperationalMandate {
@@ -1081,6 +1153,34 @@ const INITIAL_MAPPED = mapReactorToGameStateFields(
   'AWAITING_VOLKOV_MAIL'
 )
 
+export const RADIO_SUBTITLE_PRIORITY_THRESHOLD = 35
+
+export function doesRadioDominateSubtitles(
+  radioOn: boolean,
+  radioVolume: number,
+  radioSubtitle: string | null | undefined
+): boolean {
+  return Boolean(
+    radioOn &&
+      radioVolume >= RADIO_SUBTITLE_PRIORITY_THRESHOLD &&
+      radioSubtitle &&
+      radioSubtitle.trim().length > 0
+  )
+}
+
+export function hasAudibleRadioSubtitle(
+  radioOn: boolean,
+  radioVolume: number,
+  radioSubtitle: string | null | undefined
+): boolean {
+  return Boolean(
+    radioOn &&
+      radioVolume > 0 &&
+      radioSubtitle &&
+      radioSubtitle.trim().length > 0
+  )
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   ...INITIAL_MAPPED,
   phase: 'playing',
@@ -1097,6 +1197,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   treasonStrikes: 0,
   lastDecisionFeedback: INITIAL_MAPPED.tutorialPrompt.header,
   activeMandate: null,
+  activePost84Order: null,
   tutorialHintsHidden: false,
   activeCrisisCoach: null,
   dismissedCrisisIds: [],
@@ -1130,7 +1231,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   hoveredDiagnosticId: null,
   hoveredControlHint: null,
   diagFeedActive: false,
+  radioOn: false,
+  radioVolume: 65,
   radioBroadcastSubtitle: null,
+  komradSubtitle: null,
 
   setShiftControlReady: (ready: boolean) => {
     set((state) =>
@@ -1274,7 +1378,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         kolkhozWater: substationId === 3 ? clamped : state.kolkhozWater,
         vodkaWater: substationId === 5 ? clamped : state.vodkaWater,
       }
-      stepReactorSimulation(nextReactor, 0.001)
+      stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       return {
@@ -1378,7 +1482,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ],
         houseLoadMW: 25,
         energyCreatedMW: 600,
-        batteryStoredMWh: 650,
+        batteryStoredMWh: INITIAL_BATTERY_STORED_MWH,
         batteryOutputValve: 0.60,
         energyDemandMW: 600,
         totalElectricalMW: 600,
@@ -1421,6 +1525,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         redlineInstability: 0,
         treasonStrikes: 0,
         activeMandate: null,
+        activePost84Order: null,
         gridTransientImpulse: 0,
         steamTransientImpulse: 0,
         voltageDipIntensity: 0,
@@ -1476,6 +1581,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         phase: 'playing',
         isSeatedAtDesk: false,
         activeStation: 'overview',
+        activePost84Order: null,
         tutorialHintsHidden: false,
         activeCrisisCoach: null,
         lastDecisionFeedback: mapped.tutorialPrompt.header,
@@ -1515,8 +1621,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         nextReactor.mcpActive = [true, true, true, true]
         nextReactor.sealToggles = [true, true, true]
         nextReactor.pumpThrottle = [60, 60]
-        nextReactor.feedwaterValve = 0.5
-        nextReactor.nitrogenLoopValve = 50
       } else if (nextTargetPhase === 'STEP_6_BASELINE_600MW') {
         nextReactor.mcpActive = [true, true, true, true]
         nextReactor.sealToggles = [true, true, true]
@@ -1527,7 +1631,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         nextReactor.thermalPower = Math.max(nextReactor.thermalPower, 1920)
         nextReactor.coreTemp = Math.max(nextReactor.coreTemp, 380)
         nextReactor.drumPressure = Math.max(nextReactor.drumPressure, 58)
-        nextReactor.batteryStoredMWh = Math.max(nextReactor.batteryStoredMWh, 450)
+        nextReactor.batteryStoredMWh = Math.max(
+          nextReactor.batteryStoredMWh,
+          INITIAL_BATTERY_STORED_MWH
+        )
       } else if (nextTargetPhase === 'STEP_8_XENON_DRILL') {
         nextReactor.substations = nextReactor.substations.map((s) => ({
           ...s,
@@ -1617,6 +1724,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       komradOpeningDispatched: false,
       isSeatedAtDesk: false,
       activeMandate: null,
+      activePost84Order: null,
       lastDecisionFeedback: mapped.tutorialPrompt.header,
       selectedH2OSubstationId: 1,
       hzOutOfBoundsSeconds: 0,
@@ -1633,7 +1741,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       hoveredDiagnosticId: null,
       hoveredControlHint: null,
       diagFeedActive: false,
+      radioOn: false,
       radioBroadcastSubtitle: null,
+      komradSubtitle: null,
       terminalEntries: [...state.terminalEntries.slice(-24), entry],
       terminalLogs: [
         ...state.terminalLogs.slice(-24),
@@ -1665,6 +1775,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       komradOpeningDispatched: false,
       isSeatedAtDesk: false,
       activeMandate: null,
+      activePost84Order: null,
       lastDecisionFeedback: mapped.tutorialPrompt.header,
       selectedH2OSubstationId: 1,
       treasonStrikes: 0,
@@ -1675,7 +1786,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       shiftRunId: state.shiftRunId + 1,
       hoveredDiagnosticId: null,
       diagFeedActive: false,
+      radioOn: false,
       radioBroadcastSubtitle: null,
+      komradSubtitle: null,
       vodkaDroughtTimer: 0,
       redlineInstability: 0,
       isInspectingDesk: false,
@@ -1795,6 +1908,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setFeedwaterValve: (valveRatioOrPct: number) => {
+    if (!Number.isFinite(valveRatioOrPct)) return
     set((state) => {
       const normalized =
         valveRatioOrPct > 1.0001 ? valveRatioOrPct / 100 : valveRatioOrPct
@@ -1816,14 +1930,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       nextMcp[pumpIdx] =
         typeof active === 'boolean' ? active : !nextMcp[pumpIdx]
       const activeCount = nextMcp.filter(Boolean).length
-      const nextFeedwater =
-        activeCount >= 2 && state.feedwaterValve < 0.40
-          ? 0.50
-          : state.feedwaterValve
-      const nextNitrogen =
-        activeCount >= 2 && state.nitrogenLoopValve < 40
-          ? 50
-          : state.nitrogenLoopValve
       const nextThrottle: [number, number] = [
         state.pumpThrottle[0],
         state.pumpThrottle[1],
@@ -1849,8 +1955,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...extractReactorState(state),
         mcpActive: nextMcp,
         pumpThrottle: nextThrottle,
-        feedwaterValve: nextFeedwater,
-        nitrogenLoopValve: nextNitrogen,
         sealToggles: nextSeals,
       }
       const prevPhase = state.tutorialPhase
@@ -1913,7 +2017,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         batteryOutputValve: clamped,
         turbines: nextTurbines,
       }
-      stepReactorSimulation(nextReactor, 0.001)
+      stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       return withTutorialTransitionFeedback(state, prevPhase, mapped)
@@ -1958,6 +2062,67 @@ export const useGameStore = create<GameState>((set, get) => ({
     state.setSectorPower(sector, current + deltaMW)
   },
 
+  setActivePost84Order: (order: ActivePost84PowerOrder | null) => {
+    set((state) => {
+      const hasAnyQuotaMode = state.substations.some(
+        (sub) => sub.quotaMode !== undefined
+      )
+      if (
+        order === null &&
+        state.activePost84Order === null &&
+        preOrderSectorTargets === null &&
+        !hasAnyQuotaMode
+      ) {
+        return state
+      }
+
+      if (order === null) {
+        const restoreTargets = preOrderSectorTargets ?? state.targetSectorMW
+        const nextSubstations = applyPost84OrderToSubstations(
+          state.substations,
+          restoreTargets,
+          null
+        )
+        preOrderSectorTargets = null
+        const nextReactor: ReactorState = {
+          ...extractReactorState(state),
+          substations: nextSubstations,
+        }
+        stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
+        const mapped = mapReactorToGameStateFields(
+          nextReactor,
+          state.tutorialPhase
+        )
+        return {
+          ...mapped,
+          activePost84Order: null,
+        }
+      }
+
+      const baseTargets: Record<SectorNodeId, number> =
+        preOrderSectorTargets ?? { ...state.targetSectorMW }
+      preOrderSectorTargets = { ...baseTargets }
+      const nextSubstations = applyPost84OrderToSubstations(
+        state.substations,
+        baseTargets,
+        order
+      )
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        substations: nextSubstations,
+      }
+      stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
+      const mapped = mapReactorToGameStateFields(
+        nextReactor,
+        state.tutorialPhase
+      )
+      return {
+        ...mapped,
+        activePost84Order: order,
+      }
+    })
+  },
+
   setSectorPower: (sector: SectorNodeId, targetMW: number) => {
     set((state) => {
       if (state.komradOverrideLocked) return state
@@ -1990,7 +2155,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? Math.max(state.voltageDipIntensity, Math.min(0.18, Math.abs(deltaMW) / 150))
           : state.voltageDipIntensity
 
-      stepReactorSimulation(nextReactor, 0.001)
+      stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       return {
@@ -2015,22 +2180,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       ]
       nextThrottle[pumpIndex] = target ? Math.max(60, nextThrottle[pumpIndex]) : 0
       const activeCount = nextMcp.filter(Boolean).length
-      const nextFeedwater =
-        activeCount >= 2 && state.feedwaterValve < 0.40
-          ? 0.50
-          : state.feedwaterValve
-      const nextNitrogen =
-        activeCount >= 2 && state.nitrogenLoopValve < 40
-          ? 50
-          : state.nitrogenLoopValve
       const nextSeals: [boolean, boolean, boolean] =
         activeCount >= 2 ? [true, true, true] : [...state.sealToggles] as [boolean, boolean, boolean]
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         mcpActive: nextMcp,
         pumpThrottle: nextThrottle,
-        feedwaterValve: nextFeedwater,
-        nitrogenLoopValve: nextNitrogen,
         sealToggles: nextSeals,
       }
       const prevPhase = state.tutorialPhase
@@ -2058,22 +2213,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       ]
       nextThrottle[pumpIndex] = clamped
       const activeCount = nextMcp.filter(Boolean).length
-      const nextFeedwater =
-        activeCount >= 2 && state.feedwaterValve < 0.40
-          ? 0.50
-          : state.feedwaterValve
-      const nextNitrogen =
-        activeCount >= 2 && state.nitrogenLoopValve < 40
-          ? 50
-          : state.nitrogenLoopValve
       const nextSeals: [boolean, boolean, boolean] =
         activeCount >= 2 ? [true, true, true] : [...state.sealToggles] as [boolean, boolean, boolean]
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         mcpActive: nextMcp,
         pumpThrottle: nextThrottle,
-        feedwaterValve: nextFeedwater,
-        nitrogenLoopValve: nextNitrogen,
         sealToggles: nextSeals,
       }
       const prevPhase = state.tutorialPhase
@@ -2099,20 +2244,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const delta = nextRods - state.controlRods
       if (Math.abs(delta) < 0.0005) return state
       const shouldPrimeStartupFw =
-        state.tutorialPhase === 'STEP_1_COOLING' ||
-        state.tutorialPhase === 'STEP_2_PULL_RODS'
-      const nextFeedwater =
-        shouldPrimeStartupFw &&
+        state.tutorialPhase === 'STEP_2_PULL_RODS' &&
         nextRods >= 0.20 &&
-        state.feedwaterValve < 0.40
-          ? 0.50
-          : state.feedwaterValve
-      const nextNitrogen =
-        shouldPrimeStartupFw &&
-        nextRods >= 0.20 &&
-        state.nitrogenLoopValve < 40
-          ? 50
-          : state.nitrogenLoopValve
+        state.feedwaterValve <= 0.01 &&
+        state.nitrogenLoopValve <= 1
+      const nextFeedwater = shouldPrimeStartupFw ? 0.50 : state.feedwaterValve
+      const nextNitrogen = shouldPrimeStartupFw ? 50 : state.nitrogenLoopValve
       const boronHydraulicCost =
         state.tutorialPhase === 'COMPLETED' ? Math.abs(delta) * 14 : Math.abs(delta) * 4
       const nextBoronTank = Math.max(
@@ -2256,6 +2393,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setNitrogenLoopValve: (valvePct: number) => {
+    if (!Number.isFinite(valvePct)) return
     set((state) => {
       const clampedPct = Math.max(0, Math.min(100, Number(valvePct.toFixed(1))))
       const nextReactor: ReactorState = {
@@ -2299,22 +2437,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         nextMcp[toggleIndex] = target
       }
 
-      const activeCount = nextMcp.filter(Boolean).length
-      const nextFeedwater =
-        activeCount >= 2 && state.feedwaterValve < 0.40
-          ? 0.50
-          : state.feedwaterValve
-      const nextNitrogen =
-        activeCount >= 2 && state.nitrogenLoopValve < 40
-          ? 50
-          : state.nitrogenLoopValve
-
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         mcpActive: nextMcp,
         sealToggles: nextSeals,
-        feedwaterValve: nextFeedwater,
-        nitrogenLoopValve: nextNitrogen,
       }
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
@@ -2328,8 +2454,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...extractReactorState(s),
         mcpActive: [true, true, true, true],
         sealToggles: [true, true, true],
-        feedwaterValve: Math.max(s.feedwaterValve, 0.50),
-        nitrogenLoopValve: Math.max(s.nitrogenLoopValve, 50),
       }
       const prevPhase = s.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
@@ -2384,7 +2508,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...extractReactorState(state),
         ventilationActive: nextVent,
       }
-      stepReactorSimulation(nextReactor, 0.001)
+      stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const mapped = mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
       return {
         ...mapped,
@@ -2401,7 +2525,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...extractReactorState(state),
         avrActive: nextAvr,
       }
-      stepReactorSimulation(nextReactor, 0.001)
+      stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const mapped = mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
       return {
         ...mapped,
@@ -2418,7 +2542,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...extractReactorState(state),
         kgbLineActive: nextKgb,
       }
-      stepReactorSimulation(nextReactor, 0.001)
+      stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const prevPhase = state.tutorialPhase
       const mapped = mapReactorToGameStateFields(nextReactor, prevPhase)
       return {
@@ -2436,7 +2560,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...extractReactorState(state),
         condenserVacActive: nextVac,
       }
-      stepReactorSimulation(nextReactor, 0.001)
+      stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const mapped = mapReactorToGameStateFields(nextReactor, state.tutorialPhase)
       return {
         ...mapped,
@@ -2585,17 +2709,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         nextTargetDefense = nextTargetSector.duga + nextTargetSector.kgb
         nextTargetVodka = nextTargetSector.vodka + nextTargetSector.steel
 
-        const subTargetById: Record<number, number> = {
-          1: nextTargetSector.pripyat,
-          2: nextTargetSector.duga,
-          3: nextTargetSector.kolkhoz,
-          4: nextTargetSector.kgb,
-          5: nextTargetSector.vodka,
-          6: nextTargetSector.steel,
+        const baseTargetsAfterPaper = { ...nextTargetSector }
+        if (preOrderSectorTargets !== null) {
+          preOrderSectorTargets = baseTargetsAfterPaper
         }
-        nextSubstations = state.substations.map((s) => ({
+        nextSubstations = applyPost84OrderToSubstations(
+          state.substations,
+          baseTargetsAfterPaper,
+          state.activePost84Order
+        ).map((s) => ({
           ...s,
-          targetMW: subTargetById[s.id] ?? s.targetMW,
           maxMW: 250,
         }))
 
@@ -2636,10 +2759,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
         const plantGuidance =
           totalDeltaMW >= 25
-            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): 1)[A-2] RAISE RODS & [B] MATCH FEEDWATER -> 2)[A] SET MW LEVERS (UNIT C AUTO-DRAINS BANKS)!`
+            ? `SURGE TO ${newTotalMW} MWe (+${totalDeltaMW} MWe): RAISE UNIT A SECTOR MW LEVERS (UNIT C BATTERY BUFFERS DEMAND)!`
             : totalDeltaMW <= -25
-              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): 1)[A] LOWER MW LEVERS (UNIT C AUTO-TRIMS) -> 2)[A-2] INSERT RODS & [B] TRIM FEEDWATER!`
-              : `DIVERT POWER (${newTotalMW} MWe TOTAL): RE-BALANCE UNIT A LEVERS & VERIFY [KEY 5] UNIT C ZONE DRAIN!`
+              ? `SHED LOAD TO ${newTotalMW} MWe (${totalDeltaMW} MWe): LOWER UNIT A SECTOR MW LEVERS (EXCESS CHARGES UNIT C)!`
+              : `DIVERT POWER (${newTotalMW} MWe TOTAL): RE-BALANCE UNIT A SECTOR MW LEVERS TO MEET DEMAND!`
 
         const routeReqText = `${changeDescriptions.join(' & ')} // ${plantGuidance}`
 
@@ -2788,7 +2911,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         } else if (
           !state.isSeatedAtDesk &&
           !isKomradTransmitting() &&
-          state.radioBroadcastSubtitle === null
+          !doesRadioDominateSubtitles(
+            state.radioOn,
+            state.radioVolume,
+            state.radioBroadcastSubtitle
+          )
         ) {
           volkovHassleCooldownSec -= dt
           if (volkovHassleCooldownSec <= 0) {
@@ -2825,22 +2952,36 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
 
-      if (volkovLogs.length > 0 || volkovKomradMsgs.length > 0) {
-        const updatedEntries = [
-          ...state.terminalEntries.slice(-24),
-          ...volkovLogs,
-        ]
-        set({
-          lastDecisionFeedback: volkovFeedback,
-          terminalEntries: updatedEntries,
-          terminalLogs: updatedEntries.map(
-            (e) => `[${e.timestamp}] ${e.sender}: ${e.text}`
-          ),
-          komradMessages: appendKomradFeed(
-            state.komradMessages,
-            ...volkovKomradMsgs
-          ),
-        })
+      if (
+        volkovLogs.length > 0 ||
+        volkovKomradMsgs.length > 0 ||
+        state.drumWaterLevel !== 0 ||
+        state.wetSteamSeverity !== 0
+      ) {
+        if (volkovLogs.length > 0 || volkovKomradMsgs.length > 0) {
+          const updatedEntries = [
+            ...state.terminalEntries.slice(-24),
+            ...volkovLogs,
+          ]
+          set({
+            drumWaterLevel: 0,
+            wetSteamSeverity: 0,
+            lastDecisionFeedback: volkovFeedback,
+            terminalEntries: updatedEntries,
+            terminalLogs: updatedEntries.map(
+              (e) => `[${e.timestamp}] ${e.sender}: ${e.text}`
+            ),
+            komradMessages: appendKomradFeed(
+              state.komradMessages,
+              ...volkovKomradMsgs
+            ),
+          })
+        } else {
+          set({
+            drumWaterLevel: 0,
+            wetSteamSeverity: 0,
+          })
+        }
       }
       return
     }
@@ -3112,8 +3253,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       (sum, s) => sum + s.targetMW,
       0
     )
+    const activeOrder = state.activePost84Order
     const dispatchedMWe = baseReactor.totalElectricalMW
-    const neededMWe = Math.max(totalTargetMW, baseReactor.energyDemandMW)
+    const neededMWe = Math.max(
+      totalTargetMW,
+      baseReactor.energyDemandMW,
+      activeOrder?.minTotalMW ?? 0
+    )
     const deltaDispatchMWe = dispatchedMWe - neededMWe
     const powerBalanceMatched = Math.abs(deltaDispatchMWe) <= 25
     const allQuotasOk = baseReactor.substations.every((s) => s.quotaOk)
@@ -3180,7 +3326,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       // 2. Sustained Over-Dispatch (> +75 MWe surplus pushed into grid from Battery)
-      if (deltaDispatchMWe > 75) {
+      if (!activeOrder && deltaDispatchMWe > 75) {
         surplusOverloadSeconds += dt
         if (surplusOverloadSeconds >= 16) {
           surplusOverloadSeconds = 0
@@ -3649,6 +3795,15 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setDiagFeedActive: (active: boolean) => {
     set({ diagFeedActive: active })
+  },
+
+  setRadioOn: (on: boolean) => {
+    set((state) => (state.radioOn === on ? state : { radioOn: on }))
+  },
+
+  setRadioVolume: (volume: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(volume)))
+    set((state) => (state.radioVolume === clamped ? state : { radioVolume: clamped }))
   },
 
   setRadioBroadcastSubtitle: (subtitle: string | null) => {

@@ -24,6 +24,11 @@ import {
 import { useCameraLookStore } from "./CameraController";
 import { NOOP_RAYCAST } from "./ExteriorDioramas3D";
 import {
+  getKomradControlVisualOverride,
+  notifyPlayerControlInteraction,
+  registerKomradControlObject,
+} from "./komradArmController";
+import {
   onKremlinFontReady,
   registerKremlinCanvasRedraw,
 } from "./kremlinFontReady";
@@ -295,6 +300,8 @@ function startSmoothWheelSwivelDrag(
 
   const startX = e.nativeEvent.clientX;
   const startY = e.nativeEvent.clientY;
+  let prevClientX = startX;
+  let prevClientY = startY;
   let currentVal = initialValue;
   let totalMoveDist = 0;
   const initR = Math.hypot(startX - centerX, startY - centerY);
@@ -311,25 +318,34 @@ function startSmoothWheelSwivelDrag(
       Math.hypot(ev.clientX - startX, ev.clientY - startY),
     );
 
+    const dx = ev.clientX - prevClientX;
+    const dy = ev.clientY - prevClientY;
+    prevClientX = ev.clientX;
+    prevClientY = ev.clientY;
+
+    const moveLen = Math.hypot(dx, dy);
+    if (moveLen < 0.25) return;
+
     const rx = ev.clientX - centerX;
     const ry = ev.clientY - centerY;
     const r = Math.hypot(rx, ry);
-    if (r < 6) return;
+    const curAngle = r >= 6 ? Math.atan2(ry, rx) : prevAngle;
 
-    const curAngle = Math.atan2(ry, rx);
-    if (!hasValidAngle) {
-      hasValidAngle = true;
-      prevAngle = curAngle;
-      return;
+    let deltaRatio = (dx - dy) / 135;
+    if (r >= 24 && hasValidAngle) {
+      let dTheta = curAngle - prevAngle;
+      while (dTheta > Math.PI) dTheta -= Math.PI * 2;
+      while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+      const tangentialLen = Math.abs(dTheta) * r;
+      if (tangentialLen > moveLen * 0.65) {
+        deltaRatio = dTheta / (Math.PI * 1.25);
+      }
     }
 
-    let dTheta = curAngle - prevAngle;
-    while (dTheta > Math.PI) dTheta -= Math.PI * 2;
-    while (dTheta < -Math.PI) dTheta += Math.PI * 2;
-    prevAngle = curAngle;
-
-    // Pure circular rotation around the wheel center (clockwise = increase, counter-clockwise = decrease)
-    const deltaRatio = dTheta / (Math.PI * 1.25);
+    if (r >= 6) {
+      hasValidAngle = true;
+      prevAngle = curAngle;
+    }
 
     currentVal = THREE.MathUtils.clamp(
       currentVal + deltaRatio * range,
@@ -337,7 +353,7 @@ function startSmoothWheelSwivelDrag(
       maxVal,
     );
     if (wheelObject) {
-      wheelObject.rotation.z -= dTheta;
+      wheelObject.rotation.z -= deltaRatio * Math.PI * 1.6;
     }
     onChange(currentVal);
 
@@ -1065,6 +1081,36 @@ function getSharedKsp4Textures(): readonly [THREE.CanvasTexture, THREE.CanvasTex
   return sharedKsp4TexturesCache;
 }
 
+const SECTOR_TO_SUBSTATION_ID: Readonly<Record<SectorNodeId, number>> = {
+  pripyat: 1,
+  duga: 2,
+  kolkhoz: 3,
+  kgb: 4,
+  vodka: 5,
+  steel: 6,
+};
+
+function getSectorQuotaStatus(
+  substations: readonly { id: number; quotaMode?: "exact" | "min" | "max" }[],
+  sector: SectorNodeId,
+  currentMW: number,
+  targetMW: number,
+): { mode: "exact" | "min" | "max"; isMatched: boolean; diff: number } {
+  const subId = SECTOR_TO_SUBSTATION_ID[sector];
+  const sub = substations.find((item) => item.id === subId);
+  const mode = sub?.quotaMode ?? "exact";
+  if (mode === "min") {
+    const deficit = Math.max(0, targetMW - currentMW);
+    return { mode, isMatched: deficit === 0, diff: deficit };
+  }
+  if (mode === "max") {
+    const excess = Math.max(0, currentMW - targetMW);
+    return { mode, isMatched: excess === 0, diff: excess };
+  }
+  const diff = Math.abs(currentMW - targetMW);
+  return { mode, isMatched: diff === 0, diff };
+}
+
 export const SovietModularSteelCabinet3D: React.FC<
   SovietModularSteelCabinet3DProps
 > = React.memo(
@@ -1210,7 +1256,16 @@ export const SovietModularSteelCabinet3D: React.FC<
           let unmatched = 0;
           for (let k = 0; k < sectorKeys.length; k++) {
             const key = sectorKeys[k];
-            if (s.sectorMW[key] !== s.targetSectorMW[key]) unmatched++;
+            if (
+              !getSectorQuotaStatus(
+                s.substations,
+                key,
+                s.sectorMW[key],
+                s.targetSectorMW[key],
+              ).isMatched
+            ) {
+              unmatched++;
+            }
           }
           if (unmatched > 0) {
             const baseQuota = unmatched <= 2 ? 0.45 : 0.6;
@@ -3931,6 +3986,17 @@ const SculptedPumpValveAssembly3D: React.FC<
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
+  useEffect(() => {
+    const coolId = pumpIndex === 0 ? "pumpABearingCool" : "pumpBBearingCool";
+    const flowId = pumpIndex === 0 ? "pumpAFlow" : "pumpBFlow";
+    registerKomradControlObject(coolId, wheelRef.current);
+    registerKomradControlObject(flowId, leverArmRef.current, [0, 0, 0.118]);
+    return () => {
+      registerKomradControlObject(coolId, null);
+      registerKomradControlObject(flowId, null);
+    };
+  }, [pumpIndex]);
+
   const nameplateTex = useMemo(
     () =>
       makePlaqueTex(label, subLabel ?? "FLOW VALVE", {
@@ -4122,6 +4188,7 @@ const SculptedPumpValveAssembly3D: React.FC<
   });
 
   const handleWheelPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    const coolId = pumpIndex === 0 ? "pumpABearingCool" : "pumpBBearingCool";
     const curCooling = useGameStore.getState().oilCoolerValve;
     startSmoothWheelSwivelDrag(
       e,
@@ -4134,11 +4201,13 @@ const SculptedPumpValveAssembly3D: React.FC<
       },
       (active) => {
         pumpDraggingRef.current = active;
+        notifyPlayerControlInteraction(coolId, active);
       },
     );
   };
 
   const handleLeverPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    const flowId = pumpIndex === 0 ? "pumpAFlow" : "pumpBFlow";
     const curThrottle = useGameStore.getState().pumpThrottle[pumpIndex];
     startSmoothWheelSwivelDrag(
       e,
@@ -4151,6 +4220,7 @@ const SculptedPumpValveAssembly3D: React.FC<
       },
       (active) => {
         pumpDraggingRef.current = active;
+        notifyPlayerControlInteraction(flowId, active);
       },
     );
   };
@@ -4609,6 +4679,15 @@ interface IndustrialPowerColumn3DProps {
   plusBtnTex: THREE.CanvasTexture;
 }
 
+const SECTOR_KOMRAD_ID_MAP: Readonly<Record<SectorNodeId, string>> = {
+  pripyat: "sector_0",
+  duga: "sector_1",
+  kolkhoz: "sector_2",
+  kgb: "sector_3",
+  vodka: "sector_4",
+  steel: "sector_5",
+};
+
 const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   position,
   sector,
@@ -4630,6 +4709,19 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   const lastReadoutDrawRef = useRef(-1);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
+
+  const komradSectorId = SECTOR_KOMRAD_ID_MAP[sector];
+
+  useEffect(() => {
+    registerKomradControlObject(komradSectorId, leverGroupRef.current, [
+      0,
+      0,
+      0.064,
+    ]);
+    return () => {
+      registerKomradControlObject(komradSectorId, null);
+    };
+  }, [komradSectorId]);
 
   const dragRef = useRef<{
     active: boolean;
@@ -4733,6 +4825,11 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
     const state = useGameStore.getState();
     const currentMW = state.sectorMW[sector];
     const targetMW = state.targetSectorMW[sector];
+    const {
+      mode: quotaMode,
+      isMatched: sectorQuotaMatched,
+      diff: sectorQuotaDiff,
+    } = getSectorQuotaStatus(state.substations, sector, currentMW, targetMW);
     const highlightTut =
       state.tutorialPhase === "STEP_6_BASELINE_600MW" && currentMW !== targetMW;
     if (handleRingMatRef.current) {
@@ -4774,7 +4871,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
       (lastReadoutDrawRef.current < 0 || now - lastReadoutDrawRef.current >= 0.105)
     ) {
       lastReadoutDrawRef.current = now;
-      const readoutSig = `${currentMW}|${targetMW}|${highlightTut}`;
+      const readoutSig = `${currentMW}|${targetMW}|${quotaMode}|${highlightTut}`;
       const tex = readoutMatRef.current?.map as THREE.CanvasTexture | undefined;
       if (tex && readoutSig !== lastReadoutSigRef.current) {
         lastReadoutSigRef.current = readoutSig;
@@ -4783,8 +4880,8 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         if (ctx) {
           const w = canvas.width;
           const h = canvas.height;
-          const isMatched = currentMW === targetMW;
-          const isClose = Math.abs(currentMW - targetMW) <= 25;
+          const isMatched = sectorQuotaMatched;
+          const isClose = sectorQuotaDiff <= 25;
           const primaryColor = highlightTut
             ? "#ffb000"
             : isMatched
@@ -4810,10 +4907,17 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           ctx.lineWidth = 4;
           ctx.strokeRect(2, 2, w - 4, h - 4);
 
+          const targetLabel =
+            quotaMode === "min"
+              ? `>=${targetMW}`
+              : quotaMode === "max"
+                ? `<=${targetMW}`
+                : `${targetMW}`;
+
           // Enlarged High-Legibility Nixie / Phosphor Readout: "200 / 200 MW" (~1.45x larger)
           drawFittedPlaqueText(
             ctx,
-            `${currentMW} / ${targetMW} MW`,
+            `${currentMW} / ${targetLabel} MW`,
             w / 2,
             86,
             w + 6,
@@ -4827,8 +4931,9 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           tex.needsUpdate = true;
         }
         if (readoutMatRef.current) {
-          readoutMatRef.current.emissiveIntensity =
-            currentMW === targetMW ? 0.95 : 1.25;
+          readoutMatRef.current.emissiveIntensity = sectorQuotaMatched
+            ? 0.95
+            : 1.25;
         }
       }
     }
@@ -4862,6 +4967,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
       startClientY,
       startMW,
     };
+    notifyPlayerControlInteraction(komradSectorId, true);
     playSwitchClank(true);
 
     const onWindowMove = (ev: PointerEvent) => {
@@ -4869,6 +4975,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
       const s = useGameStore.getState();
       if (s.komradOverrideLocked) {
         dragRef.current.active = false;
+        notifyPlayerControlInteraction(komradSectorId, false);
         return;
       }
       totalMovement = Math.max(
@@ -4894,6 +5001,7 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
     const onWindowUp = () => {
       if (!dragRef.current.active) return;
       dragRef.current.active = false;
+      notifyPlayerControlInteraction(komradSectorId, false);
       window.removeEventListener("pointermove", onWindowMove);
       window.removeEventListener("pointerup", onWindowUp);
       window.removeEventListener("pointercancel", onWindowUp);
@@ -5065,7 +5173,12 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
         scale={0.92}
         label="MW QUOTA"
         getAlertState={(s) => {
-          const diff = Math.abs(s.sectorMW[sector] - s.targetSectorMW[sector]);
+          const { diff } = getSectorQuotaStatus(
+            s.substations,
+            sector,
+            s.sectorMW[sector],
+            s.targetSectorMW[sector],
+          );
           return {
             level: diff >= 75 ? "critical" : diff > 0 ? "warn" : "normal",
             acknowledged: dragRef.current.active,
@@ -5361,9 +5474,21 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
   const panelGroupRef = useRef<THREE.Group>(null);
   const [az5CoverOpen, setAz5CoverOpen] = useState(false);
   const az5CoverGroupRef = useRef<THREE.Group>(null);
+  const az5BtnGroupRef = useRef<THREE.Group>(null);
   const boronPlungerMeshRef = useRef<THREE.Group>(null);
   const boronLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const boronDepressRef = useRef(0);
+
+  useEffect(() => {
+    registerKomradControlObject("boron", boronPlungerMeshRef.current);
+    registerKomradControlObject("az5", az5BtnGroupRef.current, [0, 0, 0.026]);
+    registerKomradControlObject("az5Cover", az5CoverGroupRef.current);
+    return () => {
+      registerKomradControlObject("boron", null);
+      registerKomradControlObject("az5", null);
+      registerKomradControlObject("az5Cover", null);
+    };
+  }, []);
   const redlineScaleBlockRefs = useRef<
     Array<THREE.MeshStandardMaterial | null>
   >([]);
@@ -5586,7 +5711,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
     state.tickThermodynamics(delta);
 
     if (az5CoverGroupRef.current) {
-      const targetRotX = az5CoverOpen ? -1.95 : 0;
+      const coverOverride = getKomradControlVisualOverride("az5Cover");
+      const effectiveOpen =
+        coverOverride >= 0 ? coverOverride >= 0.5 : az5CoverOpen;
+      const targetRotX = effectiveOpen ? -1.95 : 0;
       az5CoverGroupRef.current.rotation.x = THREE.MathUtils.lerp(
         az5CoverGroupRef.current.rotation.x,
         targetRotX,
@@ -5598,7 +5726,12 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       boronDepressRef.current = Math.max(0, boronDepressRef.current - delta * 2.5);
     }
     if (boronPlungerMeshRef.current) {
-      const targetZ = 0.036 - boronDepressRef.current * 0.03;
+      const boronOverride = getKomradControlVisualOverride("boron");
+      const effectiveDepress =
+        boronOverride >= 0
+          ? Math.max(boronDepressRef.current, boronOverride)
+          : boronDepressRef.current;
+      const targetZ = 0.036 - effectiveDepress * 0.03;
       boronPlungerMeshRef.current.position.z = THREE.MathUtils.lerp(
         boronPlungerMeshRef.current.position.z,
         targetZ,
@@ -5646,13 +5779,15 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       return;
     lastStatusDrawRef.current = now;
 
-    const all6Matched =
-      state.sectorMW.pripyat === state.targetSectorMW.pripyat &&
-      state.sectorMW.kolkhoz === state.targetSectorMW.kolkhoz &&
-      state.sectorMW.duga === state.targetSectorMW.duga &&
-      state.sectorMW.kgb === state.targetSectorMW.kgb &&
-      state.sectorMW.vodka === state.targetSectorMW.vodka &&
-      state.sectorMW.steel === state.targetSectorMW.steel;
+    const all6Matched = (Object.keys(state.sectorMW) as SectorNodeId[]).every(
+      (key) =>
+        getSectorQuotaStatus(
+          state.substations,
+          key,
+          state.sectorMW[key],
+          state.targetSectorMW[key],
+        ).isMatched,
+    );
 
     const totalTargetMW =
       state.targetSectorMW.pripyat +
@@ -6022,9 +6157,12 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
 
           {/* Glowing Engraved Red Bakelite AZ-5 Push-Button Plunger */}
           <group
+            ref={az5BtnGroupRef}
             position={[0, 0, 0.048]}
             onClick={(e) => {
               e.stopPropagation();
+              notifyPlayerControlInteraction("az5", true);
+              notifyPlayerControlInteraction("az5", false);
               if (!az5CoverOpen) {
                 playSafetyCoverFlip(true);
                 setAz5CoverOpen(true);
@@ -6096,6 +6234,8 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             position={[0, 0.105, 0.034]}
             onClick={(e) => {
               e.stopPropagation();
+              notifyPlayerControlInteraction("az5Cover", true);
+              notifyPlayerControlInteraction("az5Cover", false);
               setAz5CoverOpen((prev) => {
                 playSafetyCoverFlip(!prev);
                 return !prev;
@@ -6141,6 +6281,8 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             onPointerDown={(e) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
+              notifyPlayerControlInteraction("boron", true);
+              notifyPlayerControlInteraction("boron", false);
               const s = useGameStore.getState();
               if (s.boronCooldown > 0 || s.boronTankLevel < 20 || s.isBlackout) {
                 playLeverRatchet(0.45);
@@ -6754,6 +6896,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
   const channelRimMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>(
     [],
   );
+  const channelTileRefs = useRef<Array<THREE.Group | null>>([]);
   const hoveredChannelRef = useRef<number | null>(null);
   const rbmkPinShaftInstRef = useRef<THREE.InstancedMesh>(null);
   const rbmkPinCapInstRef = useRef<THREE.InstancedMesh>(null);
@@ -6825,6 +6968,62 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (variant === "left-rear") {
+      registerKomradControlObject("controlRodDrive", oilWheelRef.current);
+      registerKomradControlObject("rodRefuelLever", boronPistonGroupRef.current, [
+        0,
+        0,
+        0.094,
+      ]);
+      for (let i = 0; i < RBMK_OCTAGON_TILES.length; i++) {
+        registerKomradControlObject(
+          `coreChannelTile_${i}`,
+          channelTileRefs.current[i] ?? null,
+          [0, 0, 0.015],
+        );
+      }
+      return () => {
+        registerKomradControlObject("controlRodDrive", null);
+        registerKomradControlObject("rodRefuelLever", null);
+        for (let i = 0; i < RBMK_OCTAGON_TILES.length; i++) {
+          registerKomradControlObject(`coreChannelTile_${i}`, null);
+        }
+      };
+    }
+
+    registerKomradControlObject("feedwaterValve", gasWheelRef.current);
+    registerKomradControlObject(
+      "mcpSealToggle0",
+      sealToggleBatRefs.current[0] ?? null,
+      [0, 0, 0.065],
+    );
+    registerKomradControlObject(
+      "mcpSealToggle1",
+      sealToggleBatRefs.current[1] ?? null,
+      [0, 0, 0.065],
+    );
+    registerKomradControlObject(
+      "mcpSealToggle2",
+      sealToggleBatRefs.current[2] ?? null,
+      [0, 0, 0.065],
+    );
+    registerKomradControlObject("emergSealLock", emergSealBtnRef.current);
+    registerKomradControlObject("bubblerDrain", drainLeverGroupRef.current, [
+      0,
+      0,
+      0.076,
+    ]);
+    return () => {
+      registerKomradControlObject("feedwaterValve", null);
+      registerKomradControlObject("mcpSealToggle0", null);
+      registerKomradControlObject("mcpSealToggle1", null);
+      registerKomradControlObject("mcpSealToggle2", null);
+      registerKomradControlObject("emergSealLock", null);
+      registerKomradControlObject("bubblerDrain", null);
+    };
+  }, [variant]);
 
   const headerTex = useMemo(
     () =>
@@ -7277,18 +7476,23 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       }
 
       // Spring-Return Rod Refueling Lever & 10-Segment Reload Progress / Fuel Health Bar
+      const komradRefuelOverride = getKomradControlVisualOverride("rodRefuelLever");
+      const isRefuelDragging =
+        pistonDragRef.current.active || komradRefuelOverride >= 0;
       const leverDragRatio = pistonDragRef.current.active
         ? pistonDragRef.current.currentPos
-        : 0;
+        : komradRefuelOverride >= 0
+          ? komradRefuelOverride
+          : 0;
       if (boronPistonGroupRef.current) {
         const targetY = 0.086 - leverDragRatio * 0.172;
         boronPistonGroupRef.current.position.y = THREE.MathUtils.lerp(
           boronPistonGroupRef.current.position.y,
           targetY,
-          pistonDragRef.current.active ? 0.45 : 0.22,
+          isRefuelDragging ? 0.45 : 0.22,
         );
       }
-      if (pistonDragRef.current.active) {
+      if (isRefuelDragging) {
         const dragSegs = Math.round(leverDragRatio * 10);
         const dragCol = leverDragRatio >= 0.82 ? "#33ff66" : "#ffb000";
         for (let i = 0; i < 10; i++) {
@@ -7478,17 +7682,27 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         );
       }
       if (emergSealBtnRef.current) {
+        const komradEmergOverride =
+          getKomradControlVisualOverride("emergSealLock");
+        const effEmergDepress =
+          komradEmergOverride >= 0
+            ? Math.max(emergSealDepressRef.current, komradEmergOverride)
+            : emergSealDepressRef.current;
         emergSealBtnRef.current.position.z =
-          0.028 - emergSealDepressRef.current * 0.016;
+          0.028 - effEmergDepress * 0.016;
       }
 
       const isDrainActive = s.bubblerDraining || s.steamDumpValve;
       if (drainLeverGroupRef.current) {
+        const komradDrainOverride =
+          getKomradControlVisualOverride("bubblerDrain");
         const prog = drainDragRef.current.active
           ? drainDragRef.current.progress
-          : isDrainActive
-            ? 1.0
-            : 0;
+          : komradDrainOverride >= 0
+            ? komradDrainOverride
+            : isDrainActive
+              ? 1.0
+              : 0;
         const targetY = 0.095 - prog * 0.19;
         drainLeverGroupRef.current.position.y = THREE.MathUtils.lerp(
           drainLeverGroupRef.current.position.y,
@@ -8219,6 +8433,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               {RBMK_OCTAGON_TILES.map((tile, tIdx) => (
                 <group
                   key={tile.code}
+                  ref={(el) => {
+                    channelTileRefs.current[tIdx] = el;
+                  }}
                   position={[tile.x, tile.y, 0]}
                   onPointerOver={(e) => {
                     e.stopPropagation();
@@ -8239,6 +8456,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   onPointerDown={(e) => {
                     if (useCameraLookStore.getState().isFreeLookMode) return;
                     e.stopPropagation();
+                    notifyPlayerControlInteraction("coreChannelTile", true);
                     const s = useGameStore.getState();
                     const startY = e.nativeEvent.clientY;
                     const startRod = s.controlRodLevel;
@@ -8249,6 +8467,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                       const dy = startY - ev.clientY;
                       if (Math.abs(dy) >= 5) {
                         moved = true;
+                        notifyPlayerControlInteraction("controlRodDrive", true);
                         const nextRod = THREE.MathUtils.clamp(
                           startRod + (dy / 90) * 100,
                           0,
@@ -8264,6 +8483,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     };
 
                     const handleUp = () => {
+                      notifyPlayerControlInteraction("coreChannelTile", false);
+                      notifyPlayerControlInteraction("controlRodDrive", false);
                       window.removeEventListener("pointermove", handleMove);
                       window.removeEventListener("pointerup", handleUp);
                       window.removeEventListener("pointercancel", handleUp);
@@ -8454,6 +8675,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   (v) => useGameStore.getState().setControlRodLevel(v),
                   (act) => {
                     oilWheelDraggingRef.current = act;
+                    notifyPlayerControlInteraction("controlRodDrive", act);
                   },
                 )
               }
@@ -8685,6 +8907,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                notifyPlayerControlInteraction("rodRefuelLever", true);
                 refuelStrokeFiredRef.current = false;
                 pistonDragRef.current = {
                   active: true,
@@ -8714,6 +8937,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 const handleUp = () => {
                   pistonDragRef.current.active = false;
                   pistonDragRef.current.currentPos = 0;
+                  notifyPlayerControlInteraction("rodRefuelLever", false);
                   if (!refuelStrokeFiredRef.current) {
                     playSwitchClank(false);
                     const s = useGameStore.getState();
@@ -9028,7 +9252,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 useGameStore
                   .getState()
                   .setHoveredControlHint(
-                    "FEEDWATER VALVE (FW PUMP): Scroll Wheel (±5% | Shift ±1%) or Click/Drag (0–100%)",
+                    "FEEDWATER VALVE (FW PUMP): Scroll (±5% | Shift ±1%) or Drag Up/Right (+) / Down/Left (-) (0–100%)",
                   );
               }}
               onPointerOut={(e) => {
@@ -9042,7 +9266,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
                 const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 1 : 5);
                 const s = useGameStore.getState();
-                const curPct = Math.round(s.nitrogenLoopValve);
+                const curPct = Math.round(s.feedwaterValve * 100);
                 const nextPct = THREE.MathUtils.clamp(curPct + step, 0, 100);
                 if (nextPct !== curPct) {
                   playDetentClick((Math.abs(nextPct) % 5) + 1);
@@ -9053,19 +9277,20 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 startSmoothWheelSwivelDrag(
                   e,
                   gasWheelRef.current,
-                  useGameStore.getState().nitrogenLoopValve,
+                  useGameStore.getState().feedwaterValve * 100,
                   0,
                   100,
                   (v) => useGameStore.getState().setNitrogenLoopValve(v),
                   (act) => {
                     gasWheelDraggingRef.current = act;
+                    notifyPlayerControlInteraction("feedwaterValve", act);
                   },
                 )
               }
             >
               {/* Stationary Tight Hit Collider matching physical handwheel without occluding indicator above */}
-              <mesh position={[0, 0, 0.042]} rotation={[Math.PI / 2, 0, 0]}>
-                <cylinderGeometry args={[0.094, 0.094, 0.084, 12]} />
+              <mesh position={[0, 0, 0.048]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.105, 0.105, 0.095, 12]} />
                 <meshBasicMaterial transparent opacity={0} depthWrite={false} />
               </mesh>
               <mesh position={[0, 0, 0.008]} raycast={NOOP_RAYCAST}>
@@ -9316,6 +9541,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 onClick={(e) => {
                   if (useCameraLookStore.getState().isFreeLookMode) return;
                   e.stopPropagation();
+                  notifyPlayerControlInteraction(`mcpSealToggle${tIdx}`, true);
+                  notifyPlayerControlInteraction(`mcpSealToggle${tIdx}`, false);
                   playSwitchClank(true);
                   useGameStore.getState().toggleSealSwitch(tIdx as 0 | 1 | 2);
                 }}
@@ -9414,6 +9641,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                notifyPlayerControlInteraction("emergSealLock", true);
+                notifyPlayerControlInteraction("emergSealLock", false);
                 emergSealDepressRef.current = 1.0;
                 playSwitchClank(true);
                 playPneumaticWhoosh();
@@ -9516,7 +9745,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 useGameStore
                   .getState()
                   .setHoveredControlHint(
-                    "BUBBLER DRAIN & CONDENSER: Drag Down / Click = DRAIN BUBBLER -> RESERVOIR & RELIEVE >72 BAR",
+                    "BUBBLER / DRUM DRAIN LEVER: Click, Drag Down, or Scroll Up = DRAIN DRUM WATER (mm) & BUBBLER / RELIEVE >72 BAR",
                   );
               }}
               onPointerOut={(e) => {
@@ -9539,39 +9768,51 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                notifyPlayerControlInteraction("bubblerDrain", true);
                 const wasOpen = useGameStore.getState().bubblerDraining;
+                const startY = e.nativeEvent.clientY;
                 let dragged = false;
                 drainDragRef.current = {
                   active: true,
-                  startY: e.nativeEvent.clientY,
-                  progress: wasOpen ? 1.0 : 0.4,
+                  startY,
+                  progress: wasOpen ? 1.0 : 0.0,
                   lastHissTime: 0,
                 };
-                useGameStore.getState().setBubblerDraining(!wasOpen);
-                playSwitchClank(true);
-                playSteamVentHiss(0.6);
                 const handleMove = (ev: PointerEvent) => {
                   if (!drainDragRef.current.active) return;
-                  const dy = ev.clientY - drainDragRef.current.startY;
-                  if (Math.abs(dy) >= 8) {
+                  const dy = ev.clientY - startY;
+                  if (Math.abs(dy) >= 14) {
                     dragged = true;
                   }
+                  if (!dragged) return;
                   const prog = THREE.MathUtils.clamp(
-                    (wasOpen ? 1.0 : 0.2) + dy / 65,
+                    (wasOpen ? 1.0 : 0.0) + dy / 65,
                     0,
                     1.0,
                   );
                   drainDragRef.current.progress = prog;
-                  if (dragged) {
-                    useGameStore.getState().setBubblerDraining(prog >= 0.45);
+                  const wantOpen = prog >= 0.5;
+                  const s = useGameStore.getState();
+                  if (s.bubblerDraining !== wantOpen) {
+                    s.setBubblerDraining(wantOpen);
+                    playSwitchClank(true);
+                    if (wantOpen) playSteamVentHiss(0.6);
                   }
                 };
                 const handleUp = () => {
                   drainDragRef.current.active = false;
-                  drainDragRef.current.progress = useGameStore.getState().bubblerDraining
-                    ? 1.0
-                    : 0;
-                  playSwitchClank(false);
+                  const s = useGameStore.getState();
+                  if (!dragged) {
+                    const nextOpen = !wasOpen;
+                    s.setBubblerDraining(nextOpen);
+                    drainDragRef.current.progress = nextOpen ? 1.0 : 0.0;
+                    playSwitchClank(true);
+                    if (nextOpen) playSteamVentHiss(0.6);
+                  } else {
+                    drainDragRef.current.progress = s.bubblerDraining ? 1.0 : 0.0;
+                    playSwitchClank(false);
+                  }
+                  notifyPlayerControlInteraction("bubblerDrain", false);
                   window.removeEventListener("pointermove", handleMove);
                   window.removeEventListener("pointerup", handleUp);
                   window.removeEventListener("pointercancel", handleUp);

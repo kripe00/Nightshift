@@ -35,6 +35,7 @@ export interface DesktopTelemetrySnapshot {
   shiftTimeMinutes: number
   tutorialPhase: string
   isBlackout: boolean
+  az5Active: boolean
   coreTemp: number
   pressureBar: number
   energyCreatedMW: number
@@ -49,6 +50,7 @@ export interface DesktopTelemetrySnapshot {
   bubblerLevel: number
   containmentSealLocked: boolean
   sectorMW: Post84LiveTelemetry['sectorMW']
+  targetSectorMW: Post84LiveTelemetry['targetSectorMW']
   coolingMW: number
   defenseMW: number
   facilityMW: number
@@ -1362,13 +1364,16 @@ function paintMailWindow(
       ctx.strokeRect(rect.x + 300, rect.y + 396, 412, 46)
       ctx.textAlign = 'center'
       ctx.fillStyle = '#ffb000'
-      ctx.font = 'bold 14px "Courier Prime", monospace'
+      ctx.font = 'bold 13px "Courier Prime", monospace'
       ctx.fillText(
-        'TRACKING ACTIVE — FULFILL AT PANELS (AUTO-COMPLETES)',
+        'TRACKING ACTIVE — FULFILL AT UNIT A (AUTO-COMPLETES)',
         rect.x + 506,
-        rect.y + 419,
+        rect.y + 410,
         396
       )
+      ctx.fillStyle = '#33ff66'
+      ctx.font = '12px "Courier Prime", monospace'
+      ctx.fillText(evalRes.detailLine, rect.x + 506, rect.y + 429, 396)
     } else {
       ctx.fillStyle = '#092913'
       ctx.fillRect(rect.x + 300, rect.y + 396, 412, 46)

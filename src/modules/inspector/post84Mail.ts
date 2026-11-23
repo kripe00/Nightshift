@@ -1,3 +1,5 @@
+import type { ActivePost84PowerOrder, SectorNodeId } from '../../shared/types'
+
 export type Post84MessageStatus = 'unread' | 'read'
 
 export type Post84OrderState = 'pending' | 'active' | 'completed'
@@ -5,34 +7,31 @@ export type Post84OrderState = 'pending' | 'active' | 'completed'
 export type Post84TrainingDirectiveState = 'pending' | 'accepted' | 'skipped'
 
 export type Post84OrderTemplateId =
-  | 'vodka_batch'
-  | 'tractor_foundry'
-  | 'swan_lake_tv'
   | 'municipal_heating'
+  | 'vodka_batch'
+  | 'kolkhoz_lamps'
+  | 'tractor_foundry'
+  | 'duga_radar'
+  | 'kgb_interrogation'
+  | 'swan_lake_tv'
   | 'volkor_driveway'
   | 'moscow_inspection'
-  | 'duga_radar'
 
 export interface Post84LiveTelemetry {
   totalElectricalMW: number
-  energyCreatedMW: number
-  pressureBar: number
-  gridHz: number
-  avrActive: boolean
-  kgbLineActive: boolean
-  radiationLevel: number
-  waterReservoir: number
-  bubblerLevel: number
-  containmentSealLocked: boolean
-  coreTemp: number
-  sectorMW: {
-    pripyat: number
-    duga: number
-    kolkhoz: number
-    kgb: number
-    vodka: number
-    steel: number
-  }
+  isBlackout: boolean
+  az5Active: boolean
+  sectorMW: Record<SectorNodeId, number>
+  targetSectorMW: Record<SectorNodeId, number>
+}
+
+export interface Post84DeliveredPower {
+  totalAllocatedMW: number
+  availableGridMW: number
+  totalDeliveredMW: number
+  deliveryRatio: number
+  isPowerShortfall: boolean
+  sectorDeliveredMW: Record<SectorNodeId, number>
 }
 
 export interface Post84OrderSpec {
@@ -43,6 +42,7 @@ export interface Post84OrderSpec {
   rewardRub: number
   quotaPoints: number
   objectiveSummary: string
+  arrivalVox: string
 }
 
 export interface Post84Message {
@@ -69,14 +69,19 @@ export const VOLKOV_ONBOARDING_MAIL_ID = 'mail-volkov-calibration-directive'
 export const VOLKOR_WELCOME_MAIL_ID = 'mail-volkor-welcome'
 export const VOLKOR_TUTORIAL_MAIL_ID = 'mail-volkor-komrad84'
 
+export const POST84_ORDER_COMPLETED_VOX =
+  'STATE POWER DIRECTIVE COMPLETE. QUOTA AND RUBLES RECORDED.'
+
 export const POST84_ORDER_TEMPLATE_IDS: Post84OrderTemplateId[] = [
-  'vodka_batch',
-  'tractor_foundry',
-  'swan_lake_tv',
   'municipal_heating',
+  'vodka_batch',
+  'kolkhoz_lamps',
+  'tractor_foundry',
+  'duga_radar',
+  'kgb_interrogation',
+  'swan_lake_tv',
   'volkor_driveway',
   'moscow_inspection',
-  'duga_radar',
 ]
 
 /**
@@ -224,6 +229,67 @@ export function createShuffledOrderDeck(
   return deck
 }
 
+/**
+ * Computes real electrical MW delivered per sector backed by actual grid generation + UNIT C batteries.
+ * Prevents fake slider cheating when reactor + battery output cannot back allocated sector MW.
+ */
+export function computeDeliveredPost84Power(
+  telemetry: Post84LiveTelemetry
+): Post84DeliveredPower {
+  const pripyatAlloc = Math.max(0, telemetry.sectorMW.pripyat)
+  const dugaAlloc = Math.max(0, telemetry.sectorMW.duga)
+  const kolkhozAlloc = Math.max(0, telemetry.sectorMW.kolkhoz)
+  const kgbAlloc = Math.max(0, telemetry.sectorMW.kgb)
+  const vodkaAlloc = Math.max(0, telemetry.sectorMW.vodka)
+  const steelAlloc = Math.max(0, telemetry.sectorMW.steel)
+
+  const totalAllocatedMW =
+    pripyatAlloc + dugaAlloc + kolkhozAlloc + kgbAlloc + vodkaAlloc + steelAlloc
+
+  const availableGridMW =
+    telemetry.isBlackout || telemetry.az5Active
+      ? 0
+      : Math.max(0, Math.round(telemetry.totalElectricalMW))
+
+  if (totalAllocatedMW <= 0 || availableGridMW <= 0) {
+    return {
+      totalAllocatedMW,
+      availableGridMW,
+      totalDeliveredMW: 0,
+      deliveryRatio: 0,
+      isPowerShortfall: totalAllocatedMW > 0,
+      sectorDeliveredMW: {
+        pripyat: 0,
+        duga: 0,
+        kolkhoz: 0,
+        kgb: 0,
+        vodka: 0,
+        steel: 0,
+      },
+    }
+  }
+
+  const totalDeliveredMW = Math.min(totalAllocatedMW, availableGridMW)
+  const deliveryRatio = totalDeliveredMW / totalAllocatedMW
+  const isPowerShortfall = availableGridMW + 5 < totalAllocatedMW
+
+  return {
+    totalAllocatedMW,
+    availableGridMW,
+    totalDeliveredMW,
+    deliveryRatio,
+    isPowerShortfall,
+    sectorDeliveredMW: {
+      pripyat: Math.round(pripyatAlloc * deliveryRatio),
+      duga: Math.round(dugaAlloc * deliveryRatio),
+      kolkhoz: Math.round(kolkhozAlloc * deliveryRatio),
+      kgb: Math.round(kgbAlloc * deliveryRatio),
+      vodka: Math.round(vodkaAlloc * deliveryRatio),
+      steel: Math.round(steelAlloc * deliveryRatio),
+    },
+  }
+}
+
 interface OrderTemplateBlueprint {
   sender: string
   orgTag: string
@@ -233,100 +299,209 @@ interface OrderTemplateBlueprint {
   rewardRub: number
   quotaPoints: number
   objectiveSummary: string
+  arrivalVox: string
+  powerTargets: {
+    minTotalMW?: number
+    sectorMinMW?: Partial<Record<SectorNodeId, number>>
+    sectorMaxMW?: Partial<Record<SectorNodeId, number>>
+  }
 }
 
 const ORDER_BLUEPRINTS: Record<Post84OrderTemplateId, OrderTemplateBlueprint> = {
+  municipal_heating: {
+    sender: 'PRIPYAT HOUSING DEPT.',
+    orgTag: 'MUNICIPAL ELECTRIC',
+    subject: 'FROZEN MUNICIPAL HEATING PIPES',
+    bodyLines: [
+      'The Mayor reports his bathroom radiator has frozen into an ideological sculpture of Lenin.',
+      'Supply >= 175 MW of emergency electric heating power to Sector 1 (Pripyat City) for 15s.',
+    ],
+    holdDurationSec: 15,
+    rewardRub: 190,
+    quotaPoints: 1,
+    objectiveSummary: 'PRIPYAT >= 175 MW (HOLD 15s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE POWER DIRECTIVE FOR PRIPYAT CITY RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      sectorMinMW: { pripyat: 175 },
+    },
+  },
   vodka_batch: {
     sender: 'GLAVSPIRTPROM',
     orgTag: 'DISTILLERY HQ',
     subject: 'VODKA DISTILLERY NIGHT BATCH',
     bodyLines: [
       'Party Congress delegates arrive by midnight and our potato stills are currently running on lukewarm patriotism.',
-      'Boost Sector 5 (Vodka Plant) on UNIT A to >= 175 MW and hold 15s so the night mash hits 96 proof.',
+      'Supply >= 175 MW of electrical power to Sector 5 (Vodka Plant) for 15s so the night mash hits 96 proof.',
     ],
     holdDurationSec: 15,
     rewardRub: 180,
     quotaPoints: 1,
-    objectiveSummary: 'VODKA SECTOR >= 175 MW (HOLD 15s)',
+    objectiveSummary: 'VODKA PLANT >= 175 MW (HOLD 15s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE POWER DIRECTIVE FOR VODKA PLANT RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      sectorMinMW: { vodka: 175 },
+    },
+  },
+  kolkhoz_lamps: {
+    sender: 'KOLKHOZ ZARYA #3',
+    orgTag: 'STATE AGRO-COMPLEX',
+    subject: 'MIDNIGHT POTATO UV LAMP SURGE',
+    bodyLines: [
+      'Subterranean winter potato lamps dimmed during the midnight tuber count, threatening tomorrow’s starch quota.',
+      'Supply >= 175 MW of electrical power to Sector 3 (Kolkhoz Farm) for 15s to keep every grow lamp blazing.',
+    ],
+    holdDurationSec: 15,
+    rewardRub: 185,
+    quotaPoints: 1,
+    objectiveSummary: 'KOLKHOZ FARM >= 175 MW (HOLD 15s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE POWER DIRECTIVE FOR KOLKHOZ FARM RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      sectorMinMW: { kolkhoz: 175 },
+    },
   },
   tractor_foundry: {
     sender: "PEOPLE'S FOUNDRY #4",
     orgTag: 'HEAVY INDUSTRY',
-    subject: 'TRACTOR & TANK FOUNDRY SURGE',
+    subject: 'FOUNDRY POUR & BOTTLING PEAK',
     bodyLines: [
-      'Our arc welders fusing "agricultural tractors" with 120mm plows keep dimming the town streetlights.',
-      'Divert >= 175 MW to Sector 6 (Steel Works) on UNIT A while keeping grid sync at 50.0 Hz (AVR ON) for 15s.',
-    ],
-    holdDurationSec: 15,
-    rewardRub: 200,
-    quotaPoints: 1,
-    objectiveSummary: 'STEEL >= 175 MW & 50.0 Hz SYNC (HOLD 15s)',
-  },
-  swan_lake_tv: {
-    sender: 'GOSTELERADIO',
-    orgTag: 'STATE TELEVISION',
-    subject: 'STATE TV "SWAN LAKE" BROADCAST',
-    bodyLines: [
-      'State TV airs Swan Lake in high-contrast monochrome tonight, and any flicker on the General Secretary screen means reindeer duty.',
-      'Hold Total Electrical output >= 675 MW with grid frequency synced near 50.0 Hz for 15s.',
-    ],
-    holdDurationSec: 15,
-    rewardRub: 220,
-    quotaPoints: 1,
-    objectiveSummary: 'TOTAL OUTPUT >= 675 MW & 50.0 Hz (HOLD 15s)',
-  },
-  municipal_heating: {
-    sender: 'PRIPYAT HOUSING DEPT.',
-    orgTag: 'MUNICIPAL STEAM',
-    subject: 'FROZEN MUNICIPAL HEATING PIPES',
-    bodyLines: [
-      'The Mayor reports his bathroom radiator has frozen into an ideological sculpture of Lenin.',
-      'Hold Steam Drum Pressure in 65-78 BAR while supplying >= 150 MW to Sector 1 (Pripyat) for 15s without popping a seal.',
-    ],
-    holdDurationSec: 15,
-    rewardRub: 190,
-    quotaPoints: 1,
-    objectiveSummary: 'PRESSURE 65-78 BAR & PRIPYAT >= 150 MW (15s)',
-  },
-  volkor_driveway: {
-    sender: 'DIRECTOR VOLKOR',
-    orgTag: 'PARTY COMMISSAR // SECTOR-84',
-    subject: "COMMISSAR VOLKOR'S HEATED DRIVEWAY",
-    bodyLines: [
-      'A single snowflake dared to land near my black Volga sedan and the heated asphalt coils demand immediate megawatts.',
-      'Raise Control Rods [UNIT A-2] and Feedwater [UNIT B] to generate >= 750 MW Energy Created for 18s.',
+      'Our arc welders fusing "agricultural tractors" with armor-grade plows collide with the Vodka Plant bottling rush tonight.',
+      'Deliver >= 175 MW to Sector 6 (Steel Works) AND >= 150 MW to Sector 5 (Vodka Plant) simultaneously for 18s.',
     ],
     holdDurationSec: 18,
-    rewardRub: 240,
+    rewardRub: 230,
     quotaPoints: 1,
-    objectiveSummary: 'ENERGY CREATED >= 750 MW (HOLD 18s)',
-  },
-  moscow_inspection: {
-    sender: 'MOSCOW SAFETY BOARD',
-    orgTag: 'SHOW-TRIAL AUDIT',
-    subject: 'MOSCOW SAFETY SHOW-TRIAL INSPECTION',
-    bodyLines: [
-      'Pravda photographers are outside capturing "the safest reactor on Earth", so conceal any glowing puddles at once.',
-      'Lock all 3 Seals [UNIT B] and keep Rad <= 0.8 R/h, Water >= 70%, Bubbler <= 65%, and Grid >= 550 MW for 20s.',
-    ],
-    holdDurationSec: 20,
-    rewardRub: 260,
-    quotaPoints: 1,
-    objectiveSummary: 'SEALS LOCKED, RAD<=0.8, H2O>=70%, BUB<=65%, >=550 MW (20s)',
+    objectiveSummary: 'STEEL >= 175 MW & VODKA >= 150 MW (18s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE POWER DIRECTIVE FOR STEEL WORKS AND VODKA PLANT RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      sectorMinMW: { steel: 175, vodka: 150 },
+    },
   },
   duga_radar: {
     sender: 'DUGA-1 COMMAND',
     orgTag: 'MINISTRY OF DEFENSE',
     subject: 'DUGA-1 "WOODPECKER" RADAR SWEEP',
     bodyLines: [
-      'Radar operators spotted a suspicious seagull near Finland that may be an unauthorized NATO spy drone.',
-      'Divert >= 175 MW to Sector 2 (Duga-1 Radar) on UNIT A with KGB Line ON [UNIT C] for 15s to rattle Western jazz radio.',
+      'Radar operators spotted a suspicious Western weather balloon near Finland that demands full-power microwave tracking.',
+      'Deliver >= 200 MW to Sector 2 (Duga-1 Radar) while rationing Sector 3 (Kolkhoz Farm) to <= 50 MW for 15s.',
+    ],
+    holdDurationSec: 15,
+    rewardRub: 215,
+    quotaPoints: 1,
+    objectiveSummary: 'DUGA-1 >= 200 MW & KOLKHOZ <= 50 MW (15s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE POWER DIRECTIVE FOR DUGA RADAR RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      sectorMinMW: { duga: 200 },
+      sectorMaxMW: { kolkhoz: 50 },
+    },
+  },
+  kgb_interrogation: {
+    sender: 'KGB BUNKER #7',
+    orgTag: 'STATE SECURITY',
+    subject: 'MIDNIGHT INTERROGATION FLOODLIGHTS',
+    bodyLines: [
+      'State Security Bunker #7 is running extra-bright interrogation floodlights and reel-to-reel tape arrays until dawn.',
+      'Deliver >= 175 MW to Sector 4 (KGB Bunker #7) while capping Sector 1 (Pripyat City) at <= 50 MW for 15s.',
     ],
     holdDurationSec: 15,
     rewardRub: 210,
     quotaPoints: 1,
-    objectiveSummary: 'DUGA-1 >= 175 MW & KGB LINE ON (HOLD 15s)',
+    objectiveSummary: 'KGB #7 >= 175 MW & PRIPYAT <= 50 MW (15s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE POWER DIRECTIVE FOR KGB BUNKER SEVEN RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      sectorMinMW: { kgb: 175 },
+      sectorMaxMW: { pripyat: 50 },
+    },
   },
+  swan_lake_tv: {
+    sender: 'GOSTELERADIO',
+    orgTag: 'STATE TELEVISION',
+    subject: 'STATE TV "SWAN LAKE" BROADCAST',
+    bodyLines: [
+      'State TV airs Swan Lake in high-contrast monochrome across every oblast tonight, and one dim living room means reindeer duty.',
+      'Deliver >= 750 MW total electrical output across all 6 UNIT A grid sectors for 20s.',
+    ],
+    holdDurationSec: 20,
+    rewardRub: 235,
+    quotaPoints: 1,
+    objectiveSummary: 'TOTAL OUTPUT >= 750 MW (HOLD 20s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE GRID OUTPUT DIRECTIVE RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      minTotalMW: 750,
+    },
+  },
+  volkor_driveway: {
+    sender: 'DIRECTOR VOLKOR',
+    orgTag: 'PARTY COMMISSAR // SECTOR-84',
+    subject: "COMMISSAR VOLKOR'S HEATED DRIVEWAY",
+    bodyLines: [
+      'A single snowflake dared to land near my black Volga sedan, and my heated asphalt driveway and estate floodlights demand full power.',
+      'Deliver >= 800 MW total electrical output across the grid for 18s until every snow crystal evaporates.',
+    ],
+    holdDurationSec: 18,
+    rewardRub: 250,
+    quotaPoints: 1,
+    objectiveSummary: 'TOTAL OUTPUT >= 800 MW (HOLD 18s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE GRID OUTPUT DIRECTIVE RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      minTotalMW: 800,
+    },
+  },
+  moscow_inspection: {
+    sender: 'MOSCOW GRID DISPATCH',
+    orgTag: 'GOSPLAN ELECTRIFICATION',
+    subject: 'PRAVDA REGIONAL SKYLINE AUDIT',
+    bodyLines: [
+      'Pravda cameramen are filming Sector 84 from orbit tonight to prove Soviet electricity outshines the entire West.',
+      'Deliver >= 750 MW total across the grid with all 6 sectors simultaneously receiving >= 125 MW for 20s.',
+    ],
+    holdDurationSec: 20,
+    rewardRub: 265,
+    quotaPoints: 1,
+    objectiveSummary: 'TOTAL >= 750 MW & ALL 6 SECTORS >= 125 MW (20s)',
+    arrivalVox:
+      'ATTENTION COMRADE OPERATOR. NEW STATE GRID OUTPUT DIRECTIVE RECEIVED ON DESK TERMINAL.',
+    powerTargets: {
+      minTotalMW: 750,
+      sectorMinMW: {
+        pripyat: 125,
+        duga: 125,
+        kolkhoz: 125,
+        kgb: 125,
+        vodka: 125,
+        steel: 125,
+      },
+    },
+  },
+}
+
+export function getPost84PowerOrderSpec(
+  orderId: string,
+  templateId: Post84OrderTemplateId,
+  title: string
+): ActivePost84PowerOrder {
+  const bp = ORDER_BLUEPRINTS[templateId]
+  return {
+    orderId,
+    templateId,
+    title,
+    ...(bp.powerTargets.minTotalMW !== undefined
+      ? { minTotalMW: bp.powerTargets.minTotalMW }
+      : {}),
+    ...(bp.powerTargets.sectorMinMW
+      ? { sectorMinMW: { ...bp.powerTargets.sectorMinMW } }
+      : {}),
+    ...(bp.powerTargets.sectorMaxMW
+      ? { sectorMaxMW: { ...bp.powerTargets.sectorMaxMW } }
+      : {}),
+  }
 }
 
 export function createPost84OrderMessage(
@@ -351,6 +526,7 @@ export function createPost84OrderMessage(
       rewardRub: bp.rewardRub,
       quotaPoints: bp.quotaPoints,
       objectiveSummary: bp.objectiveSummary,
+      arrivalVox: bp.arrivalVox,
     },
   }
 }
@@ -369,76 +545,99 @@ export function evaluatePost84Order(
         ? `${holdProgressSec.toFixed(1)}/${holdDurationSec}s`
         : `HOLD ${holdDurationSec}s`
 
+  const delivered = computeDeliveredPost84Power(telemetry)
+  const d = delivered.sectorDeliveredMW
+  const shortfallTag = delivered.isPowerShortfall ? ' [LOW GEN]' : ''
+
   switch (templateId) {
-    case 'vodka_batch': {
-      const met = telemetry.sectorMW.vodka >= 175
+    case 'municipal_heating': {
+      const met = d.pripyat >= 175
       return {
         met,
-        liveReadout: `CURRENT: ${Math.round(telemetry.sectorMW.vodka)} MW / TARGET: >= 175 MW (${holdStr})`,
-        detailLine: 'UNIT A LEVER #5 (VODKA) // AUTO-COMPLETES WHEN HELD',
+        liveReadout: `PRIPYAT: ${d.pripyat}/>=175 MW${shortfallTag} (${holdStr})`,
+        detailLine:
+          'UNIT A LEVER #1 (PRIPYAT) >= 175 MW // UNIT C BATTERY BUFFERS SURGE',
+      }
+    }
+    case 'vodka_batch': {
+      const met = d.vodka >= 175
+      return {
+        met,
+        liveReadout: `VODKA: ${d.vodka}/>=175 MW${shortfallTag} (${holdStr})`,
+        detailLine:
+          'UNIT A LEVER #5 (VODKA) >= 175 MW // UNIT C BATTERY BUFFERS SURGE',
+      }
+    }
+    case 'kolkhoz_lamps': {
+      const met = d.kolkhoz >= 175
+      return {
+        met,
+        liveReadout: `KOLKHOZ: ${d.kolkhoz}/>=175 MW${shortfallTag} (${holdStr})`,
+        detailLine:
+          'UNIT A LEVER #3 (KOLKHOZ) >= 175 MW // UNIT C BATTERY BUFFERS SURGE',
       }
     }
     case 'tractor_foundry': {
-      const met =
-        telemetry.sectorMW.steel >= 175 &&
-        telemetry.gridHz >= 49.5 &&
-        telemetry.gridHz <= 50.5 &&
-        telemetry.avrActive
+      const met = d.steel >= 175 && d.vodka >= 150
       return {
         met,
-        liveReadout: `STEEL: ${Math.round(telemetry.sectorMW.steel)}/>=175MW | ${telemetry.gridHz.toFixed(1)}Hz AVR:${telemetry.avrActive ? 'ON' : 'OFF'} (${holdStr})`,
-        detailLine: 'UNIT A LEVER #6 (STEEL) + UNIT C AVR ON',
-      }
-    }
-    case 'swan_lake_tv': {
-      const met =
-        telemetry.totalElectricalMW >= 675 &&
-        telemetry.gridHz >= 49.5 &&
-        telemetry.gridHz <= 50.5
-      return {
-        met,
-        liveReadout: `GRID: ${Math.round(telemetry.totalElectricalMW)}/>=675MW | ${telemetry.gridHz.toFixed(1)}/50.0Hz (${holdStr})`,
-        detailLine: 'UNIT A LEVERS / UNIT C WHEEL >= 675 MW @ 50.0 Hz',
-      }
-    }
-    case 'municipal_heating': {
-      const met =
-        telemetry.pressureBar >= 65 &&
-        telemetry.pressureBar <= 78 &&
-        telemetry.sectorMW.pripyat >= 150
-      return {
-        met,
-        liveReadout: `BAR: ${telemetry.pressureBar.toFixed(1)} (65-78) | PRIPYAT: ${Math.round(telemetry.sectorMW.pripyat)}/>=150MW (${holdStr})`,
-        detailLine: 'UNIT B/A-2 STEAM 65-78 BAR + UNIT A LEVER #1 PRIPYAT',
-      }
-    }
-    case 'volkor_driveway': {
-      const met = telemetry.energyCreatedMW >= 750
-      return {
-        met,
-        liveReadout: `CREATED: ${Math.round(telemetry.energyCreatedMW)} MW / TARGET: >= 750 MW (${holdStr})`,
-        detailLine: 'UNIT A-2 RODS & UNIT B FEEDWATER -> >= 750 MW CREATED',
-      }
-    }
-    case 'moscow_inspection': {
-      const met =
-        telemetry.radiationLevel <= 0.8 &&
-        telemetry.waterReservoir >= 70 &&
-        telemetry.bubblerLevel <= 65 &&
-        telemetry.containmentSealLocked &&
-        telemetry.totalElectricalMW >= 550
-      return {
-        met,
-        liveReadout: `SEALS:${telemetry.containmentSealLocked ? 'OK' : 'NO'} RAD:${telemetry.radiationLevel.toFixed(1)} H2O:${Math.round(telemetry.waterReservoir)}% BUB:${Math.round(telemetry.bubblerLevel)}% MW:${Math.round(telemetry.totalElectricalMW)} (${holdStr})`,
-        detailLine: 'UNIT B 3 SEALS LOCKED, RAD<=0.8, H2O>=70%, BUB<=65%, >=550 MW',
+        liveReadout: `STEEL:${d.steel}/>=175 | VODKA:${d.vodka}/>=150 MW${shortfallTag} (${holdStr})`,
+        detailLine: 'UNIT A LEVERS #6 (STEEL) >= 175 & #5 (VODKA) >= 150 MW',
       }
     }
     case 'duga_radar': {
-      const met = telemetry.sectorMW.duga >= 175 && telemetry.kgbLineActive
+      const met =
+        d.duga >= 200 &&
+        telemetry.sectorMW.kolkhoz <= 50 &&
+        d.kolkhoz <= 50
       return {
         met,
-        liveReadout: `DUGA-1: ${Math.round(telemetry.sectorMW.duga)}/>=175MW | KGB LINE:${telemetry.kgbLineActive ? 'ON' : 'OFF'} (${holdStr})`,
-        detailLine: 'UNIT A LEVER #2 (DUGA-1) + UNIT C KGB LINE ON',
+        liveReadout: `DUGA:${d.duga}/>=200 | KOLKHOZ:${d.kolkhoz}/<=50 MW${shortfallTag} (${holdStr})`,
+        detailLine: 'UNIT A LEVER #2 (DUGA) >= 200 MW & #3 (KOLKHOZ) <= 50 MW',
+      }
+    }
+    case 'kgb_interrogation': {
+      const met =
+        d.kgb >= 175 &&
+        telemetry.sectorMW.pripyat <= 50 &&
+        d.pripyat <= 50
+      return {
+        met,
+        liveReadout: `KGB #7:${d.kgb}/>=175 | PRIPYAT:${d.pripyat}/<=50 MW${shortfallTag} (${holdStr})`,
+        detailLine: 'UNIT A LEVER #4 (KGB #7) >= 175 MW & #1 (PRIPYAT) <= 50 MW',
+      }
+    }
+    case 'swan_lake_tv': {
+      const met = delivered.totalDeliveredMW >= 750
+      return {
+        met,
+        liveReadout: `GRID DELIVERED: ${delivered.totalDeliveredMW} / >=750 MW${shortfallTag} (${holdStr})`,
+        detailLine: 'UNIT A LEVERS #1-#6 -> >= 750 MW TOTAL DELIVERED',
+      }
+    }
+    case 'volkor_driveway': {
+      const met = delivered.totalDeliveredMW >= 800
+      return {
+        met,
+        liveReadout: `GRID DELIVERED: ${delivered.totalDeliveredMW} / >=800 MW${shortfallTag} (${holdStr})`,
+        detailLine: 'UNIT A LEVERS #1-#6 -> >= 800 MW TOTAL DELIVERED',
+      }
+    }
+    case 'moscow_inspection': {
+      const minSectorDelivered = Math.min(
+        d.pripyat,
+        d.duga,
+        d.kolkhoz,
+        d.kgb,
+        d.vodka,
+        d.steel
+      )
+      const met =
+        delivered.totalDeliveredMW >= 750 && minSectorDelivered >= 125
+      return {
+        met,
+        liveReadout: `GRID:${delivered.totalDeliveredMW}/>=750 | MIN SECT:${minSectorDelivered}/>=125 MW${shortfallTag} (${holdStr})`,
+        detailLine: 'UNIT A LEVERS #1-#6 ALL >= 125 MW (>= 750 MW TOTAL)',
       }
     }
   }

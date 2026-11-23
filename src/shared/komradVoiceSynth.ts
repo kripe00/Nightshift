@@ -14,7 +14,7 @@ import {
   resetKomradSilenceState,
 } from "./komradSilenceState";
 import type { KomradMessageEntry, KomradMood } from "./types";
-import { useGameStore } from "./useGameStore";
+import { doesRadioDominateSubtitles, useGameStore } from "./useGameStore";
 
 export type KomradVowelKey =
   | "AA"
@@ -105,7 +105,10 @@ export type VoxQueueItem =
 
 export interface KomradSubtitleSnapshot {
   text: string | null;
+  clause: string | null;
+  fullText: string | null;
   mood: KomradMood;
+  activeWord: string | null;
   isSpeaking: boolean;
 }
 
@@ -387,7 +390,9 @@ const VOX_MANIFEST_URL = "./audio/vox/komrad_vox_manifest.json";
 const SERVO_WHIR_COOLDOWN_MS = 2500;
 const RADIO_BROADCAST_HOLDOFF_MS = 2800;
 const VOX_LOOKAHEAD_SEC = 0.24;
-const INTER_WORD_GAP_SEC = 0.018;
+const VOX_WORD_OVERLAP_SEC = 0.03;
+const PUNCT_COMMA_PAUSE_SEC = 0.075;
+const PUNCT_SENTENCE_PAUSE_SEC = 0.145;
 const ROUTINE_MASTER_GAIN = 0.5;
 const ALERT_MASTER_GAIN = 0.72;
 const MONOLOGUE_MIN_GAP_SEC = 75;
@@ -485,8 +490,9 @@ let charCursor = 0;
 let charAccumSec = 0;
 let visualTypingActive = false;
 
-const KOMRAD_SUBTITLE_LINGER_MS = 600;
-const KOMRAD_SUBTITLE_MAX_LEN = 88;
+const KOMRAD_SUBTITLE_LINGER_MS = 750;
+const KOMRAD_SUBTITLE_MAX_LEN = 110;
+const VISUAL_SUBTITLE_CPS = 28;
 
 interface SubtitleClauseSpan {
   start: number;
@@ -495,13 +501,29 @@ interface SubtitleClauseSpan {
 }
 
 let activeSubtitleClauses: SubtitleClauseSpan[] = [];
+let activeUtteranceCleanText = "";
 let subtitleSnapshot: KomradSubtitleSnapshot = {
   text: null,
+  clause: null,
+  fullText: null,
   mood: "normal",
+  activeWord: null,
   isSpeaking: false,
 };
 let subtitleHoldUntilMs = 0;
 const subtitleListeners = new Set<() => void>();
+
+let visualSubtitleActive = false;
+let visualSubtitleFullText = "";
+let visualSubtitleClauses: SubtitleClauseSpan[] = [];
+let visualSubtitleCharCursor = 0;
+let visualSubtitleAccumSec = 0;
+let visualSubtitleMood: KomradMood = "normal";
+let komradUnlockListenersInstalled = false;
+
+function nowPerfMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
 
 export function getKomradSubtitleSnapshot(): KomradSubtitleSnapshot {
   return subtitleSnapshot;
@@ -514,31 +536,79 @@ export function subscribeKomradSubtitle(listener: () => void): () => void {
   };
 }
 
+export function cleanSubtitleDisplayText(raw: string): string {
+  return raw
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|\uFE0F|\u200D/gu, " ")
+    .replace(/[’‘]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/^\s*(?:\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]\s*)+/, "")
+    .replace(
+      /^(?:K\.O\.M\.R\.A\.D\.?(?:[-\s]?84)?|KOMRAD(?:[-\s]?84)?|SYS\.DEFENSE|PRINTER|OPERATOR)\s*:\s*/i,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function emitKomradSubtitle(
-  text: string | null,
+  clauseText: string | null,
   mood: KomradMood,
   isSpeaking: boolean,
+  fullText: string | null = null,
+  activeWord: string | null = null,
 ): void {
-  const cleanText = text && text.trim().length > 0 ? text.trim() : null;
+  const cleanClause =
+    clauseText && clauseText.trim().length > 0 ? clauseText.trim() : null;
+  const cleanFull =
+    cleanClause === null
+      ? null
+      : fullText && fullText.trim().length > 0
+        ? fullText.trim()
+        : cleanClause;
+
   if (
-    subtitleSnapshot.text === cleanText &&
+    subtitleSnapshot.clause === cleanClause &&
+    subtitleSnapshot.fullText === cleanFull &&
     subtitleSnapshot.mood === mood &&
     subtitleSnapshot.isSpeaking === isSpeaking
   ) {
     return;
   }
+
   subtitleSnapshot = {
-    text: cleanText,
+    text: cleanClause,
+    clause: cleanClause,
+    fullText: cleanFull,
     mood,
+    activeWord,
     isSpeaking,
   };
+
+  useGameStore.setState({
+    komradSubtitle: cleanClause
+      ? {
+          text: cleanFull ?? cleanClause,
+          clause: cleanClause,
+          mood,
+          activeWord,
+          isSpeaking,
+        }
+      : null,
+  });
+
   subtitleListeners.forEach((listener) => listener());
 }
 
 function clearKomradSubtitleNow(): void {
   activeSubtitleClauses = [];
+  activeUtteranceCleanText = "";
+  visualSubtitleActive = false;
+  visualSubtitleFullText = "";
+  visualSubtitleClauses = [];
+  visualSubtitleCharCursor = 0;
+  visualSubtitleAccumSec = 0;
   subtitleHoldUntilMs = 0;
-  emitKomradSubtitle(null, "normal", false);
+  emitKomradSubtitle(null, "normal", false, null, null);
 }
 
 function splitLongClauseChunk(
@@ -562,15 +632,15 @@ function splitLongClauseChunk(
 
     const searchLimit = Math.min(len, cursor + KOMRAD_SUBTITLE_MAX_LEN);
     let splitAt = -1;
-    for (let j = searchLimit; j >= cursor + 34; j--) {
+    for (let j = searchLimit; j >= cursor + 28; j--) {
       const ch = text[j - 1];
-      if (ch === "," || ch === ";" || ch === ":") {
+      if (ch === "," || ch === ";" || ch === ":" || ch === "—" || ch === "–") {
         splitAt = j;
         break;
       }
     }
     if (splitAt < 0) {
-      for (let j = searchLimit; j >= cursor + 34; j--) {
+      for (let j = searchLimit; j >= cursor + 28; j--) {
         if (text[j] === " ") {
           splitAt = j;
           break;
@@ -588,23 +658,89 @@ function splitLongClauseChunk(
   }
 }
 
-function splitTextIntoSubtitleClauses(text: string): SubtitleClauseSpan[] {
+export function splitTextIntoSubtitleClauses(text: string): SubtitleClauseSpan[] {
   const out: SubtitleClauseSpan[] = [];
-  const sentenceRe = /[^.!?]+[.!?]+|[^.!?]+$/g;
-  let match: RegExpMatchArray | null;
-  while ((match = sentenceRe.exec(text)) !== null) {
-    const raw = match[0];
-    const trimStart = raw.search(/\S/);
-    if (trimStart < 0) continue;
-    const clean = raw.slice(trimStart).trim();
-    if (!clean) continue;
-    const startOff = (match.index ?? 0) + trimStart;
-    if (clean.length <= KOMRAD_SUBTITLE_MAX_LEN) {
-      out.push({ start: startOff, end: startOff + clean.length, text: clean });
+  const len = text.length;
+  let sentStart = 0;
+  let i = 0;
+
+  while (i < len) {
+    const ch = text[i];
+    if (ch !== "." && ch !== "!" && ch !== "?") {
+      i += 1;
+      continue;
+    }
+
+    let isSentenceEnd = false;
+    if (ch === "!" || ch === "?") {
+      let after = i + 1;
+      while (after < len && (text[after] === "." || text[after] === "!" || text[after] === "?")) {
+        after += 1;
+      }
+      while (after < len && (text[after] === '"' || text[after] === "'" || text[after] === ")")) {
+        after += 1;
+      }
+      if (after >= len || /\s/.test(text[after])) {
+        isSentenceEnd = true;
+        i = after;
+      } else {
+        i += 1;
+      }
     } else {
-      splitLongClauseChunk(clean, startOff, out);
+      // Period '.' : ignore decimals (3.6), inline acronym separators (K.O.M.R.A.D.-84),
+      // and trailing periods of multi-dot initialisms (U.S.S.R.).
+      const nextCh = i + 1 < len ? text[i + 1] : "";
+      const isTrailingAcronymDot =
+        i >= 2 && /[A-Za-z]/.test(text[i - 1]) && text[i - 2] === ".";
+      if ((nextCh === "" || /\s/.test(nextCh)) && !isTrailingAcronymDot) {
+        let after = i + 1;
+        while (after < len && (text[after] === "." || text[after] === "!" || text[after] === "?")) {
+          after += 1;
+        }
+        while (after < len && (text[after] === '"' || text[after] === "'" || text[after] === ")")) {
+          after += 1;
+        }
+        if (after >= len || /\s/.test(text[after])) {
+          isSentenceEnd = true;
+          i = after;
+        } else {
+          i += 1;
+        }
+      } else {
+        i += 1;
+      }
+    }
+
+    if (isSentenceEnd) {
+      const raw = text.slice(sentStart, i);
+      const trimStart = raw.search(/\S/);
+      if (trimStart >= 0) {
+        const clean = raw.slice(trimStart).trim();
+        const baseOff = sentStart + trimStart;
+        if (clean.length <= KOMRAD_SUBTITLE_MAX_LEN) {
+          out.push({ start: baseOff, end: baseOff + clean.length, text: clean });
+        } else {
+          splitLongClauseChunk(clean, baseOff, out);
+        }
+      }
+      sentStart = i;
     }
   }
+
+  if (sentStart < len) {
+    const raw = text.slice(sentStart);
+    const trimStart = raw.search(/\S/);
+    if (trimStart >= 0) {
+      const clean = raw.slice(trimStart).trim();
+      const baseOff = sentStart + trimStart;
+      if (clean.length <= KOMRAD_SUBTITLE_MAX_LEN) {
+        out.push({ start: baseOff, end: baseOff + clean.length, text: clean });
+      } else {
+        splitLongClauseChunk(clean, baseOff, out);
+      }
+    }
+  }
+
   return out;
 }
 
@@ -619,6 +755,34 @@ function lookupSubtitleClauseAtChar(
     }
   }
   return clauses[clauses.length - 1].text;
+}
+
+function ensureKomradAudioUnlockListeners(): void {
+  if (komradUnlockListenersInstalled || typeof window === "undefined") return;
+  komradUnlockListenersInstalled = true;
+
+  const tryUnlockAudio = () => {
+    const s = useGameStore.getState();
+    if (s.isMusicMuted) return;
+    const audio = getAudioContext();
+    if (!audio) return;
+    const finishUnlock = () => {
+      if (audio.state !== "running") return;
+      if (useGameStore.getState().phase === "playing" && !useGameStore.getState().isMusicMuted) {
+        ensureVoxPreloaded(audio);
+      }
+      window.removeEventListener("pointerdown", tryUnlockAudio);
+      window.removeEventListener("keydown", tryUnlockAudio);
+    };
+    if (audio.state === "running") {
+      finishUnlock();
+    } else if (audio.state === "suspended") {
+      void audio.resume().then(finishUnlock).catch(() => {});
+    }
+  };
+
+  window.addEventListener("pointerdown", tryUnlockAudio, { passive: true });
+  window.addEventListener("keydown", tryUnlockAudio, { passive: true });
 }
 
 export function getKomradVowelBand(
@@ -1072,7 +1236,7 @@ export function tokenizeToVoxQueue(
     // 2. Punctuation pauses
     if (ch === "," || ch === ";" || ch === "—" || ch === "–") {
       i += 1;
-      queue.push({ kind: "pause", durSec: 0.12, terminator: ",", charEnd: i });
+      queue.push({ kind: "pause", durSec: PUNCT_COMMA_PAUSE_SEC, terminator: ",", charEnd: i });
       continue;
     }
     if (ch === ":" || (ch === "-" && normalizedText[i + 1] === "-")) {
@@ -1081,7 +1245,7 @@ export function tokenizeToVoxQueue(
       const nextCh = normalizedText[i + step] ?? "";
       i += step;
       if (!(ch === ":" && isDigitChar(prevCh) && isDigitChar(nextCh))) {
-        queue.push({ kind: "pause", durSec: 0.12, terminator: ",", charEnd: i });
+        queue.push({ kind: "pause", durSec: PUNCT_COMMA_PAUSE_SEC, terminator: ",", charEnd: i });
       }
       continue;
     }
@@ -1099,7 +1263,7 @@ export function tokenizeToVoxQueue(
       ) {
         i += 1;
       }
-      queue.push({ kind: "pause", durSec: 0.22, terminator: term, charEnd: i });
+      queue.push({ kind: "pause", durSec: PUNCT_SENTENCE_PAUSE_SEC, terminator: term, charEnd: i });
       continue;
     }
 
@@ -1745,8 +1909,8 @@ export function decomposeWordToSyllables(rawWord: string): SyllableSpec[] {
 
 function isRadioHoldoffActive(): boolean {
   const s = useGameStore.getState();
-  const nowMs = performance.now();
-  if (s.radioBroadcastSubtitle !== null) {
+  const nowMs = nowPerfMs();
+  if (doesRadioDominateSubtitles(s.radioOn, s.radioVolume, s.radioBroadcastSubtitle)) {
     lastRadioSubtitleActiveMs = nowMs;
     return true;
   }
@@ -1848,9 +2012,9 @@ function ensureVoiceChain(
   consonantBusInput.gain.value = 1.0;
 
   // Unified Dark Soviet Mainframe Vocoder & Overwatch PA Horn Bus:
-  // Highpass 95Hz -> Dark Chest +5.0dB @ 170Hz -> 56Hz Ring-Mod ->
+  // Highpass 95Hz -> Dark Chest +5.5dB @ 155Hz -> 56Hz Ring-Mod ->
   // Parallel 9.2ms Metallic Comb Resonator -> Asymmetric Tube Saturation ->
-  // PA Presence +3.5dB @ 1450Hz -> Dark Lowpass 2900Hz -> 36ms Bunker Slapback
+  // PA Presence +3.5dB @ 1450Hz -> Dark Lowpass 2750Hz -> 36ms Bunker Slapback
   const paHighpass = audio.createBiquadFilter();
   paHighpass.type = "highpass";
   paHighpass.frequency.value = 95;
@@ -1858,9 +2022,9 @@ function ensureVoiceChain(
 
   const chestResonance = audio.createBiquadFilter();
   chestResonance.type = "peaking";
-  chestResonance.frequency.value = 170;
+  chestResonance.frequency.value = 155;
   chestResonance.Q.value = 1.25;
-  chestResonance.gain.value = 5.0;
+  chestResonance.gain.value = 5.5;
 
   const ringModGain = audio.createGain();
   ringModGain.gain.value = 1.0;
@@ -1911,7 +2075,7 @@ function ensureVoiceChain(
 
   const paLowpass = audio.createBiquadFilter();
   paLowpass.type = "lowpass";
-  paLowpass.frequency.value = 2900;
+  paLowpass.frequency.value = 2750;
   paLowpass.Q.value = 0.85;
 
   const consHighpass = audio.createBiquadFilter();
@@ -2171,11 +2335,21 @@ function cancelActiveVoxUtterance(fadeSec = 0.03): void {
 
 function finishActiveUtterance(elapsedSec: number): void {
   lastUtteranceEndElapsedSec = elapsedSec;
-  if (subtitleSnapshot.text) {
-    subtitleHoldUntilMs =
-      (typeof performance !== "undefined" ? performance.now() : Date.now()) +
-      KOMRAD_SUBTITLE_LINGER_MS;
-    emitKomradSubtitle(subtitleSnapshot.text, subtitleSnapshot.mood, false);
+  const finalClause =
+    activeSubtitleClauses.length > 0
+      ? activeSubtitleClauses[activeSubtitleClauses.length - 1].text
+      : voxTimeline.length > 0 && voxTimeline[voxTimeline.length - 1].clauseText
+        ? voxTimeline[voxTimeline.length - 1].clauseText!
+        : subtitleSnapshot.clause;
+  if (finalClause) {
+    subtitleHoldUntilMs = nowPerfMs() + KOMRAD_SUBTITLE_LINGER_MS;
+    emitKomradSubtitle(
+      finalClause,
+      voxActiveMood || subtitleSnapshot.mood,
+      false,
+      activeUtteranceCleanText || subtitleSnapshot.fullText,
+      null,
+    );
   }
   releaseActiveUtteranceNodes(0.04);
   markKomradTransmissionEnd();
@@ -2306,7 +2480,8 @@ function scheduleFormantWord(
   const syllables = decomposeWordToSyllables(rawWord);
   if (syllables.length === 0) return 0.14;
 
-  const basePitch = mood === "critical" ? 138 : mood === "warning" ? 134 : 131;
+  const rate = getBasePlaybackRate(mood);
+  const basePitch = mood === "critical" ? 136 : mood === "warning" ? 132 : 128;
   const interSylGap = 0.004;
   let cursor = when;
   let prevF: [number, number, number] = [...NEUTRAL_FORMANTS];
@@ -2317,7 +2492,10 @@ function scheduleFormantWord(
     const isStressed = stressed || syl.stressed;
     const pitchMod = isStressed ? 1.03 : isFinal && syllables.length > 1 ? 0.97 : 1.0;
     const f0 = basePitch * pitchMod;
-    const dur = syl.durSec * (isStressed && si === 0 ? 1.08 : 1.0);
+    const dur = Math.max(
+      0.055,
+      (syl.durSec / rate) * (isStressed && si === 0 ? 1.06 : 1.0),
+    );
 
     const hasOnset = syl.onset.kind !== "none";
     const onsetDur =
@@ -2329,7 +2507,7 @@ function scheduleFormantWord(
             ? 0.02
             : 0;
     const vowelStart = cursor + (hasOnset ? Math.min(0.014, onsetDur * 0.6) : 0);
-    const vowelDur = Math.max(0.075, dur - (vowelStart - cursor));
+    const vowelDur = Math.max(0.052, dur - (vowelStart - cursor));
     const vowelEnd = vowelStart + vowelDur;
 
     // Glottal source: sawtooth + sub-octave dark weight + upper pulse + breath
@@ -2583,7 +2761,7 @@ function scheduleFormantWord(
 }
 
 function getBasePlaybackRate(mood: KomradMood): number {
-  return mood === "critical" ? 0.88 : mood === "warning" ? 0.86 : 0.84;
+  return mood === "critical" ? 1.12 : mood === "warning" ? 1.08 : 1.04;
 }
 
 function normalizeTextForClipMatch(text: string): string {
@@ -2683,27 +2861,63 @@ function beginVoxClipUtterance(
     const term: "." | "!" | "?" | "," | "" =
       lastCh === "!" ? "!" : lastCh === "?" ? "?" : lastCh === "," || lastCh === ":" ? "," : ".";
 
-    const cleanClause = cl.text.trim();
-    voxTimeline.push({
-      startSec: when + cl.start / rate,
-      endSec: when + cl.end / rate,
-      prevCharEnd,
-      charEnd,
-      clauseText: cleanClause,
-      word: labelWord,
-      stressed: false,
-      terminator: term,
-      isClipClause: true,
-    });
+    const cleanClause = cleanSubtitleDisplayText(cl.text) || cl.text.trim();
+    const clauseStartSec = when + cl.start / rate;
+    const clauseEndSec = when + cl.end / rate;
+    const subClauses =
+      cleanClause.length > KOMRAD_SUBTITLE_MAX_LEN
+        ? splitTextIntoSubtitleClauses(cleanClause)
+        : [{ start: 0, end: cleanClause.length, text: cleanClause }];
+
+    if (subClauses.length <= 1) {
+      voxTimeline.push({
+        startSec: clauseStartSec,
+        endSec: clauseEndSec,
+        prevCharEnd,
+        charEnd,
+        clauseText: subClauses[0]?.text ?? cleanClause,
+        word: labelWord,
+        stressed: false,
+        terminator: term,
+        isClipClause: true,
+      });
+    } else {
+      const totalChars = Math.max(1, cleanClause.length);
+      const totalDur = Math.max(0.08, clauseEndSec - clauseStartSec);
+      const charSpan = Math.max(0, charEnd - prevCharEnd);
+      for (let si = 0; si < subClauses.length; si++) {
+        const sc = subClauses[si];
+        const sFrac0 = sc.start / totalChars;
+        const sFrac1 = sc.end / totalChars;
+        voxTimeline.push({
+          startSec: clauseStartSec + totalDur * sFrac0,
+          endSec: clauseStartSec + totalDur * sFrac1,
+          prevCharEnd: Math.round(prevCharEnd + charSpan * sFrac0),
+          charEnd: Math.round(prevCharEnd + charSpan * sFrac1),
+          clauseText: sc.text,
+          word: labelWord,
+          stressed: false,
+          terminator: si === subClauses.length - 1 ? term : ",",
+          isClipClause: true,
+        });
+      }
+    }
     prevCharEnd = charEnd;
   }
 
+  visualSubtitleActive = false;
+  visualSubtitleClauses = [];
+  visualSubtitleFullText = "";
   activeSubtitleClauses = [];
+  activeUtteranceCleanText =
+    cleanSubtitleDisplayText(clip.text) || clip.text.trim();
   subtitleHoldUntilMs = 0;
   emitKomradSubtitle(
-    voxTimeline[0]?.clauseText ?? clip.text,
+    voxTimeline[0]?.clauseText ?? activeUtteranceCleanText,
     mood,
     true,
+    activeUtteranceCleanText,
+    voxTimeline[0]?.word ?? null,
   );
 
   voxQueue = [];
@@ -2715,6 +2929,22 @@ function beginVoxClipUtterance(
   voxSpeakingAudioActive = true;
   visualTypingActive = false;
   markKomradTransmissionStart();
+}
+
+function beginVisualSubtitle(msg: KomradMessageEntry, mood: KomradMood): void {
+  const raw = msg.spokenVoxText ?? msg.text;
+  const clean = cleanSubtitleDisplayText(raw);
+  if (!clean) return;
+  const clauses = splitTextIntoSubtitleClauses(clean);
+  if (clauses.length === 0) return;
+  visualSubtitleActive = true;
+  visualSubtitleFullText = clean;
+  visualSubtitleClauses = clauses;
+  visualSubtitleCharCursor = 0;
+  visualSubtitleAccumSec = 0;
+  visualSubtitleMood = mood;
+  subtitleHoldUntilMs = 0;
+  emitKomradSubtitle(clauses[0].text, mood, true, clean, null);
 }
 
 function beginVoxUtterance(
@@ -2760,24 +2990,47 @@ function beginVoxUtterance(
   startOpenPaCarrierBed(audio, chain, uttGain, nodesSet);
 
   const wordMap = voxManifest?.words ?? {};
-  const speechSource = msg.spokenVoxText ?? msg.text;
+  const rawSpeechSource = msg.spokenVoxText ?? msg.text;
+  const speechSource = cleanSubtitleDisplayText(rawSpeechSource) || rawSpeechSource;
   voxQueue = tokenizeToVoxQueue(speechSource, wordMap);
   for (let qi = 0; qi < voxQueue.length; qi++) {
     voxQueue[qi].speechCharEnd = voxQueue[qi].charEnd;
   }
-  if (msg.spokenVoxText && speechSource.length > 0 && msg.spokenVoxText !== msg.text) {
+  if (speechSource.length > 0 && speechSource !== msg.text) {
     const scale = msg.text.length / speechSource.length;
     for (let qi = 0; qi < voxQueue.length; qi++) {
       const q = voxQueue[qi];
       q.charEnd = Math.min(msg.text.length, Math.max(0, Math.round(q.charEnd * scale)));
     }
   }
+
+  visualSubtitleActive = false;
+  visualSubtitleClauses = [];
+  visualSubtitleFullText = "";
+  activeUtteranceCleanText = speechSource;
   activeSubtitleClauses = splitTextIntoSubtitleClauses(speechSource);
-  subtitleHoldUntilMs = 0;
+  subtitleHoldUntilMs =
+    voxQueue.length === 0 ? nowPerfMs() + KOMRAD_SUBTITLE_LINGER_MS : 0;
+
+  let firstWord: string | null = null;
+  for (let qi = 0; qi < voxQueue.length; qi++) {
+    const q = voxQueue[qi];
+    if (q.kind === "word") {
+      firstWord = q.word;
+      break;
+    }
+    if (q.kind === "fallback") {
+      firstWord = q.rawWord;
+      break;
+    }
+  }
+
   emitKomradSubtitle(
     activeSubtitleClauses[0]?.text ?? speechSource,
     mood,
     voxQueue.length > 0,
+    speechSource,
+    firstWord,
   );
   voxQueueCursor = 0;
   voxCursorAudioSec = audio.currentTime + 0.045;
@@ -2808,7 +3061,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
   const drive = mood === "critical" ? 1.42 : mood === "warning" ? 1.22 : 1.05;
   chain.driveGain.gain.setTargetAtTime(drive, audio.currentTime, 0.015);
 
-  // Crystal-flat baritone playback rate (0.84x normal) with zero random jitter
+  // Fast, brisk baritone playback rate (1.04x normal / 1.08x warning / 1.12x critical)
   const rate = getBasePlaybackRate(mood);
   const uttGain = activeUtteranceGain;
   const nodesSet = activeUtteranceNodes;
@@ -2842,9 +3095,10 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
     if (item.kind === "word") {
       const buf = voxBuffers.get(item.entry.pack);
       if (buf) {
-        const playDur = item.entry.dur / rate;
+        const effectiveDur = item.entry.dur / rate;
         const when = voxCursorAudioSec;
-        const fade = Math.min(0.004, playDur * 0.2);
+        const fadeIn = Math.min(0.005, effectiveDur * 0.15);
+        const fadeOut = Math.min(0.024, effectiveDur * 0.25);
         const gainVal = item.entry.gain * (item.stressed ? 1.08 : 1.0);
 
         const src = audio.createBufferSource();
@@ -2853,12 +3107,12 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
 
         const wordGain = audio.createGain();
         wordGain.gain.setValueAtTime(0.0001, when);
-        wordGain.gain.linearRampToValueAtTime(gainVal, when + fade);
+        wordGain.gain.linearRampToValueAtTime(gainVal, when + fadeIn);
         wordGain.gain.setValueAtTime(
           gainVal,
-          Math.max(when + fade, when + playDur - fade),
+          Math.max(when + fadeIn, when + effectiveDur - fadeOut),
         );
-        wordGain.gain.linearRampToValueAtTime(0.0001, when + playDur);
+        wordGain.gain.linearRampToValueAtTime(0.0001, when + effectiveDur);
 
         src.connect(wordGain);
         wordGain.connect(uttGain);
@@ -2871,9 +3125,16 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
           wordGain.disconnect();
         };
 
+        const nextItem = voxQueue[voxQueueCursor];
+        const nextIsSpoken = nextItem !== undefined && nextItem.kind !== "pause";
+        const overlapSec = nextIsSpoken
+          ? Math.min(VOX_WORD_OVERLAP_SEC, Math.max(0, effectiveDur - 0.075))
+          : 0;
+        const nextCursor = when + effectiveDur - overlapSec;
+
         voxTimeline.push({
           startSec: when,
-          endSec: when + playDur,
+          endSec: nextIsSpoken ? nextCursor : when + effectiveDur,
           prevCharEnd: item.charEnd,
           charEnd: item.charEnd,
           speechCharEnd: item.speechCharEnd ?? item.charEnd,
@@ -2881,8 +3142,11 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
           stressed: item.stressed,
           terminator: "",
         });
-        voxUtteranceEndAudioSec = Math.max(voxUtteranceEndAudioSec, when + playDur);
-        voxCursorAudioSec = when + playDur + INTER_WORD_GAP_SEC;
+        voxUtteranceEndAudioSec = Math.max(
+          voxUtteranceEndAudioSec,
+          when + effectiveDur,
+        );
+        voxCursorAudioSec = nextCursor;
         continue;
       }
     }
@@ -2900,9 +3164,15 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
       mood,
       item.stressed,
     );
+    const nextItem = voxQueue[voxQueueCursor];
+    const nextIsSpoken = nextItem !== undefined && nextItem.kind !== "pause";
+    const overlapSec = nextIsSpoken
+      ? Math.min(0.014, Math.max(0, fDur - 0.07))
+      : 0;
+    const nextCursor = when + fDur - overlapSec;
     voxTimeline.push({
       startSec: when,
-      endSec: when + fDur,
+      endSec: nextIsSpoken ? nextCursor : when + fDur,
       prevCharEnd: item.charEnd,
       charEnd: item.charEnd,
       speechCharEnd: item.speechCharEnd ?? item.charEnd,
@@ -2911,7 +3181,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
       terminator: "",
     });
     voxUtteranceEndAudioSec = Math.max(voxUtteranceEndAudioSec, when + fDur);
-    voxCursorAudioSec = when + fDur + INTER_WORD_GAP_SEC;
+    voxCursorAudioSec = nextCursor;
   }
 }
 
@@ -3233,6 +3503,11 @@ export function stepKomradSpeech(
       elapsedSec + MONOLOGUE_MIN_GAP_SEC + Math.random() * MONOLOGUE_EXTRA_GAP_SEC;
   }
 
+  const radioActive = doesRadioDominateSubtitles(
+    s.radioOn,
+    s.radioVolume,
+    s.radioBroadcastSubtitle,
+  );
   const radioBlocked = isRadioHoldoffActive();
   const mood = computeKomradLiveMood(elapsedSec, vocalState.msgStartSec);
   vocalState.mood = mood;
@@ -3241,6 +3516,7 @@ export function stepKomradSpeech(
   const speakAllowed = canKomradSpeakAudio();
   updateMasterDucking(speakAllowed, targetMasterLevel);
 
+  ensureKomradAudioUnlockListeners();
   const audio = getAudioContext();
   const audioRunning = audio !== null && audio.state === "running";
 
@@ -3328,21 +3604,33 @@ export function stepKomradSpeech(
     return vocalState;
   }
 
-  // Stop cleanly if a Soviet radio broadcast, mute, or diag feed interrupts while K.O.M.R.A.D.-84 is speaking
-  if (
-    (s.radioBroadcastSubtitle !== null || s.isMusicMuted || s.diagFeedActive) &&
-    voxSpeakingAudioActive
-  ) {
+  // Stop cleanly if a Soviet radio broadcast or diag feed interrupts while K.O.M.R.A.D.-84 is speaking.
+  // When only muted (no radio/diag override), stop Web Audio playback while preserving visible subtitles.
+  if (radioActive || s.diagFeedActive) {
+    if (voxSpeakingAudioActive) {
+      cancelActiveVoxUtterance(0.03);
+      lastUtteranceEndElapsedSec = elapsedSec;
+      charCursor = latestMsg.text.length;
+      markKomradTransmissionEnd();
+    }
+    if (subtitleSnapshot.clause !== null || visualSubtitleActive) {
+      clearKomradSubtitleNow();
+    }
+  } else if (s.isMusicMuted && voxSpeakingAudioActive) {
     cancelActiveVoxUtterance(0.03);
-    clearKomradSubtitleNow();
     lastUtteranceEndElapsedSec = elapsedSec;
     charCursor = latestMsg.text.length;
     markKomradTransmissionEnd();
-  } else if (
-    (s.radioBroadcastSubtitle !== null || s.isMusicMuted || s.diagFeedActive) &&
-    subtitleSnapshot.text !== null
-  ) {
-    clearKomradSubtitleNow();
+    if (subtitleSnapshot.clause) {
+      subtitleHoldUntilMs = nowPerfMs() + KOMRAD_SUBTITLE_LINGER_MS;
+      emitKomradSubtitle(
+        subtitleSnapshot.clause,
+        subtitleSnapshot.mood,
+        false,
+        subtitleSnapshot.fullText,
+        null,
+      );
+    }
   }
 
   // Detect natural completion of active utterance independently of typewriter state
@@ -3391,6 +3679,9 @@ export function stepKomradSpeech(
           cancelActiveVoxUtterance(0.03);
           markKomradTransmissionEnd();
           queuePendingMessage(latestMsg, msgMood, incomingPriority, elapsedSec);
+          if (!radioActive && !s.diagFeedActive) {
+            beginVisualSubtitle(latestMsg, msgMood);
+          }
         }
       }
       // Otherwise: DROP speech — never queue back-to-back chatter behind an active transmission
@@ -3432,6 +3723,9 @@ export function stepKomradSpeech(
         charCursor = latestMsg.text.length;
         vocalState.activeMsgId = latestMsg.id;
       }
+      if (!radioActive && !s.diagFeedActive) {
+        beginVisualSubtitle(latestMsg, msgMood);
+      }
     } else if (latestMsg.text.length > 0) {
       charCursor = 0;
       charAccumSec = 0;
@@ -3439,6 +3733,9 @@ export function stepKomradSpeech(
       vocalState.activeMsgId = latestMsg.id;
       visualTypingActive = true;
       markKomradTransmissionStart();
+      if (!radioActive && !s.diagFeedActive) {
+        beginVisualSubtitle(latestMsg, msgMood);
+      }
     } else {
       charCursor = 0;
       vocalState.activeMsgId = latestMsg.id;
@@ -3530,6 +3827,7 @@ export function stepKomradSpeech(
       pumpVoxLookahead(audio, chain);
 
       const nowAudio = audio.currentTime;
+      let lastPassedClause: string | null = null;
       while (
         voxTimelineIdx < voxTimeline.length &&
         voxTimeline[voxTimelineIdx].endSec <= nowAudio
@@ -3537,6 +3835,15 @@ export function stepKomradSpeech(
         const passed = voxTimeline[voxTimelineIdx];
         if (passed.charEnd > charCursor) {
           charCursor = passed.charEnd;
+        }
+        const passedClause =
+          passed.clauseText ??
+          lookupSubtitleClauseAtChar(
+            activeSubtitleClauses,
+            passed.speechCharEnd ?? passed.charEnd,
+          );
+        if (passedClause) {
+          lastPassedClause = passedClause;
         }
         voxTimelineIdx += 1;
       }
@@ -3573,11 +3880,26 @@ export function stepKomradSpeech(
             activeSeg.speechCharEnd ?? activeSeg.charEnd,
           );
         if (subText) {
-          emitKomradSubtitle(subText, voxActiveMood, true);
+          emitKomradSubtitle(
+            subText,
+            voxActiveMood,
+            true,
+            activeUtteranceCleanText,
+            activeSeg.word,
+          );
         }
       } else {
         vocalState.activeWord = null;
         vocalState.isStressed = false;
+        if (lastPassedClause) {
+          emitKomradSubtitle(
+            lastPassedClause,
+            voxActiveMood,
+            true,
+            activeUtteranceCleanText,
+            null,
+          );
+        }
       }
 
       const stillRunning =
@@ -3598,10 +3920,59 @@ export function stepKomradSpeech(
   }
 
   if (
-    subtitleSnapshot.text !== null &&
+    visualSubtitleActive &&
     !voxSpeakingAudioActive &&
-    (typeof performance !== "undefined" ? performance.now() : Date.now()) >=
-      subtitleHoldUntilMs
+    !radioActive &&
+    !s.diagFeedActive
+  ) {
+    const totalVisLen = visualSubtitleFullText.length;
+    if (visualSubtitleCharCursor < totalVisLen) {
+      visualSubtitleAccumSec += dt * VISUAL_SUBTITLE_CPS;
+      const step = Math.floor(visualSubtitleAccumSec);
+      if (step > 0) {
+        visualSubtitleAccumSec -= step;
+        visualSubtitleCharCursor = Math.min(
+          totalVisLen,
+          visualSubtitleCharCursor + step,
+        );
+      }
+    }
+    const nextClause = lookupSubtitleClauseAtChar(
+      visualSubtitleClauses,
+      Math.max(1, visualSubtitleCharCursor),
+    );
+    if (visualSubtitleCharCursor >= totalVisLen) {
+      visualSubtitleActive = false;
+      const endClause =
+        nextClause ??
+        visualSubtitleClauses[visualSubtitleClauses.length - 1]?.text ??
+        subtitleSnapshot.clause;
+      if (endClause) {
+        subtitleHoldUntilMs = nowPerfMs() + KOMRAD_SUBTITLE_LINGER_MS;
+        emitKomradSubtitle(
+          endClause,
+          visualSubtitleMood,
+          false,
+          visualSubtitleFullText,
+          null,
+        );
+      }
+    } else if (nextClause) {
+      emitKomradSubtitle(
+        nextClause,
+        visualSubtitleMood,
+        true,
+        visualSubtitleFullText,
+        null,
+      );
+    }
+  }
+
+  if (
+    subtitleSnapshot.clause !== null &&
+    !voxSpeakingAudioActive &&
+    !visualSubtitleActive &&
+    nowPerfMs() >= subtitleHoldUntilMs
   ) {
     clearKomradSubtitleNow();
   }

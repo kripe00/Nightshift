@@ -26,10 +26,12 @@ import {
   type DesktopTelemetrySnapshot,
 } from './desktopOsCanvas'
 import {
+  POST84_ORDER_COMPLETED_VOX,
   VOLKOV_ONBOARDING_MAIL_ID,
   createPost84OrderMessage,
   createShuffledOrderDeck,
   evaluatePost84Order,
+  getPost84PowerOrderSpec,
   type Post84LiveTelemetry,
   type Post84OrderTemplateId,
 } from './post84Mail'
@@ -68,7 +70,8 @@ function pushKomradTerminalNotice(
   text: string,
   level: 'normal' | 'warn',
   sender: 'PRINTER' | 'K.O.M.R.A.D.-84' | 'OPERATOR',
-  pushToKomradWall = true
+  pushToKomradWall = true,
+  spokenVoxText?: string
 ): void {
   post84LogSeq += 1
   const cur = useGameStore.getState()
@@ -86,6 +89,7 @@ function pushKomradTerminalNotice(
     timestamp: hms,
     sender,
     text,
+    ...(spokenVoxText ? { spokenVoxText } : {}),
     mood: level === 'warn' ? 'warning' : 'normal',
   }
   useGameStore.setState((prev) => ({
@@ -126,6 +130,7 @@ function readTelemetrySnapshot(): { snapshot: DesktopTelemetrySnapshot; key: str
     shiftTimeMinutes: gs.shiftTimeMinutes,
     tutorialPhase: gs.tutorialPhase,
     isBlackout: gs.isBlackout,
+    az5Active: gs.az5Active,
     coreTemp: gs.coreTemp,
     pressureBar: gs.pressureBar,
     energyCreatedMW: gs.energyCreatedMW,
@@ -140,6 +145,7 @@ function readTelemetrySnapshot(): { snapshot: DesktopTelemetrySnapshot; key: str
     bubblerLevel: gs.bubblerLevel,
     containmentSealLocked: gs.containmentSealLocked,
     sectorMW: { ...gs.sectorMW },
+    targetSectorMW: { ...gs.targetSectorMW },
     coolingMW: gs.powerAllocation.cooling,
     defenseMW: gs.powerAllocation.defense,
     facilityMW: gs.powerAllocation.facility,
@@ -157,6 +163,7 @@ function readTelemetrySnapshot(): { snapshot: DesktopTelemetrySnapshot; key: str
     Math.floor(snapshot.shiftTimeMinutes),
     snapshot.tutorialPhase,
     snapshot.isBlackout ? 1 : 0,
+    snapshot.az5Active ? 1 : 0,
     Math.round(snapshot.coreTemp),
     snapshot.pressureBar.toFixed(1),
     Math.round(snapshot.energyCreatedMW),
@@ -175,6 +182,12 @@ function readTelemetrySnapshot(): { snapshot: DesktopTelemetrySnapshot; key: str
     snapshot.sectorMW.kgb,
     snapshot.sectorMW.vodka,
     snapshot.sectorMW.steel,
+    snapshot.targetSectorMW.pripyat,
+    snapshot.targetSectorMW.duga,
+    snapshot.targetSectorMW.kolkhoz,
+    snapshot.targetSectorMW.kgb,
+    snapshot.targetSectorMW.vodka,
+    snapshot.targetSectorMW.steel,
     snapshot.coolingMW,
     snapshot.defenseMW,
     snapshot.facilityMW,
@@ -303,6 +316,7 @@ export function DesktopComputer3D() {
       badge.tex.dispose()
       cableGeo.dispose()
       mouseCableGeo.dispose()
+      useGameStore.getState().setActivePost84Order(null)
     }
   }, [badge, cableGeo, mouseCableGeo, screenTex])
 
@@ -376,17 +390,10 @@ export function DesktopComputer3D() {
         if (uncompletedOrder.order.orderState === 'active') {
           const liveTelemetry: Post84LiveTelemetry = {
             totalElectricalMW: gs.totalElectricalMW,
-            energyCreatedMW: gs.energyCreatedMW,
-            pressureBar: gs.pressureBar,
-            gridHz: gs.gridHz,
-            avrActive: gs.avrActive,
-            kgbLineActive: gs.kgbLineActive,
-            radiationLevel: gs.radiationLevel,
-            waterReservoir: gs.waterReservoir,
-            bubblerLevel: gs.bubblerLevel,
-            containmentSealLocked: gs.containmentSealLocked,
-            coreTemp: gs.coreTemp,
+            isBlackout: gs.isBlackout,
+            az5Active: gs.az5Active,
             sectorMW: gs.sectorMW,
+            targetSectorMW: gs.targetSectorMW,
           }
           const evalRes = evaluatePost84Order(
             uncompletedOrder.order.templateId,
@@ -432,10 +439,13 @@ export function DesktopComputer3D() {
               diskPulseRef.current = 0.75
               playOrderCompleteChime()
               notifyPost84OrderEvent()
+              useGameStore.getState().setActivePost84Order(null)
               pushKomradTerminalNotice(
                 `DIRECTIVE COMPLETED: ${completedMessage.subject} — PAID +${completedMessage.order.rewardRub} RUB (+${completedMessage.order.quotaPoints} QUOTA)`,
                 'normal',
-                'K.O.M.R.A.D.-84'
+                'K.O.M.R.A.D.-84',
+                true,
+                POST84_ORDER_COMPLETED_VOX
               )
               orderSpawnCountdownRef.current =
                 ORDER_COOLDOWN_MIN_SEC +
@@ -479,7 +489,9 @@ export function DesktopComputer3D() {
               pushKomradTerminalNotice(
                 `NEW STATE DIRECTIVE RECEIVED ON ISKRA-84 DESK TERMINAL: ${newOrderMsg.subject}`,
                 'warn',
-                'PRINTER'
+                'PRINTER',
+                true,
+                newOrderMsg.order?.arrivalVox
               )
               if (cursorPosRef.current) {
                 const updatedHit = hitTestDesktopOs(
@@ -670,6 +682,15 @@ export function DesktopComputer3D() {
       alertBlinkStepRef.current = -1
       const accepted = nextState.mailMessages.find((m) => m.id === acceptedMessageId)
       if (accepted?.order) {
+        useGameStore
+          .getState()
+          .setActivePost84Order(
+            getPost84PowerOrderSpec(
+              accepted.id,
+              accepted.order.templateId,
+              accepted.subject
+            )
+          )
         pushKomradTerminalNotice(
           `DIRECTIVE ACCEPTED: ${accepted.subject} — ${accepted.order.objectiveSummary}`,
           'normal',

@@ -7,18 +7,17 @@ import {
 import { playSwitchClank } from './modules/reactor/audioSynth'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
-import {
-  getKomradSubtitleSnapshot,
-  subscribeKomradSubtitle,
-  type KomradSubtitleSnapshot,
-} from './shared/komradVoiceSynth'
 import { MainMenuOverlay } from './shared/MainMenuOverlay'
 import {
   pointerLockInteraction,
   subscribePointerLockInteraction,
 } from './shared/pointerLockState'
 import { TutorialCompassHud } from './shared/TutorialCompassHud'
-import { useGameStore } from './shared/useGameStore'
+import {
+  doesRadioDominateSubtitles,
+  hasAudibleRadioSubtitle,
+  useGameStore,
+} from './shared/useGameStore'
 
 function CenterReticle() {
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -118,51 +117,58 @@ function CenterReticle() {
   )
 }
 
-function KomradBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
+function KomradBroadcastSubtitleHud({ mainMenuOpen }: { mainMenuOpen: boolean }) {
   const phase = useGameStore((s) => s.phase)
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
   const diagFeedActive = useGameStore((s) => s.diagFeedActive)
+  const radioOn = useGameStore((s) => s.radioOn)
+  const radioVolume = useGameStore((s) => s.radioVolume)
   const radioSubtitle = useGameStore((s) => s.radioBroadcastSubtitle)
-  const [sub, setSub] = useState<KomradSubtitleSnapshot>(() =>
-    getKomradSubtitleSnapshot(),
-  )
+  const sub = useGameStore((s) => s.komradSubtitle)
 
-  useEffect(() => {
-    const sync = () => {
-      setSub(getKomradSubtitleSnapshot())
-    }
-    const timer = window.setTimeout(sync, 0)
-    const unsub = subscribeKomradSubtitle(sync)
-    return () => {
-      window.clearTimeout(timer)
-      unsub()
-    }
-  }, [])
+  const radioDominates = doesRadioDominateSubtitles(
+    radioOn,
+    radioVolume,
+    radioSubtitle
+  )
 
   if (
     phase !== 'playing' ||
     !isShiftControlReady ||
     diagFeedActive ||
-    menusOpen ||
-    radioSubtitle !== null ||
-    !sub.text
+    mainMenuOpen ||
+    radioDominates ||
+    !sub?.clause
   ) {
     return null
   }
 
   const accentHex =
     sub.mood === 'critical'
-      ? '#ff3b2f'
+      ? '#ff2a2a'
       : sub.mood === 'warning'
         ? '#ffb000'
         : '#33ff66'
 
+  const bodyColor =
+    sub.mood === 'critical'
+      ? '#ff9e9e'
+      : sub.mood === 'warning'
+        ? '#ffd27d'
+        : '#e6f5ea'
+
   return (
     <div
-      className="pointer-events-none fixed bottom-20 left-1/2 z-25 w-max max-w-[min(92vw,48rem)] -translate-x-1/2 rounded border px-4 py-2 text-center shadow-[0_6px_22px_rgba(0,0,0,0.85)] select-none"
+      className="w-max max-w-[min(92vw,52rem)] rounded border px-4 py-2 text-center shadow-[0_6px_22px_rgba(0,0,0,0.85)] select-none"
       style={{
-        backgroundColor: 'rgba(10, 12, 10, 0.84)',
-        borderColor: `${accentHex}a6`,
+        position: 'fixed',
+        bottom: '80px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 45,
+        pointerEvents: 'none',
+        backgroundColor: 'rgba(8, 12, 9, 0.88)',
+        borderColor: `${accentHex}b3`,
       }}
     >
       <div
@@ -179,36 +185,58 @@ function KomradBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
             boxShadow: `0 0 6px ${accentHex}`,
           }}
         />
-        <span>[ K.O.M.R.A.D.-84 // SECTOR 84 PA ]</span>
+        <span>K.O.M.R.A.D.-84 // SECTOR 84 PA</span>
       </div>
       <div
-        className="text-base leading-snug tracking-[0.085em] text-[#f6ead0] uppercase sm:text-lg"
+        className="text-xl leading-snug tracking-[0.06em] uppercase sm:text-2xl"
         style={{
-          fontFamily: '"Kremlin", "VT323", monospace',
-          textShadow:
-            '0 2px 0 #070907, 0 0 8px rgba(0, 0, 0, 0.95), 0 0 14px rgba(51, 255, 102, 0.22)',
+          color: bodyColor,
+          fontFamily: '"VT323", "Courier Prime", monospace',
+          textShadow: '0 2px 0 #070907, 0 0 8px rgba(0, 0, 0, 0.95)',
         }}
       >
-        {sub.text}
+        {sub.clause}
       </div>
     </div>
   )
 }
 
-function RadioBroadcastSubtitleHud({ menusOpen }: { menusOpen: boolean }) {
+function RadioBroadcastSubtitleHud({ mainMenuOpen }: { mainMenuOpen: boolean }) {
   const phase = useGameStore((s) => s.phase)
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
   const diagFeedActive = useGameStore((s) => s.diagFeedActive)
+  const radioOn = useGameStore((s) => s.radioOn)
+  const radioVolume = useGameStore((s) => s.radioVolume)
   const subtitle = useGameStore((s) => s.radioBroadcastSubtitle)
+  const komradSub = useGameStore((s) => s.komradSubtitle)
 
-  if (phase !== 'playing' || !isShiftControlReady || diagFeedActive || menusOpen || !subtitle) {
+  const hasRadio = hasAudibleRadioSubtitle(radioOn, radioVolume, subtitle)
+  const radioDominates = doesRadioDominateSubtitles(radioOn, radioVolume, subtitle)
+  const hasKomrad = Boolean(komradSub?.clause?.trim())
+
+  if (
+    phase !== 'playing' ||
+    !isShiftControlReady ||
+    diagFeedActive ||
+    mainMenuOpen ||
+    !hasRadio ||
+    (!radioDominates && hasKomrad)
+  ) {
     return null
   }
 
   return (
     <div
-      className="pointer-events-none fixed bottom-20 left-1/2 z-25 w-max max-w-[min(92vw,48rem)] -translate-x-1/2 rounded border border-[#ffb000]/65 px-4 py-2 text-center shadow-[0_6px_22px_rgba(0,0,0,0.85)] select-none"
-      style={{ backgroundColor: 'rgba(10, 12, 10, 0.84)' }}
+      className="w-max max-w-[min(92vw,48rem)] rounded border border-[#ffb000]/65 px-4 py-2 text-center shadow-[0_6px_22px_rgba(0,0,0,0.85)] select-none"
+      style={{
+        position: 'fixed',
+        bottom: '80px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 45,
+        pointerEvents: 'none',
+        backgroundColor: 'rgba(10, 12, 10, 0.84)',
+      }}
     >
       <div
         className="mb-1 flex items-center justify-center gap-2 text-xs font-bold tracking-[0.18em] text-[#ffb000]"
@@ -243,12 +271,16 @@ export function App() {
   const [menusOpen, setMenusOpen] = useState<boolean>(
     () => pointerLockInteraction.mainMenuOpen || pointerLockInteraction.debugMenuOpen
   )
+  const [mainMenuOpen, setMainMenuOpen] = useState<boolean>(
+    () => pointerLockInteraction.mainMenuOpen
+  )
 
   useEffect(() => {
     const syncMenus = () => {
       setMenusOpen(
         pointerLockInteraction.mainMenuOpen || pointerLockInteraction.debugMenuOpen
       )
+      setMainMenuOpen(pointerLockInteraction.mainMenuOpen)
     }
     syncMenus()
     return subscribePointerLockInteraction(syncMenus)
@@ -344,8 +376,6 @@ export function App() {
       <DebugMenu />
       <CenterReticle />
       <TutorialCompassHud menusOpen={menusOpen} />
-      <KomradBroadcastSubtitleHud menusOpen={menusOpen} />
-      <RadioBroadcastSubtitleHud menusOpen={menusOpen} />
 
       {/* Subtle Contextual [E] SIT AT DESK Prompt When Walking Near Inspector Desk */}
       {phase === 'playing' && isShiftControlReady && !isSeatedAtDesk && canSitAtDesk && !menusOpen && (
@@ -371,6 +401,9 @@ export function App() {
       >
         <ControlRoomScene />
       </Canvas>
+
+      <KomradBroadcastSubtitleHud mainMenuOpen={mainMenuOpen} />
+      <RadioBroadcastSubtitleHud mainMenuOpen={mainMenuOpen} />
     </div>
   )
 }

@@ -3,6 +3,7 @@ export interface SubstationQuota {
   name: string;
   allocatedMW: number;   // Controlled via the 6 MW levers on UNIT A (0 to maxMW)
   targetMW: number;      // Active Ministry quota target MW
+  quotaMode?: 'exact' | 'min' | 'max';
   maxMW: number;
   requiresH2O: boolean;
   allocatedH2O: number;
@@ -81,7 +82,7 @@ export interface ReactorState {
   turbines: [TurbineState, TurbineState]; // Legacy compatibility mirror (Unit C now uses Battery Dispatch)
   houseLoadMW: number;        // Internal plant electrical load (Ventilation + KGB Trunk)
   energyCreatedMW: number;    // Live electrical power generated into Station Battery (0-1050 MW)
-  batteryStoredMWh: number;   // Energy stored in Station Battery Bank (0-1000 MWh, /10 = 0-100%)
+  batteryStoredMWh: number;   // Energy stored in Station Battery Bank (0-3000 MWh, /30 = 0-100%)
   batteryOutputValve: number; // Single UNIT C wheel (0.0-1.0 => 0-1000 MW from Battery to Grid)
   energyDemandMW: number;     // Total regional grid demand (sum of substations.targetMW)
   totalElectricalMW: number;  // Net MW delivered from Station Battery to the 6 regional substations
@@ -120,6 +121,12 @@ export interface TutorialPrompt {
 const NOMINAL_THERMAL_MW = 3200;
 const NOMINAL_PRESSURE_BAR = 70;
 const MAX_BATTERY_INPUT_MW = 1050;
+export const MAX_BATTERY_CAPACITY_MWH = 3000;
+export const INITIAL_BATTERY_CHARGE_RATIO = 0.25;
+export const INITIAL_BATTERY_STORED_MWH =
+  MAX_BATTERY_CAPACITY_MWH * INITIAL_BATTERY_CHARGE_RATIO; // 750 MWh (25%)
+const BATTERY_CHARGE_RATE = 0.095;    // Responsive surplus recharge (~60-80s for 25% -> 100% at +300-400 MW)
+const BATTERY_DISCHARGE_RATE = 0.045; // 3x longer discharge endurance at 3000 MWh (~111s full 600 MW backup)
 const ROD_SPEED = 0.015;
 const AZ5_SPEED = 0.055;             // ~18s full insertion with 3.5s graphite displacer tip effect
 const VOID_COEFFICIENT = 0.028;      // Positive void coefficient (+alpha_phi)
@@ -197,7 +204,7 @@ export function createColdStartState(): ReactorState {
     ],
     houseLoadMW: 25,
     energyCreatedMW: 0,
-    batteryStoredMWh: 250,
+    batteryStoredMWh: INITIAL_BATTERY_STORED_MWH,
     batteryOutputValve: 0,
     energyDemandMW: 600,
     totalElectricalMW: 0,
@@ -313,6 +320,8 @@ export function stepReactorSimulation(
   const delta = Math.min(dt, 0.1);
 
   if (tutorialPhase === 'AWAITING_VOLKOV_MAIL') {
+    state.drumWaterLevel = 0;
+    state.wetSteamSeverity = 0;
     return;
   }
 
@@ -737,28 +746,53 @@ export function stepReactorSimulation(
   const feedwaterSupplyMWe = state.feedwaterValve * 1200 * reservoirSuctionFactor;
 
   // Integrate Drum Water Level (`drumWaterLevel` in mm: `d(Level)/dt = k_lvl * (FeedwaterIn - SteamBoiled)`):
+  const isPreUnitBTutorial =
+    tutorialPhase === 'STEP_1_COOLING' ||
+    tutorialPhase === 'STEP_2_PULL_RODS' ||
+    tutorialPhase === 'STEP_6_BASELINE_600MW' ||
+    tutorialPhase === 'STEP_8_XENON_DRILL';
+  const isColdCore = state.thermalPower < 80 && state.coreTemp < 110;
   const netWaterMassMWe = feedwaterSupplyMWe - steamBoiledMWe;
-  let dWaterMmPerSec = netWaterMassMWe * 0.058;
+  let dWaterMmPerSec = netWaterMassMWe * 0.048;
 
-  if (state.drumPressure < 58 && state.drumWaterLevel > 45 && netWaterMassMWe > 0 && state.feedwaterValve <= 0.65) {
-    // Startup high-level overflow weir returns cold excess smoothly during initial drum boil-up
-    dWaterMmPerSec = (52 - state.drumWaterLevel) * 0.55;
-  } else if (Math.abs(netWaterMassMWe) <= 45) {
-    // Stronger automatic drum-separator level self-centering within ±45 MW balance band
-    dWaterMmPerSec += -state.drumWaterLevel * 0.22;
+  if (state.bubblerDraining) {
+    // Active Drum Blowdown / Bubbler Drain on UNIT B:
+    // Actively dumps excess drum water (> 0 mm) and continues visibly draining down to -150 mm even at cold/low power
+    const blowdownRate =
+      state.drumWaterLevel > 0
+        ? 125
+        : state.drumWaterLevel > -150
+          ? 48
+          : 0;
+    const effectiveInflowMm =
+      netWaterMassMWe > 0 ? netWaterMassMWe * 0.025 : dWaterMmPerSec;
+    dWaterMmPerSec = effectiveInflowMm - blowdownRate;
+  } else if (
+    isPreUnitBTutorial &&
+    netWaterMassMWe > 0 &&
+    state.feedwaterValve >= 0.4 &&
+    state.feedwaterValve <= 0.58
+  ) {
+    // Cold/warmup condensate recirculation bypass keeps nominal ~50% startup feedwater gently near 0 mm
+    // during Steps 1-4 (before Step 5 UNIT B training), without blocking manual FW > 58%, FW < 40%, or Drain!
+    dWaterMmPerSec = (12 - state.drumWaterLevel) * 0.45;
+  } else if (isColdCore && state.feedwaterValve <= 0.12) {
+    // Cold shutdown with feedwater closed/near-zero settles drum level smoothly toward 0 mm
+    dWaterMmPerSec = -state.drumWaterLevel * 0.28;
+  } else if (Math.abs(netWaterMassMWe) <= 50) {
+    // Stronger automatic drum-separator level self-centering within ±50 MW balance band
+    dWaterMmPerSec += -state.drumWaterLevel * 0.24;
   } else {
-    // Proportional drum-separator overflow / automatic level damping across all operating pressures
-    dWaterMmPerSec += -state.drumWaterLevel * 0.045;
+    // Proportional drum-separator overflow return across all operating pressures (stronger above 0 mm)
+    const overflowDamp = state.drumWaterLevel > 0 ? 0.085 : 0.055;
+    dWaterMmPerSec += -state.drumWaterLevel * overflowDamp;
   }
 
-  state.drumWaterLevel += dWaterMmPerSec * delta;
-
-  // Holding BUBBLER DRAIN on UNIT B actively dumps excess separator water (> +50 mm) into condensate return
-  if (state.bubblerDraining && state.drumWaterLevel > 50) {
-    state.drumWaterLevel -= 95 * delta;
-  }
-
-  state.drumWaterLevel = clamp(state.drumWaterLevel, -400, 400);
+  state.drumWaterLevel = clamp(
+    state.drumWaterLevel + dWaterMmPerSec * delta,
+    -400,
+    400
+  );
 
   // Wet Steam Carryover (`drumWaterLevel > +180mm`): floods moisture separators and mildly reduces charger efficiency
   state.wetSteamSeverity =
@@ -878,15 +912,19 @@ export function stepReactorSimulation(
 
   // Battery supplies requestedGridMW while stored charge > 1 MWh; if depleted, caps at energyCreatedMW
   const deliveredGridMW =
-    state.batteryStoredMWh > 1.0
-      ? requestedGridMW
-      : Math.min(requestedGridMW, state.energyCreatedMW);
+    state.az5Active || state.coreMeltdown || state.steamExplosion
+      ? 0
+      : state.batteryStoredMWh > 1.0
+        ? requestedGridMW
+        : Math.min(requestedGridMW, state.energyCreatedMW);
 
   const netChargeFlowMW = state.energyCreatedMW - deliveredGridMW;
+  const batteryRate =
+    netChargeFlowMW >= 0 ? BATTERY_CHARGE_RATE : BATTERY_DISCHARGE_RATE;
   state.batteryStoredMWh = clamp(
-    state.batteryStoredMWh + netChargeFlowMW * 0.045 * delta,
+    state.batteryStoredMWh + netChargeFlowMW * batteryRate * delta,
     0,
-    1000
+    MAX_BATTERY_CAPACITY_MWH
   );
 
   state.totalElectricalMW = deliveredGridMW;
@@ -942,13 +980,21 @@ export function stepReactorSimulation(
   state.substations[2].allocatedH2O = Math.round(state.kolkhozWater);
   state.substations[4].allocatedH2O = Math.round(state.vodkaWater);
 
+  const hasMinQuotaOrder = state.substations.some((x) => x.quotaMode === 'min');
+
   state.substations.forEach((sub) => {
-    const leverMatchesTarget = Math.abs(sub.allocatedMW - sub.targetMW) <= 10;
+    const mode = sub.quotaMode ?? 'exact';
+    const leverMatchesTarget =
+      mode === 'min'
+        ? sub.allocatedMW >= sub.targetMW - 5
+        : mode === 'max'
+          ? sub.allocatedMW <= sub.targetMW + 5
+          : Math.abs(sub.allocatedMW - sub.targetMW) <= 10;
     const mwMet = hasEnoughPower && leverMatchesTarget;
 
     if (!hasEnoughPower && sub.allocatedMW > 0) {
       sub.statusText = `LOW OUT (${Math.round(state.totalElectricalMW)}/${totalAllocatedMW}MW)`;
-    } else if (surplusGridMW > 65 && sub.allocatedMW > 0) {
+    } else if (!hasMinQuotaOrder && surplusGridMW > 65 && sub.allocatedMW > 0) {
       sub.statusText = `SURPLUS (+${Math.round(surplusGridMW)}MW)`;
     } else if (sub.id === 1) {
       sub.statusText = mwMet ? 'HEATING OK' : 'HEATING LOW';
@@ -1020,8 +1066,6 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       if ((aOk && bOk) || (activeMcpCount >= 4 && state.feedwaterValve >= 0.45)) {
         state.mcpActive = [true, true, true, true];
         state.sealToggles = [true, true, true];
-        state.feedwaterValve = Math.max(state.feedwaterValve, 0.5);
-        state.nitrogenLoopValve = Math.max(state.nitrogenLoopValve, 50);
         state.pumpThrottle = [
           Math.max(55, state.pumpThrottle[0]),
           Math.max(55, state.pumpThrottle[1]),
@@ -1193,7 +1237,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         (unmetSub !== undefined && unmetSub.targetMW > unmetSub.allocatedMW) ||
         deltaMW < -25 ||
         state.energyCreatedMW < demandMW - 90 ||
-        state.batteryStoredMWh < 180;
+        state.batteryStoredMWh < MAX_BATTERY_CAPACITY_MWH * 0.18;
       const isMinusOrder =
         totalTargetMW < totalAllocatedMW - 5 ||
         (unmetSub !== undefined && unmetSub.targetMW < unmetSub.allocatedMW) ||
@@ -1271,7 +1315,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       return {
         phase: 'COMPLETED',
         header: `>> BATTERY & GRID BALANCED (${Math.round(dispatchedMW)}/${Math.round(demandMW)} MW):`,
-        body: `DISPATCHED OUTPUT MATCHES ENERGY DEMAND (${Math.round(state.batteryStoredMWh / 10)}% BATTERY STORED)! CHECK [KEY 4] DESK FOR PRAVDA ORDERS.`,
+        body: `DISPATCHED OUTPUT MATCHES ENERGY DEMAND (${Math.round((state.batteryStoredMWh / MAX_BATTERY_CAPACITY_MWH) * 100)}% BATTERY STORED)! CHECK [KEY 4] DESK FOR PRAVDA ORDERS.`,
         hint: '+MW: Raise Rods % [A-2] + FW [B] + Sliders [A]. -MW: Lower Sliders [A] + Lower Rods % [A-2].',
         panelKey: 'CHECK: [KEY 4] DESK & [KEY 5] UNIT C',
         actionLine: 'AWAIT NEXT PRAVDA-84 POWER ORDER',

@@ -117,6 +117,14 @@ export interface KomradMessageEntry {
   mood: KomradMood
 }
 
+export interface KomradSubtitleState {
+  text: string
+  clause: string
+  mood: KomradMood
+  activeWord: string | null
+  isSpeaking: boolean
+}
+
 export type CrisisCoachId =
   | 'HIGH_VOID'
   | 'HIGH_XENON'
@@ -149,6 +157,15 @@ export interface OperationalMandate {
   targetMW?: number
 }
 
+export interface ActivePost84PowerOrder {
+  orderId: string
+  templateId: string
+  title: string
+  minTotalMW?: number
+  sectorMinMW?: Partial<Record<SectorNodeId, number>>
+  sectorMaxMW?: Partial<Record<SectorNodeId, number>>
+}
+
 export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspecting'> {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
@@ -165,6 +182,7 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   treasonStrikes: number // 0 to 3 (3 = Gulag Game Over)
   lastDecisionFeedback: string | null
   activeMandate: OperationalMandate | null
+  activePost84Order: ActivePost84PowerOrder | null
   tutorialPhase: TutorialPhase
   tutorialPrompt: TutorialPrompt
   tutorialHintsHidden: boolean
@@ -248,7 +266,10 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   hoveredDiagnosticId: DiagnosticAlarmId | null
   hoveredControlHint: string | null
   diagFeedActive: boolean
+  radioOn: boolean
+  radioVolume: number
   radioBroadcastSubtitle: string | null
+  komradSubtitle: KomradSubtitleState | null
 
   // Shared Actions
   setShiftControlReady: (ready: boolean) => void
@@ -298,6 +319,7 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   setSubsystemPower: (system: SystemType, targetMW: number) => void
   setSectorPower: (sector: SectorNodeId, targetMW: number) => void
   shiftSectorPower: (sector: SectorNodeId, deltaMW: number) => void
+  setActivePost84Order: (order: ActivePost84PowerOrder | null) => void
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => void
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => void
   setOilCoolerValve: (valvePct: number) => void
@@ -354,6 +376,8 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   ) => void
   toggleMusicMute: () => void
   setDiagFeedActive: (active: boolean) => void
+  setRadioOn: (on: boolean) => void
+  setRadioVolume: (volume: number) => void
   setRadioBroadcastSubtitle: (subtitle: string | null) => void
   setGodMode: (enabled: boolean) => void
   debugSetTemp: (temp: number) => void
