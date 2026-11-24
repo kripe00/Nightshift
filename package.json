@@ -8,6 +8,8 @@
     "shift": "node scripts/komrad-banner.mjs && vite",
     "pravda": "node scripts/pravda-bulletin.mjs",
     "kgb": "node scripts/kgb-inspection.mjs",
+    "build:vox": "node scripts/build-komrad-vox.mjs",
+    "extract:vox": "node scripts/extract-missing-vox.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

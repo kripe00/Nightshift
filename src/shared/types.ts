@@ -25,19 +25,6 @@ export type SectorNodeId =
   | 'steel'
 export type DirectiveDecision = 'APPROVED' | 'SHREDDED'
 
-export type WePadTabId = 1 | 2 | 3 | 4 | 5 | 6
-
-export interface WePadChatMessage {
-  id: string
-  timestamp: string
-  sender: 'COMRADE VOLKOV' | 'K.O.M.R.A.D.-84' | 'SYSTEM' | 'PRAVDA-84'
-  text: string
-  hint?: string
-  phase?: TutorialPhase
-  completed?: boolean
-  level?: 'normal' | 'warn' | 'danger'
-}
-
 export type TutorialStep = 1 | 2 | 3 | 4 | 5 | 'DONE'
 export type DiagnosticAlarmId =
   | 'core'
@@ -118,6 +105,39 @@ export interface TerminalLogEntry {
   level: 'normal' | 'warn' | 'danger'
 }
 
+export type KomradMood = 'normal' | 'warning' | 'critical'
+
+export interface KomradMessageEntry {
+  id: string
+  timestamp: string // [HH:MM:SS] format
+  sender: 'K.O.M.R.A.D.-84' | 'SYS.DEFENSE' | 'PRINTER' | 'OPERATOR'
+  text: string
+  spokenVoxText?: string
+  forceInterrupt?: boolean
+  mood: KomradMood
+}
+
+export interface KomradSubtitleState {
+  text: string
+  clause: string
+  mood: KomradMood
+  activeWord: string | null
+  isSpeaking: boolean
+}
+
+export type CrisisCoachId =
+  | 'HIGH_VOID'
+  | 'HIGH_XENON'
+  | 'WATER_LOW'
+  | 'HIGH_PRESSURE'
+  | 'SPENT_ROD'
+  | 'MELTDOWN_RISK'
+
+export interface ActiveCrisisCoach {
+  id: CrisisCoachId
+  expiresAtMs: number
+}
+
 export type HotspotSeverity = 'amber' | 'red' | 'cyan'
 
 export interface OperationalMandate {
@@ -137,10 +157,23 @@ export interface OperationalMandate {
   targetMW?: number
 }
 
-export interface GameState extends ReactorState {
+export interface ActivePost84PowerOrder {
+  orderId: string
+  templateId: string
+  title: string
+  minTotalMW?: number
+  sectorMinMW?: Partial<Record<SectorNodeId, number>>
+  sectorMaxMW?: Partial<Record<SectorNodeId, number>>
+}
+
+export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspecting'> {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
+  isShiftControlReady: boolean
+  komradOpeningDispatched: boolean
   activeStation: CameraStation
+  isSeatedAtDesk: boolean
+  canSitAtDesk: boolean
   shiftNumber: number // 1 to 5
   shiftTimeMinutes: number // 0 (00:00) to 360 (06:00)
   isShiftKeyHeld: boolean // Physical SHIFT key clutch
@@ -149,12 +182,14 @@ export interface GameState extends ReactorState {
   treasonStrikes: number // 0 to 3 (3 = Gulag Game Over)
   lastDecisionFeedback: string | null
   activeMandate: OperationalMandate | null
+  activePost84Order: ActivePost84PowerOrder | null
   tutorialPhase: TutorialPhase
   tutorialPrompt: TutorialPrompt
+  tutorialHintsHidden: boolean
+  activeCrisisCoach: ActiveCrisisCoach | null
+  dismissedCrisisIds: CrisisCoachId[]
 
-  // WE-PAD 84 & H2O Controls
-  wePadActiveTab: WePadTabId
-  wePadChatLog: WePadChatMessage[]
+  // H2O Controls
   selectedH2OSubstationId: 1 | 3 | 5
 
   // Reactor & Power Matrix (UNIT A, UNIT A-2, UNIT B & Right Turbine Panel)
@@ -195,18 +230,19 @@ export interface GameState extends ReactorState {
   bubblerDraining: boolean // Toothed quadrant drain lever held on UNIT B
   sealToggles: [boolean, boolean, boolean] // [N2 PURGE, RAD FILTER, SEAL LOCK] on UNIT B
   containmentSealLocked: boolean // True when all 3 UNIT B seal toggles are locked
-  ventingSteam: boolean // Spring-loaded СБРОС ПАРА lever held down
+  ventingSteam: boolean // Spring-loaded STEAM VENT (BRU-K) lever held down
   turbineRpm: number // 0 to 3600 RPM
   gridHz: number // 45.0 to 55.0 Hz (Target 50.0 Hz)
   excitationTrim: number // -5.0 to +5.0 Hz rotary rheostat offset
   hzOutOfBoundsSeconds: number // > 10s outside [47.8, 52.2] or > 3450 RPM trips Main Breaker
-  ventilationActive: boolean // ВЕНТИЛЯЦИЯ guarded toggle (-1.2 R/h/s, +15 MW house load)
-  avrActive: boolean // АРВ ВОЗБУЖДЕНИЕ guarded toggle (+8 MW house load, stabilizes 50Hz & sync)
-  kgbLineActive: boolean // СВЯЗЬ КГБ guarded toggle (+10 MW house load, powers KGB Bunker trunk)
-  auxLoopBActive: boolean // ВАКУУМ КОНДЕНСАТОРА / TRIP RESET (+12 MW house load, condenser vacuum)
+  ventilationActive: boolean // VENTILATION guarded toggle (-1.2 R/h/s, +15 MW house load)
+  avrActive: boolean // AVR EXCITATION guarded toggle (+8 MW house load, stabilizes 50Hz & sync)
+  kgbLineActive: boolean // KGB LINE guarded toggle (+10 MW house load, powers KGB Bunker trunk)
+  auxLoopBActive: boolean // CONDENSER VACUUM / TRIP RESET (+12 MW house load, condenser vacuum)
   houseLoadMW: number // Total internal plant auxiliary load drawn from generator (MW)
   wetSteamPenalty: number // 0.0 to 1.0 turbine efficiency & vibration penalty from high drum level (> +100mm)
-  boronCooldown: number // 0 to 30s recharge for БОРНАЯ КИСЛОТА plunger
+  batteryStoredPct: number // 0 to 100% accumulator storage charge level
+  boronCooldown: number // 0 to 30s recharge for BORIC ACID plunger
   az5Available: boolean
   az5Cooldown: number
   gridTransientImpulse: number // Immediate Hz/RPM kick when moving Sector MW levers
@@ -216,6 +252,7 @@ export interface GameState extends ReactorState {
   // K.O.M.R.A.D.-84 Terminal & Cyber Defense (Komrad Kristianov's Domain)
   terminalLogs: string[]
   terminalEntries: TerminalLogEntry[]
+  komradMessages: KomradMessageEntry[]
   ciaIntrusionActive: boolean
   ciaIntrusionProgress: number // 0 to 100%
   komradOverrideLocked: boolean
@@ -228,12 +265,27 @@ export interface GameState extends ReactorState {
   shiftRunId: number
   hoveredDiagnosticId: DiagnosticAlarmId | null
   hoveredControlHint: string | null
+  diagFeedActive: boolean
+  radioOn: boolean
+  radioVolume: number
+  radioBroadcastSubtitle: string | null
+  komradSubtitle: KomradSubtitleState | null
 
   // Shared Actions
+  setShiftControlReady: (ready: boolean) => void
+  launchKomradOpeningDispatch: () => void
   setActiveStation: (station: CameraStation) => void
+  setSeatedAtDesk: (seated: boolean) => void
+  toggleSeatedAtDesk: () => void
+  setCanSitAtDesk: (canSit: boolean) => void
   startShift: () => void
   resetShift: () => void
   skipTutorial: () => void
+  acceptVolkovTrainingDirective: () => void
+  advanceTutorialStep: () => void
+  setTutorialHintsHidden: (hidden: boolean) => void
+  toggleTutorialHintsHidden: () => void
+  dismissCrisisCoach: () => void
   setTutorialStep: (step: TutorialStep) => void
   setHoveredDiagnosticId: (id: DiagnosticAlarmId | null) => void
   setHoveredControlHint: (hint: string | null) => void
@@ -249,9 +301,6 @@ export interface GameState extends ReactorState {
       steel?: number
     }
   ) => void
-  toggleWePadHeld: (forceHeld?: boolean) => void
-  toggleWePadInspecting: (forceInspecting?: boolean) => void
-  setWePadActiveTab: (tab: WePadTabId) => void
   setSubstationH2O: (substationId: 1 | 3 | 5, pct: number) => void
   adjustSubstationH2O: (substationId: 1 | 3 | 5, deltaPct: number) => void
   cycleSelectedH2OSubstation: () => void
@@ -263,13 +312,14 @@ export interface GameState extends ReactorState {
   setSteamDumpValve: (open: boolean) => void
   toggleSteamDumpValve: () => void
   setRodTargetRate: (rate: -1 | 0 | 1) => void
-  setAutoRodEnabled: (enabled?: boolean) => void
   setTurbineSteamValve: (valveRatioOrPct: number) => void
+  setBatteryOutputValve: (valveRatioOrPct: number) => void
   setShiftKeyHeld: (held: boolean) => void
   shiftPower: (system: SystemType, deltaMW: number) => void
   setSubsystemPower: (system: SystemType, targetMW: number) => void
   setSectorPower: (sector: SectorNodeId, targetMW: number) => void
   shiftSectorPower: (sector: SectorNodeId, deltaMW: number) => void
+  setActivePost84Order: (order: ActivePost84PowerOrder | null) => void
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => void
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => void
   setOilCoolerValve: (valvePct: number) => void
@@ -277,6 +327,8 @@ export interface GameState extends ReactorState {
   adjustControlRodLevel: (deltaPct: number) => void
   pumpBoronTank: (amountPct?: number) => void
   quenchChannelHotspot: (channelIndex: number) => void
+  selectChannelForRefuel: (channelIndex: number) => void
+  executeRefuelLeverStroke: () => void
   setNitrogenLoopValve: (valvePct: number) => void
   setBubblerDraining: (draining: boolean) => void
   toggleSealSwitch: (toggleIndex: 0 | 1 | 2, active?: boolean) => void
@@ -323,6 +375,10 @@ export interface GameState extends ReactorState {
     isExpanded?: boolean
   ) => void
   toggleMusicMute: () => void
+  setDiagFeedActive: (active: boolean) => void
+  setRadioOn: (on: boolean) => void
+  setRadioVolume: (volume: number) => void
+  setRadioBroadcastSubtitle: (subtitle: string | null) => void
   setGodMode: (enabled: boolean) => void
   debugSetTemp: (temp: number) => void
   debugTriggerBlackout: () => void

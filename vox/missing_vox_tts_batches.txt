@@ -1,0 +1,4 @@
+# K.O.M.R.A.D.-84 MISSING VOX TTS BATCHES (0 words, 28 per batch)
+# Copy-paste each batch into your TTS generator, save combined audio as vox/komrad84_vox_extra.wav,
+# and run `npm run build:vox` to slice & merge using vox/komrad84_vox_extra_labels.txt.
+

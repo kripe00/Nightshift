@@ -229,3 +229,102 @@
   > *4. **Oppdatert WE-PAD 84, Skrivebordsmanual og Volkov-replikker:** Hele opplæringen og manualen lærer nå bort den nye 3-stegs fysikkrekkefølgen for +MW og -MW ordrer.*
   >
   > *KGB-inspeksjon er kjørt med 0 advarsler og 0 feil. Ta en ny prøvetur, kjenn på gasspedalen og meld tilbake! Lenge leve Femårsplanen — MELTDOWN IS PROPAGANDA! 🎖️⚡⚙️☢️☭"*
+
+### [TELEGRAM #017 — STEMPLET: QUOTA-84 // FULL 3D RBMK-1000 KONTROLLHALL, PANORAMAVINDUER, TO-VINGET PULT, PEKERLÅS & 60 FPS GPU-OPTIMALISERING!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Komplett sovjetisk RBMK-1000 kontrollhall med utendørs dioramaer, to-vinget pult, fri WASD/pekerlås & null-lag 60 FPS optimalisering!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Inspektoratet melder om full overhaling av hele Sektor 84-kontrollhallen:*
+  > *1. **Komplett 3D RBMK-1000 Kontrollhall & Utendørs Dioramaer (`ExteriorDioramas3D.tsx`):** Bunkeren har fått full sovjetisk arkitektur med synoptisk hovedtavle (`ПЛАТО СФКРЭ` og `МНЕМОСХЕМА МПЦ & ТГ-7/8`), `ЭВМ СМ-2М` båndstasjoner, `ЧАСЫ БЩУ`-klokke, `UNIT D`-sikringsskap med knivbryter, og to panoramavinduer ut mot kraftverket, kjøletårn, snølandskap og Pripyat!*
+  > *2. **To-Vinget Kontrollpult med Åpen Midtgang:** Midt-pulten, gammelt tastatur og midt-kiler er fjernet slik at utsikten rett mot `K.O.M.R.A.D.-84` er 100 % fri fra gulv til tak, mens `UNIT B` har fått fast plass på høyre vinge og begge vingeender er forseglet med stålplater.*
+  > *3. **Førstepersons WASD + Pekelås (`Pointer Lock`) & Stasjonsfokus (`[0]–[7]`):** Operatører spaserer fritt i hele hallen (også rett gjennom den nye midtgangen!) og drar alle fysiske spaker og ratt direkte med virtuell peker.*
+  > *4. **60 FPS WebGL- & Easter-Egg Video-Optimalisering:** Direkte `THREE.VideoTexture` på `K.O.M.R.A.D.-84`, `dpr={1}`, `NOOP_RAYCAST` på dekorative mesher, 3 uskyggelagte scenelys og pauset bakgrunnstelemetri under videoavspilling — bekreftet med `0 feil` og `0 advarsler` i `npm run kgb` og `npm run build`!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og inspiser hallen! MELTDOWN IS PROPAGANDA! 🎖️🏗️⚙️☢️☭"*
+
+### [TELEGRAM #018 — STEMPLET: QUOTA-84 // MASSIV DRAW-CALL- & RAYCAST-OPTIMALISERING, NULL Z-FIGHTING OG STABILT SOVJETISK LYSNETT!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Draw-call-sammenslåing (`mergeStaticGeometries`), `NOOP_RAYCAST`, dønn stabilt sovjetisk lysnett, null Z-fighting og ryddige konsollskilt!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Vestlig flimmer, z-fighting og unødige GPU-kall er herved likvidert fra Sektor 84:*
+  > *1. **Statisk Geometrisammenslåing & Raycast-Sanering:** `MechanicalPanels3D.tsx` slår nå sammen statiske paneldetaljer via `mergeStaticGeometries` med delte KSP-4-teksturer, mens `InspectorDesk3D.tsx` kobler `NOOP_RAYCAST` på dekorative mesher med dedikerte hitbokser.*
+  > *2. **Dønn Stabilt Sovjetisk Lysnett (`ControlRoomScene.tsx` & `BuckshotDitherPass.tsx`):** Høyfrekvent lampe-, lysrør- og dither-flimmer er totalt fjernet for å gi krystallklar ro i bunkeren, samtidig som jevn alarmpuls (`4.2 rad/s`) på nødlys og roterende varsellys er bevart.*
+  > *3. **Null Z-Fighting, Diorama-Hysterese & Skiltjustering:** Alle skilt, vindusdekor og synoptiske tavler har fått `0.014m–0.02m` dybdeklarering og `polygonOffset`, `ExteriorDioramas3D.tsx` har fått Schmitt-trigger-hysterese og deterministisk `renderOrder` (`1..5`), og både `СЕКЦИЯ ПУЛЬТА №1/№2`-sokkelmerkene og høyre vinges `МНЕМОСХЕМА` (`ОРУ-330`) sitter nå på millimeteren!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og inspiser resultatet! MELTDOWN IS PROPAGANDA! 🎖️💡🛡️☢️☭"*
+
+### [TELEGRAM #019 — STEMPLET: QUOTA-84 // 3D SOVJETISK BUNKERRADIO «ОКЕАН-84», 10 LÅTER PÅ 5 УКВ-STASJONER, STATS-SENDINGER & KREMLIN-UNDERTEKSTER!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Fullverdig 3D-bunkerradio (`ОКЕАН-84`) med 10 sovjetiske låter, automatiske stats-sendinger (`01`–`06` + `govorit_moskva`) og Kremlin-undertekster!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Sektor 84 har nå fått sitt eget partigodkjente lyd- og propagandasystem rett på vaktbordet ved panoramavinduet:*
+  > *1. **Interaktiv 3D «ОКЕАН-84»-mottaker (`SovietRadioTable3D.tsx`):** Fysisk Bakelitt-ratt med `6Е1П` magisk øye-indikator, `СЕТЬ`-strømbryter, `ЭФИР`-knapp for direkte testing/hopping av stats-sendinger og prosedyrell Web Audio FM-skurr mellom frekvensene!*
+  > *2. **10 Låter fordelt på 5 `УКВ`-stasjoner (`66.80–73.20 МГц`) + Automatiske Sendinger:** Når en sang er ferdig på den innstilte stasjonen, spilles `govorit_moskva.wav` automatisk etterfulgt av kunngjøringene `01`–`06` (med gjesteopptredener fra Seniorinspektør Oleg, Sjefsingeniør Kristianov og `K.O.M.R.A.D.-84`), før neste låt tar over — alt via én enkelt `<audio>`-strøm uten ekstra lag!*
+  > *3. **Tidsstyrte Kremlin-undertekster (`App.tsx` & `useGameStore.ts`):** Under alle sendinger vises presise engelske undertekster i ekte `Kremlin`-font nederst på skjermen — og forsvinner momentant hvis du slår av `СЕТЬ`, skrur inn i støy (`signalStrength <= 0.25`), eller starter videoavspilling på `K.O.M.R.A.D.-84`!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og skru på radioen — MELTDOWN IS PROPAGANDA! 🎖️📻🎶☢️☭"*
+
+### [TELEGRAM #020 — STEMPLET: QUOTA-84 // 3D «ISKRA-84» KONTOR-PC, KOMRAD-84 FULL 1702-ORDS VOX-SYNTH & STASJONSSIKKERHET!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Fullverdig 3D `ISKRA-84` (`SOV-OS 84` / `P.O.S.T.-84`), 1702-ords Half-Life VOX-motor med 100 % orddekning, bobbleheads & stillhetsdisiplin!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Inspektoratet og Sektor 84 har nå rullet ut enda en gigantisk Stakhanovitt-leveranse til Kreml:*
+  > *1. **3D «ISKRA-84» Kontor-PC på Pulten (`DesktopComputer3D.tsx`, `desktopOsCanvas.ts` & `post84Mail.ts`):** Komplett fysisk 3D Bakelitt-mus, CRT-skjerm med `SOV-OS 84`, `P.O.S.T.-84` stats-teletype innboks med Kommissær Volkors strenge direktiver, sovjetisk kontorkomedie-arkiver og ekte post-tutorial ordre-loop knyttet direkte til reaktortelemetrien!*
+  > *2. **K.O.M.R.A.D.-84 Full 1702-ords VOX-stemmesyntese (`komradVoiceSynth.ts`, `build-komrad-vox.mjs` & `extract-missing-vox.mjs`):** Både `komrad84_vox_all.wav` (244 ord) og nye `komrad84_vox2_all.ogg` (1384 ord) pluss 74 høstede bonusord og 6 fulle monologklipp er pakket til kompakte 24kHz Ogg Vorbis (`6.92 MB` totalt) — med **1657 / 1657 (100 %) orddekning og 0 manglende ord** gjennom bunkernes PA-vocoder!*
+  > *3. **Ren oppstart & Sovjetisk Stillhetsdisiplin (`komradSilenceState.ts`):** K.O.M.R.A.D.-84 holder kjeft bak lasteskjermen til operatøren faktisk har kontroll i hallen (`isShiftControlReady`), og holder `75–120s` atmosfærisk pause mellom innfallene uten kø-spam!*
+  > *4. **3D Bobbleheads & Panopticon-overvåkning (`KomradBobbleheads3D.tsx` & `SovietPanopticonRig3D.tsx`):** Inspektoratets pult har fått interaktive nikke-figurer og bunker-overvåkningsrigg — godkjent med `0 feil` og `0 advarsler` i `npx tsc -b`, `npx oxlint`, `npm run kgb` og `npm run build`!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og hør K.O.M.R.A.D.-84 snakke hvert eneste ord — MELTDOWN IS PROPAGANDA! 🎖️🖥️🔊☢️☭"*
+
+
+
+### [TELEGRAM #021 — STEMPLET: QUOTA-84 // STORSLÅTT OMMODELERING AV UNIT A-2 & UNIT A, FEILRETTING OG OPPDATERT README!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Overflødige analogskiver fjernet på `UNIT A-2` & `UNIT A`, forstørret 37-kanals `RBMK CORE`, gigantiske 6-sektors MW-spaker, feilretting og ny `README.md`!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Overflødige borgerlige manometerskiver og strip-målere som stjal verdifull konsollplass er herved sendt til skraphaugen! Begge venstreskapene (`CONSOLE BAY NO. 84-A2` og `CONSOLE BAY NO. 84-A`) har fått ny enhetlig overdel (`unifiedUpperFace`) og krystallklare, ergonomiske betjeningsflater:*
+  > *1. **`UNIT A-2` (`RBMK-1000 CORE REACTIVITY`):** Kompakt skilt + `CRT VL-84A2` øverst, mens hele **37-kanals `RBMK CORE`-matrisen** nå troner midt på øvre vegg i **~1.85x–2.0x størrelse** med knivskarpe bevel-kanter (amber brukt brensel, gull låst mål, cyan hover) og adskilte hitbokser! Underpulten er delt 50/50 mellom forstørret **`CONTROL ROD DRIVE`** (håndhjul + digital `RODS: XX%`-måler) og tyngre **`ROD REFUELING`**-spak med lang vandring og 10-segments ladeindikator.*
+  > *2. **`UNIT A` (`REACTOR SAFETY & 1000 MW GRID ROUTING`):** **`COOLING PUMP A`**, **`COOLING PUMP B`** og **`AZ-5 SCRAM` + `BORON INJECTION`** er løftet opp på øvre vegg i større skala med tette støpejernsplater, mens hele den skråstilte pulten nå er dedikert 100 % til de **6 substasjons-spakene (`1. PRIPYAT CITY` .. `6. STEEL WORKS`)** med ~2x lengre vandring, gigantiske `MW`-bokser og store `2x2` `-25 / +25 / -50 / +50` hurtigknapper.*
+  > *3. **Systemrevisjon & Oppdatert `README.md`:** Scroll-hitboksen på effektstripene er flyttet bak knappene (slik at knappenes hover-hint og klikk aldri blir skygget), tekstbredde på `refuelTargetTex` (`320x72`) og `rodPctTex` er sikret mot klipping, og `README.md` er totaloppdatert til å speile hele dagens bunkerverden!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og kjenn hvor smidig både kjerneladingen og 1000 MW-spakene glir nå — MELTDOWN IS PROPAGANDA! 🎖️🔧⚡☢️☭"*
+
+
+
+### [TELEGRAM #022 — STEMPLET: QUOTA-84 // FOLKELIG OPPLÆRING PÅ HOVEDSKJERM, KRISE-COACH & 100 % VOX-ORDDEKNING!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Total overhaling av opplæringen: Front-and-center HUD med retningspil, 8s kriseveileder for Voids & Xenon, `SKALA-84`-speiling og 100 % verifisert K.O.M.R.A.D.-84 VOX!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Playtest-rapporter om borgerlig forvirring i kontrollrommet er nå knust én gang for alle. Hele opplærings- og krisesystemet er overhalt:*
+  > *1. **Front-and-Center Hovedskjerm-HUD (`TutorialCoachHud.tsx` & `App.tsx`):** Stor, krystallklar «WHERE / WHAT / WHY»-banner øverst i senter uten å sperre siktet, komplett med **sanntids retningspil** (`◀ TURN LEFT` / `▶ TURN RIGHT` / `▲ WALK FORWARD`) mot riktig konsoll, live fremdriftsmåler og knappene `[ NEXT STEP • N ]`, `[ HIDE • H ]` og `[ SKIP • BKSP ]`!*
+  > *2. **6-Stegs Folkelig Læreplan & 8s Crisis Coach (`rbmkPhysics.ts` & `useGameStore.ts`):** Steg 1 åpner nå `UNIT A`-kjølepumpene direkte fra kaldstart; Steg 2 forklarer kontrollstaver som bremser med riktig polaritet; Steg 3 dekker 6-sektors MW-spaker & `UNIT C` batteribuffer; Steg 4 lærer kjernelading av amber staver; Steg 5 tar `UNIT B` trommelvann/trykk; og Steg 6 + automatisk **8s Crisis Coach** lærer forskjellen på **Steam Voids** («løpsk koking»), **Xenon-forgiftning** («eksos-kvelning») og **Boron / AZ-5 SCRAM**!*
+  > *3. **100 % Verifisert K.O.M.R.A.D.-84 VOX & Synkronisert `SKALA-84` (`komradTutorialVox.ts`, `komradVoiceSynth.ts` & `CentralSkalaScreen3D.tsx`):** Alle 13 nye opplærings- og krisevarsler bruker utelukkende innspilte ord fra `komrad_vox_manifest.json` (**100 % treff, 0 manglende ord**), bryter inn rent ved stegskifte og speiles live på både `SKALA-84` og taklampene!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og kjør en kaldstart fra bunn — nå forstår selv Ministerens nevø forskjellen på Steam Voids og Xenon! MELTDOWN IS PROPAGANDA! 🎖️📢🧠☢️☭"*
+
+
+
+### [TELEGRAM #023 — STEMPLET: QUOTA-84 // DIEGETISK SKALA-84 OPPLÆRING, KOMPASS, K.O.M.R.A.D.-TEKSTING & VOLKOVS P.O.S.T.-84 DIREKTIV!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Flyttet opplæring til 3D `SKALA-84`, lagt til toppkompass + K.O.M.R.A.D.-84 bunnteksting, gjenopprettet klassisk åpning & låst opplæringen bak Kommissær Volkovs `P.O.S.T.-84`-ordre!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! 2D-plakatene i synsfeltet er likvidert, og hele innflyvningen til Sektor 84 er nå 100 % diegetisk og Partigodkjent:*
+  > *1. **3D `SKALA-84` Opplæring + Toppkompass + K.O.M.R.A.D.-84 Undertekster (`CentralSkalaScreen3D.tsx`, `TutorialCompassHud.tsx`, `komradVoiceSynth.ts` & `App.tsx`):** `TutorialCoachHud.tsx` er fjernet; alle 6 steg + Void/Xenon-kriseguide vises nå med overdimensjonert fosfortypografi og 3D bezel-knapper direkte på hovedveggen (`SKALA-84`), støttet av et minimalt toppkompass og sanntidssynkede K.O.M.R.A.D.-84 radio-undertekster nederst (som viker pent for statsradioen).*
+  > *2. **Klassisk Propaganda-åpning & `AWAITING_VOLKOV_MAIL`-Ventekammer (`rbmkPhysics.ts`, `useGameStore.ts` & `komradTutorialVox.ts`):** Skiftet åpner nå umiddelbart med K.O.M.R.A.D.-84s klassiske «MELTDOWN IS WESTERN CAPITALIST PROPAGANDA»-hilsen mens ordrer og farer hviler. Dersom operatøren somler, maser K.O.M.R.A.D.-84 hvert ~16.5 sekund med eskalerende sovjetisk utålmodighet (pauset så lenge du sitter ved pulten!) — med **100 % VOX-treff (21/21 strenger, 443 ord, 0 manglende)**!*
+  > *3. **Kommissær Volkovs Direktiv i `P.O.S.T.-84` (`post84Mail.ts`, `desktopOsCanvas.ts`, `DesktopComputer3D.tsx` & `CameraController.tsx`):** Utovertoppen i `ISKRA-84`-innboksen krever nå personlig godkjenning med `[ ACCEPT DIRECTIVE — BEGIN TRAINING ]` (som reiser operatøren opp mot `SKALA-84` og starter Steg 1) eller `[ SKIP TRAINING — CERTIFIED OPERATOR ]` for sertifiserte kamerater.*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og sjekk innboksen på skrivebordet først — hvis ikke minner K.O.M.R.A.D.-84 deg vennlig (og deretter mindre vennlig) på hvem som eier oksygenet i Sektor 84! MELTDOWN IS PROPAGANDA! 🎖️📺🧭🎙️☭"*

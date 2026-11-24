@@ -22,7 +22,6 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform float uDitherStrength;
   uniform float uColorLevels;
   uniform float uScanlineOpacity;
-  uniform float uTime;
 
   varying vec2 vUv;
 
@@ -54,12 +53,6 @@ const FRAGMENT_SHADER = /* glsl */ `
     }
 
     return (val / 16.0) - 0.5;
-  }
-
-  float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
   }
 
   vec3 acesFilm(vec3 x) {
@@ -99,23 +92,17 @@ const FRAGMENT_SHADER = /* glsl */ `
     col *= mix(vec3(1.0), warmAmberHighlight, highlightWeight * 0.38);
 
     // 2. Exponential Distance Fog in Deep Bunker Corners (using scene depth buffer)
+    // Indoor hall max diagonal is <14.6m, so 0m-15m stays 100% identical while >15m exterior panoramas stay crisp out to 90m+.
     float rawDepth = texture2D(tDepth, vUv).r;
     float viewDist = linearizeDepth(rawDepth);
     float fogFactor = (1.0 - exp(-pow(max(0.0, viewDist - 2.1) * 0.19, 1.85))) * (1.0 - protectText);
+    float maxBunkerFog = mix(0.78, 0.08, smoothstep(15.0, 25.0, viewDist));
     vec3 deepBunkerFog = vec3(0.022, 0.038, 0.033);
-    col = mix(col, deepBunkerFog, clamp(fogFactor, 0.0, 0.78));
+    col = mix(col, deepBunkerFog, clamp(fogFactor, 0.0, maxBunkerFog));
 
-    // Coarse 2.5px Bayer grid (clearly visible Buckshot Roulette cross-hatched stippling!)
+    // Coarse 2.5px Bayer grid (strictly screen-static Buckshot Roulette cross-hatched stippling)
     vec2 bayerCell = floor(gl_FragCoord.xy / uDitherPixelSize);
     float b = bayer4x4(bayerCell);
-
-    // Subtle analog film grain in shadows
-    float grain =
-      (hash12(bayerCell + fract(uTime * 11.7) * 97.0) - 0.5) *
-      0.022 *
-      (1.0 - luma * 0.7) *
-      (1.0 - protectText);
-    col = clamp(col + vec3(grain), 0.0, 1.0);
 
     // Strong dithering (0.14) and 7 color levels across the entire room/desk,
     // softening to 24 levels (0.025 strength) strictly on bright paper sheets and glowing CRT text
@@ -193,13 +180,12 @@ export const BuckshotDitherPass: React.FC = () => {
         tDiffuse: { value: renderTarget.texture },
         tDepth: { value: renderTarget.depthTexture },
         uResolution: { value: new THREE.Vector2(size.width, size.height) },
-        uCameraNear: { value: 0.1 },
-        uCameraFar: { value: 25.0 },
+        uCameraNear: { value: 0.05 },
+        uCameraFar: { value: 160.0 },
         uDitherPixelSize: { value: 2.5 },
         uDitherStrength: { value: 0.14 },
         uColorLevels: { value: 7.0 },
         uScanlineOpacity: { value: 0.035 },
-        uTime: { value: 0 },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
@@ -220,13 +206,12 @@ export const BuckshotDitherPass: React.FC = () => {
   }, [postMaterial])
 
   // Priority 1 takes over R3F's default render loop so we render Scene -> RenderTarget -> Fullscreen Bayer Dither Quad
-  useFrame((state) => {
+  useFrame(() => {
     const uniforms = postMaterial.uniforms
     uniforms.uDitherPixelSize.value = 2.5
     uniforms.uDitherStrength.value = 0.14
     uniforms.uColorLevels.value = 7.0
     uniforms.uScanlineOpacity.value = 0.035
-    uniforms.uTime.value = state.clock.elapsedTime
     uniforms.uResolution.value.set(
       renderTarget.width,
       renderTarget.height

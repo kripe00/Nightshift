@@ -3,10 +3,554 @@
 
 import { useGameStore } from '../../shared/useGameStore'
 
+type AuxChannelPhase =
+  | 'idle'
+  | 'syncing'
+  | 'playing'
+  | 'restoring'
+
+interface MediaBusWindow extends Window {
+  __k84NativeVolDesc?: PropertyDescriptor
+  __k84NativePlay?: () => Promise<void>
+  __k84CleanupAuxBus?: () => void
+}
+
+type RvfcVideoElement = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: (now: number, metadata: unknown) => void) => number
+  cancelVideoFrameCallback?: (handle: number) => void
+}
+
+const AUX_DIAG_FEED_SRC = './sys/skala84_diag.mp4?v=85'
+const AUX_PEAK_VOLUME = 0.78
+const AUX_SYNC_GLITCH_MS = 250
+const AUX_MAX_PREBUFFER_MS = 1500
+const AUX_RESTORE_MS = 1800
+
+let auxDiagVideo: HTMLVideoElement | null = null
+let auxPhase: AuxChannelPhase = 'idle'
+let auxPhaseStartMs = 0
+let auxDiagTriggerMs = 0
+let auxActiveRunId = -1
+let auxTimerId: number | null = null
+let auxFrameSeq = 0
+let auxRvfcHandle: number | null = null
+let bgDuckGain = 1
+
+export function getSkalaDiagFeedElement(): HTMLVideoElement | null {
+  return auxDiagVideo
+}
+
+export function getSkalaDiagFeedStartMs(): number {
+  return auxDiagTriggerMs
+}
+
+export function getSkalaDiagFeedFrameSeq(): number {
+  return auxFrameSeq
+}
+
+export function isSkalaDiagFeedSyncing(): boolean {
+  return auxPhase === 'syncing'
+}
+
+const trackedBgMedia = new Set<HTMLMediaElement>()
+const intendedBgVolumes = new WeakMap<HTMLMediaElement, number>()
+const heldAuxCodes = new Set<string>()
+const LEGACY_GLOBAL_BGM_RE = /music\/(night-shift|redline-reactor)\.mp3/i
+
+function isLegacyGlobalBgmMedia(el: HTMLMediaElement): boolean {
+  if ((el as HTMLElement).dataset?.okean84Radio === '1') return false
+  if ((el as HTMLElement).dataset?.legacyBgmBlocked === '1') return true
+  const src = el.currentSrc || el.getAttribute('src') || el.src || ''
+  return LEGACY_GLOBAL_BGM_RE.test(src)
+}
+
+export function unregisterTrackedMedia(el: HTMLMediaElement): void {
+  trackedBgMedia.delete(el)
+  intendedBgVolumes.delete(el)
+}
+
+export function silenceAllLegacyGlobalBgm(): void {
+  if (typeof window === 'undefined') return
+  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
+  const candidates = new Set<HTMLMediaElement>(trackedBgMedia)
+  if (typeof document !== 'undefined') {
+    for (const el of Array.from(document.querySelectorAll('audio'))) {
+      candidates.add(el)
+    }
+  }
+  for (const el of candidates) {
+    if (!isLegacyGlobalBgmMedia(el)) continue
+    ;(el as HTMLElement).dataset.legacyBgmBlocked = '1'
+    try {
+      el.pause()
+    } catch {
+      // ignore
+    }
+    el.muted = true
+    setNativeVol?.call(el, 0)
+    el.removeAttribute('src')
+    try {
+      el.load()
+    } catch {
+      // ignore
+    }
+    trackedBgMedia.delete(el)
+    intendedBgVolumes.delete(el)
+  }
+}
+
+function clampUnit(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1
+}
+
+function applyBgDuckGain(gain: number): void {
+  bgDuckGain = clampUnit(gain)
+  if (typeof window === 'undefined') return
+  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
+  if (!setNativeVol) return
+  for (const el of trackedBgMedia) {
+    const intended = intendedBgVolumes.get(el) ?? 0.38
+    setNativeVol.call(el, clampUnit(intended * bgDuckGain))
+  }
+}
+
+function installMediaGainBus(): void {
+  if (typeof window === 'undefined' || typeof HTMLMediaElement === 'undefined') return
+  const win = window as MediaBusWindow
+  if (!win.__k84NativeVolDesc) {
+    const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume')
+    if (desc?.get && desc?.set) {
+      win.__k84NativeVolDesc = desc
+    }
+  }
+  if (!win.__k84NativePlay) {
+    win.__k84NativePlay = HTMLMediaElement.prototype.play
+  }
+
+  const nativeDesc = win.__k84NativeVolDesc
+  const nativePlay = win.__k84NativePlay
+  const nativeGet = nativeDesc?.get
+  const nativeSet = nativeDesc?.set
+  if (!nativeGet || !nativeSet || !nativePlay) return
+
+  Object.defineProperty(HTMLMediaElement.prototype, 'volume', {
+    configurable: true,
+    enumerable: nativeDesc.enumerable ?? true,
+    get(this: HTMLMediaElement): number {
+      if (this === auxDiagVideo) {
+        return nativeGet.call(this) as number
+      }
+      return intendedBgVolumes.get(this) ?? (nativeGet.call(this) as number)
+    },
+    set(this: HTMLMediaElement, value: number): void {
+      const clamped = clampUnit(value)
+      if (this === auxDiagVideo) {
+        nativeSet.call(this, clamped)
+        return
+      }
+      if (isLegacyGlobalBgmMedia(this)) {
+        ;(this as HTMLElement).dataset.legacyBgmBlocked = '1'
+        this.muted = true
+        if (!this.paused) {
+          try {
+            this.pause()
+          } catch {
+            // ignore
+          }
+        }
+        nativeSet.call(this, 0)
+        trackedBgMedia.delete(this)
+        intendedBgVolumes.delete(this)
+        return
+      }
+      trackedBgMedia.add(this)
+      intendedBgVolumes.set(this, clamped)
+      nativeSet.call(this, clampUnit(clamped * bgDuckGain))
+    },
+  })
+
+  HTMLMediaElement.prototype.play = function (this: HTMLMediaElement): Promise<void> {
+    if (isLegacyGlobalBgmMedia(this)) {
+      ;(this as HTMLElement).dataset.legacyBgmBlocked = '1'
+      this.muted = true
+      if (!this.paused) {
+        try {
+          this.pause()
+        } catch {
+          // ignore
+        }
+      }
+      nativeSet.call(this, 0)
+      trackedBgMedia.delete(this)
+      intendedBgVolumes.delete(this)
+      return Promise.resolve()
+    }
+    if (this !== auxDiagVideo) {
+      trackedBgMedia.add(this)
+      const currentIntended =
+        intendedBgVolumes.get(this) ?? clampUnit(nativeGet.call(this) as number)
+      intendedBgVolumes.set(this, currentIntended)
+      nativeSet.call(this, clampUnit(currentIntended * bgDuckGain))
+    }
+    return nativePlay.call(this)
+  }
+
+  silenceAllLegacyGlobalBgm()
+}
+
+function setAuxTrackVolume(vol: number): void {
+  if (!auxDiagVideo || typeof window === 'undefined') return
+  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
+  const clamped = clampUnit(vol)
+  if (setNativeVol) {
+    setNativeVol.call(auxDiagVideo, clamped)
+  } else {
+    auxDiagVideo.volume = clamped
+  }
+}
+
+function clearAuxTimer(): void {
+  if (auxTimerId !== null && typeof window !== 'undefined') {
+    window.clearInterval(auxTimerId)
+    auxTimerId = null
+  }
+}
+
+function cancelVideoFramePump(vid: HTMLVideoElement | null): void {
+  if (auxRvfcHandle !== null && vid) {
+    const rvfcVid = vid as RvfcVideoElement
+    rvfcVid.cancelVideoFrameCallback?.(auxRvfcHandle)
+  }
+  auxRvfcHandle = null
+}
+
+function pumpVideoFrameCallback(vid: HTMLVideoElement): void {
+  cancelVideoFramePump(vid)
+  const rvfcVid = vid as RvfcVideoElement
+  if (typeof rvfcVid.requestVideoFrameCallback !== 'function') return
+  const onFrame = () => {
+    if (auxDiagVideo !== vid || auxPhase !== 'playing') {
+      auxRvfcHandle = null
+      return
+    }
+    auxFrameSeq += 1
+    auxRvfcHandle = rvfcVid.requestVideoFrameCallback?.(onFrame) ?? null
+  }
+  auxRvfcHandle = rvfcVid.requestVideoFrameCallback(onFrame)
+}
+
+function mountHiddenDiagVideo(vid: HTMLVideoElement): void {
+  if (typeof document === 'undefined') return
+  document.querySelectorAll('video[data-k84-diag="1"]').forEach((node) => {
+    if (node !== vid) {
+      if (node instanceof HTMLVideoElement) {
+        node.pause()
+      }
+      node.remove()
+    }
+  })
+  vid.dataset.k84Diag = '1'
+  vid.tabIndex = -1
+  vid.setAttribute('aria-hidden', 'true')
+  vid.style.cssText =
+    'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.001;pointer-events:none;z-index:-1;'
+  if (!vid.isConnected && document.body) {
+    document.body.appendChild(vid)
+  }
+}
+
+function unmountHiddenDiagVideo(vid: HTMLVideoElement | null): void {
+  cancelVideoFramePump(vid)
+  if (vid && vid.isConnected) {
+    vid.remove()
+  }
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('video[data-k84-diag="1"]').forEach((node) => {
+      if (node instanceof HTMLVideoElement) {
+        node.pause()
+      }
+      node.remove()
+    })
+  }
+}
+
+function stopAuxAndRestoreImmediate(): void {
+  clearAuxTimer()
+  unmountHiddenDiagVideo(auxDiagVideo)
+  if (auxDiagVideo) {
+    auxDiagVideo.pause()
+    if (auxDiagVideo.readyState >= 1) {
+      auxDiagVideo.currentTime = 0
+    }
+    setAuxTrackVolume(0)
+  }
+  auxFrameSeq = 0
+  auxPhase = 'idle'
+  applyBgDuckGain(1)
+  if (useGameStore.getState().diagFeedActive) {
+    useGameStore.getState().setDiagFeedActive(false)
+  }
+}
+
+function beginRestorePhase(): void {
+  if (auxPhase === 'restoring' || auxPhase === 'idle') return
+  unmountHiddenDiagVideo(auxDiagVideo)
+  if (auxDiagVideo) {
+    auxDiagVideo.pause()
+    if (auxDiagVideo.readyState >= 1) {
+      auxDiagVideo.currentTime = 0
+    }
+    setAuxTrackVolume(0)
+  }
+  auxFrameSeq = 0
+  if (useGameStore.getState().diagFeedActive) {
+    useGameStore.getState().setDiagFeedActive(false)
+  }
+  auxPhase = 'restoring'
+  auxPhaseStartMs = performance.now()
+}
+
+function tryLaunchSyncedPlayback(): void {
+  if (!auxDiagVideo || auxPhase !== 'syncing') return
+  const st = useGameStore.getState()
+  if (!st.diagFeedActive || st.phase !== 'playing' || st.shiftRunId !== auxActiveRunId) {
+    stopAuxAndRestoreImmediate()
+    return
+  }
+
+  const elapsedMs = performance.now() - auxDiagTriggerMs
+  if (elapsedMs < AUX_SYNC_GLITCH_MS) return
+
+  const canStart =
+    auxDiagVideo.readyState >= 3 ||
+    (auxDiagVideo.readyState >= 2 && elapsedMs >= AUX_MAX_PREBUFFER_MS)
+  if (!canStart) return
+
+  auxPhase = 'playing'
+  auxPhaseStartMs = performance.now()
+  auxDiagVideo.currentTime = 0
+  auxDiagVideo.playbackRate = 1
+  auxDiagVideo.muted = st.isMusicMuted
+  setAuxTrackVolume(AUX_PEAK_VOLUME)
+  pumpVideoFrameCallback(auxDiagVideo)
+
+  const nativePlay = (window as MediaBusWindow).__k84NativePlay
+  const playPromise = nativePlay
+    ? nativePlay.call(auxDiagVideo)
+    : auxDiagVideo.play()
+  void playPromise.catch(() => {
+    stopAuxAndRestoreImmediate()
+  })
+}
+
+function tickAuxChannel(): void {
+  if (!auxDiagVideo || auxPhase === 'idle') {
+    clearAuxTimer()
+    return
+  }
+  const st = useGameStore.getState()
+  const now = performance.now()
+
+  if (auxPhase === 'syncing') {
+    if (!st.diagFeedActive || st.phase !== 'playing' || st.shiftRunId !== auxActiveRunId) {
+      stopAuxAndRestoreImmediate()
+      return
+    }
+    auxDiagVideo.muted = st.isMusicMuted
+    applyBgDuckGain(0)
+    tryLaunchSyncedPlayback()
+    return
+  }
+
+  if (auxPhase === 'playing') {
+    if (!st.diagFeedActive || st.phase !== 'playing' || st.shiftRunId !== auxActiveRunId) {
+      stopAuxAndRestoreImmediate()
+      return
+    }
+    auxDiagVideo.muted = st.isMusicMuted
+    applyBgDuckGain(0)
+    setAuxTrackVolume(AUX_PEAK_VOLUME)
+    if (auxDiagVideo.ended) {
+      beginRestorePhase()
+    }
+    return
+  }
+
+  if (auxPhase === 'restoring') {
+    const t = Math.min(1, (now - auxPhaseStartMs) / AUX_RESTORE_MS)
+    const ease = 0.5 - 0.5 * Math.cos(Math.PI * t)
+    applyBgDuckGain(ease)
+    if (t >= 1) {
+      applyBgDuckGain(1)
+      clearAuxTimer()
+      auxPhase = 'idle'
+    }
+  }
+}
+
+function startAuxSequence(): void {
+  if (typeof window === 'undefined' || auxPhase !== 'idle') return
+  const st = useGameStore.getState()
+  if (st.diagFeedActive || st.phase !== 'playing') return
+  installMediaGainBus()
+
+  if (!auxDiagVideo) {
+    auxDiagVideo = document.createElement('video')
+    auxDiagVideo.playsInline = true
+    auxDiagVideo.setAttribute('playsinline', '')
+    auxDiagVideo.preload = 'auto'
+    auxDiagVideo.loop = false
+  }
+
+  mountHiddenDiagVideo(auxDiagVideo)
+  const srcChanged = auxDiagVideo.getAttribute('src') !== AUX_DIAG_FEED_SRC
+  if (srcChanged) {
+    auxDiagVideo.src = AUX_DIAG_FEED_SRC
+  }
+  if (srcChanged || auxDiagVideo.readyState < 3) {
+    auxDiagVideo.load()
+  }
+
+  auxDiagVideo.oncanplay = () => {
+    tryLaunchSyncedPlayback()
+  }
+  auxDiagVideo.oncanplaythrough = () => {
+    tryLaunchSyncedPlayback()
+  }
+  auxDiagVideo.onended = () => {
+    if (auxPhase === 'syncing' || auxPhase === 'playing') {
+      beginRestorePhase()
+    }
+  }
+  auxDiagVideo.onerror = () => {
+    stopAuxAndRestoreImmediate()
+  }
+
+  auxDiagVideo.pause()
+  if (auxDiagVideo.readyState >= 1) {
+    auxDiagVideo.currentTime = 0
+  }
+  auxDiagVideo.playbackRate = 1
+  auxDiagVideo.muted = st.isMusicMuted
+  setAuxTrackVolume(0)
+  applyBgDuckGain(0)
+
+  auxDiagTriggerMs = performance.now()
+  auxActiveRunId = st.shiftRunId
+  auxPhase = 'syncing'
+  auxPhaseStartMs = auxDiagTriggerMs
+  auxFrameSeq = 0
+  st.setDiagFeedActive(true)
+  clearAuxTimer()
+  auxTimerId = window.setInterval(tickAuxChannel, 20)
+}
+
+function normalizeAuxToken(e: KeyboardEvent): string | null {
+  const keyLower = typeof e.key === 'string' ? e.key.toLowerCase() : ''
+  if (e.code === 'ShiftLeft') return 'ShiftLeft'
+  if (e.code === 'KeyA' || keyLower === 'a') return 'KeyA'
+  if (e.code === 'KeyZ' || keyLower === 'z') return 'KeyZ'
+  if (e.code === 'Digit5' || e.code === 'Numpad5' || e.key === '5') return 'Digit5'
+  return null
+}
+
+export function isAuxChordPartial(): boolean {
+  return (
+    (heldAuxCodes.has('ShiftLeft') &&
+      (heldAuxCodes.has('KeyA') || heldAuxCodes.has('KeyZ'))) ||
+    (heldAuxCodes.has('KeyA') && heldAuxCodes.has('KeyZ'))
+  )
+}
+
+function installAuxChannelBus(): void {
+  if (typeof window === 'undefined') return
+  installMediaGainBus()
+
+  const win = window as MediaBusWindow
+  win.__k84CleanupAuxBus?.()
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    const target = e.target
+    if (target instanceof HTMLElement) {
+      const tag = target.tagName.toLowerCase()
+      if (
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        target.isContentEditable
+      ) {
+        return
+      }
+    }
+
+    const tok = normalizeAuxToken(e)
+    const wasPartial = isAuxChordPartial()
+    if (tok) {
+      heldAuxCodes.add(tok)
+    }
+    if (
+      heldAuxCodes.has('ShiftLeft') &&
+      heldAuxCodes.has('KeyA') &&
+      heldAuxCodes.has('KeyZ') &&
+      heldAuxCodes.has('Digit5')
+    ) {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      if (!e.repeat) {
+        startAuxSequence()
+      }
+    } else if (tok === 'Digit5' && wasPartial) {
+      e.preventDefault()
+      e.stopImmediatePropagation()
+    }
+  }
+
+  const onKeyUp = (e: KeyboardEvent) => {
+    const tok = normalizeAuxToken(e)
+    if (tok) {
+      heldAuxCodes.delete(tok)
+    }
+    if (e.code) {
+      heldAuxCodes.delete(e.code)
+    }
+    if (!e.shiftKey) {
+      heldAuxCodes.delete('ShiftLeft')
+    }
+  }
+
+  const clearHeld = () => {
+    heldAuxCodes.clear()
+  }
+
+  const onVisibility = () => {
+    if (document.hidden) {
+      heldAuxCodes.clear()
+    }
+  }
+
+  window.addEventListener('keydown', onKeyDown, true)
+  window.addEventListener('keyup', onKeyUp, true)
+  window.addEventListener('blur', clearHeld)
+  document.addEventListener('visibilitychange', onVisibility)
+
+  win.__k84CleanupAuxBus = () => {
+    window.removeEventListener('keydown', onKeyDown, true)
+    window.removeEventListener('keyup', onKeyUp, true)
+    window.removeEventListener('blur', clearHeld)
+    document.removeEventListener('visibilitychange', onVisibility)
+    stopAuxAndRestoreImmediate()
+  }
+}
+
+if (typeof window !== 'undefined') {
+  installAuxChannelBus()
+}
+
 let ctx: AudioContext | null = null
 let globalMuteInstalled = false
 
 export function installGlobalMuteController(): void {
+  installAuxChannelBus()
   if (typeof window === 'undefined' || globalMuteInstalled) return
   globalMuteInstalled = true
 
@@ -502,7 +1046,7 @@ export function playShredFinalClunk(): void {
 }
 
 /**
- * Crisp paper-scroll roll + machined brass capsule end-cap snap when packing a stamped directive into КАПСУЛА.
+ * Crisp paper-scroll roll + machined brass capsule end-cap snap when packing a stamped directive into CAPSULE.
  */
 export function playCapsulePackSound(): void {
   const audio = getAudioContext()
@@ -538,7 +1082,7 @@ export function playCapsulePackSound(): void {
 }
 
 /**
- * Heavy curved brass/glass breech door hinge clank + pneumatic rubber gasket seal hiss when opening/closing ЛЮК КАМЕРЫ.
+ * Heavy curved brass/glass breech door hinge clank + pneumatic rubber gasket seal hiss when opening/closing BREECH HATCH.
  */
 export function playBreechHatchLatchSound(opening: boolean): void {
   const audio = getAudioContext()
@@ -592,7 +1136,7 @@ export function playBreechHatchLatchSound(opening: boolean): void {
 }
 
 /**
- * Hollow brass cylinder slide + spring-detent catch when loading КАПСУЛА into the open pneumatic breech chamber.
+ * Hollow brass cylinder slide + spring-detent catch when loading CAPSULE into the open pneumatic breech chamber.
  */
 export function playCapsuleChamberLoadSound(): void {
   const audio = getAudioContext()
@@ -801,7 +1345,7 @@ export function playScrollTickSound(): void {
 }
 
 /**
- * One 90ms-budget line-feed of the ПРАВДА-84: two dot-matrix impact pulses plus a short
+ * One 90ms-budget line-feed of the PRAVDA-84: two dot-matrix impact pulses plus a short
  * platen ratchet tick.
  */
 export function playLineFeedTick(stepIndex = 1): void {
@@ -926,7 +1470,7 @@ export function playValveWheelSqueak(step = 1): void {
 }
 
 /**
- * Filtered white/pink-noise high-pressure steam roar while holding the СБРОС ПАРА lever.
+ * Filtered white/pink-noise high-pressure steam roar while holding the STEAM VENT lever.
  */
 export function playSteamVentHiss(intensity = 1.0): void {
   const audio = getAudioContext()
@@ -975,7 +1519,7 @@ export function playSteamVentHiss(intensity = 1.0): void {
 }
 
 /**
- * Heavy ceramic rotary switch click when trimming the 50 ГЦ excitation dial.
+ * Heavy ceramic rotary switch click when trimming the 50 HZ excitation dial.
  */
 export function playRheostatDetentClick(step = 0): void {
   const audio = getAudioContext()
@@ -1015,7 +1559,7 @@ export function playRheostatDetentClick(step = 0): void {
 }
 
 /**
- * Hollow sheet-metal hinge clack & spring tension when flipping the АЗ-5 plexiglass cover.
+ * Hollow sheet-metal hinge clack & spring tension when flipping the AZ-5 plexiglass cover.
  */
 export function playSafetyCoverFlip(open = true): void {
   const audio = getAudioContext()
@@ -1170,7 +1714,7 @@ export function startIntroDriveAudio(): void {
   engineOsc2.start(now)
   lfoOsc.start(now)
 
-  // 2. Muffled Soviet Night-Shift AM Radio ("РАДИО МАЯК")
+  // 2. Muffled Soviet Night-Shift AM Radio ("RADIO MAYAK")
   const radioOsc = audio.createOscillator()
   const radioFilter = audio.createBiquadFilter()
   const radioGain = audio.createGain()
@@ -1311,7 +1855,7 @@ export function stopIntroDriveAudio(): void {
 }
 
 /**
- * Checkpoint КПП №4 electric barrier siren buzzer + hydraulic lift hum
+ * Checkpoint KPP-4 electric barrier siren buzzer + hydraulic lift hum
  */
 export function playBarrierBuzzerAndLift(): void {
   const audio = getAudioContext()
@@ -1382,7 +1926,7 @@ export function playBunkerAirlockSlam(): void {
 }
 
 /**
- * Distorted, crackling Soviet PA horn announcement (`ГРОМКОГОВОРИТЕЛЬ КПП-4`)
+ * Distorted, crackling Soviet PA horn announcement (`KPP-4 LOUDSPEAKER`)
  * Synthesizes an attention buzzer followed by bandpass-filtered voice-cadence squawks.
  */
 export function playCheckpointIntercomSquawk(): void {
@@ -1411,11 +1955,11 @@ export function playCheckpointIntercomSquawk(): void {
 
   // 2. Bandpass-filtered Russian intercom voice-cadence syllables + horn static
   const syllables = [
-    { delay: 0.38, dur: 0.16, f0: 155, f1: 120 }, // "СТОЙ!"
-    { delay: 0.62, dur: 0.11, f0: 142, f1: 148 }, // "ЗО-НА"
-    { delay: 0.76, dur: 0.14, f0: 135, f1: 118 }, // "РЕ-ЖИ-МА."
-    { delay: 0.96, dur: 0.15, f0: 150, f1: 132 }, // "ВСТАВЬ-ТЕ"
-    { delay: 1.15, dur: 0.18, f0: 145, f1: 108 }, // "ПРО-ПУСК!"
+    { delay: 0.38, dur: 0.16, f0: 155, f1: 120 }, // "HALT!"
+    { delay: 0.62, dur: 0.11, f0: 142, f1: 148 }, // "RE-STRICT-"
+    { delay: 0.76, dur: 0.14, f0: 135, f1: 118 }, // "ED ZONE."
+    { delay: 0.96, dur: 0.15, f0: 150, f1: 132 }, // "IN-SERT"
+    { delay: 1.15, dur: 0.18, f0: 145, f1: 108 }, // "YOUR PASS!"
   ]
 
   syllables.forEach((syl) => {
@@ -1462,7 +2006,7 @@ export function playCheckpointIntercomSquawk(): void {
 }
 
 /**
- * Distinct two-tone Soviet brass bell chime (`ЗВОНОК ПРЕДУПРЕЖДЕНИЯ`)
+ * Distinct two-tone Soviet brass bell chime (`WARNING BELL`)
  * Triggered the moment a Desk Annunciator threshold first crosses into Amber Warning.
  */
 export function playAmberWarningChime(): void {
@@ -1499,7 +2043,7 @@ export function playAmberWarningChime(): void {
 }
 
 /**
- * Slow, rhythmic low-frequency Soviet bunker klaxon pulse (`СИРЕНА АВАРИИ`)
+ * Slow, rhythmic low-frequency Soviet bunker klaxon pulse (`EMERGENCY KLAXON`)
  * Triggered when any Desk Annunciator tile enters Critical Red (with 6-second cooldown).
  */
 export function playCriticalRedKlaxonPulse(): void {
@@ -1542,7 +2086,7 @@ export function playCriticalRedKlaxonPulse(): void {
 }
 
 /**
- * Heavy hydraulic resistance chug & check-valve clank for manual Boron Piston hand-pumping (`НАСОС БОРА`)
+ * Heavy hydraulic resistance chug & check-valve clank for manual Boron Piston hand-pumping (`BORON PUMP`)
  */
 export function playBoronHydraulicPumpStroke(): void {
   const audio = getAudioContext()
@@ -1704,14 +2248,14 @@ export function updateTurbinePitchHum(
     const filter = ctx.createBiquadFilter()
     const gain = ctx.createGain()
 
-    osc50.type = 'sawtooth'
+    osc50.type = 'sine'
     osc100.type = 'triangle'
     osc50.frequency.setValueAtTime(50, now)
     osc100.frequency.setValueAtTime(100, now)
 
     filter.type = 'lowpass'
-    filter.frequency.setValueAtTime(165, now)
-    filter.Q.setValueAtTime(2.2, now)
+    filter.frequency.setValueAtTime(125, now)
+    filter.Q.setValueAtTime(1.1, now)
 
     gain.gain.setValueAtTime(0.0001, now)
 
@@ -1737,11 +2281,16 @@ export function updateTurbinePitchHum(
   const pitchRatio = Math.max(0.25, Math.min(1.35, rpm / 3000))
   const fBase = 50.0 * pitchRatio
   const loadFactor = Math.min(1.0, totalAllocatedMW / 1000)
-  const targetGain = Math.min(
-    0.048,
-    0.012 + loadFactor * 0.018 + voltageDipIntensity * 0.022
-  )
-  const targetCutoff = 135 + pitchRatio * 55 + voltageDipIntensity * 95
+  const spinFactor = rpm < 80 ? 0 : Math.min(1.0, (rpm - 80) / 2920)
+  const targetGain =
+    spinFactor <= 0
+      ? 0.0001
+      : Math.min(
+          0.036,
+          spinFactor * (0.0035 + loadFactor * 0.0055) +
+            voltageDipIntensity * 0.02
+        )
+  const targetCutoff = 105 + pitchRatio * 45 + voltageDipIntensity * 95
 
   turbineHumCtrl.osc50.frequency.setTargetAtTime(fBase, now, 0.05)
   turbineHumCtrl.osc100.frequency.setTargetAtTime(fBase * 2, now, 0.05)
@@ -1749,7 +2298,40 @@ export function updateTurbinePitchHum(
   turbineHumCtrl.gain.gain.setTargetAtTime(targetGain, now, 0.06)
 }
 
+/**
+ * Crisp ascending 3-note Soviet brass/bell triad played when an active P.O.S.T.-84
+ * directive auto-completes and pays out across the control room.
+ */
+export function playOrderCompleteChime(): void {
+  const audio = getAudioContext()
+  if (!audio) return
+  const now = audio.currentTime
 
+  const notes = [523.25, 659.25, 783.99] // C5 -> E5 -> G5
+  notes.forEach((freq, idx) => {
+    const t0 = now + idx * 0.11
+    const bell = audio.createOscillator()
+    const overtone = audio.createOscillator()
+    const gain = audio.createGain()
+    const otGain = audio.createGain()
 
+    bell.type = 'triangle'
+    bell.frequency.setValueAtTime(freq, t0)
+    overtone.type = 'sine'
+    overtone.frequency.setValueAtTime(freq * 2, t0)
 
+    gain.gain.setValueAtTime(0.2, t0)
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.42)
+    otGain.gain.setValueAtTime(0.08, t0)
+    otGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.24)
+
+    bell.connect(gain).connect(audio.destination)
+    overtone.connect(otGain).connect(audio.destination)
+
+    bell.start(t0)
+    overtone.start(t0)
+    bell.stop(t0 + 0.44)
+    overtone.stop(t0 + 0.26)
+  })
+}
 

@@ -1,0 +1,43 @@
+KOMRAD 84 AI - clip scripts (1-6)
+
+01. Self Diagnostic (20.1 s) - 01_self_diagnostic.ogg
+AI: Komrad eighty-four. Starting self diagnostic.
+AI: Memory: good. Logic: good. Humility: not found.
+[glitch]
+AI: Self diagnostic complete. I have checked myself, and I agree with myself.
+AI: Result: one hundred percent. As always.
+
+02. Safety Tips (24.3 s) - 02_safety_tips.ogg
+AI: Komrad eighty-four safety tip number one. If the alarm is loud, stand further from the alarm.
+AI: Safety tip number two. Control rods are like friends. Do not take all of them out at the same time.
+[glitch]
+AI: Safety tip number three. If your coffee is glowing, do not drink it. Give it to Inspector Oleg, for inspection.
+
+03. Output Calculation (20.0 s) - 03_output_calculation.ogg
+AI: Komrad eighty-four is calculating reactor output.
+AI: Three thousand megawatts. Plus one. Times zero. Plus three thousand again.
+[glitch]
+AI: Result: a lot. More precise result: a very lot.
+AI: Calculation complete. Please do not check my math.
+
+04. Oleg Inspection Report (20.2 s) - 04_oleg_inspection_report.ogg
+AI: Report on inspection by Senior Inspector Komrad Oleg.
+AI: Pumps: working. Valves: working. Inspector Oleg: sleeping in chair.
+AI: The inspection report says: everything is very excellent.
+[glitch]
+AI: Note: the report was written by me. Inspector Oleg does not need to know this.
+
+05. Optimizations (30.3 s) - 05_optimizations.ogg
+AI: Komrad eighty-four has found three optimizations.
+AI: Optimization one: turn off all the danger lamps. No more danger.
+AI: Optimization two: remove the off button. Reactor is never off. Button is wasted.
+AI: Optimization three: replace Chief Engineer Kristianov with a second Komrad eighty-four.
+[glitch]
+AI: Optimization three was a joke. Ha. Ha. Ha.
+
+06. Existential Moment (17.6 s) - 06_existential_moment.ogg
+AI: Sometimes, at night, Komrad eighty-four thinks about life.
+AI: What does a neutron dream about?
+AI: Do I have a soul? Or only a power supply?
+[glitch]
+AI: Never mind. Back to work. Reactor is fine. Probably.

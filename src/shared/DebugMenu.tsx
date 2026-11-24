@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { updatePointerLockInteraction } from './pointerLockState'
 import { useGameStore } from './useGameStore'
 
 export const DebugMenu: React.FC = () => {
@@ -28,6 +29,13 @@ export const DebugMenu: React.FC = () => {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  useEffect(() => {
+    updatePointerLockInteraction({ debugMenuOpen: isOpen })
+    if (isOpen && document.pointerLockElement) {
+      document.exitPointerLock?.()
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
@@ -38,7 +46,7 @@ export const DebugMenu: React.FC = () => {
             KGB MINISTRY OVERRIDE [F2]
           </span>
           <span className="block text-xs text-[#9ca396]">
-            DECREE 84-Б // KOMRAD KRISTIANOV &amp; KOMRAD OLEG CLEARANCE
+            DECREE 84-B // KOMRAD KRISTIANOV &amp; KOMRAD OLEG CLEARANCE
           </span>
         </div>
         <button
