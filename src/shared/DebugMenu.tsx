@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { updatePointerLockInteraction } from './pointerLockState'
+import {
+  pointerLockInteraction,
+  updatePointerLockInteraction,
+} from './pointerLockState'
 import { useGameStore } from './useGameStore'
 
 export const DebugMenu: React.FC = () => {
@@ -21,6 +24,7 @@ export const DebugMenu: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
+        if (pointerLockInteraction.mainMenuOpen) return
         e.preventDefault()
         setIsOpen((prev) => !prev)
       }

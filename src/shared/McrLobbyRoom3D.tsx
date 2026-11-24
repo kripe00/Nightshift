@@ -412,6 +412,7 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
 
   const hoveredBtnRef = useRef<"new" | "resume" | null>(null);
   const clickedRef = useRef<boolean>(false);
+  const dismissedRef = useRef<boolean>(false);
   const fadeElapsedRef = useRef<number>(0);
   const newHoverBlendRef = useRef<number>(0);
   const resumeHoverBlendRef = useRef<number>(0);
@@ -582,6 +583,14 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
     };
   }, [menuTextures]);
 
+  useEffect(() => {
+    if (lobbyMenuPhase !== "door_opening") return;
+    const timer = window.setTimeout(() => {
+      setMenuDismissed(true);
+    }, Math.ceil(LOBBY_MENU_FADE_DURATION_SEC * 1000) + 50);
+    return () => window.clearTimeout(timer);
+  }, [lobbyMenuPhase]);
+
   useFrame(({ clock }, delta) => {
     if (menuDismissed) return;
     const dt = Math.min(0.1, delta);
@@ -601,7 +610,12 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
       const smooth = fadeT * fadeT * (3 - 2 * fadeT);
       fadeAlpha = 1 - smooth;
       if (fadeT >= 1) {
-        setMenuDismissed(true);
+        if (!dismissedRef.current) {
+          dismissedRef.current = true;
+          if (rootGroupRef.current) {
+            rootGroupRef.current.visible = false;
+          }
+        }
         return;
       }
     }
@@ -765,6 +779,18 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
     }
 
     triggerLobbyAmbientFadeIn();
+
+    try {
+      const canvas = document.querySelector("canvas");
+      if (canvas && document.pointerLockElement !== canvas) {
+        const req = canvas.requestPointerLock?.() as Promise<void> | undefined;
+        req?.catch?.(() => {
+          // Ignore rejected pointer lock promises if browser blocks lock
+        });
+      }
+    } catch {
+      // Ignore security exceptions when calling requestPointerLock
+    }
   };
 
   return (
@@ -929,6 +955,7 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
   const airlockSignLightRef = useRef<THREE.PointLight>(null);
   const lobbyFillLightRef = useRef<THREE.PointLight>(null);
   const controlRoomLitBlendRef = useRef(0);
+  const wasLobbySealedRef = useRef(false);
   const deskLampBulbMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const deskLampShadeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const elevatorBusyLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -2620,6 +2647,27 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
         dt,
       );
     }
+
+    const lobbySealed =
+      gs.lobbyMenuPhase === "entered_control_room" &&
+      airlockDoorState.openProgress <= 0.01 &&
+      controlRoomLitBlendRef.current >= 0.99;
+
+    if (lobbySealed) {
+      if (!wasLobbySealedRef.current) {
+        wasLobbySealedRef.current = true;
+        if (ceilingNorthLightRef.current) ceilingNorthLightRef.current.intensity = 0.0002;
+        if (ceilingSouthLightRef.current) ceilingSouthLightRef.current.intensity = 0.0002;
+        if (cabinetLightRef.current) cabinetLightRef.current.intensity = 0.0002;
+        if (deskLampLightRef.current) deskLampLightRef.current.intensity = 0.0002;
+        if (elevatorRubyLightRef.current) elevatorRubyLightRef.current.intensity = 0.0002;
+        if (airlockSignLightRef.current) airlockSignLightRef.current.intensity = 0.0002;
+        if (lobbyFillLightRef.current) lobbyFillLightRef.current.intensity = 0.0002;
+      }
+      return;
+    }
+    wasLobbySealedRef.current = false;
+
     const standbyBoost = 1 - controlRoomLitBlendRef.current;
 
     const flickerWave =

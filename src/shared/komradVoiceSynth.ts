@@ -462,6 +462,7 @@ let voxActiveMood: KomradMood = "normal";
 let voxTimeline: VoxTimelineSegment[] = [];
 let voxTimelineIdx = 0;
 let voxSpeakingAudioActive = false;
+let voxHardDeadlineMs = 0;
 
 let lastTrackedShiftRunId = -1;
 let voxLoadStartedElapsedSec = -1;
@@ -545,6 +546,7 @@ export function cleanSubtitleDisplayText(raw: string): string {
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|\uFE0F|\u200D/gu, " ")
     .replace(/[’‘]/g, "'")
     .replace(/[“”]/g, '"')
+    .replace(/\bPERFORMOM\b/gi, "PERFORMED")
     .replace(/^\s*(?:\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]\s*)+/, "")
     .replace(
       /^(?:K\.O\.M\.R\.A\.D\.?(?:[-\s]?84)?|KOMRAD(?:[-\s]?84)?|SYS\.DEFENSE|PRINTER|OPERATOR)\s*:\s*/i,
@@ -1196,7 +1198,11 @@ export function tokenizeToVoxQueue(
   text: string,
   words: Record<string, VoxWordEntry>,
 ): VoxQueueItem[] {
-  const normalizedText = text.replace(/[’‘]/g, "'");
+  const normalizedText = text
+    .replace(/[’‘]/g, "'")
+    .replace(/\bPERFORMOM\b/gi, "PERFORMED")
+    .replace(/\bMM\s*\/\s*DD\s*\/\s*1984\b/gi, "AMERICAN DAY YEAR 1984")
+    .replace(/\bOTH\b/g, "RADAR");
   const queue: VoxQueueItem[] = [];
   const hasLowerCase = /[a-z]/.test(normalizedText);
 
@@ -2408,10 +2414,14 @@ function releaseActiveUtteranceNodes(fadeSec: number): void {
 }
 
 function cancelActiveVoxUtterance(fadeSec = 0.03): void {
+  voxSpeakingAudioActive = false;
+  voxHardDeadlineMs = 0;
   releaseActiveUtteranceNodes(fadeSec);
 }
 
 function finishActiveUtterance(elapsedSec: number): void {
+  voxSpeakingAudioActive = false;
+  voxHardDeadlineMs = 0;
   lastUtteranceEndElapsedSec = elapsedSec;
   const finalClause =
     activeSubtitleClauses.length > 0
@@ -3005,6 +3015,7 @@ function beginVoxClipUtterance(
   voxUtteranceEndAudioSec = when + playDur;
   voxActiveMood = mood;
   voxSpeakingAudioActive = true;
+  voxHardDeadlineMs = nowPerfMs() + playDur * 1000 + 2500;
   visualTypingActive = false;
   markKomradTransmissionStart();
 }
@@ -3117,6 +3128,9 @@ function beginVoxUtterance(
   voxTimeline = [];
   voxTimelineIdx = 0;
   voxSpeakingAudioActive = voxQueue.length > 0;
+  voxHardDeadlineMs = voxSpeakingAudioActive
+    ? nowPerfMs() + Math.max(4500, voxQueue.length * 420 + 3000)
+    : 0;
   visualTypingActive = false;
   if (voxSpeakingAudioActive) {
     markKomradTransmissionStart();
@@ -3261,6 +3275,10 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
     voxUtteranceEndAudioSec = Math.max(voxUtteranceEndAudioSec, when + fDur);
     voxCursorAudioSec = nextCursor;
   }
+  voxHardDeadlineMs = Math.max(
+    voxHardDeadlineMs,
+    nowPerfMs() + Math.max(0, voxUtteranceEndAudioSec - audio.currentTime) * 1000 + 2500,
+  );
 }
 
 function updateAnalyserLipSync(
@@ -3741,6 +3759,16 @@ export function stepKomradSpeech(
       charCursor = Math.max(charCursor, activeUtteranceTextLen);
       finishActiveUtterance(elapsedSec);
     }
+  } else if (
+    voxSpeakingAudioActive &&
+    !audioRunning &&
+    voxHardDeadlineMs > 0 &&
+    nowPerfMs() >= voxHardDeadlineMs
+  ) {
+    cancelActiveVoxUtterance(0.02);
+    charCursor = Math.max(charCursor, activeUtteranceTextLen);
+    markKomradTransmissionEnd();
+    clearKomradSubtitleNow();
   }
 
   // Handle newly arriving messages from the store: drop-don't-queue during speech or silence cooldown

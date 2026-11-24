@@ -2342,7 +2342,11 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           }
         }, 2800);
       }
-      registerKomradControlObject("radioPower", powerBtnMeshRef.current);
+      registerKomradControlObject("radioPower", powerBtnMeshRef.current, [
+        0,
+        0,
+        0.012,
+      ]);
       registerKomradControlObject("radioVolume", wheelGroupRef.current, [
         0,
         0,
@@ -2441,12 +2445,21 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         if (!eng || eng.disposed) return;
 
         needsGestureUnlockRef.current = false;
+        syncUnifiedAudio(0, distanceGainRef.current);
         if (eng.ctx.state === "suspended") {
-          void eng.ctx.resume().catch(() => {});
-        }
-
-        syncUnifiedAudio(0.05, distanceGainRef.current);
-        if (eng.ctx.state === "running" && !needsGestureUnlockRef.current) {
+          void eng.ctx
+            .resume()
+            .then(() => {
+              if (
+                !unmounted &&
+                eng.ctx.state === "running" &&
+                !needsGestureUnlockRef.current
+              ) {
+                removeUnlockListeners();
+              }
+            })
+            .catch(() => {});
+        } else if (eng.ctx.state === "running") {
           removeUnlockListeners();
         }
       }
@@ -2559,69 +2572,22 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       };
       r3fTarget?.setPointerCapture?.(e.pointerId);
 
-      const domElem =
-        (e.nativeEvent.target as HTMLElement | null) ??
-        document.querySelector("canvas");
-      const rect = domElem?.getBoundingClientRect();
-      let centerX = e.nativeEvent.clientX;
-      let centerY = e.nativeEvent.clientY;
-      if (wheelGroupRef.current && rect && rect.width > 0 && rect.height > 0) {
-        const worldPos = new THREE.Vector3();
-        wheelGroupRef.current.getWorldPosition(worldPos);
-        worldPos.project(e.camera);
-        centerX = rect.left + (worldPos.x * 0.5 + 0.5) * rect.width;
-        centerY = rect.top + (-worldPos.y * 0.5 + 0.5) * rect.height;
-      }
-
-      let prevX = e.nativeEvent.clientX;
       let prevY = e.nativeEvent.clientY;
-      const initR = Math.hypot(prevX - centerX, prevY - centerY);
-      let hasValidAngle = initR >= 14;
-      let prevAngle = hasValidAngle
-        ? Math.atan2(prevY - centerY, prevX - centerX)
-        : 0;
       let accumPct = volumePctRef.current;
+      let finished = false;
 
       const handleMove = (ev: PointerEvent) => {
-        const stepDX = ev.clientX - prevX;
-        const stepDY = ev.clientY - prevY;
-        prevX = ev.clientX;
+        if (finished) return;
+        const rawDy =
+          document.pointerLockElement !== null
+            ? ev.movementY
+            : ev.clientY - prevY;
         prevY = ev.clientY;
+        if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
 
-        const rx = ev.clientX - centerX;
-        const ry = ev.clientY - centerY;
-        const r = Math.hypot(rx, ry);
+        const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
         const fineScale = ev.shiftKey ? 0.35 : 1.0;
-
-        let dAngle = 0;
-        if (r >= 14) {
-          const curAngle = Math.atan2(ry, rx);
-          if (!hasValidAngle) {
-            hasValidAngle = true;
-            prevAngle = curAngle;
-            dAngle = (stepDX - stepDY) * 0.022;
-          } else {
-            let dTheta = curAngle - prevAngle;
-            while (dTheta > Math.PI) dTheta -= Math.PI * 2;
-            while (dTheta < -Math.PI) dTheta += Math.PI * 2;
-            prevAngle = curAngle;
-
-            // Blend seamlessly between circular rotary swivel and vertical/horizontal drag
-            const radialDot = Math.abs((rx * stepDX + ry * stepDY) / r);
-            const tangDot = Math.abs((-ry * stepDX + rx * stepDY) / r);
-            if (tangDot >= radialDot * 0.45 && Math.abs(dTheta) < 0.7) {
-              dAngle = dTheta;
-            } else {
-              dAngle = (stepDX - stepDY) * 0.022;
-            }
-          }
-        } else {
-          hasValidAngle = false;
-          dAngle = (stepDX - stepDY) * 0.022;
-        }
-
-        const sweepSpan = VOLUME_KNOB_ANGLE_MAX - VOLUME_KNOB_ANGLE_MIN;
-        const dPct = ((dAngle * fineScale) / sweepSpan) * 100;
+        const dPct = (-dy / 140) * 100 * fineScale;
         accumPct = THREE.MathUtils.clamp(accumPct + dPct, 0, 100);
         const stepped = Math.round(accumPct);
         if (stepped !== volumePctRef.current) {
@@ -2630,9 +2596,12 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       };
 
       const finishDrag = () => {
+        if (finished) return;
+        finished = true;
         window.removeEventListener("pointermove", handleMove);
         window.removeEventListener("pointerup", finishDrag);
         window.removeEventListener("pointercancel", finishDrag);
+        window.removeEventListener("blur", finishDrag);
         dragCleanupRef.current = null;
         r3fTarget?.releasePointerCapture?.(e.pointerId);
         draggingRef.current = false;
@@ -2649,10 +2618,12 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       window.addEventListener("pointermove", handleMove);
       window.addEventListener("pointerup", finishDrag);
       window.addEventListener("pointercancel", finishDrag);
+      window.addEventListener("blur", finishDrag);
     };
 
     const handleVolumeKnobScroll = (e: ThreeEvent<WheelEvent>) => {
       if (useCameraLookStore.getState().isFreeLookMode) return;
+      if (e.deltaY === 0) return;
       e.stopPropagation();
       e.nativeEvent?.stopImmediatePropagation?.();
       const deltaPct = e.deltaY < 0 ? 1 : -1;

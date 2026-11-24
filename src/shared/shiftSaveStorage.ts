@@ -1,6 +1,9 @@
 import { useDeskStore } from '../modules/inspector/useDeskStore'
 import type { SavedGameStatePayload } from './types'
-import { useGameStore } from './useGameStore'
+import {
+  getPreOrderSectorTargetsSnapshot,
+  useGameStore,
+} from './useGameStore'
 
 const STORAGE_KEY = 'MIP_SAVED_SHIFT_84'
 
@@ -20,6 +23,9 @@ export interface SavedShiftSnapshot {
 }
 
 export function computeSavedShiftRubles(snap: SavedShiftSnapshot): number {
+  if (typeof snap.game.rubles === 'number' && Number.isFinite(snap.game.rubles)) {
+    return Math.max(0, Math.round(snap.game.rubles))
+  }
   return Math.max(
     0,
     300 + snap.desk.commendations * 150 - snap.desk.citations * 50
@@ -61,11 +67,17 @@ export function saveCurrentShiftToStorage(): void {
         shiftNumber: g.shiftNumber,
         shiftTimeMinutes: g.shiftTimeMinutes,
         treasonStrikes: g.treasonStrikes,
+        rubles: g.rubles,
+        quotaCompleted: g.quotaCompleted,
         lastDecisionFeedback: g.lastDecisionFeedback,
         activeMandate: g.activeMandate,
         activePost84Order: g.activePost84Order,
+        post84InboxSnapshot: g.post84InboxSnapshot,
+        preOrderSectorTargets: getPreOrderSectorTargetsSnapshot(),
         tutorialPhase: g.tutorialPhase,
         tutorialStep: g.tutorialStep,
+        tutorialHintsHidden: g.tutorialHintsHidden,
+        dismissedCrisisIds: [...g.dismissedCrisisIds],
         coreTemp: g.coreTemp,
         pressureBar: g.pressureBar,
         drumPressure: g.drumPressure,
@@ -84,6 +96,8 @@ export function saveCurrentShiftToStorage(): void {
         oilCoolerValve: g.oilCoolerValve,
         boronTankLevel: g.boronTankLevel,
         boronReservePool: g.boronReservePool,
+        boronDampingTimer: g.boronDampingTimer,
+        boronCooldown: g.boronCooldown,
         graphiteTemp: g.graphiteTemp,
         nitrogenLoopValve: g.nitrogenLoopValve,
         heliumPressure: g.heliumPressure,
@@ -98,6 +112,12 @@ export function saveCurrentShiftToStorage(): void {
         voidFraction: g.voidFraction,
         controlRods: g.controlRods,
         controlRodLevel: g.controlRodLevel,
+        coolantFlow: g.coolantFlow,
+        fuelBurnupTimer: g.fuelBurnupTimer,
+        az5Active: g.az5Active,
+        az5Timer: g.az5Timer,
+        az5Cooldown: g.az5Cooldown,
+        az5Available: g.az5Available,
         thermalPower: g.thermalPower,
         energyCreatedMW: g.energyCreatedMW,
         batteryStoredMWh: g.batteryStoredMWh,
@@ -113,6 +133,8 @@ export function saveCurrentShiftToStorage(): void {
         kgbLineActive: g.kgbLineActive,
         condenserVacActive: g.auxLoopBActive,
         auxLoopBActive: g.auxLoopBActive,
+        radioOn: g.radioOn,
+        radioVolume: g.radioVolume,
         vodkaDroughtTimer: g.vodkaDroughtTimer,
         coreTileAnomalies: { ...(g.coreTileAnomalies ?? {}) },
         turbines: [{ ...g.turbines[0] }, { ...g.turbines[1] }],
@@ -149,17 +171,21 @@ export function startFreshShiftFromLobby(): void {
 }
 
 export function restoreSavedShiftFromStorage(snap: SavedShiftSnapshot): void {
-  useDeskStore.setState({
-    documents: Array.isArray(snap.desk.documents) ? snap.desk.documents : [],
-    printingDoc: snap.desk.printingDoc ?? null,
-    nextTemplateIndex:
-      typeof snap.desk.nextTemplateIndex === 'number'
-        ? snap.desk.nextTemplateIndex
-        : 0,
-    commendations:
-      typeof snap.desk.commendations === 'number' ? snap.desk.commendations : 0,
-    citations: typeof snap.desk.citations === 'number' ? snap.desk.citations : 0,
-    lastVerdict: snap.desk.lastVerdict ?? null,
+  const resolvedRubles = computeSavedShiftRubles(snap)
+  const resolvedQuota =
+    typeof snap.game.quotaCompleted === 'number' &&
+    Number.isFinite(snap.game.quotaCompleted)
+      ? Math.max(0, Math.round(snap.game.quotaCompleted))
+      : Math.max(
+          0,
+          (typeof snap.desk.commendations === 'number'
+            ? snap.desk.commendations
+            : 0) + (snap.game.post84InboxSnapshot?.mailOrdersCompleted ?? 0)
+        )
+  useGameStore.getState().restoreSavedShift({
+    ...snap.game,
+    rubles: resolvedRubles,
+    quotaCompleted: resolvedQuota,
   })
-  useGameStore.getState().restoreSavedShift(snap.game)
+  useDeskStore.getState().restoreDeskSnapshot(snap.desk)
 }

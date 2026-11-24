@@ -225,6 +225,14 @@ interface DeskStoreState {
     reason: string
   ) => void
   resetDeskStore: () => void
+  restoreDeskSnapshot: (desk: {
+    documents?: DeskDocument[]
+    printingDoc?: DeskDocument | null
+    nextTemplateIndex?: number
+    commendations?: number
+    citations?: number
+    lastVerdict?: InspectionVerdict | null
+  }) => void
 }
 
 const SECTOR_ORDER_SPECS: Record<
@@ -757,6 +765,32 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
     })
   },
 
+  restoreDeskSnapshot: (desk) => {
+    const gs = useGameStore.getState()
+    lastObservedShiftRunId = gs.shiftRunId
+    lastObservedTutorialStep = gs.tutorialStep
+    const docs = Array.isArray(desk.documents) ? desk.documents : []
+    docSequence = Math.max(1, docs.length + 1)
+    set({
+      documents: docs,
+      printingDoc: desk.printingDoc ?? null,
+      nextTemplateIndex:
+        typeof desk.nextTemplateIndex === 'number'
+          ? desk.nextTemplateIndex
+          : 0,
+      commendations:
+        typeof desk.commendations === 'number' ? desk.commendations : 0,
+      citations: typeof desk.citations === 'number' ? desk.citations : 0,
+      lastVerdict: desk.lastVerdict ?? null,
+      nextPrintReadyAtMs: Date.now() + 3500,
+      directiveCooldown: 3.5,
+      capsuleState: 'CRADLE_EMPTY',
+      hatchOpen: false,
+      packedDoc: null,
+      manualDefaultPos: { ...MANUAL_DEFAULT_POS_3D },
+    })
+  },
+
   bringToFront: (id: string) =>
     set((state) => {
       const idx = state.documents.findIndex((d) => d.id === id)
@@ -1092,6 +1126,12 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
           : 'SECURITY BREACH: Valid Directive Shredded (+18% INSTABILITY)!',
       },
     })
+    if (correct) {
+      useGameStore.getState().addRubles(150)
+      useGameStore.getState().addQuotaCompleted(1)
+    } else {
+      useGameStore.getState().spendRubles(50)
+    }
   },
 
   packDocumentIntoCapsule: (docId?: string) => {
@@ -1351,6 +1391,12 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
           : `SABOTAGE DISPATCHED (2 SPENT FUEL CHANNELS + TREASON STRIKE): ${doc.forgeryReason}`,
       },
     })
+    if (correct) {
+      useGameStore.getState().addRubles(150)
+      useGameStore.getState().addQuotaCompleted(1)
+    } else {
+      useGameStore.getState().spendRubles(50)
+    }
   },
 
   dispatchDocumentToOutbox: (id: string) => {
@@ -1393,6 +1439,12 @@ export const useDeskStore = create<DeskStoreState>((set, get) => ({
         reason,
       },
     })
+    if (fulfilled) {
+      useGameStore.getState().addRubles(150)
+      useGameStore.getState().addQuotaCompleted(1)
+    } else {
+      useGameStore.getState().spendRubles(50)
+    }
   },
 }))
 

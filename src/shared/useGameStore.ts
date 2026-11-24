@@ -55,6 +55,7 @@ import type {
   KomradMood,
   LobbyMenuPhase,
   OperationalMandate,
+  Post84InboxSnapshot,
   SavedGameStatePayload,
   SectorNodeId,
   SystemType,
@@ -249,14 +250,14 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
 function cleanWheelText(text: string): string {
   return text
     .replace(/GO TO:\s*\[KEY 5\]\s*UNIT C\s*\(BATTERY WHEEL\)/gi, 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)')
-    .replace(/\[BATTERY\s*->\s*GRID\]\s*WHEEL/gi, 'UNIT C AUTO BUSBARS')
-    .replace(/TURN\s+BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?\s*TO\s*(\d+\s*MW)/gi, 'SET SECTOR LEVERS [A] TO $3 (UNIT C AUTO-DRAINS)')
-    .replace(/BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?/gi, 'UNIT C AUTO BUSBARS')
+    .replace(/\[BATTERY\s*->\s*GRID\]\s*WHEEL/gi, 'UNIT C BATTERY OUTPUT')
+    .replace(/TURN\s+BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?\s*TO\s*(\d+\s*MW)/gi, 'SET SECTOR LEVERS [A] TO $3 (UNIT C BATTERY OUTPUT)')
+    .replace(/BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?/gi, 'UNIT C BATTERY OUTPUT')
     .replace(/single\s+UNIT\s+C\s+wheel/gi, 'UNIT C copper busbars')
-    .replace(/UNIT\s+C\s+wheel/gi, 'UNIT C auto-dispatch')
-    .replace(/&\s*Wheel\s*\[C\]/gi, '(C auto-trims)')
-    .replace(/3\.\s*Battery\s*Wheel\s*\[C\]/gi, '3. Unit C Auto-Drains')
-    .replace(/\bTURN\s+WHEEL\b/gi, 'CHECK AUTO DRAIN')
+    .replace(/UNIT\s+C\s+wheel/gi, 'UNIT C battery output')
+    .replace(/&\s*Wheel\s*\[C\]/gi, '(C battery buffer)')
+    .replace(/3\.\s*Battery\s*Wheel\s*\[C\]/gi, '3. Unit C Battery Output')
+    .replace(/\bTURN\s+WHEEL\b/gi, 'CHECK BATTERY OUTPUT')
     .replace(/UNIT C \(RIGHT WALL\)/gi, 'UNIT C (LEFT WALL)')
     .replace(/UNIT B \(FAR LEFT\)/gi, 'UNIT B (RIGHT WING)')
 }
@@ -293,7 +294,8 @@ function evaluateWheelFreeTutorial(
 
 function mapReactorToGameStateFields(
   r: ReactorState,
-  tutorialPhase: TutorialPhase
+  tutorialPhase: TutorialPhase,
+  activePost84Order: ActivePost84PowerOrder | null = syncedActivePost84Order
 ) {
   const evalRes = evaluateWheelFreeTutorial(r, tutorialPhase)
   const sub1 = findSubById(r.substations, 1)
@@ -380,7 +382,10 @@ function mapReactorToGameStateFields(
       Math.max(0, Math.min(100, (r.batteryStoredMWh / MAX_BATTERY_CAPACITY_MWH) * 100))
     ),
     batteryOutputValve: Number(r.batteryOutputValve.toFixed(3)),
-    energyDemandMW: Math.round(r.energyDemandMW),
+    energyDemandMW: Math.max(
+      Math.round(r.energyDemandMW),
+      activePost84Order?.minTotalMW ?? 0
+    ),
     wetSteamPenalty: Number(r.wetSteamSeverity.toFixed(2)),
     sectorMW,
     targetSectorMW,
@@ -398,7 +403,6 @@ function mapReactorToGameStateFields(
       defense: Math.max(35, Math.round((sectorMW.duga + sectorMW.kgb) / 10)),
       facility: Math.max(30, Math.round((sectorMW.vodka + sectorMW.steel) / 10)),
     },
-    isBlackout: false,
   }
 }
 
@@ -419,8 +423,8 @@ export function getContextualDiagnosticHint(
           return '⚠️ HIGH REACTIVITY: INSERT CONTROL RODS (UNIT A-2) OR BOOST PUMPS TO AVOID OVERHEAT!'
         }
         return state.coreTemp > 520
-          ? '⚠️ HIGH CORE TEMP (>520°C): INSERT CONTROL RODS ON UNIT A-2 [KEY 3] OR BOOST COOLING PUMPS ON UNIT A!'
-          : '⚡ CORE & REACTIVITY: MONITOR THERMAL MWt & BORON CONTROL RODS ON UNIT A-2 [KEY 3]!'
+          ? '⚠️ HIGH CORE TEMP (>520°C): INSERT CONTROL RODS ON UNIT A-2 [KEY 6] OR BOOST COOLING PUMPS ON UNIT A!'
+          : '⚡ CORE & REACTIVITY: MONITOR THERMAL MWt & BORON CONTROL RODS ON UNIT A-2 [KEY 6]!'
       case 'water':
         if (state.drumWaterLevel < -100) {
           return `💧 LOW DRUM WATER (${Math.round(state.drumWaterLevel)} MM): OPEN FEEDWATER WHEEL ON UNIT B [KEY 3] TO PREVENT VOID SPIKE!`
@@ -445,11 +449,11 @@ export function getContextualDiagnosticHint(
           return `⚙️ PUMP BEARINGS HOT (${Math.round(20 + maxPumpHeat)}°C / OIL ${Math.round(state.lubeOilPressure)} PSI): TRIM PUMP THROTTLE (UNIT A) OR FIX WET STEAM ON UNIT B!`
         }
         if (state.boronTankLevel < 25) {
-          return `🧪 LOW BORON TANK (${Math.round(state.boronTankLevel)}%): PASSIVE FEED TRICKLE ACTIVE — REFUEL AMBER CHANNELS ON UNIT A-2 [KEY 3]!`
+          return `🧪 LOW BORON TANK (${Math.round(state.boronTankLevel)}%): PASSIVE FEED TRICKLE ACTIVE — REFUEL AMBER CHANNELS ON UNIT A-2 [KEY 6]!`
         }
         const spentCount = Object.keys(state.coreTileAnomalies ?? {}).length
         if (spentCount >= 4) {
-          return `☢️ SPENT FUEL OVERHEAT (${spentCount} AMBER CHANNELS): CLICK AN AMBER TILE & PULL [ROD REFUELING LEVER] ON UNIT A-2 [KEY 3]!`
+          return `☢️ SPENT FUEL OVERHEAT (${spentCount} AMBER CHANNELS): CLICK AN AMBER TILE & PULL [ROD REFUELING LEVER] ON UNIT A-2 [KEY 6]!`
         }
         return state.voidFraction > 0.35
           ? `⚠️ STEAM VOIDS (${Math.round(state.voidFraction * 100)}%): RAISE [FEEDWATER] (UNIT B) OR LOWER [RODS] (UNIT A-2), OR PRESS [BORON INJECTION] ON UNIT A!`
@@ -459,7 +463,7 @@ export function getContextualDiagnosticHint(
           return '🔋 BATTERY BANK LOW (<8%): WITHDRAW RODS (A-2) TO GENERATE >500 MW AND RECHARGE ACCUMULATORS!'
         }
         if (state.totalElectricalMW > state.energyDemandMW + 60) {
-          return '⚡ GRID OVER-DISPATCH: LOWER UNIT A SECTOR LEVERS [KEY 1] TO SHED SURPLUS LOAD (UNIT C AUTO-DRAINS)!'
+          return '⚡ GRID OVER-DISPATCH: LOWER UNIT A SECTOR LEVERS [KEY 1] TO SHED SURPLUS LOAD (UNIT C BATTERY OUTPUT)!'
         }
         if (state.totalElectricalMW < state.energyDemandMW - 40) {
           return '⚡ DEMAND DEFICIT: BATTERY BANK LOW OR TRIPPED ON UNIT C [KEY 5] — RAISE RODS ON A-2 TO SUPPLY DEMAND!'
@@ -712,6 +716,11 @@ let prevAllSubstationsOk = true
 let mandateStableSeconds = 0
 let surplusOverloadSeconds = 0
 let preOrderSectorTargets: Record<SectorNodeId, number> | null = null
+let syncedActivePost84Order: ActivePost84PowerOrder | null = null
+
+export function getPreOrderSectorTargetsSnapshot(): Record<SectorNodeId, number> | null {
+  return preOrderSectorTargets ? { ...preOrderSectorTargets } : null
+}
 
 const VOLKOV_HASSLE_INITIAL_DELAY_SEC = 13.5
 const VOLKOV_HASSLE_REPEAT_SEC = 16.5
@@ -757,6 +766,7 @@ function resetKomradTrackers(): void {
   mandateStableSeconds = 0
   surplusOverloadSeconds = 0
   preOrderSectorTargets = null
+  syncedActivePost84Order = null
 }
 
 function createNextMandate(): OperationalMandate {
@@ -1198,9 +1208,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   isGodMode: false,
   isMusicMuted: false,
   treasonStrikes: 0,
+  rubles: 300,
+  quotaCompleted: 0,
   lastDecisionFeedback: INITIAL_MAPPED.tutorialPrompt.header,
   activeMandate: null,
   activePost84Order: null,
+  post84InboxSnapshot: null,
+  isBlackout: false,
   tutorialHintsHidden: false,
   activeCrisisCoach: null,
   dismissedCrisisIds: [],
@@ -1390,9 +1404,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           state.komradMessages,
           createKomradMsg(
             state.shiftTimeMinutes,
-            `${komradPrinterMsg} (${docTitle.slice(0, 24)})`,
+            `${komradPrinterMsg} (${docTitle})`,
             mapLevelToMood(level),
-            'K.O.M.R.A.D.-84'
+            'K.O.M.R.A.D.-84',
+            komradPrinterMsg
           )
         ),
       }
@@ -1537,7 +1552,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         coreMeltdown: false,
         steamExplosion: false,
       }
-      const mapped = mapReactorToGameStateFields(liveReactor, 'COMPLETED')
+      syncedActivePost84Order = null
+      const mapped = mapReactorToGameStateFields(liveReactor, 'COMPLETED', null)
       const isFromVolkovGate = state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
       const completedVox = TUTORIAL_VOX_BY_PHASE.COMPLETED
       const msg = isFromVolkovGate
@@ -1565,6 +1581,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         treasonStrikes: 0,
         activeMandate: null,
         activePost84Order: null,
+        isBlackout: false,
         gridTransientImpulse: 0,
         steamTransientImpulse: 0,
         voltageDipIntensity: 0,
@@ -1591,7 +1608,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   acceptVolkovTrainingDirective: () => {
     set((state) => {
-      resetVolkovHassleTrackers()
+      resetKomradTrackers()
       volkovOpenerFinished = true
       if (state.tutorialPhase !== 'AWAITING_VOLKOV_MAIL') {
         return {
@@ -1600,7 +1617,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
       const cold = createColdStartState()
-      const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING')
+      syncedActivePost84Order = null
+      const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING', null)
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
@@ -1620,7 +1638,21 @@ export const useGameStore = create<GameState>((set, get) => ({
         phase: 'playing',
         isSeatedAtDesk: false,
         activeStation: 'overview',
+        boronCooldown: 0,
+        boronPoisoningTimer: 0,
+        az5Cooldown: 0,
+        az5Available: true,
+        redlineInstability: 0,
+        tutorialDrainSeconds: 0,
+        dismissedCrisisIds: [],
+        vodkaDroughtTimer: 0,
+        ciaIntrusionActive: false,
+        komradOverrideLocked: false,
+        activeMandate: null,
         activePost84Order: null,
+        hoveredControlHint: null,
+        hoveredDiagnosticId: null,
+        isBlackout: false,
         tutorialHintsHidden: false,
         activeCrisisCoach: null,
         lastDecisionFeedback: mapped.tutorialPrompt.header,
@@ -1767,6 +1799,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         canSitAtDesk: false,
         activeMandate: null,
         activePost84Order: null,
+        isBlackout: false,
+        rubles: 300,
+        quotaCompleted: 0,
+        post84InboxSnapshot: null,
         lastDecisionFeedback: mapped.tutorialPrompt.header,
         selectedH2OSubstationId: 1,
         hzOutOfBoundsSeconds: 0,
@@ -1784,6 +1820,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         hoveredControlHint: null,
         diagFeedActive: false,
         radioOn: false,
+        radioVolume: 65,
         radioBroadcastSubtitle: null,
         komradSubtitle: null,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
@@ -1831,9 +1868,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         shiftNumber: 1,
         activeMandate: null,
         activePost84Order: null,
+        isBlackout: false,
+        rubles: 300,
+        quotaCompleted: 0,
+        post84InboxSnapshot: null,
         lastDecisionFeedback: mapped.tutorialPrompt.header,
         selectedH2OSubstationId: 1,
         treasonStrikes: 0,
+        isGodMode: false,
         tutorialDrainSeconds: 0,
         tutorialHintsHidden: false,
         activeCrisisCoach: null,
@@ -1843,6 +1885,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         hoveredControlHint: null,
         diagFeedActive: false,
         radioOn: false,
+        radioVolume: 65,
         radioBroadcastSubtitle: null,
         komradSubtitle: null,
         vodkaDroughtTimer: 0,
@@ -1878,6 +1921,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     const boolOr = (val: unknown, fallback: boolean): boolean =>
       typeof val === 'boolean' ? val : fallback
 
+    const restoredOrder = savedGame.activePost84Order ?? null
+    syncedActivePost84Order = restoredOrder
+    preOrderSectorTargets = savedGame.preOrderSectorTargets
+      ? { ...savedGame.preOrderSectorTargets }
+      : null
+
     const savedControlRods =
       typeof savedGame.controlRods === 'number' && Number.isFinite(savedGame.controlRods)
         ? savedGame.controlRods
@@ -1885,10 +1934,23 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? Math.max(0, Math.min(1, savedGame.controlRodLevel / 100))
           : baseReactor.controlRods
 
+    const clampedBattery = Math.max(
+      0,
+      Math.min(
+        MAX_BATTERY_CAPACITY_MWH,
+        numOr(savedGame.batteryStoredMWh, baseReactor.batteryStoredMWh)
+      )
+    )
+
     const mergedReactor: ReactorState = {
       ...baseReactor,
       controlRods: savedControlRods,
-      batteryStoredMWh: numOr(savedGame.batteryStoredMWh, baseReactor.batteryStoredMWh),
+      az5Active: boolOr(savedGame.az5Active, baseReactor.az5Active),
+      az5Timer: numOr(savedGame.az5Timer, baseReactor.az5Timer),
+      coolantFlow: numOr(savedGame.coolantFlow, baseReactor.coolantFlow),
+      fuelBurnupTimer: numOr(savedGame.fuelBurnupTimer, baseReactor.fuelBurnupTimer),
+      boronDampingTimer: numOr(savedGame.boronDampingTimer, baseReactor.boronDampingTimer),
+      batteryStoredMWh: clampedBattery,
       batteryOutputValve: numOr(savedGame.batteryOutputValve, baseReactor.batteryOutputValve),
       energyCreatedMW: numOr(savedGame.energyCreatedMW, baseReactor.energyCreatedMW),
       energyDemandMW: numOr(savedGame.energyDemandMW, baseReactor.energyDemandMW),
@@ -1937,7 +1999,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       pumpAHeat: numOr(savedGame.pumpAHeat, baseReactor.pumpAHeat),
       pumpBHeat: numOr(savedGame.pumpBHeat, baseReactor.pumpBHeat),
       lubeOilPressure: numOr(savedGame.lubeOilPressure, baseReactor.lubeOilPressure),
-      oilCoolerValve: numOr(savedGame.oilCoolerValve, baseReactor.oilCoolerValve),
+      oilCoolerValve: numOr(savedGame.oilCoolerValve, 100),
       boronTankLevel: numOr(savedGame.boronTankLevel, baseReactor.boronTankLevel),
       boronReservePool: numOr(savedGame.boronReservePool, baseReactor.boronReservePool),
       sealToggles:
@@ -1994,8 +2056,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         ? savedGame.tutorialPhase
         : 'AWAITING_VOLKOV_MAIL'
 
-    const mapped = mapReactorToGameStateFields(mergedReactor, savedTutorialPhase)
+    const mapped = mapReactorToGameStateFields(
+      mergedReactor,
+      savedTutorialPhase,
+      restoredOrder
+    )
     const restoredShiftTime = numOr(savedGame.shiftTimeMinutes, 0)
+    lastBroadcastHour = Math.floor(restoredShiftTime / 60)
     const resumeLogEntry = createLogEntry(
       restoredShiftTime,
       'K.O.M.R.A.D.-84',
@@ -2014,18 +2081,35 @@ export const useGameStore = create<GameState>((set, get) => ({
       shiftNumber: numOr(savedGame.shiftNumber, 1),
       shiftTimeMinutes: restoredShiftTime,
       treasonStrikes: numOr(savedGame.treasonStrikes, 0),
+      rubles: Math.max(0, Math.round(numOr(savedGame.rubles, 300))),
+      quotaCompleted: Math.max(0, Math.round(numOr(savedGame.quotaCompleted, 0))),
       lastDecisionFeedback:
         savedGame.lastDecisionFeedback ?? mapped.tutorialPrompt.header,
       activeMandate: savedGame.activeMandate ?? null,
-      activePost84Order: savedGame.activePost84Order ?? null,
+      activePost84Order: restoredOrder,
+      post84InboxSnapshot: savedGame.post84InboxSnapshot ?? null,
       redlineInstability: numOr(savedGame.redlineInstability, 0),
       isBlackout: boolOr(savedGame.isBlackout, false),
       excitationTrim: numOr(savedGame.excitationTrim, 0.0),
       vodkaDroughtTimer: numOr(savedGame.vodkaDroughtTimer, 0),
+      boronCooldown: Math.max(0, numOr(savedGame.boronCooldown, 0)),
+      az5Cooldown: Math.max(0, numOr(savedGame.az5Cooldown, 0)),
+      az5Available: boolOr(savedGame.az5Available, true),
+      tutorialHintsHidden: boolOr(savedGame.tutorialHintsHidden, false),
+      dismissedCrisisIds: Array.isArray(savedGame.dismissedCrisisIds)
+        ? [...savedGame.dismissedCrisisIds]
+        : [],
+      activeCrisisCoach: null,
+      ciaIntrusionActive: false,
+      ciaIntrusionProgress: 0,
+      komradOverrideLocked: false,
+      activeDirectives: [],
+      printerProgress: 0,
       hoveredDiagnosticId: null,
       hoveredControlHint: null,
       diagFeedActive: false,
-      radioOn: false,
+      radioOn: boolOr(savedGame.radioOn, false),
+      radioVolume: Math.max(0, Math.min(100, Math.round(numOr(savedGame.radioVolume, 65)))),
       radioBroadcastSubtitle: null,
       komradSubtitle: null,
       komradMessages: [],
@@ -2309,6 +2393,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           null
         )
         preOrderSectorTargets = null
+        syncedActivePost84Order = null
         const nextReactor: ReactorState = {
           ...extractReactorState(state),
           substations: nextSubstations,
@@ -2316,7 +2401,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
         const mapped = mapReactorToGameStateFields(
           nextReactor,
-          state.tutorialPhase
+          state.tutorialPhase,
+          null
         )
         return {
           ...mapped,
@@ -2327,6 +2413,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const baseTargets: Record<SectorNodeId, number> =
         preOrderSectorTargets ?? { ...state.targetSectorMW }
       preOrderSectorTargets = { ...baseTargets }
+      syncedActivePost84Order = order
       const nextSubstations = applyPost84OrderToSubstations(
         state.substations,
         baseTargets,
@@ -2339,13 +2426,42 @@ export const useGameStore = create<GameState>((set, get) => ({
       stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const mapped = mapReactorToGameStateFields(
         nextReactor,
-        state.tutorialPhase
+        state.tutorialPhase,
+        order
       )
       return {
         ...mapped,
         activePost84Order: order,
       }
     })
+  },
+
+  addRubles: (delta: number) => {
+    const amount = Math.round(delta)
+    if (!Number.isFinite(amount) || amount === 0) return
+    set((state) => ({
+      rubles: Math.max(0, state.rubles + amount),
+    }))
+  },
+
+  spendRubles: (amount: number) => {
+    const debit = Math.max(0, Math.round(amount))
+    if (!Number.isFinite(debit) || debit === 0) return
+    set((state) => ({
+      rubles: Math.max(0, state.rubles - debit),
+    }))
+  },
+
+  addQuotaCompleted: (delta = 1) => {
+    const inc = Math.max(0, Math.round(delta))
+    if (!Number.isFinite(inc) || inc === 0) return
+    set((state) => ({
+      quotaCompleted: Math.max(0, state.quotaCompleted + inc),
+    }))
+  },
+
+  setPost84InboxSnapshot: (snapshot: Post84InboxSnapshot | null) => {
+    set({ post84InboxSnapshot: snapshot })
   },
 
   setSectorPower: (sector: SectorNodeId, targetMW: number) => {
@@ -3514,7 +3630,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               okReason,
               'normal',
               'K.O.M.R.A.D.-84',
-              `GOSPLAN QUOTA MET (${nextMandate.title.slice(0, 22)})! MOSCOW RECORDS +1 SOCIALIST EFFICIENCY POINT.`
+              `GOSPLAN QUOTA MET (${nextMandate.title})! MOSCOW RECORDS +1 SOCIALIST EFFICIENCY POINT.`
             )
             mandateComplianceListener?.(true, nextMandate.id, okReason)
           } else {
@@ -3535,7 +3651,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               failReason,
               'danger',
               'K.O.M.R.A.D.-84',
-              `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title.slice(0, 20)}! VOLKOV IS FUMING!`
+              `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title}! VOLKOV IS FUMING!`
             )
             mandateComplianceListener?.(false, nextMandate.id, failReason)
             nextMandate = {
@@ -4080,22 +4196,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const rawNextMinutes = state.shiftTimeMinutes + SHIFT_MINUTES_PER_SECOND
     const nextMinutes = rawNextMinutes % 360
 
-    // 2. Legacy Pravda Dot-Matrix Printer progress (post-tutorial only, no wall CRT / VOX chatter spam)
-    let nextPrinterProgress = state.printerProgress
-    let nextDirectives = state.activeDirectives
+    // 2. Legacy Pravda Dot-Matrix background spawner disabled (H-08); manual DebugMenu spawnDirective remains intact.
+    const nextPrinterProgress = 0
+    const nextDirectives = state.activeDirectives
     const tickKomradMsgs: KomradMessageEntry[] = []
-    if (
-      state.tutorialPhase === 'COMPLETED' &&
-      state.activeDirectives.length === 0 &&
-      shiftElapsedSeconds >= 15
-    ) {
-      nextPrinterProgress = Math.min(100, state.printerProgress + 3.5)
-      if (nextPrinterProgress >= 100) {
-        const spawned = createDirectiveInstance()
-        nextDirectives = [spawned]
-        nextPrinterProgress = 0
-      }
-    }
 
     // 3. Hourly Shift Broadcasts (01:00 -> 05:00): strictly obey global idle silence cooldown (drop, don't queue)
     const currentHour = Math.floor(nextMinutes / 60)

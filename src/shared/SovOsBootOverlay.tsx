@@ -43,8 +43,8 @@ const BOOT_DIAGNOSTIC_POOL: readonly BootDiagnosticEntry[] = [
     tone: "red",
   },
   {
-    text: "WARMING COMMISSAR VOLKOV'S DACHA SWIMMING POOL",
-    tag: "[PRIORITY]",
+    text: "FILING FORM 84-B FOR UNAUTHORIZED NEUTRON FLUX",
+    tag: "[STAMPED]",
     tone: "amber",
   },
   {
@@ -103,7 +103,7 @@ const BOOT_DIAGNOSTIC_POOL: readonly BootDiagnosticEntry[] = [
     tone: "amber",
   },
   {
-    text: "DIVERTING KOLKHOZ TRACTOR VOLTAGE TO PARTY SAUNA",
+    text: "AUDITING TURBINE HALL BOLT INVENTORY AGAINST 1974 LEDGER",
     tag: "[CLASSIFIED]",
     tone: "red",
   },
@@ -479,9 +479,9 @@ export const SovOsBootOverlay: React.FC<{
       if (cancelled || bootCompletedRef.current) return;
       bootCompletedRef.current = true;
       setFadingOut(true);
-      onBootCompleteRef.current();
       unmountTimer = window.setTimeout(() => {
         if (!cancelled) {
+          onBootCompleteRef.current();
           setUnmounted(true);
         }
       }, FADE_OUT_MS);

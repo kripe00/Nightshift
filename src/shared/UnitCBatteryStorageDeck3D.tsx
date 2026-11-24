@@ -1,6 +1,7 @@
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import React, { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { controlRoomPowerState } from "./ControlRoomScene";
 import { NOOP_RAYCAST } from "./ExteriorDioramas3D";
 import { registerKremlinCanvasRedraw } from "./kremlinFontReady";
 import {
@@ -737,6 +738,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
   const genLampMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
   const syncLampMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
   const modeTileMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
+  const vfdMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
   const vfdTexRef = useRef<THREE.CanvasTexture | null>(null);
 
   const lastChargeSigRef = useRef(-1);
@@ -745,6 +747,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
   const lastVfdBlackoutRef = useRef<boolean | null>(null);
   const lastVfdDrawRef = useRef(-1);
   const lastModeSigRef = useRef(-1);
+  const lastPowerBucketRef = useRef(-1);
 
   const resources = useMemo(() => {
     const bankAHeaderTex = makeBayHeaderTex(
@@ -916,14 +919,24 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
   useFrame(({ clock }, dt) => {
     const s = useGameStore.getState();
     const t = clock.getElapsedTime();
+    const unitCPower =
+      s.lobbyMenuPhase !== "entered_control_room"
+        ? 0.12
+        : THREE.MathUtils.lerp(0.12, 1.0, controlRoomPowerState.zone2);
+    const powerBucket = Math.round(unitCPower * 50);
+    const powerChanged = powerBucket !== lastPowerBucketRef.current;
+    if (powerChanged) {
+      lastPowerBucketRef.current = powerBucket;
+      if (vfdMatRef.current) {
+        vfdMatRef.current.emissiveIntensity = 0.85 * unitCPower;
+        vfdMatRef.current.color.setRGB(unitCPower, unitCPower, unitCPower);
+      }
+    }
 
-    const dispatchedMW = s.isBlackout
-      ? 0
-      : Math.round(
-          s.totalElectricalMW > 0
-            ? s.totalElectricalMW
-            : s.batteryOutputValve * 1000,
-        );
+    const dispatchedMW =
+      s.isBlackout || s.az5Active
+        ? 0
+        : Math.max(0, Math.round(s.totalElectricalMW));
     const createdMW = s.isBlackout ? 0 : s.energyCreatedMW;
     const netFlowMW = dispatchedMW - createdMW; // negative = charging, positive = discharging
     const chargePct = s.batteryStoredPct;
@@ -955,7 +968,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
       }
     }
     const chargeSig = (chargeTier << 12) | chargeMask;
-    if (chargeSig !== lastChargeSigRef.current) {
+    if (chargeSig !== lastChargeSigRef.current || powerChanged) {
       lastChargeSigRef.current = chargeSig;
       for (let i = 0; i < 10; i++) {
         const mat = chargeSegMatRefs.current[i];
@@ -971,7 +984,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
                 : COL_EMERALD;
         mat.color.copy(isLit ? litCol : COL_SEG_OFF);
         mat.emissive.copy(isLit ? litCol : COL_BLACK);
-        mat.emissiveIntensity = isLit ? 1.45 : 0.04;
+        mat.emissiveIntensity = (isLit ? 1.45 : 0.04) * unitCPower;
       }
     }
 
@@ -982,7 +995,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
         dispatchMask |= 1 << i;
       }
     }
-    if (dispatchMask !== lastDispatchMaskRef.current) {
+    if (dispatchMask !== lastDispatchMaskRef.current || powerChanged) {
       lastDispatchMaskRef.current = dispatchMask;
       for (let i = 0; i < 10; i++) {
         const mat = dispatchSegMatRefs.current[i];
@@ -991,7 +1004,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
         const litCol = i >= 8 ? COL_RED : i >= 6 ? COL_AMBER : COL_GREEN;
         mat.color.copy(isLit ? litCol : COL_SEG_OFF);
         mat.emissive.copy(isLit ? litCol : COL_BLACK);
-        mat.emissiveIntensity = isLit ? 1.5 : 0.04;
+        mat.emissiveIntensity = (isLit ? 1.5 : 0.04) * unitCPower;
       }
     }
 
@@ -1026,7 +1039,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
       (isSynced ? 256 : 0) |
       (chargeTier << 9);
 
-    if (modeSig !== lastModeSigRef.current) {
+    if (modeSig !== lastModeSigRef.current || powerChanged) {
       lastModeSigRef.current = modeSig;
 
       const tileStates: readonly [boolean, THREE.Color, number][] = [
@@ -1041,7 +1054,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
         if (!m) continue;
         m.color.copy(active ? col : COL_TILE_OFF);
         m.emissive.copy(active ? col : COL_BLACK);
-        m.emissiveIntensity = active ? intensity : 0.0;
+        m.emissiveIntensity = active ? intensity * unitCPower : 0.0;
       }
 
       // 3 Relay Coil Jewels (GEN IN, BAT BUS, GRID OUT)
@@ -1053,7 +1066,7 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
         const on = relayFlags[i];
         rm.color.copy(on ? relayCols[i] : COL_PILOT_OFF);
         rm.emissive.copy(on ? relayCols[i] : COL_BLACK);
-        rm.emissiveIntensity = on ? 1.35 : 0.04;
+        rm.emissiveIntensity = (on ? 1.35 : 0.04) * unitCPower;
       }
 
       // Bank A & Bank B Temperature / Health Jewels
@@ -1069,19 +1082,19 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
         if (!tm) continue;
         tm.color.copy(s.isBlackout ? COL_PILOT_OFF : tempCol);
         tm.emissive.copy(s.isBlackout ? COL_BLACK : tempCol);
-        tm.emissiveIntensity = s.isBlackout ? 0.04 : 1.1;
+        tm.emissiveIntensity = (s.isBlackout ? 0.04 : 1.1) * unitCPower;
       }
 
       // Top Flanking GEN & SYNC Pilots
       if (genLampMatRef.current) {
         genLampMatRef.current.color.copy(genActive ? COL_AMBER : COL_PILOT_OFF);
         genLampMatRef.current.emissive.copy(genActive ? COL_AMBER : COL_BLACK);
-        genLampMatRef.current.emissiveIntensity = genActive ? 1.45 : 0.04;
+        genLampMatRef.current.emissiveIntensity = (genActive ? 1.45 : 0.04) * unitCPower;
       }
       if (syncLampMatRef.current) {
         syncLampMatRef.current.color.copy(isSynced ? COL_GREEN : COL_PILOT_OFF);
         syncLampMatRef.current.emissive.copy(isSynced ? COL_GREEN : COL_BLACK);
-        syncLampMatRef.current.emissiveIntensity = isSynced ? 1.5 : 0.04;
+        syncLampMatRef.current.emissiveIntensity = (isSynced ? 1.5 : 0.04) * unitCPower;
       }
     }
 
@@ -1090,13 +1103,13 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
       const m = modeTileMatRefs.current[3];
       if (m) {
         const pulse = (Math.sin(t * 6.0) + 1) * 0.5;
-        m.emissiveIntensity = 0.75 + pulse * 1.1;
+        m.emissiveIntensity = (0.75 + pulse * 1.1) * unitCPower;
       }
     } else if (isDischarging && netFlowMW > 180) {
       const m = modeTileMatRefs.current[1];
       if (m) {
         const pulse = (Math.sin(t * 4.5) + 1) * 0.5;
-        m.emissiveIntensity = 0.85 + pulse * 0.6;
+        m.emissiveIntensity = (0.85 + pulse * 0.6) * unitCPower;
       }
     }
 
@@ -1693,10 +1706,12 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
               <mesh position={[0, -0.204, 0.073]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.214, 0.042]} />
                 <meshStandardMaterial
+                  ref={vfdMatRef}
+                  color="#1f1f1f"
                   map={resources.vfdTex}
                   emissive="#ffffff"
                   emissiveMap={resources.vfdTex}
-                  emissiveIntensity={0.85}
+                  emissiveIntensity={0.1}
                   roughness={0.38}
                   polygonOffset
                   polygonOffsetFactor={-2}

@@ -350,7 +350,7 @@ export const KOMRAD_CONTROL_TARGETS: Readonly<
     id: "az5Cover",
     station: "UNIT A",
     label: "AZ-5 SAFETY COVER LATCH",
-    worldPos: [-2.503, 1.264, -1.927],
+    worldPos: [-2.503, 1.155, -1.86],
     approachNormal: [0.226, 0.488, 0.843],
     standoffGantryPos: [-2.34, 1.62, -1.2],
     gripType: "lever",
@@ -492,8 +492,10 @@ export const KOMRAD_CONTROL_TARGETS: Readonly<
       const s = useGameStore.getState();
       if (v >= 0.5) {
         s.lockAllContainmentSeals();
-      } else if (s.mcpActive[3]) {
-        s.toggleMcpPump(3, false);
+      } else {
+        s.toggleSealSwitch(0, false);
+        s.toggleSealSwitch(1, false);
+        s.toggleSealSwitch(2, false);
       }
     },
   },
@@ -594,20 +596,6 @@ export const KOMRAD_CONTROL_TARGETS: Readonly<
         s.toggleAuxLoopB(v >= 0.5);
       }
     },
-  },
-  batteryOutputValve: {
-    id: "batteryOutputValve",
-    station: "UNIT C",
-    label: "BATTERY DISPATCH RELAY (0-100%)",
-    worldPos: [-4.876, 1.031, 1.42],
-    approachNormal: [0.919, 0.395, 0],
-    standoffGantryPos: [-4.14, 1.56, 1.42],
-    gripType: "knob",
-    minValue: 0,
-    maxValue: 100,
-    wristSpinTurns: 1.4,
-    readValue: () => useGameStore.getState().batteryOutputValve * 100,
-    writeValue: (v) => useGameStore.getState().setBatteryOutputValve(v),
   },
 
   // =========================================================================
@@ -1203,7 +1191,7 @@ export function stepKomradArmController(
       }
 
       if (p >= 1) {
-        if (spec.id === "az5") {
+        if (spec.id === "az5" || spec.id === "az5Cover") {
           visualOverrideMap.delete("az5Cover");
         }
         _armFrameState.phase = "release_and_retract";
@@ -1226,7 +1214,7 @@ export function stepKomradArmController(
         visualOverrideMap.delete("rodRefuelLever");
         visualOverrideMap.delete("emergSealLock");
         visualOverrideMap.delete("bubblerDrain");
-        if (spec.id === "az5") {
+        if (spec.id === "az5" || spec.id === "az5Cover") {
           visualOverrideMap.delete("az5Cover");
         }
       }

@@ -56,6 +56,8 @@ export interface DesktopTelemetrySnapshot {
   facilityMW: number
   commendations: number
   citations: number
+  rubles: number
+  quotaCompleted: number
   activeMandateTitle: string | null
   activeMandateText: string | null
   recentLogs: Array<{
@@ -171,12 +173,9 @@ export function uvToCanvasCoords(u: number, v: number): { x: number; y: number }
 
 export function computeBalanceRub(
   telemetry: DesktopTelemetrySnapshot,
-  state: DesktopOsState
+  _state: DesktopOsState
 ): number {
-  return Math.max(
-    0,
-    300 + telemetry.commendations * 150 - telemetry.citations * 50 + state.mailEarnedRub
-  )
+  return Math.max(0, Math.round(telemetry.rubles))
 }
 
 function getWindowRect() {
@@ -665,7 +664,7 @@ export function paintDesktopOsCanvas(
 
   // Shift & Quota Readout
   const quotaTarget = 5
-  const totalQuotaDone = telemetry.commendations + state.mailOrdersCompleted
+  const totalQuotaDone = Math.max(0, Math.round(telemetry.quotaCompleted))
   const clockStr = formatShiftClock(telemetry.shiftTimeMinutes)
   ctx.fillStyle = '#08200f'
   ctx.fillRect(168, 6, 366, 36)
@@ -688,7 +687,7 @@ export function paintDesktopOsCanvas(
   ctx.strokeRect(546, 6, 198, 36)
   ctx.fillStyle = '#ffb000'
   ctx.font = 'bold 19px "Courier Prime", monospace'
-  ctx.fillText(`BAL: ${rubBalance} RUB`, 560, 24)
+  ctx.fillText(`BAL: ${rubBalance} RUB`, 560, 24, 176)
 
   // Reactor Quick-Status Pill (read-only telemetry indicator)
   const coreRounded = Math.round(telemetry.coreTemp)

@@ -10,8 +10,6 @@ type AuxChannelPhase =
   | 'restoring'
 
 interface MediaBusWindow extends Window {
-  __k84NativeVolDesc?: PropertyDescriptor
-  __k84NativePlay?: () => Promise<void>
   __k84CleanupAuxBus?: () => void
 }
 
@@ -24,17 +22,19 @@ const AUX_DIAG_FEED_SRC = './sys/skala84_diag.mp4?v=85'
 const AUX_PEAK_VOLUME = 0.78
 const AUX_SYNC_GLITCH_MS = 250
 const AUX_MAX_PREBUFFER_MS = 1500
+const AUX_STALL_TIMEOUT_MS = 8000
 const AUX_RESTORE_MS = 1800
 
 let auxDiagVideo: HTMLVideoElement | null = null
 let auxPhase: AuxChannelPhase = 'idle'
 let auxPhaseStartMs = 0
 let auxDiagTriggerMs = 0
+let auxLastProgressMs = 0
+let auxLastMediaTime = -1
 let auxActiveRunId = -1
 let auxTimerId: number | null = null
 let auxFrameSeq = 0
 let auxRvfcHandle: number | null = null
-let bgDuckGain = 1
 
 export function getSkalaDiagFeedElement(): HTMLVideoElement | null {
   return auxDiagVideo
@@ -52,161 +52,23 @@ export function isSkalaDiagFeedSyncing(): boolean {
   return auxPhase === 'syncing'
 }
 
-const trackedBgMedia = new Set<HTMLMediaElement>()
-const intendedBgVolumes = new WeakMap<HTMLMediaElement, number>()
 const heldAuxCodes = new Set<string>()
-const LEGACY_GLOBAL_BGM_RE = /music\/(night-shift|redline-reactor)\.mp3/i
 
-function isLegacyGlobalBgmMedia(el: HTMLMediaElement): boolean {
-  if ((el as HTMLElement).dataset?.okean84Radio === '1') return false
-  if ((el as HTMLElement).dataset?.legacyBgmBlocked === '1') return true
-  const src = el.currentSrc || el.getAttribute('src') || el.src || ''
-  return LEGACY_GLOBAL_BGM_RE.test(src)
-}
-
-export function unregisterTrackedMedia(el: HTMLMediaElement): void {
-  trackedBgMedia.delete(el)
-  intendedBgVolumes.delete(el)
+export function unregisterTrackedMedia(_el: HTMLMediaElement): void {
+  // Legacy global BGM tracking retired; kept as a safe no-op export
 }
 
 export function silenceAllLegacyGlobalBgm(): void {
-  if (typeof window === 'undefined') return
-  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
-  const candidates = new Set<HTMLMediaElement>(trackedBgMedia)
-  if (typeof document !== 'undefined') {
-    for (const el of Array.from(document.querySelectorAll('audio'))) {
-      candidates.add(el)
-    }
-  }
-  for (const el of candidates) {
-    if (!isLegacyGlobalBgmMedia(el)) continue
-    ;(el as HTMLElement).dataset.legacyBgmBlocked = '1'
-    try {
-      el.pause()
-    } catch {
-      // ignore
-    }
-    el.muted = true
-    setNativeVol?.call(el, 0)
-    el.removeAttribute('src')
-    try {
-      el.load()
-    } catch {
-      // ignore
-    }
-    trackedBgMedia.delete(el)
-    intendedBgVolumes.delete(el)
-  }
+  // Legacy global BGM retired; kept as a safe no-op export
 }
 
 function clampUnit(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1
 }
 
-function applyBgDuckGain(gain: number): void {
-  bgDuckGain = clampUnit(gain)
-  if (typeof window === 'undefined') return
-  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
-  if (!setNativeVol) return
-  for (const el of trackedBgMedia) {
-    const intended = intendedBgVolumes.get(el) ?? 0.38
-    setNativeVol.call(el, clampUnit(intended * bgDuckGain))
-  }
-}
-
-function installMediaGainBus(): void {
-  if (typeof window === 'undefined' || typeof HTMLMediaElement === 'undefined') return
-  const win = window as MediaBusWindow
-  if (!win.__k84NativeVolDesc) {
-    const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume')
-    if (desc?.get && desc?.set) {
-      win.__k84NativeVolDesc = desc
-    }
-  }
-  if (!win.__k84NativePlay) {
-    win.__k84NativePlay = HTMLMediaElement.prototype.play
-  }
-
-  const nativeDesc = win.__k84NativeVolDesc
-  const nativePlay = win.__k84NativePlay
-  const nativeGet = nativeDesc?.get
-  const nativeSet = nativeDesc?.set
-  if (!nativeGet || !nativeSet || !nativePlay) return
-
-  Object.defineProperty(HTMLMediaElement.prototype, 'volume', {
-    configurable: true,
-    enumerable: nativeDesc.enumerable ?? true,
-    get(this: HTMLMediaElement): number {
-      if (this === auxDiagVideo) {
-        return nativeGet.call(this) as number
-      }
-      return intendedBgVolumes.get(this) ?? (nativeGet.call(this) as number)
-    },
-    set(this: HTMLMediaElement, value: number): void {
-      const clamped = clampUnit(value)
-      if (this === auxDiagVideo) {
-        nativeSet.call(this, clamped)
-        return
-      }
-      if (isLegacyGlobalBgmMedia(this)) {
-        ;(this as HTMLElement).dataset.legacyBgmBlocked = '1'
-        this.muted = true
-        if (!this.paused) {
-          try {
-            this.pause()
-          } catch {
-            // ignore
-          }
-        }
-        nativeSet.call(this, 0)
-        trackedBgMedia.delete(this)
-        intendedBgVolumes.delete(this)
-        return
-      }
-      trackedBgMedia.add(this)
-      intendedBgVolumes.set(this, clamped)
-      nativeSet.call(this, clampUnit(clamped * bgDuckGain))
-    },
-  })
-
-  HTMLMediaElement.prototype.play = function (this: HTMLMediaElement): Promise<void> {
-    if (isLegacyGlobalBgmMedia(this)) {
-      ;(this as HTMLElement).dataset.legacyBgmBlocked = '1'
-      this.muted = true
-      if (!this.paused) {
-        try {
-          this.pause()
-        } catch {
-          // ignore
-        }
-      }
-      nativeSet.call(this, 0)
-      trackedBgMedia.delete(this)
-      intendedBgVolumes.delete(this)
-      return Promise.resolve()
-    }
-    if (this !== auxDiagVideo) {
-      trackedBgMedia.add(this)
-      const currentIntended =
-        intendedBgVolumes.get(this) ?? clampUnit(nativeGet.call(this) as number)
-      intendedBgVolumes.set(this, currentIntended)
-      nativeSet.call(this, clampUnit(currentIntended * bgDuckGain))
-    }
-    return nativePlay.call(this)
-  }
-
-  silenceAllLegacyGlobalBgm()
-}
-
 function setAuxTrackVolume(vol: number): void {
-  if (!auxDiagVideo || typeof window === 'undefined') return
-  const setNativeVol = (window as MediaBusWindow).__k84NativeVolDesc?.set
-  const clamped = clampUnit(vol)
-  if (setNativeVol) {
-    setNativeVol.call(auxDiagVideo, clamped)
-  } else {
-    auxDiagVideo.volume = clamped
-  }
+  if (!auxDiagVideo) return
+  auxDiagVideo.volume = clampUnit(vol)
 }
 
 function clearAuxTimer(): void {
@@ -286,7 +148,6 @@ function stopAuxAndRestoreImmediate(): void {
   }
   auxFrameSeq = 0
   auxPhase = 'idle'
-  applyBgDuckGain(1)
   if (useGameStore.getState().diagFeedActive) {
     useGameStore.getState().setDiagFeedActive(false)
   }
@@ -318,7 +179,8 @@ function tryLaunchSyncedPlayback(): void {
     return
   }
 
-  const elapsedMs = performance.now() - auxDiagTriggerMs
+  const now = performance.now()
+  const elapsedMs = now - auxDiagTriggerMs
   if (elapsedMs < AUX_SYNC_GLITCH_MS) return
 
   const canStart =
@@ -327,18 +189,16 @@ function tryLaunchSyncedPlayback(): void {
   if (!canStart) return
 
   auxPhase = 'playing'
-  auxPhaseStartMs = performance.now()
+  auxPhaseStartMs = now
+  auxLastProgressMs = now
+  auxLastMediaTime = 0
   auxDiagVideo.currentTime = 0
   auxDiagVideo.playbackRate = 1
   auxDiagVideo.muted = st.isMusicMuted
   setAuxTrackVolume(AUX_PEAK_VOLUME)
   pumpVideoFrameCallback(auxDiagVideo)
 
-  const nativePlay = (window as MediaBusWindow).__k84NativePlay
-  const playPromise = nativePlay
-    ? nativePlay.call(auxDiagVideo)
-    : auxDiagVideo.play()
-  void playPromise.catch(() => {
+  void auxDiagVideo.play().catch(() => {
     stopAuxAndRestoreImmediate()
   })
 }
@@ -356,8 +216,11 @@ function tickAuxChannel(): void {
       stopAuxAndRestoreImmediate()
       return
     }
+    if (now - auxDiagTriggerMs >= AUX_STALL_TIMEOUT_MS) {
+      stopAuxAndRestoreImmediate()
+      return
+    }
     auxDiagVideo.muted = st.isMusicMuted
-    applyBgDuckGain(0)
     tryLaunchSyncedPlayback()
     return
   }
@@ -368,20 +231,23 @@ function tickAuxChannel(): void {
       return
     }
     auxDiagVideo.muted = st.isMusicMuted
-    applyBgDuckGain(0)
     setAuxTrackVolume(AUX_PEAK_VOLUME)
     if (auxDiagVideo.ended) {
       beginRestorePhase()
+      return
+    }
+    if (auxDiagVideo.currentTime > auxLastMediaTime + 1e-3) {
+      auxLastMediaTime = auxDiagVideo.currentTime
+      auxLastProgressMs = now
+    } else if (now - auxLastProgressMs >= AUX_STALL_TIMEOUT_MS) {
+      stopAuxAndRestoreImmediate()
     }
     return
   }
 
   if (auxPhase === 'restoring') {
     const t = Math.min(1, (now - auxPhaseStartMs) / AUX_RESTORE_MS)
-    const ease = 0.5 - 0.5 * Math.cos(Math.PI * t)
-    applyBgDuckGain(ease)
     if (t >= 1) {
-      applyBgDuckGain(1)
       clearAuxTimer()
       auxPhase = 'idle'
     }
@@ -391,8 +257,14 @@ function tickAuxChannel(): void {
 function startAuxSequence(): void {
   if (typeof window === 'undefined' || auxPhase !== 'idle') return
   const st = useGameStore.getState()
-  if (st.diagFeedActive || st.phase !== 'playing') return
-  installMediaGainBus()
+  if (
+    st.diagFeedActive ||
+    st.phase !== 'playing' ||
+    st.lobbyMenuPhase !== 'entered_control_room' ||
+    (st.isBlackout && !st.isGodMode)
+  ) {
+    return
+  }
 
   if (!auxDiagVideo) {
     auxDiagVideo = document.createElement('video')
@@ -433,9 +305,10 @@ function startAuxSequence(): void {
   auxDiagVideo.playbackRate = 1
   auxDiagVideo.muted = st.isMusicMuted
   setAuxTrackVolume(0)
-  applyBgDuckGain(0)
 
   auxDiagTriggerMs = performance.now()
+  auxLastProgressMs = auxDiagTriggerMs
+  auxLastMediaTime = -1
   auxActiveRunId = st.shiftRunId
   auxPhase = 'syncing'
   auxPhaseStartMs = auxDiagTriggerMs
@@ -464,7 +337,6 @@ export function isAuxChordPartial(): boolean {
 
 function installAuxChannelBus(): void {
   if (typeof window === 'undefined') return
-  installMediaGainBus()
 
   const win = window as MediaBusWindow
   win.__k84CleanupAuxBus?.()

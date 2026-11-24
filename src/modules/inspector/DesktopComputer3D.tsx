@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
-import type { KomradMessageEntry, TerminalLogEntry } from '../../shared/types'
+import type {
+  KomradMessageEntry,
+  Post84InboxSnapshot,
+  Post84SavedMessage,
+  TerminalLogEntry,
+} from '../../shared/types'
 import { useGameStore } from '../../shared/useGameStore'
 import { useDeskStore } from './useDeskStore'
 import { onKremlinFontReady } from '../../shared/kremlinFontReady'
+import { controlRoomPowerState } from '../../shared/ControlRoomScene'
 import { notifyPost84OrderEvent } from '../../shared/komradSilenceState'
+import { saveCurrentShiftToStorage } from '../../shared/shiftSaveStorage'
 import {
   playCarriageReturnDing,
   playDetentClick,
@@ -27,12 +34,14 @@ import {
 } from './desktopOsCanvas'
 import {
   POST84_ORDER_COMPLETED_VOX,
+  POST84_ORDER_TEMPLATE_IDS,
   VOLKOV_ONBOARDING_MAIL_ID,
   createPost84OrderMessage,
   createShuffledOrderDeck,
   evaluatePost84Order,
   getPost84PowerOrderSpec,
   type Post84LiveTelemetry,
+  type Post84Message,
   type Post84OrderTemplateId,
 } from './post84Mail'
 
@@ -105,25 +114,12 @@ function pushKomradTerminalNotice(
   }))
 }
 
-function readTelemetrySnapshot(): { snapshot: DesktopTelemetrySnapshot; key: string } {
+function readTelemetrySnapshot(osState?: DesktopOsState): {
+  snapshot: DesktopTelemetrySnapshot
+  key: string
+} {
   const gs = useGameStore.getState()
   const ds = useDeskStore.getState()
-
-  const recentLogs = gs.terminalEntries
-    .slice(-18)
-    .reverse()
-    .map((entry) => ({
-      id: entry.id,
-      source: entry.sender,
-      text: entry.text,
-      time: entry.timestamp,
-      level: entry.level,
-    }))
-
-  const latestKomrad =
-    gs.komradMessages.length > 0
-      ? gs.komradMessages[gs.komradMessages.length - 1].text
-      : null
 
   const snapshot: DesktopTelemetrySnapshot = {
     shiftNumber: gs.shiftNumber,
@@ -151,54 +147,53 @@ function readTelemetrySnapshot(): { snapshot: DesktopTelemetrySnapshot; key: str
     facilityMW: gs.powerAllocation.facility,
     commendations: ds.commendations,
     citations: ds.citations,
+    rubles: gs.rubles,
+    quotaCompleted: gs.quotaCompleted,
     activeMandateTitle: gs.activeMandate ? gs.activeMandate.title : null,
     activeMandateText: gs.activeMandate ? gs.activeMandate.requirementText : null,
-    recentLogs,
-    latestKomradLine: latestKomrad,
+    recentLogs: [],
+    latestKomradLine: null,
   }
 
-  const topLogId = recentLogs.length > 0 ? recentLogs[0].id : ''
-  const key = [
+  const isMailOpen = osState ? osState.openWindows.includes('mail') : false
+  const selectedOrderMsg =
+    isMailOpen && osState?.selectedMailId
+      ? osState.mailMessages.find((m) => m.id === osState.selectedMailId)?.order
+      : undefined
+
+  const keyParts: Array<string | number> = [
     snapshot.shiftNumber,
     Math.floor(snapshot.shiftTimeMinutes),
-    snapshot.tutorialPhase,
+    Math.round(snapshot.rubles),
+    Math.round(snapshot.quotaCompleted),
     snapshot.isBlackout ? 1 : 0,
-    snapshot.az5Active ? 1 : 0,
     Math.round(snapshot.coreTemp),
-    snapshot.pressureBar.toFixed(1),
-    Math.round(snapshot.energyCreatedMW),
-    Math.round(snapshot.totalElectricalMW),
-    Math.round(snapshot.energyDemandMW),
-    snapshot.gridHz.toFixed(2),
-    Math.round(snapshot.waterReservoir),
-    snapshot.radiationLevel.toFixed(1),
-    snapshot.avrActive ? 1 : 0,
-    snapshot.kgbLineActive ? 1 : 0,
-    Math.round(snapshot.bubblerLevel),
-    snapshot.containmentSealLocked ? 1 : 0,
-    snapshot.sectorMW.pripyat,
-    snapshot.sectorMW.duga,
-    snapshot.sectorMW.kolkhoz,
-    snapshot.sectorMW.kgb,
-    snapshot.sectorMW.vodka,
-    snapshot.sectorMW.steel,
-    snapshot.targetSectorMW.pripyat,
-    snapshot.targetSectorMW.duga,
-    snapshot.targetSectorMW.kolkhoz,
-    snapshot.targetSectorMW.kgb,
-    snapshot.targetSectorMW.vodka,
-    snapshot.targetSectorMW.steel,
-    snapshot.coolingMW,
-    snapshot.defenseMW,
-    snapshot.facilityMW,
-    snapshot.commendations,
-    snapshot.citations,
-    snapshot.activeMandateTitle ?? '',
-    topLogId,
-    latestKomrad ?? '',
-  ].join('|')
+    snapshot.radiationLevel >= 8.0 ? 1 : 0,
+  ]
 
-  return { snapshot, key }
+  if (selectedOrderMsg) {
+    keyParts.push(
+      selectedOrderMsg.templateId,
+      selectedOrderMsg.orderState,
+      Math.round(snapshot.totalElectricalMW),
+      snapshot.az5Active ? 1 : 0,
+      snapshot.kgbLineActive ? 1 : 0,
+      snapshot.sectorMW.pripyat,
+      snapshot.sectorMW.duga,
+      snapshot.sectorMW.kolkhoz,
+      snapshot.sectorMW.kgb,
+      snapshot.sectorMW.vodka,
+      snapshot.sectorMW.steel,
+      snapshot.targetSectorMW.pripyat,
+      snapshot.targetSectorMW.duga,
+      snapshot.targetSectorMW.kolkhoz,
+      snapshot.targetSectorMW.kgb,
+      snapshot.targetSectorMW.vodka,
+      snapshot.targetSectorMW.steel
+    )
+  }
+
+  return { snapshot, key: keyParts.join('|') }
 }
 
 function drawMonitorBadgeCanvas(ctx: CanvasRenderingContext2D, w: number, h: number): void {
@@ -220,7 +215,106 @@ function drawMonitorBadgeCanvas(ctx: CanvasRenderingContext2D, w: number, h: num
   ctx.restore()
 }
 
+function isValidOrderTemplateId(id: string): id is Post84OrderTemplateId {
+  return (POST84_ORDER_TEMPLATE_IDS as readonly string[]).includes(id)
+}
+
+function serializePost84Snapshot(
+  osState: DesktopOsState,
+  orderDeck: Post84OrderTemplateId[],
+  orderSequence: number,
+  lastOrderTemplateId: Post84OrderTemplateId | undefined,
+  orderSpawnCountdownSec: number | null,
+  tutorialCompletedSeen: boolean
+): Post84InboxSnapshot {
+  const mailMessages: Post84SavedMessage[] = osState.mailMessages.map((m) => ({
+    id: m.id,
+    sender: m.sender,
+    orgTag: m.orgTag,
+    subject: m.subject,
+    timestamp: m.timestamp,
+    bodyLines: [...m.bodyLines],
+    status: m.status,
+    ...(m.order ? { order: { ...m.order } } : {}),
+    ...(m.trainingDirective
+      ? { trainingDirective: { ...m.trainingDirective } }
+      : {}),
+  }))
+  return {
+    mailMessages,
+    selectedMailId: osState.selectedMailId,
+    mailScrollOffset: osState.mailScrollOffset,
+    mailEarnedRub: osState.mailEarnedRub,
+    mailOrdersCompleted: osState.mailOrdersCompleted,
+    lastStatusNotice: osState.lastStatusNotice,
+    orderDeck: [...orderDeck],
+    orderSequence,
+    ...(lastOrderTemplateId ? { lastOrderTemplateId } : {}),
+    orderSpawnCountdownSec,
+    tutorialCompletedSeen,
+  }
+}
+
+function hydratePost84Snapshot(snapshot: Post84InboxSnapshot): {
+  osState: DesktopOsState
+  orderDeck: Post84OrderTemplateId[]
+  orderSequence: number
+  lastOrderTemplateId: Post84OrderTemplateId | undefined
+  orderSpawnCountdownSec: number | null
+  tutorialCompletedSeen: boolean
+} {
+  const mailMessages: Post84Message[] = snapshot.mailMessages.map((m) => {
+    const order =
+      m.order && isValidOrderTemplateId(m.order.templateId)
+        ? {
+            ...m.order,
+            templateId: m.order.templateId,
+          }
+        : undefined
+    return {
+      id: m.id,
+      sender: m.sender,
+      orgTag: m.orgTag,
+      subject: m.subject,
+      timestamp: m.timestamp,
+      bodyLines: Array.isArray(m.bodyLines) ? [...m.bodyLines] : [],
+      status: m.status,
+      ...(order ? { order } : {}),
+      ...(m.trainingDirective
+        ? { trainingDirective: { ...m.trainingDirective } }
+        : {}),
+    }
+  })
+  return {
+    osState: {
+      openWindows: [],
+      minimizedWindows: [],
+      mailMessages,
+      selectedMailId: snapshot.selectedMailId ?? '',
+      mailScrollOffset: snapshot.mailScrollOffset ?? 0,
+      mailEarnedRub: snapshot.mailEarnedRub ?? 0,
+      mailOrdersCompleted: snapshot.mailOrdersCompleted ?? 0,
+      lastStatusNotice: snapshot.lastStatusNotice ?? 'INBOX SYNCED',
+    },
+    orderDeck: Array.isArray(snapshot.orderDeck)
+      ? snapshot.orderDeck.filter(isValidOrderTemplateId)
+      : [],
+    orderSequence: snapshot.orderSequence ?? 0,
+    lastOrderTemplateId:
+      snapshot.lastOrderTemplateId &&
+      isValidOrderTemplateId(snapshot.lastOrderTemplateId)
+        ? snapshot.lastOrderTemplateId
+        : undefined,
+    orderSpawnCountdownSec:
+      typeof snapshot.orderSpawnCountdownSec === 'number'
+        ? snapshot.orderSpawnCountdownSec
+        : null,
+    tutorialCompletedSeen: Boolean(snapshot.tutorialCompletedSeen),
+  }
+}
+
 export function DesktopComputer3D() {
+  const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk)
   const osStateRef = useRef<DesktopOsState>(createInitialDesktopOsState())
   const hoveredIdRef = useRef<string | null>(null)
   const cursorPosRef = useRef<{ x: number; y: number } | null>(null)
@@ -239,9 +333,39 @@ export function DesktopComputer3D() {
   const orderSequenceRef = useRef<number>(0)
   const lastOrderTemplateRef = useRef<Post84OrderTemplateId | undefined>(undefined)
   const orderProgressPaintAccumRef = useRef<number>(0)
+  const orderProgressSaveAccumRef = useRef<number>(0)
+
+  const syncSnapshotToStore = () => {
+    useGameStore
+      .getState()
+      .setPost84InboxSnapshot(
+        serializePost84Snapshot(
+          osStateRef.current,
+          orderDeckRef.current,
+          orderSequenceRef.current,
+          lastOrderTemplateRef.current,
+          orderSpawnCountdownRef.current,
+          tutorialCompletedSeenRef.current
+        )
+      )
+  }
+
+  const applyStoreSnapshot = (snapshot: Post84InboxSnapshot) => {
+    const hydrated = hydratePost84Snapshot(snapshot)
+    osStateRef.current = hydrated.osState
+    orderDeckRef.current = hydrated.orderDeck
+    orderSequenceRef.current = hydrated.orderSequence
+    lastOrderTemplateRef.current = hydrated.lastOrderTemplateId
+    orderSpawnCountdownRef.current = hydrated.orderSpawnCountdownSec
+    tutorialCompletedSeenRef.current = hydrated.tutorialCompletedSeen
+    orderProgressSaveAccumRef.current = 0
+  }
 
   const mouseGroupRef = useRef<THREE.Group | null>(null)
   const mouseTargetRef = useRef<{ x: number; z: number }>({ x: 0, z: 0 })
+  const screenMatRef = useRef<THREE.MeshBasicMaterial | null>(null)
+  const bezelPowerLedMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const towerPowerLedMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
   const diskLedMatRef = useRef<THREE.MeshStandardMaterial | null>(null)
 
   const { screenCanvas, screenTex, markScreenTexUpdated } = useMemo(() => {
@@ -306,6 +430,17 @@ export function DesktopComputer3D() {
   }, [])
 
   useEffect(() => {
+    const initSnap = useGameStore.getState().post84InboxSnapshot
+    if (initSnap) {
+      const hydrated = hydratePost84Snapshot(initSnap)
+      osStateRef.current = hydrated.osState
+      orderDeckRef.current = hydrated.orderDeck
+      orderSequenceRef.current = hydrated.orderSequence
+      lastOrderTemplateRef.current = hydrated.lastOrderTemplateId
+      orderSpawnCountdownRef.current = hydrated.orderSpawnCountdownSec
+      tutorialCompletedSeenRef.current = hydrated.tutorialCompletedSeen
+      dirtyRef.current = true
+    }
     const offFont = onKremlinFontReady(() => {
       badge.redraw()
       dirtyRef.current = true
@@ -326,7 +461,6 @@ export function DesktopComputer3D() {
 
     if (gs.shiftRunId !== lastShiftRunIdRef.current) {
       lastShiftRunIdRef.current = gs.shiftRunId
-      osStateRef.current = createInitialDesktopOsState()
       hoveredIdRef.current = null
       cursorPosRef.current = null
       mouseTargetRef.current.x = 0
@@ -334,12 +468,18 @@ export function DesktopComputer3D() {
       volkovPulseAccumRef.current = 0
       mailAlertFlashRef.current = 0
       alertBlinkStepRef.current = -1
-      tutorialCompletedSeenRef.current = false
-      orderSpawnCountdownRef.current = null
-      orderDeckRef.current = []
-      orderSequenceRef.current = 0
-      lastOrderTemplateRef.current = undefined
       orderProgressPaintAccumRef.current = 0
+      orderProgressSaveAccumRef.current = 0
+      if (gs.post84InboxSnapshot) {
+        applyStoreSnapshot(gs.post84InboxSnapshot)
+      } else {
+        osStateRef.current = createInitialDesktopOsState()
+        tutorialCompletedSeenRef.current = false
+        orderSpawnCountdownRef.current = null
+        orderDeckRef.current = []
+        orderSequenceRef.current = 0
+        lastOrderTemplateRef.current = undefined
+      }
       dirtyRef.current = true
     }
 
@@ -367,6 +507,7 @@ export function DesktopComputer3D() {
               ? 'CERTIFIED SKIP // LIVE SHIFT'
               : 'TRAINING DIRECTIVE ACCEPTED',
         }
+        syncSnapshotToStore()
         dirtyRef.current = true
       }
     }
@@ -380,6 +521,7 @@ export function DesktopComputer3D() {
       if (!tutorialCompletedSeenRef.current) {
         tutorialCompletedSeenRef.current = true
         orderSpawnCountdownRef.current = FIRST_ORDER_DELAY_AFTER_TUTORIAL_SEC
+        syncSnapshotToStore()
       }
 
       const uncompletedOrder = osStateRef.current.mailMessages.find(
@@ -392,6 +534,7 @@ export function DesktopComputer3D() {
             totalElectricalMW: gs.totalElectricalMW,
             isBlackout: gs.isBlackout,
             az5Active: gs.az5Active,
+            kgbLineActive: gs.kgbLineActive,
             sectorMW: gs.sectorMW,
             targetSectorMW: gs.targetSectorMW,
           }
@@ -439,7 +582,10 @@ export function DesktopComputer3D() {
               diskPulseRef.current = 0.75
               playOrderCompleteChime()
               notifyPost84OrderEvent()
-              useGameStore.getState().setActivePost84Order(null)
+              const storeApi = useGameStore.getState()
+              storeApi.addRubles(completedMessage.order.rewardRub)
+              storeApi.addQuotaCompleted(completedMessage.order.quotaPoints)
+              storeApi.setActivePost84Order(null)
               pushKomradTerminalNotice(
                 `DIRECTIVE COMPLETED: ${completedMessage.subject} — PAID +${completedMessage.order.rewardRub} RUB (+${completedMessage.order.quotaPoints} QUOTA)`,
                 'normal',
@@ -450,10 +596,19 @@ export function DesktopComputer3D() {
               orderSpawnCountdownRef.current =
                 ORDER_COOLDOWN_MIN_SEC +
                 Math.random() * (ORDER_COOLDOWN_MAX_SEC - ORDER_COOLDOWN_MIN_SEC)
-              const refreshed = readTelemetrySnapshot()
+              orderProgressSaveAccumRef.current = 0
+              syncSnapshotToStore()
+              saveCurrentShiftToStorage()
+              const refreshed = readTelemetrySnapshot(osStateRef.current)
               latestTelemetryRef.current = refreshed.snapshot
               lastTelemetryKeyRef.current = refreshed.key
               dirtyRef.current = true
+            }
+          } else {
+            orderProgressSaveAccumRef.current += dt
+            if (orderProgressSaveAccumRef.current >= 10.0) {
+              orderProgressSaveAccumRef.current = 0
+              syncSnapshotToStore()
             }
           }
         }
@@ -501,11 +656,19 @@ export function DesktopComputer3D() {
                 )
                 hoveredIdRef.current = updatedHit ? updatedHit.id : null
               }
-              const refreshed = readTelemetrySnapshot()
+              orderProgressSaveAccumRef.current = 0
+              syncSnapshotToStore()
+              const refreshed = readTelemetrySnapshot(osStateRef.current)
               latestTelemetryRef.current = refreshed.snapshot
               lastTelemetryKeyRef.current = refreshed.key
               dirtyRef.current = true
             }
+          }
+        } else {
+          orderProgressSaveAccumRef.current += dt
+          if (orderProgressSaveAccumRef.current >= 10.0) {
+            orderProgressSaveAccumRef.current = 0
+            syncSnapshotToStore()
           }
         }
       }
@@ -560,13 +723,27 @@ export function DesktopComputer3D() {
         Math.abs(targetZ - nextZ) < MOUSE_SETTLE_EPS ? targetZ : nextZ
     }
 
+    const deskPower =
+      gs.lobbyMenuPhase !== 'entered_control_room'
+        ? 0.14
+        : THREE.MathUtils.lerp(0.14, 1.0, controlRoomPowerState.zone1)
+    if (screenMatRef.current) {
+      screenMatRef.current.color.setRGB(deskPower, deskPower, deskPower)
+    }
+    if (bezelPowerLedMatRef.current) {
+      bezelPowerLedMatRef.current.emissiveIntensity = 1.6 * deskPower
+    }
+    if (towerPowerLedMatRef.current) {
+      towerPowerLedMatRef.current.emissiveIntensity = 1.4 * deskPower
+    }
+
     // Pulse disk activity LED when loading modules or clicking inside OS
     if (diskLedMatRef.current) {
       if (diskPulseRef.current > 0) {
         diskPulseRef.current = Math.max(0, diskPulseRef.current - dt)
-        diskLedMatRef.current.emissiveIntensity = 1.9
+        diskLedMatRef.current.emissiveIntensity = 1.9 * deskPower
       } else {
-        diskLedMatRef.current.emissiveIntensity = 0.22
+        diskLedMatRef.current.emissiveIntensity = 0.22 * deskPower
       }
     }
 
@@ -574,7 +751,7 @@ export function DesktopComputer3D() {
     telemetryAccumRef.current += dt
     if (telemetryAccumRef.current >= 0.16) {
       telemetryAccumRef.current = 0
-      const { snapshot, key } = readTelemetrySnapshot()
+      const { snapshot, key } = readTelemetrySnapshot(osStateRef.current)
       if (key !== lastTelemetryKeyRef.current) {
         lastTelemetryKeyRef.current = key
         latestTelemetryRef.current = snapshot
@@ -697,7 +874,7 @@ export function DesktopComputer3D() {
           'OPERATOR',
           false
         )
-        const refreshed = readTelemetrySnapshot()
+        const refreshed = readTelemetrySnapshot(osStateRef.current)
         latestTelemetryRef.current = refreshed.snapshot
         lastTelemetryKeyRef.current = refreshed.key
       }
@@ -723,6 +900,7 @@ export function DesktopComputer3D() {
 
     const newHit = hitTestDesktopOs(nextState, coords.x, coords.y)
     hoveredIdRef.current = newHit ? newHit.id : null
+    syncSnapshotToStore()
     dirtyRef.current = true
   }
 
@@ -801,6 +979,7 @@ export function DesktopComputer3D() {
           <mesh position={[0.425, -0.308, 0.214]} raycast={NOOP_RAYCAST}>
             <sphereGeometry args={[0.006, 8, 8]} />
             <meshStandardMaterial
+              ref={bezelPowerLedMatRef}
               color="#33ff66"
               emissive="#33ff66"
               emissiveIntensity={1.6}
@@ -814,12 +993,19 @@ export function DesktopComputer3D() {
           </mesh>
           <mesh
             position={[0, 0.008, 0.185]}
+            raycast={isSeatedAtDesk ? undefined : NOOP_RAYCAST}
             onPointerMove={handleScreenPointerMove}
             onPointerOut={handleScreenPointerOut}
             onPointerDown={handleScreenPointerDown}
           >
             <planeGeometry args={[0.928, 0.58]} />
-            <meshBasicMaterial map={screenTex} toneMapped={false} fog={false} />
+            <meshBasicMaterial
+              ref={screenMatRef}
+              color="#242424"
+              map={screenTex}
+              toneMapped={false}
+              fog={false}
+            />
           </mesh>
         </group>
       </group>
@@ -860,7 +1046,12 @@ export function DesktopComputer3D() {
         </mesh>
         <mesh position={[0.02, 0.09, 0.223]} raycast={NOOP_RAYCAST}>
           <sphereGeometry args={[0.006, 8, 8]} />
-          <meshStandardMaterial color="#33ff66" emissive="#33ff66" emissiveIntensity={1.4} />
+          <meshStandardMaterial
+            ref={towerPowerLedMatRef}
+            color="#33ff66"
+            emissive="#33ff66"
+            emissiveIntensity={1.4}
+          />
         </mesh>
         <mesh position={[0.055, 0.09, 0.223]} raycast={NOOP_RAYCAST}>
           <sphereGeometry args={[0.006, 8, 8]} />

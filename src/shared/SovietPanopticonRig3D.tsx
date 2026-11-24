@@ -84,7 +84,7 @@ const SUPERVISORY_DRIFT_STEP_M = 0.42;
 
 const MAX_FRAME_DT = 0.05;
 const CRANE_PATROL_MAX_SPEED_XZ = 1.35;
-const CRANE_PATROL_RETREAT_MAX_SPEED_XZ = 2.2;
+const CRANE_PATROL_RETREAT_MAX_SPEED_XZ = 4.8;
 const CRANE_PATROL_MAX_ACCEL_XZ = 2.6;
 const CRANE_PATROL_SMOOTH_TIME_XZ = 0.85;
 const CRANE_PATROL_MAX_SPEED_Y = 0.65;
@@ -98,13 +98,13 @@ const CRANE_ACTUATION_MAX_SPEED_Y = 2.2;
 const CRANE_ACTUATION_MAX_ACCEL_Y = 7.0;
 const CRANE_ACTUATION_SMOOTH_TIME_Y = 0.26;
 
-const DANCE_ANCHOR_X = 2.02;
+const DANCE_ANCHOR_X = 1.9;
 const DANCE_ANCHOR_Z = -1.4;
 const DANCE_BASE_Y = 1.88;
 const DANCE_BPM = 126;
 const DANCE_BEATS_PER_SEC = DANCE_BPM / 60;
-const DANCE_PERSONAL_SPACE_DIST = 1.85;
-const DANCE_PUSH_RADIUS = 1.95;
+const DANCE_PERSONAL_SPACE_DIST = MIN_TROLLEY_DIST;
+const DANCE_PUSH_RADIUS = PUSH_TARGET_TROLLEY_DIST;
 const DANCE_CRANE_MAX_SPEED_XZ = 3.2;
 const DANCE_CRANE_MAX_ACCEL_XZ = 11.0;
 const DANCE_CRANE_SMOOTH_TIME_XZ = 0.22;
@@ -574,7 +574,7 @@ function computeCorridorSteerTarget(
 ): void {
   const deskClear = segmentClearsDesk(curX, curZ, anchorX, anchorZ);
   const playerCut =
-    segmentMinDistToPoint(curX, curZ, anchorX, anchorZ, camX, camZ) < 1.85 &&
+    segmentMinDistToPoint(curX, curZ, anchorX, anchorZ, camX, camZ) < MIN_TROLLEY_DIST &&
     Math.hypot(curX - anchorX, curZ - anchorZ) > 0.8;
 
   if (deskClear && !playerCut) {
@@ -625,6 +625,9 @@ function stepHeavyCraneXZ(
   smoothTime: number,
   enforcePatrolCorridor: boolean,
   out: CraneXZStepOut,
+  keepOutCamX?: number,
+  keepOutCamZ?: number,
+  minCamDist?: number,
 ): CraneXZStepOut {
   if (dt <= 1e-5) {
     out.x = curX;
@@ -674,6 +677,46 @@ function stepHeavyCraneXZ(
   } else {
     nextX = THREE.MathUtils.clamp(nextX, ACTUATION_X_MIN, ACTUATION_X_MAX);
     nextZ = THREE.MathUtils.clamp(nextZ, ACTUATION_Z_MIN, ACTUATION_Z_MAX);
+  }
+
+  if (
+    keepOutCamX !== undefined &&
+    keepOutCamZ !== undefined &&
+    minCamDist !== undefined &&
+    minCamDist > 0
+  ) {
+    const kdx = nextX - keepOutCamX;
+    const kdz = nextZ - keepOutCamZ;
+    const kd = Math.hypot(kdx, kdz);
+    if (kd < minCamDist) {
+      let rx = kdx;
+      let rz = kdz;
+      if (kd < 1e-4) {
+        const cdx = curX - keepOutCamX;
+        const cdz = curZ - keepOutCamZ;
+        const cd = Math.hypot(cdx, cdz);
+        if (cd > 1e-4) {
+          rx = cdx / cd;
+          rz = cdz / cd;
+        } else {
+          rx = 0.85;
+          rz = 0.45;
+        }
+      } else {
+        rx /= kd;
+        rz /= kd;
+      }
+      nextX = keepOutCamX + rx * minCamDist;
+      nextZ = keepOutCamZ + rz * minCamDist;
+      if (enforcePatrolCorridor && isStrictlySafeCorridor(curX, curZ)) {
+        projectOntoSafeCorridor(nextX, nextZ, _projTmp);
+        nextX = _projTmp.x;
+        nextZ = _projTmp.z;
+      } else {
+        nextX = THREE.MathUtils.clamp(nextX, ACTUATION_X_MIN, ACTUATION_X_MAX);
+        nextZ = THREE.MathUtils.clamp(nextZ, ACTUATION_Z_MIN, ACTUATION_Z_MAX);
+      }
+    }
   }
 
   out.x = nextX;
@@ -1243,17 +1286,23 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     // 1. Gantry Carriage X/Z Translation + 3-Joint Articulated GLaDOS Boss Rig
     const ts = turretStateRef.current;
 
+    let shiftReset = false;
     if (
       ts.lastShiftRunId !== s.shiftRunId ||
       s.phase !== "playing" ||
       isBlackout
     ) {
       if (ts.lastShiftRunId !== s.shiftRunId) {
+        shiftReset = true;
         ts.lastShiftRunId = s.shiftRunId;
         ts.curX = INITIAL_TROLLEY_X;
         ts.curHeadY = 1.96;
         ts.curZ = INITIAL_TROLLEY_Z;
         ts.curYaw = INITIAL_YAW;
+        ts.curPitch = isBlackout ? TURRET_BLACKOUT_PITCH : -0.12;
+        ts.curRoll = 0;
+        ts.rollImpulse = 0;
+        ts.shakeAmp = 0;
         ts.velX = 0;
         ts.velY = 0;
         ts.velZ = 0;
@@ -1265,10 +1314,10 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         ts.wasArmActive = false;
         ts.wasDancing = false;
         ts.danceElapsedSec = 0;
+        ts.arms[0].curRoll = 0;
+        ts.arms[1].curRoll = 0;
         ts.nextDriftSec = t + SUPERVISORY_DRIFT_INTERVAL_SEC;
       }
-      ts.wasDancing = false;
-      ts.danceElapsedSec = 0;
       cancelKomradActuation();
     }
 
@@ -1395,12 +1444,14 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       }
     }
 
-    if (exitedDance) {
+    if (exitedDance || shiftReset) {
       ts.curRoll = 0;
+      ts.curPitch = isBlackout ? TURRET_BLACKOUT_PITCH : 0;
       ts.rollImpulse = 0;
       ts.shakeAmp = 0;
-      ts.arms[0].curRoll = wrapAngleRad(ts.arms[0].curRoll);
-      ts.arms[1].curRoll = wrapAngleRad(ts.arms[1].curRoll);
+      ts.danceElapsedSec = 0;
+      ts.arms[0].curRoll = 0;
+      ts.arms[1].curRoll = 0;
     }
 
     let desiredTargetY = 1.96;
@@ -1509,12 +1560,35 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         _danceTargetTmp.z = camPos.z + pz * DANCE_PUSH_RADIUS;
       }
 
-      _danceTargetTmp.x = THREE.MathUtils.clamp(_danceTargetTmp.x, 1.85, 3.65);
+      _danceTargetTmp.x = THREE.MathUtils.clamp(_danceTargetTmp.x, 1.72, 3.65);
       _danceTargetTmp.z = THREE.MathUtils.clamp(_danceTargetTmp.z, -1.45, 1.15);
       pushPointOutOfOBB(_danceTargetTmp, PATROL_KEEP_OUT_OBBS[1]);
       pushPointOutOfOBB(_danceTargetTmp, PATROL_KEEP_OUT_OBBS[2]);
-      _danceTargetTmp.x = THREE.MathUtils.clamp(_danceTargetTmp.x, 1.85, 3.65);
+      _danceTargetTmp.x = THREE.MathUtils.clamp(_danceTargetTmp.x, 1.72, 3.65);
       _danceTargetTmp.z = THREE.MathUtils.clamp(_danceTargetTmp.z, -1.45, 1.15);
+      if (
+        Math.hypot(_danceTargetTmp.x - camPos.x, _danceTargetTmp.z - camPos.z) <
+        MIN_TROLLEY_DIST
+      ) {
+        const safeDanceTarget = computeSafePanopticonTarget(
+          {
+            camPos,
+            refX: ts.anchorX,
+            refZ: ts.anchorZ,
+            curX: ts.curX,
+            curZ: ts.curZ,
+            preferredSide: ts.preferredSide,
+            isSeatedAtDesk: s.isSeatedAtDesk,
+            isTalking: vocal.isTalking,
+            mood: vocal.mood,
+            isBlackout: false,
+            elapsedSec: t,
+          },
+          _safeTargetOut,
+        );
+        _danceTargetTmp.x = safeDanceTarget.targetX;
+        _danceTargetTmp.z = safeDanceTarget.targetZ;
+      }
 
       desiredTargetY = THREE.MathUtils.clamp(
         DANCE_BASE_Y + danceBounceY,
@@ -1535,6 +1609,9 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         DANCE_CRANE_SMOOTH_TIME_XZ,
         false,
         _craneXZOut,
+        camPos.x,
+        camPos.z,
+        MIN_TROLLEY_DIST,
       );
       ts.curX = xzStep.x;
       ts.curZ = xzStep.z;
@@ -1574,12 +1651,14 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         ts.anchorX - camPos.x,
         ts.anchorZ - camPos.z,
       );
+      const liveDistToCam = Math.hypot(ts.curX - camPos.x, ts.curZ - camPos.z);
       const camMoved = Math.hypot(
         camPos.x - ts.lastAnchorCamX,
         camPos.z - ts.lastAnchorCamZ,
       );
       const anchorUnsafe = !isStrictlySafeCorridor(ts.anchorX, ts.anchorZ);
-      const personalSpaceBreach = anchorDistToCam < MIN_TROLLEY_DIST;
+      const personalSpaceBreach =
+        anchorDistToCam < MIN_TROLLEY_DIST || liveDistToCam < MIN_TROLLEY_DIST;
       const meaningfulPlayerMove =
         camMoved > PLAYER_MOVE_DEADBAND_M &&
         (anchorDistToCam > MAX_TROLLEY_DIST ||
@@ -1674,11 +1753,11 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         _steerTmp,
       );
 
-      const liveDistToCam = Math.hypot(ts.curX - camPos.x, ts.curZ - camPos.z);
       const patrolMaxSpeed =
-        liveDistToCam < 2.65
+        liveDistToCam < PUSH_TARGET_TROLLEY_DIST
           ? THREE.MathUtils.clamp(
-              CRANE_PATROL_MAX_SPEED_XZ + (2.65 - liveDistToCam) * 1.4,
+              CRANE_PATROL_MAX_SPEED_XZ +
+                (PUSH_TARGET_TROLLEY_DIST - liveDistToCam) * 3.0,
               CRANE_PATROL_MAX_SPEED_XZ,
               CRANE_PATROL_RETREAT_MAX_SPEED_XZ,
             )
@@ -1697,6 +1776,9 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         CRANE_PATROL_SMOOTH_TIME_XZ,
         true,
         _craneXZOut,
+        camPos.x,
+        camPos.z,
+        MIN_TROLLEY_DIST * 0.92,
       );
       ts.curX = xzStep.x;
       ts.curZ = xzStep.z;

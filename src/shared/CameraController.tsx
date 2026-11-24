@@ -78,8 +78,8 @@ const SEATED_DESK_POSE = {
 const RMB_SEATED_ZOOM_FOV = 37;
 
 const STAND_UP_SPOT: BayStandingSpot = {
-  x: -0.05,
-  z: 3.06,
+  x: 0.14,
+  z: 3.08,
   yaw: 0,
   pitch: -0.32,
 };
@@ -120,10 +120,10 @@ const BAY_STANDING_SPOTS: Record<CameraStation, BayStandingSpot> = {
     pitch: -0.22,
   },
   inspector: {
-    // [4] Shift Supervisor Desk (Post No. 4): standing on +Z side facing desk & console row
-    x: 0.05,
-    z: 2.56,
-    yaw: 0,
+    // [4] Shift Supervisor Desk (Post No. 4): standing on +Z side facing desk & console row (clear of chair collider)
+    x: 0.22,
+    z: 2.6,
+    yaw: 0.12,
     pitch: -0.56,
   },
   aux: {
@@ -151,6 +151,12 @@ interface ColliderOBB {
   rotY: number;
 }
 
+interface ColliderCircle {
+  cx: number;
+  cz: number;
+  radius: number;
+}
+
 const CONTROL_ROOM_COLLIDERS: readonly ColliderOBB[] = [
   // Front Synoptic Wall Monumental CRT Bay & Angled Wings
   { cx: 0.0, cz: -3.86, halfW: 1.98, halfD: 0.42, rotY: 0 },
@@ -163,25 +169,39 @@ const CONTROL_ROOM_COLLIDERS: readonly ColliderOBB[] = [
   { cx: 0.0, cz: 1.8, halfW: 1.28, halfD: 0.46, rotY: 0 },
   // Left-Wall `UNIT C` 1000 MWh Battery & HV Switchgear Alcove (`x = -5.16, z = +1.42`)
   { cx: -5.36, cz: 1.42, halfW: 0.68, halfD: 1.92, rotY: 0 },
-  // Corner `SM-2M` Magnetic Tape Computer Cabinets & Rear Fire-Shield Sand Box
-  { cx: -5.6, cz: -2.56, halfW: 0.36, halfD: 0.8, rotY: 0 },
-  { cx: 5.56, cz: -2.5, halfW: 0.34, halfD: 0.56, rotY: 0 },
-  { cx: -4.05, cz: 4.3, halfW: 0.52, halfD: 0.22, rotY: 0 },
+  // Corner `SM-2M` Magnetic Tape Computer Cabinets & Rear Fire-Shield Sand Box (`FIRE SAND NO. 1`)
+  { cx: -5.6, cz: -2.38, halfW: 0.34, halfD: 0.6, rotY: 0 },
+  { cx: 5.62, cz: -2.54, halfW: 0.32, halfD: 0.46, rotY: 0 },
+  { cx: -4.32, cz: 4.32, halfW: 0.58, halfD: 0.18, rotY: 0 },
   // Right-Window Duty Radio Side Table (`OKEAN-84` at `x = +5.58, z = +1.58`)
   { cx: 5.58, cz: 1.58, halfW: 0.28, halfD: 0.43, rotY: 0 },
+];
+
+const CONTROL_ROOM_CIRCLE_COLLIDERS: readonly ColliderCircle[] = [
+  // Supervisor Swivel Chair (`[-0.28, 0.005, 2.74]`)
+  { cx: -0.28, cz: 2.74, radius: 0.24 },
+  // Left Operator Swivel Chair (`[-4.46, 0.016, -0.14]`)
+  { cx: -4.46, cz: -0.14, radius: 0.24 },
+  // Right Operator Swivel Chair (`[4.62, 0.016, 0.24]`)
+  { cx: 4.62, cz: 0.24, radius: 0.24 },
 ];
 
 const LOBBY_COLLIDERS: readonly ColliderOBB[] = [
   // Cozy Break Table Near East Frosted Window (`x = +0.92, z = +6.95`)
   { cx: 0.92, cz: 6.95, halfW: 0.4, halfD: 0.7, rotY: 0 },
-  // Soviet Tubular-Steel Vinyl Chair (`x = +0.18, z = +6.75`)
-  { cx: 0.18, cz: 6.75, halfW: 0.25, halfD: 0.25, rotY: 0.3 },
+  // Soviet Tubular-Steel Vinyl Armchair (`x = +0.18, z = +6.75`, `rotY = 1.22`)
+  { cx: 0.18, cz: 6.75, halfW: 0.26, halfD: 0.26, rotY: 1.22 },
   // West-Wall Trophy & Medal Display Cabinet (`x = -3.52, z = +7.45`)
   { cx: -3.52, cz: 7.45, halfW: 0.3, halfD: 1.15, rotY: 0 },
   // South-Wall Non-Functional Elevator (`LIFT-84`) Frame (`x = -0.85, z = +10.18`)
   { cx: -0.85, cz: 10.18, halfW: 1.15, halfD: 0.16, rotY: 0 },
   // South-East Potted Rubber Plant (`STATE BOTANICAL ASSET #04`)
   { cx: 0.86, cz: 9.45, halfW: 0.28, halfD: 0.28, rotY: 0 },
+];
+
+const LOBBY_CIRCLE_COLLIDERS: readonly ColliderCircle[] = [
+  // Lobby Metal Wastebasket (`[1.14, 0, 7.82]`)
+  { cx: 1.14, cz: 7.82, radius: 0.18 },
 ];
 
 const R_CTRL_MIN_X = -5.48;
@@ -244,15 +264,59 @@ function pushCircleOutOfOBB(
   pos.z += -pushLX * sin + pushLZ * cos;
 }
 
+function pushCircleOutOfCircle(
+  pos: THREE.Vector3,
+  playerRadius: number,
+  col: ColliderCircle,
+): void {
+  const minDist = playerRadius + col.radius;
+  const dx = pos.x - col.cx;
+  const dz = pos.z - col.cz;
+  const distSq = dx * dx + dz * dz;
+  if (distSq >= minDist * minDist) return;
+
+  if (distSq > 1e-8) {
+    const dist = Math.sqrt(distSq);
+    const scale = minDist / dist;
+    pos.x = col.cx + dx * scale;
+    pos.z = col.cz + dz * scale;
+  } else {
+    pos.x = col.cx + minDist;
+  }
+}
+
+function isInsideWalkableUnion(x: number, z: number): boolean {
+  const inCtrl =
+    x >= R_CTRL_MIN_X &&
+    x <= R_CTRL_MAX_X &&
+    z >= R_CTRL_MIN_Z &&
+    z <= R_CTRL_MAX_Z;
+  if (inCtrl) return true;
+  const inDoor =
+    x >= R_DOOR_MIN_X &&
+    x <= R_DOOR_MAX_X &&
+    z >= R_DOOR_MIN_Z &&
+    z <= R_DOOR_MAX_Z;
+  if (inDoor) return true;
+  return (
+    x >= R_LOBBY_MIN_X &&
+    x <= R_LOBBY_MAX_X &&
+    z >= R_LOBBY_MIN_Z &&
+    z <= R_LOBBY_MAX_Z
+  );
+}
+
 function clampToWalkableEnvelope(
   pos: THREE.Vector3,
+  prevX: number,
+  prevZ: number,
   doorPassable: boolean,
 ): void {
   const px = pos.x;
   const pz = pos.z;
 
   if (!doorPassable) {
-    if (pz < 4.64) {
+    if (prevZ < 4.64) {
       pos.x = THREE.MathUtils.clamp(px, R_CTRL_MIN_X, R_CTRL_MAX_X);
       pos.z = THREE.MathUtils.clamp(pz, R_CTRL_MIN_Z, R_CTRL_MAX_Z);
     } else {
@@ -262,67 +326,108 @@ function clampToWalkableEnvelope(
     return;
   }
 
-  const inCtrl =
-    px >= R_CTRL_MIN_X &&
-    px <= R_CTRL_MAX_X &&
-    pz >= R_CTRL_MIN_Z &&
-    pz <= R_CTRL_MAX_Z;
-  const inDoor =
-    px >= R_DOOR_MIN_X &&
-    px <= R_DOOR_MAX_X &&
-    pz >= R_DOOR_MIN_Z &&
-    pz <= R_DOOR_MAX_Z;
-  const inLobby =
-    px >= R_LOBBY_MIN_X &&
-    px <= R_LOBBY_MAX_X &&
-    pz >= R_LOBBY_MIN_Z &&
-    pz <= R_LOBBY_MAX_Z;
+  if (isInsideWalkableUnion(px, pz)) return;
 
-  if (inCtrl || inDoor || inLobby) return;
+  const xOnlyOk = isInsideWalkableUnion(px, prevZ);
+  const zOnlyOk = isInsideWalkableUnion(prevX, pz);
 
-  const cX = THREE.MathUtils.clamp(px, R_CTRL_MIN_X, R_CTRL_MAX_X);
-  const cZ = THREE.MathUtils.clamp(pz, R_CTRL_MIN_Z, R_CTRL_MAX_Z);
-  const cD = (px - cX) * (px - cX) + (pz - cZ) * (pz - cZ);
-
-  const dX = THREE.MathUtils.clamp(px, R_DOOR_MIN_X, R_DOOR_MAX_X);
-  const dZ = THREE.MathUtils.clamp(pz, R_DOOR_MIN_Z, R_DOOR_MAX_Z);
-  const dD = (px - dX) * (px - dX) + (pz - dZ) * (pz - dZ);
-
-  const lX = THREE.MathUtils.clamp(px, R_LOBBY_MIN_X, R_LOBBY_MAX_X);
-  const lZ = THREE.MathUtils.clamp(pz, R_LOBBY_MIN_Z, R_LOBBY_MAX_Z);
-  const lD = (px - lX) * (px - lX) + (pz - lZ) * (pz - lZ);
-
-  if (cD <= dD && cD <= lD) {
-    pos.x = cX;
-    pos.z = cZ;
-  } else if (dD <= lD) {
-    pos.x = dX;
-    pos.z = dZ;
-  } else {
-    pos.x = lX;
-    pos.z = lZ;
+  if (xOnlyOk && !zOnlyOk) {
+    pos.x = px;
+    const inDoorX = px >= R_DOOR_MIN_X && px <= R_DOOR_MAX_X;
+    if (prevZ <= R_CTRL_MAX_Z) {
+      pos.z = THREE.MathUtils.clamp(
+        pz,
+        R_CTRL_MIN_Z,
+        inDoorX ? R_DOOR_MAX_Z : R_CTRL_MAX_Z,
+      );
+    } else if (prevZ >= R_LOBBY_MIN_Z) {
+      pos.z = THREE.MathUtils.clamp(
+        pz,
+        inDoorX ? R_DOOR_MIN_Z : R_LOBBY_MIN_Z,
+        R_LOBBY_MAX_Z,
+      );
+    } else {
+      pos.z = THREE.MathUtils.clamp(pz, R_DOOR_MIN_Z, R_DOOR_MAX_Z);
+    }
+    return;
   }
+
+  if (zOnlyOk && !xOnlyOk) {
+    pos.z = pz;
+    if (pz > R_CTRL_MAX_Z && pz < R_LOBBY_MIN_Z) {
+      pos.x = THREE.MathUtils.clamp(px, R_DOOR_MIN_X, R_DOOR_MAX_X);
+    } else if (pz <= R_CTRL_MAX_Z) {
+      pos.x = THREE.MathUtils.clamp(px, R_CTRL_MIN_X, R_CTRL_MAX_X);
+    } else {
+      pos.x = THREE.MathUtils.clamp(px, R_LOBBY_MIN_X, R_LOBBY_MAX_X);
+    }
+    return;
+  }
+
+  // Diagonal corner exit: clamp against the zone containing (prevX, prevZ)
+  if (prevZ > R_CTRL_MAX_Z && prevZ < R_LOBBY_MIN_Z) {
+    pos.x = THREE.MathUtils.clamp(px, R_DOOR_MIN_X, R_DOOR_MAX_X);
+    pos.z = THREE.MathUtils.clamp(pz, R_DOOR_MIN_Z, R_DOOR_MAX_Z);
+    return;
+  }
+
+  if (prevZ <= R_CTRL_MAX_Z) {
+    const cx = THREE.MathUtils.clamp(px, R_CTRL_MIN_X, R_CTRL_MAX_X);
+    const inDoorX = cx >= R_DOOR_MIN_X && cx <= R_DOOR_MAX_X;
+    pos.x = cx;
+    pos.z = THREE.MathUtils.clamp(
+      pz,
+      R_CTRL_MIN_Z,
+      inDoorX ? R_DOOR_MAX_Z : R_CTRL_MAX_Z,
+    );
+    return;
+  }
+
+  const lx = THREE.MathUtils.clamp(px, R_LOBBY_MIN_X, R_LOBBY_MAX_X);
+  const inDoorX = lx >= R_DOOR_MIN_X && lx <= R_DOOR_MAX_X;
+  pos.x = lx;
+  pos.z = THREE.MathUtils.clamp(
+    pz,
+    inDoorX ? R_DOOR_MIN_Z : R_LOBBY_MIN_Z,
+    R_LOBBY_MAX_Z,
+  );
 }
 
-function resolveControlRoomCollisions(pos: THREE.Vector3): void {
+function resolveControlRoomCollisions(
+  pos: THREE.Vector3,
+  prevX = pos.x,
+  prevZ = pos.z,
+): void {
   const doorPassable =
     useGameStore.getState().lobbyMenuPhase !== "menu_locked" &&
     airlockDoorState.openProgress > AIRLOCK_PASSABLE_OPEN_THRESHOLD;
 
   for (let pass = 0; pass < 2; pass++) {
-    clampToWalkableEnvelope(pos, doorPassable);
+    const stepPrevX = pass === 0 ? prevX : pos.x;
+    const stepPrevZ = pass === 0 ? prevZ : pos.z;
+    clampToWalkableEnvelope(pos, stepPrevX, stepPrevZ, doorPassable);
     if (pos.z < 4.65) {
       for (let i = 0; i < CONTROL_ROOM_COLLIDERS.length; i++) {
         pushCircleOutOfOBB(pos, PLAYER_RADIUS, CONTROL_ROOM_COLLIDERS[i]);
+      }
+      for (let i = 0; i < CONTROL_ROOM_CIRCLE_COLLIDERS.length; i++) {
+        pushCircleOutOfCircle(
+          pos,
+          PLAYER_RADIUS,
+          CONTROL_ROOM_CIRCLE_COLLIDERS[i],
+        );
       }
     }
     if (pos.z > 4.55) {
       for (let i = 0; i < LOBBY_COLLIDERS.length; i++) {
         pushCircleOutOfOBB(pos, PLAYER_RADIUS, LOBBY_COLLIDERS[i]);
       }
+      for (let i = 0; i < LOBBY_CIRCLE_COLLIDERS.length; i++) {
+        pushCircleOutOfCircle(pos, PLAYER_RADIUS, LOBBY_CIRCLE_COLLIDERS[i]);
+      }
     }
   }
-  clampToWalkableEnvelope(pos, doorPassable);
+  clampToWalkableEnvelope(pos, pos.x, pos.z, doorPassable);
 }
 
 function shortestAngleDiff(a: number, b: number): number {
@@ -653,7 +758,7 @@ export const CameraController: React.FC = () => {
     const requestCanvasLockIfAllowed = () => {
       const gs = useGameStore.getState();
       if (document.pointerLockElement === gl.domElement) return;
-      if (!canEngageCanvasPointerLock(gs.phase, gs.isSeatedAtDesk)) return;
+      if (!canEngageCanvasPointerLock(gs.phase, gs.isSeatedAtDesk, gs.lobbyMenuPhase)) return;
       try {
         const req = gl.domElement.requestPointerLock?.() as
           | Promise<void>
@@ -1267,7 +1372,7 @@ export const CameraController: React.FC = () => {
         }
         playerPos.x = THREE.MathUtils.damp(playerPos.x, stepTargetX, 7.5, dt);
         playerPos.z = THREE.MathUtils.damp(playerPos.z, stepTargetZ, 7.5, dt);
-        resolveControlRoomCollisions(playerPos);
+        resolveControlRoomCollisions(playerPos, prevX, prevZ);
         vel.vx = dt > 1e-4 ? (playerPos.x - prevX) / dt : 0;
         vel.vz = dt > 1e-4 ? (playerPos.z - prevZ) / dt : 0;
         if (Math.hypot(glide.x - playerPos.x, glide.z - playerPos.z) < 0.025) {
@@ -1302,9 +1407,11 @@ export const CameraController: React.FC = () => {
         }
 
         if (vel.vx !== 0 || vel.vz !== 0) {
+          const prevX = playerPos.x;
+          const prevZ = playerPos.z;
           playerPos.x += vel.vx * dt;
           playerPos.z += vel.vz * dt;
-          resolveControlRoomCollisions(playerPos);
+          resolveControlRoomCollisions(playerPos, prevX, prevZ);
         }
       }
 
@@ -1413,8 +1520,6 @@ export const CameraController: React.FC = () => {
         hp.lastPitch = look.currentPitch;
         hp.lastCheckElapsed = elapsed;
 
-        refreshCenterHover(state);
-
         if (moved) {
           if (!state.internal.lastEvent.current) {
             const rect = gl.domElement.getBoundingClientRect();
@@ -1428,6 +1533,18 @@ export const CameraController: React.FC = () => {
             state.internal.lastEvent.current = seed;
           }
           state.events.update?.();
+          let hovering = false;
+          for (const ev of state.internal.hovered.values()) {
+            if (hasHoverableControlHandler(ev.object)) {
+              hovering = true;
+              break;
+            }
+          }
+          if (pointerLockInteraction.isHoveringControl !== hovering) {
+            updatePointerLockInteraction({ isHoveringControl: hovering });
+          }
+        } else {
+          refreshCenterHover(state);
         }
       }
     }

@@ -4,7 +4,6 @@ import {
   playKnifeSwitchSlam,
   silenceAllLegacyGlobalBgm,
 } from './modules/inspector/audio'
-import { useDeskStore } from './modules/inspector/useDeskStore'
 import { playSwitchClank } from './modules/reactor/audioSynth'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
@@ -268,13 +267,9 @@ export function App() {
   const phase = useGameStore((s) => s.phase)
   const lobbyMenuPhase = useGameStore((s) => s.lobbyMenuPhase)
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
-  const shiftTimeMinutes = useGameStore((s) => s.shiftTimeMinutes)
   const tutorialPhase = useGameStore((s) => s.tutorialPhase)
-  const activeMandate = useGameStore((s) => s.activeMandate)
   const activePost84Order = useGameStore((s) => s.activePost84Order)
-  const commendations = useDeskStore((s) => s.commendations)
-  const citations = useDeskStore((s) => s.citations)
-  const deskDocsLen = useDeskStore((s) => s.documents.length)
+  const quotaCompleted = useGameStore((s) => s.quotaCompleted)
   const tick = useGameStore((s) => s.tick)
   const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk)
   const canSitAtDesk = useGameStore((s) => s.canSitAtDesk)
@@ -323,42 +318,68 @@ export function App() {
     silenceAllLegacyGlobalBgm()
   }, [phase])
 
-  useEffect(() => {
-    if (
-      phase !== 'playing' ||
-      lobbyMenuPhase !== 'entered_control_room' ||
-      !isShiftControlReady
-    ) {
-      return
-    }
-    saveCurrentShiftToStorage()
-  }, [
-    phase,
-    lobbyMenuPhase,
-    isShiftControlReady,
-    shiftTimeMinutes,
-    tutorialPhase,
-    activeMandate,
-    activePost84Order,
-    commendations,
-    citations,
-    deskDocsLen,
-  ])
+  const prevMenusOpenRef = useRef(false)
+  const prevTutorialPhaseRef = useRef(tutorialPhase)
+  const prevQuotaRef = useRef(quotaCompleted)
+  const prevOrderIdRef = useRef<string | null>(activePost84Order?.orderId ?? null)
 
   useEffect(() => {
-    if (
-      phase !== 'playing' ||
-      lobbyMenuPhase !== 'entered_control_room' ||
-      !isShiftControlReady
-    ) {
-      return
+    const canSave =
+      phase === 'playing' &&
+      lobbyMenuPhase === 'entered_control_room' &&
+      isShiftControlReady
+    if (!canSave) return
+
+    const interval = window.setInterval(() => {
+      saveCurrentShiftToStorage()
+    }, 10_000)
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        saveCurrentShiftToStorage()
+      }
     }
     const onBeforeUnload = () => {
       saveCurrentShiftToStorage()
     }
+    document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
   }, [phase, lobbyMenuPhase, isShiftControlReady])
+
+  useEffect(() => {
+    const canSave =
+      phase === 'playing' &&
+      lobbyMenuPhase === 'entered_control_room' &&
+      isShiftControlReady
+    const curOrderId = activePost84Order?.orderId ?? null
+    const orderJustCompleted =
+      quotaCompleted !== prevQuotaRef.current ||
+      (prevOrderIdRef.current !== null && curOrderId === null)
+    const tutorialJustChanged = tutorialPhase !== prevTutorialPhaseRef.current
+    const justPaused = !prevMenusOpenRef.current && menusOpen
+
+    prevQuotaRef.current = quotaCompleted
+    prevOrderIdRef.current = curOrderId
+    prevTutorialPhaseRef.current = tutorialPhase
+    prevMenusOpenRef.current = menusOpen
+
+    if (canSave && (orderJustCompleted || tutorialJustChanged || justPaused)) {
+      saveCurrentShiftToStorage()
+    }
+  }, [
+    phase,
+    lobbyMenuPhase,
+    isShiftControlReady,
+    quotaCompleted,
+    activePost84Order,
+    tutorialPhase,
+    menusOpen,
+  ])
 
   useEffect(() => {
     if (phase !== 'playing' || !isShiftControlReady) return
@@ -465,7 +486,7 @@ export function App() {
       {phase === 'playing' && isShiftControlReady && (
         <div className="pointer-events-none fixed bottom-2.5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#28b862]/70 bg-[#051209]/90 px-4 py-1 font-mono text-xs font-bold tracking-wider text-[#39ff14] shadow-lg">
           {isSeatedAtDesk
-            ? '[LMB]: GRAB & DRAG DESK TOOLS | [RMB]: ZOOM | [E / ESC]: STAND UP'
+            ? '[LMB]: CLICK ISKRA-84 TERMINAL | [RMB]: ZOOM | [E / ESC]: STAND UP'
             : '[WASD]: WALK | [MOUSE]: LOOK | [HOLD LMB]: GRAB & DRAG | [RMB]: ZOOM | [E]: SIT / STAND (DESK)'}
         </div>
       )}

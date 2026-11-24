@@ -9,7 +9,6 @@ import {
   playLeverRatchet,
   playSwitchClank,
 } from "../modules/reactor/audioSynth";
-import { TerminalStation3D } from "../modules/terminal";
 import { BuckshotDitherPass } from "./BuckshotDitherPass";
 import { CameraController, useCameraLookStore } from "./CameraController";
 import { CentralSkalaScreen3D } from "./CentralSkalaScreen3D";
@@ -157,6 +156,7 @@ function computeFluorescentStarterCurve(localElapsed: number): number {
 }
 
 function playControlRoomContactorClunk(stage: 0 | 1 | 2): void {
+  if (useGameStore.getState().isMusicMuted) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   if (ctx.state === "suspended") {
@@ -1139,21 +1139,32 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
       s.ciaIntrusionActive ||
       s.komradOverrideLocked;
 
+    const z3Power =
+      s.lobbyMenuPhase !== "entered_control_room"
+        ? 0.14
+        : THREE.MathUtils.lerp(0.14, 1.0, controlRoomPowerState.zone3);
+
+    if (screenMatRef.current) {
+      screenMatRef.current.color.setRGB(z3Power, z3Power, z3Power);
+      screenMatRef.current.emissiveIntensity =
+        (s.isBlackout ? 0.18 : 1.08) * z3Power;
+    }
+
     // Update physical status indicator lamp on clock bezel
     if (statusLampMatRef.current) {
       if (s.isBlackout) {
         statusLampMatRef.current.color.copy(SCENE_COLOR_CLOCK_BLACKOUT);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
-        statusLampMatRef.current.emissiveIntensity = 0.25;
+        statusLampMatRef.current.emissiveIntensity = 0.25 * z3Power;
       } else if (isEmergency) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 4.2);
         statusLampMatRef.current.color.copy(SCENE_COLOR_RED);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
-        statusLampMatRef.current.emissiveIntensity = 1.15 + pulse * 1.25;
+        statusLampMatRef.current.emissiveIntensity = (1.15 + pulse * 1.25) * z3Power;
       } else {
         statusLampMatRef.current.color.copy(SCENE_COLOR_CLOCK_NORM);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
-        statusLampMatRef.current.emissiveIntensity = 1.1;
+        statusLampMatRef.current.emissiveIntensity = 1.1 * z3Power;
       }
     }
 
@@ -2684,6 +2695,9 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
 
   const bezelInstRef = useRef<THREE.InstancedMesh>(null);
   const coreInstRef = useRef<THREE.InstancedMesh>(null);
+  const bezelInstMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const coreInstMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const standbyRingsMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const headerMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const leftLegendMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const rightProcMatRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -2888,26 +2902,43 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
   }, [headerTex, leftLegendTex, rightProcTex]);
 
   useFrame(({ clock }) => {
-    const z3 = controlRoomPowerState.zone3;
+    const s = useGameStore.getState();
+    const z3Power =
+      s.lobbyMenuPhase !== "entered_control_room"
+        ? 0.14
+        : THREE.MathUtils.lerp(0.14, 1.0, controlRoomPowerState.zone3);
     if (headerMatRef.current) {
       headerMatRef.current.color.lerpColors(
         SCENE_COLOR_CRT_STANDBY_TINT,
         SCENE_COLOR_WHITE,
-        z3,
+        z3Power,
       );
     }
     if (leftLegendMatRef.current) {
       leftLegendMatRef.current.color.lerpColors(
         SCENE_COLOR_CRT_STANDBY_TINT,
         SCENE_COLOR_WHITE,
-        z3,
+        z3Power,
       );
     }
     if (rightProcMatRef.current) {
       rightProcMatRef.current.color.lerpColors(
         SCENE_COLOR_CRT_STANDBY_TINT,
         SCENE_COLOR_WHITE,
-        z3,
+        z3Power,
+      );
+    }
+    if (bezelInstMatRef.current) {
+      bezelInstMatRef.current.color.setRGB(z3Power, z3Power, z3Power);
+    }
+    if (coreInstMatRef.current) {
+      coreInstMatRef.current.color.setRGB(z3Power, z3Power, z3Power);
+    }
+    if (standbyRingsMatRef.current) {
+      standbyRingsMatRef.current.color.setRGB(
+        0.27 * z3Power,
+        0.098 * z3Power,
+        0.09 * z3Power,
       );
     }
 
@@ -2919,7 +2950,6 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
     const coreInst = coreInstRef.current;
     if (!bezelInst || !coreInst) return;
 
-    const s = useGameStore.getState();
     const activeRodCount = Math.round(s.controlRods * WALL_RBMK_CORE_TILES.length);
     const isHighReactivity = s.controlRods > 0.85;
     const prevCodes = prevChannelCodesRef.current;
@@ -3203,6 +3233,7 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
           raycast={NOOP_RAYCAST}
         >
           <meshBasicMaterial
+            ref={standbyRingsMatRef}
             color="#451917"
             toneMapped={false}
             fog={false}
@@ -3222,7 +3253,8 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
           raycast={NOOP_RAYCAST}
         >
           <meshBasicMaterial
-            color="#ffffff"
+            ref={bezelInstMatRef}
+            color="#242424"
             toneMapped={false}
             fog={false}
             polygonOffset
@@ -3240,7 +3272,12 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
           castShadow={false}
           raycast={NOOP_RAYCAST}
         >
-          <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+          <meshBasicMaterial
+            ref={coreInstMatRef}
+            color="#242424"
+            toneMapped={false}
+            fog={false}
+          />
         </instancedMesh>
       </group>
     </group>
@@ -6840,6 +6877,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
   const toggleDragIdxRef = useRef<number | null>(null);
+  const toggleDragCleanupRef = useRef<(() => void) | null>(null);
   const toggleLamp0 = useRef<THREE.MeshStandardMaterial | null>(null);
   const toggleLamp1 = useRef<THREE.MeshStandardMaterial | null>(null);
   const toggleLamp2 = useRef<THREE.MeshStandardMaterial | null>(null);
@@ -6923,6 +6961,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       0.055,
     ]);
     return () => {
+      toggleDragCleanupRef.current?.();
+      toggleDragCleanupRef.current = null;
       registerKomradControlObject("auxVentilation", null);
       registerKomradControlObject("auxAudioMute", null);
       registerKomradControlObject("auxKgbLine", null);
@@ -7500,21 +7540,39 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                toggleDragCleanupRef.current?.();
                 const auxId = auxKomradIds[tIdx];
                 if (auxId) notifyPlayerControlInteraction(auxId, true);
                 toggleDragIdxRef.current = tIdx;
-                (e.target as Element | null)?.setPointerCapture?.(e.pointerId);
-              }}
-              onPointerUp={(e: ThreeEvent<PointerEvent>) => {
-                if (toggleDragIdxRef.current !== tIdx) return;
-                e.stopPropagation();
-                toggleDragIdxRef.current = null;
-                const auxId = auxKomradIds[tIdx];
-                if (auxId) notifyPlayerControlInteraction(auxId, false);
-                (e.target as Element | null)?.releasePointerCapture?.(
-                  e.pointerId,
-                );
-                triggerToggle();
+                const r3fTarget = e.target as unknown as {
+                  setPointerCapture?: (id: number) => void;
+                  releasePointerCapture?: (id: number) => void;
+                };
+                r3fTarget?.setPointerCapture?.(e.pointerId);
+
+                let finished = false;
+                const finish = (commit: boolean) => {
+                  if (finished) return;
+                  finished = true;
+                  toggleDragCleanupRef.current = null;
+                  if (toggleDragIdxRef.current === tIdx) {
+                    toggleDragIdxRef.current = null;
+                  }
+                  if (auxId) notifyPlayerControlInteraction(auxId, false);
+                  r3fTarget?.releasePointerCapture?.(e.pointerId);
+                  window.removeEventListener("pointerup", onUp);
+                  window.removeEventListener("pointercancel", onCancel);
+                  window.removeEventListener("blur", onCancel);
+                  if (commit) {
+                    triggerToggle();
+                  }
+                };
+                const onUp = () => finish(true);
+                const onCancel = () => finish(false);
+                toggleDragCleanupRef.current = () => finish(false);
+                window.addEventListener("pointerup", onUp);
+                window.addEventListener("pointercancel", onCancel);
+                window.addEventListener("blur", onCancel);
               }}
             >
               <mesh position={[0, 0.045, 0.035]}>
@@ -9281,8 +9339,9 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
     }
   }, []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const t = clock.getElapsedTime();
+    const dt = Math.min(0.1, delta);
     const s = useGameStore.getState();
 
     // Animate spinning 3D magnetic tape reels with realistic forward/pause/rewind seek bursts
@@ -9292,7 +9351,7 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
       if (s.isBlackout) continue;
       const cycle = (t * 0.7 + i * 1.37) % 4.0;
       const dir = cycle < 2.2 ? 1 : cycle < 2.9 ? 0 : -1.4;
-      reel.rotation.z -= dir * 0.045;
+      reel.rotation.z -= dir * 2.7 * dt;
     }
 
     // Animate gentle LED register strips on SM-2M tape cabinets
@@ -11026,7 +11085,6 @@ export const ControlRoomScene: React.FC = React.memo(() => {
   const leftBayA2WrapRef = useRef<THREE.Group>(null);
   const reactorWrapRef = useRef<THREE.Group>(null);
   const rightBayBWrapRef = useRef<THREE.Group>(null);
-  const terminalWrapRef = useRef<THREE.Group>(null);
   const inspectorWrapRef = useRef<THREE.Group>(null);
 
   const linoleumFloorTex = useMemo(() => {
@@ -11212,15 +11270,12 @@ export const ControlRoomScene: React.FC = React.memo(() => {
 
   useEffect(() => {
     applySovietPBRToHierarchy(bunkerArchRef.current);
-    applySovietPBRToHierarchy(reactorWrapRef.current);
-    applySovietPBRToHierarchy(terminalWrapRef.current);
 
     for (const grp of [
       bunkerArchRef.current,
       leftBayA2WrapRef.current,
       reactorWrapRef.current,
       rightBayBWrapRef.current,
-      terminalWrapRef.current,
     ]) {
       grp?.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
@@ -11263,70 +11318,6 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         ) {
           obj.visible = false;
           obj.raycast = NOOP_RAYCAST;
-        }
-      });
-    }
-
-    // 1. Hide the legacy toy-brick keyboard group, lower pedestal meshes & small CRT screen inside <TerminalStation3D />
-    // 2. Scale up the CRT monitor bezel & cabinet width cleanly
-    if (terminalWrapRef.current) {
-      terminalWrapRef.current.traverse((obj) => {
-        if (
-          obj.userData?.isDvk84Replacement ||
-          obj.parent?.userData?.isDvk84Replacement
-        ) {
-          return;
-        }
-        if ((obj as THREE.Mesh).isMesh) {
-          obj.raycast = NOOP_RAYCAST;
-          obj.castShadow = false;
-          obj.receiveShadow = false;
-        }
-        // Hide legacy rear cabinet & CRT outer bezel boxes (replaced cleanly by the recessed monumental CRT chassis)
-        if (
-          (obj as THREE.Mesh).isMesh &&
-          ((Math.abs(obj.position.y - 1.01) < 0.05 &&
-            Math.abs(obj.position.z - -0.18) < 0.05) ||
-            (Math.abs(obj.position.y - 1.4) < 0.03 &&
-              Math.abs(obj.position.z - 0.02) < 0.03))
-        ) {
-          obj.visible = false;
-          obj.raycast = NOOP_RAYCAST;
-        }
-        // Hide the legacy smaller 512x352 CRT glass mesh (replaced by <Komrad84SplitScreenCrt3D />)
-        if (
-          (obj as THREE.Mesh).isMesh &&
-          Math.abs(obj.position.y - 1.4) < 0.03 &&
-          Math.abs(obj.position.z - 0.135) < 0.03
-        ) {
-          obj.visible = false;
-          obj.raycast = NOOP_RAYCAST;
-        }
-        if (
-          obj.type === "Group" &&
-          Math.abs(obj.position.y - 0.81) < 0.025 &&
-          Math.abs(obj.position.z - 0.19) < 0.025
-        ) {
-          obj.visible = false;
-          obj.traverse((sub) => {
-            if ((sub as THREE.Mesh).isMesh) {
-              sub.raycast = NOOP_RAYCAST;
-            }
-          });
-          return;
-        }
-        // Hide any remaining legacy lower pedestal meshes (relY < 0.88) from <TerminalStation3D />
-        if ((obj as THREE.Mesh).isMesh) {
-          let relY = obj.position.y;
-          let p = obj.parent;
-          while (p && p !== terminalWrapRef.current) {
-            relY += p.position.y;
-            p = p.parent;
-          }
-          if (relY < 0.88) {
-            obj.visible = false;
-            obj.raycast = NOOP_RAYCAST;
-          }
         }
       });
     }
@@ -11799,15 +11790,7 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         rotation={[TERMINAL_TILT_X, 0, 0]}
         scale={TERMINAL_SCALE}
       >
-        <group ref={terminalWrapRef} position={[0, 0, 1.62]}>
-          <TerminalStation3D />
-          <group
-            position={[0, 0, -1.62]}
-            userData={{ isDvk84Replacement: true }}
-          >
-            <CentralSkalaScreen3D />
-          </group>
-        </group>
+        <CentralSkalaScreen3D />
       </group>
 
       {/* SHIFT SUPERVISOR DESK (at `x = 0.0, z = +1.8`): <InspectorDesk3D /> */}

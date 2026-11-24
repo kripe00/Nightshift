@@ -583,7 +583,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
         castShadow={false}
         receiveShadow={false}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <boxGeometry args={[0.8, 4.45, 2.62]} />
       </mesh>
@@ -593,7 +592,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
         castShadow={false}
         receiveShadow={false}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <boxGeometry args={[0.8, 11.5, 2.62]} />
       </mesh>
@@ -603,7 +601,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
         castShadow={false}
         receiveShadow={false}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <boxGeometry args={[0.84, 0.18, 2.66]} />
       </mesh>
@@ -613,7 +610,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
         castShadow={false}
         receiveShadow={false}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <boxGeometry args={[0.86, 0.06, 0.08]} />
       </mesh>
@@ -623,7 +619,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
         castShadow={false}
         receiveShadow={false}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <boxGeometry args={[0.78, 0.08, 2.58]} />
       </mesh>
@@ -637,7 +632,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.056, 0.056, 0.72, 10]} />
           </mesh>
@@ -648,7 +642,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.092, 0.092, 0.03, 10]} />
           </mesh>
@@ -660,7 +653,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           />
           <mesh
             position={[0, 0.055, 0]}
@@ -668,7 +660,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.68, 0.028, 0.078]} />
           </mesh>
@@ -686,7 +677,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[8.0, 4.45, 0.4]} />
         </mesh>
@@ -696,7 +686,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[8.0, 11.5, 0.4]} />
         </mesh>
@@ -708,7 +697,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[5.4, 4.45, 3.62]} />
         </mesh>
@@ -718,7 +706,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[5.4, 11.5, 3.62]} />
         </mesh>
@@ -732,7 +719,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.24, 15.8, 0.09]} />
           </mesh>
@@ -747,7 +733,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             />
             {[4.2, 5.6, 6.8].map((ry, rIdx) => (
               <mesh
@@ -759,7 +744,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
             ))}
           </group>
@@ -775,7 +759,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           />
         ))}
 
@@ -786,7 +769,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[8.16, 0.24, 0.72]} />
         </mesh>
@@ -796,7 +778,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[5.54, 0.24, 3.74]} />
         </mesh>
@@ -806,7 +787,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[8.2, 0.06, 0.08]} />
         </mesh>
@@ -816,7 +796,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[8.06, 0.09, 0.66]} />
         </mesh>
@@ -826,7 +805,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[5.42, 0.09, 3.64]} />
         </mesh>
@@ -838,7 +816,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[2.6, 0.11, 0.36]} />
         </mesh>
@@ -849,7 +826,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[2.9, 0.13, 0.42]} />
         </mesh>
@@ -861,7 +837,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[1.25, 0.56, 1.05]} />
         </mesh>
@@ -871,7 +846,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <boxGeometry args={[1.3, 0.07, 1.1]} />
         </mesh>
@@ -881,7 +855,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <cylinderGeometry args={[0.18, 0.22, 1.0, 10]} />
         </mesh>
@@ -891,7 +864,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <coneGeometry args={[0.3, 0.16, 10]} />
         </mesh>
@@ -905,7 +877,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <cylinderGeometry args={[0.056, 0.056, 7.84, 10]} />
             </mesh>
@@ -915,7 +886,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[7.76, 0.026, 0.076]} />
             </mesh>
@@ -928,7 +898,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                   castShadow={false}
                   receiveShadow={false}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 />
                 <mesh
                   position={[0, 0, -0.06]}
@@ -937,7 +906,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                   castShadow={false}
                   receiveShadow={false}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 />
               </group>
             ))}
@@ -951,7 +919,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
           castShadow={false}
           receiveShadow={false}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <cylinderGeometry args={[0.048, 0.048, 4.85, 8]} />
         </mesh>
@@ -967,7 +934,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <planeGeometry args={[1.9, 1.54]} />
           </mesh>
@@ -978,7 +944,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[2.04, 0.08, 0.09]} />
           </mesh>
@@ -988,7 +953,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[2.04, 0.08, 0.09]} />
           </mesh>
@@ -998,7 +962,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.08, 1.66, 0.09]} />
           </mesh>
@@ -1008,7 +971,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.08, 1.66, 0.09]} />
           </mesh>
@@ -1021,7 +983,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.045, 1.54, 0.055]} />
             </mesh>
@@ -1032,7 +993,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[1.92, 0.045, 0.055]} />
           </mesh>
@@ -1043,7 +1003,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[2.16, 0.09, 0.22]} />
           </mesh>
@@ -1053,7 +1012,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[2.08, 0.048, 0.16]} />
           </mesh>
@@ -1071,7 +1029,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[3.45, 0.06, 1.0]} />
           </mesh>
@@ -1081,7 +1038,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[3.49, 0.1, 0.045]} />
           </mesh>
@@ -1091,7 +1047,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.045, 0.1, 1.0]} />
           </mesh>
@@ -1101,7 +1056,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.045, 0.1, 1.0]} />
           </mesh>
@@ -1116,7 +1070,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
               <mesh
                 position={[0, 0.96, 0.5]}
@@ -1125,7 +1078,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
               <mesh
                 position={[0, 0.54, 0.48]}
@@ -1135,7 +1087,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
               <mesh
                 position={[0, 0.12, 0.025]}
@@ -1144,7 +1095,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
             </group>
           ))}
@@ -1156,7 +1106,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[3.4, 0.14, 0.025]} />
           </mesh>
@@ -1167,7 +1116,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.022, 0.022, 3.4, 8]} />
           </mesh>
@@ -1178,7 +1126,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.015, 0.015, 3.4, 8]} />
           </mesh>
@@ -1191,7 +1138,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             />
           ))}
 
@@ -1203,7 +1149,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           />
           <mesh
             position={[1.14, 2.04, 0.5]}
@@ -1212,7 +1157,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.022, 0.022, 0.94, 8]} />
           </mesh>
@@ -1223,7 +1167,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.015, 0.015, 0.94, 8]} />
           </mesh>
@@ -1236,7 +1179,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           />
           <mesh
             position={[4.5, 2.04, 0.26]}
@@ -1245,7 +1187,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.022, 0.022, 0.48, 8]} />
           </mesh>
@@ -1258,7 +1199,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.52, 0.12, 0.48]} />
           </mesh>
@@ -1268,7 +1208,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.3, 0.1, 0.24]} />
           </mesh>
@@ -1279,7 +1218,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[1.45, 0.08, 0.2]} />
           </mesh>
@@ -1290,7 +1228,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.65, 0.14, 0.34]} />
           </mesh>
@@ -1300,7 +1237,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[1.22, 0.036, 0.052]} />
           </mesh>
@@ -1310,7 +1246,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.98, 0.038, 0.052]} />
           </mesh>
@@ -1320,7 +1255,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.052, 0.034, 0.82]} />
           </mesh>
@@ -1341,7 +1275,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             />
           ))}
 
@@ -1353,7 +1286,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[1.14, 2.12, 0.07]} />
             </mesh>
@@ -1363,7 +1295,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[1.02, 2.02]} />
             </mesh>
@@ -1374,7 +1305,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.06, 0.22, 0.035]} />
             </mesh>
@@ -1384,7 +1314,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.16, 0.032, 0.025]} />
             </mesh>
@@ -1396,7 +1325,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <cylinderGeometry args={[0.02, 0.02, 0.14, 6]} />
               </mesh>
@@ -1409,7 +1337,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[1.26, 0.04, 0.34]} />
             </mesh>
@@ -1420,7 +1347,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[1.2, 0.045, 0.3]} />
             </mesh>
@@ -1431,7 +1357,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[0.92, 0.22]} />
             </mesh>
@@ -1444,7 +1369,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.18, 0.22, 0.08]} />
             </mesh>
@@ -1454,7 +1378,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <sphereGeometry args={[0.062, 10, 8]} />
             </mesh>
@@ -1465,7 +1388,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             />
             <mesh
               position={[0, -0.02, 0.062]}
@@ -1475,7 +1397,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             />
             <mesh
               position={[0, -0.02, 0.062]}
@@ -1485,7 +1406,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             />
             <pointLight
               position={[0, -0.1, 0.34]}
@@ -1505,7 +1425,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <coneGeometry args={[0.145, 0.36, 12]} />
             </mesh>
@@ -1516,7 +1435,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <torusGeometry args={[0.145, 0.009, 6, 14]} />
             </mesh>
@@ -1526,7 +1444,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <cylinderGeometry args={[0.13, 0.11, 0.04, 12]} />
             </mesh>
@@ -1536,7 +1453,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.16, 0.032, 0.14]} />
             </mesh>
@@ -1550,7 +1466,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.04, 0.06, 0.06]} />
             </mesh>
@@ -1559,7 +1474,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <cylinderGeometry args={[0.065, 0.058, 0.14, 10]} />
             </mesh>
@@ -1569,7 +1483,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <cylinderGeometry args={[0.058, 0.058, 0.025, 10]} />
             </mesh>
@@ -1585,7 +1498,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                   castShadow={false}
                   receiveShadow={false}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 />
                 <mesh
                   position={[0, 0.016, 0]}
@@ -1594,7 +1506,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                   castShadow={false}
                   receiveShadow={false}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 />
               </group>
             ))}
@@ -1607,7 +1518,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.92, 0.28, 0.02]} />
             </mesh>
@@ -1617,7 +1527,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[0.88, 0.25]} />
             </mesh>
@@ -1637,7 +1546,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <boxGeometry args={[0.036, 5.1, 0.056]} />
               </mesh>
@@ -1648,7 +1556,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <boxGeometry args={[0.036, 0.056, 1.02]} />
               </mesh>
@@ -1658,7 +1565,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <boxGeometry args={[0.036, 0.38, 0.056]} />
               </mesh>
@@ -1675,7 +1581,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
               <mesh
                 position={[0.23, 0, 0]}
@@ -1684,7 +1589,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
             </group>
           ))}
@@ -1699,7 +1603,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
               <mesh
                 position={[0, 0.014, 0]}
@@ -1708,7 +1611,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
             </group>
           ))}
@@ -1727,7 +1629,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
             </group>
           ))}
@@ -1743,7 +1644,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             />
           ))}
 
@@ -1757,7 +1657,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <boxGeometry args={[0.036, 1.24, 0.056]} />
               </mesh>
@@ -1772,7 +1671,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
             ))}
             <mesh
@@ -1781,7 +1679,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
               castShadow={false}
               receiveShadow={false}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.12, 0.18, 0.12]} />
             </mesh>
@@ -1797,7 +1694,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
               <mesh
                 position={[0.23, 0, 0]}
@@ -1806,7 +1702,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
                 castShadow={false}
                 receiveShadow={false}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               />
             </group>
           ))}
@@ -1819,7 +1714,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.96, 0.38, 0.022]} />
           </mesh>
@@ -1829,7 +1723,6 @@ export const ExteriorFireEscapeWing3D: React.FC = React.memo(() => {
             castShadow={false}
             receiveShadow={false}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <planeGeometry args={[0.92, 0.35]} />
           </mesh>
