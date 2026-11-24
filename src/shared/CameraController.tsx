@@ -4,6 +4,10 @@ import * as THREE from "three";
 import { create } from "zustand";
 import { playSwitchClank } from "../modules/reactor/audioSynth";
 import {
+  AIRLOCK_PASSABLE_OPEN_THRESHOLD,
+  airlockDoorState,
+} from "./airlockDoorState";
+import {
   canEngageCanvasPointerLock,
   classifyPressTarget,
   hasHoverableControlHandler,
@@ -37,6 +41,10 @@ interface BayStandingSpot {
 const STANDING_EYE_Y = 1.65;
 const SPAWN_X = 0.0;
 const SPAWN_Z = 0.52;
+const LOBBY_SPAWN_X = -0.38;
+const LOBBY_SPAWN_Z = 8.42;
+const LOBBY_SPAWN_YAW = -0.125;
+const LOBBY_SPAWN_PITCH = 0.01;
 const WALK_SPEED = 3.0;
 const SPRINT_SPEED = 4.4;
 const VELOCITY_DAMP = 14;
@@ -86,7 +94,7 @@ const BAY_STANDING_SPOTS: Record<CameraStation, BayStandingSpot> = {
   overview: {
     // [0] Hall Spawn: standing between Supervisor Desk and Main Operator Row facing -Z
     x: SPAWN_X,
-    z: 0.52,
+    z: SPAWN_Z,
     yaw: 0,
     pitch: DEFAULT_PITCH,
   },
@@ -163,6 +171,34 @@ const CONTROL_ROOM_COLLIDERS: readonly ColliderOBB[] = [
   { cx: 5.58, cz: 1.58, halfW: 0.28, halfD: 0.43, rotY: 0 },
 ];
 
+const LOBBY_COLLIDERS: readonly ColliderOBB[] = [
+  // Cozy Break Table Near East Frosted Window (`x = +0.92, z = +6.95`)
+  { cx: 0.92, cz: 6.95, halfW: 0.4, halfD: 0.7, rotY: 0 },
+  // Soviet Tubular-Steel Vinyl Chair (`x = +0.18, z = +6.75`)
+  { cx: 0.18, cz: 6.75, halfW: 0.25, halfD: 0.25, rotY: 0.3 },
+  // West-Wall Trophy & Medal Display Cabinet (`x = -3.52, z = +7.45`)
+  { cx: -3.52, cz: 7.45, halfW: 0.3, halfD: 1.15, rotY: 0 },
+  // South-Wall Non-Functional Elevator (`LIFT-84`) Frame (`x = -0.85, z = +10.18`)
+  { cx: -0.85, cz: 10.18, halfW: 1.15, halfD: 0.16, rotY: 0 },
+  // South-East Potted Rubber Plant (`STATE BOTANICAL ASSET #04`)
+  { cx: 0.86, cz: 9.45, halfW: 0.28, halfD: 0.28, rotY: 0 },
+];
+
+const R_CTRL_MIN_X = -5.48;
+const R_CTRL_MAX_X = 5.48;
+const R_CTRL_MIN_Z = -3.42;
+const R_CTRL_MAX_Z = 4.08;
+
+const R_DOOR_MIN_X = -0.38;
+const R_DOOR_MAX_X = 0.38;
+const R_DOOR_MIN_Z = 3.9;
+const R_DOOR_MAX_Z = 5.3;
+
+const R_LOBBY_MIN_X = -3.46;
+const R_LOBBY_MAX_X = 1.06;
+const R_LOBBY_MIN_Z = 5.12;
+const R_LOBBY_MAX_Z = 9.98;
+
 function pushCircleOutOfOBB(
   pos: THREE.Vector3,
   radius: number,
@@ -208,16 +244,85 @@ function pushCircleOutOfOBB(
   pos.z += -pushLX * sin + pushLZ * cos;
 }
 
+function clampToWalkableEnvelope(
+  pos: THREE.Vector3,
+  doorPassable: boolean,
+): void {
+  const px = pos.x;
+  const pz = pos.z;
+
+  if (!doorPassable) {
+    if (pz < 4.64) {
+      pos.x = THREE.MathUtils.clamp(px, R_CTRL_MIN_X, R_CTRL_MAX_X);
+      pos.z = THREE.MathUtils.clamp(pz, R_CTRL_MIN_Z, R_CTRL_MAX_Z);
+    } else {
+      pos.x = THREE.MathUtils.clamp(px, R_LOBBY_MIN_X, R_LOBBY_MAX_X);
+      pos.z = THREE.MathUtils.clamp(pz, R_LOBBY_MIN_Z, R_LOBBY_MAX_Z);
+    }
+    return;
+  }
+
+  const inCtrl =
+    px >= R_CTRL_MIN_X &&
+    px <= R_CTRL_MAX_X &&
+    pz >= R_CTRL_MIN_Z &&
+    pz <= R_CTRL_MAX_Z;
+  const inDoor =
+    px >= R_DOOR_MIN_X &&
+    px <= R_DOOR_MAX_X &&
+    pz >= R_DOOR_MIN_Z &&
+    pz <= R_DOOR_MAX_Z;
+  const inLobby =
+    px >= R_LOBBY_MIN_X &&
+    px <= R_LOBBY_MAX_X &&
+    pz >= R_LOBBY_MIN_Z &&
+    pz <= R_LOBBY_MAX_Z;
+
+  if (inCtrl || inDoor || inLobby) return;
+
+  const cX = THREE.MathUtils.clamp(px, R_CTRL_MIN_X, R_CTRL_MAX_X);
+  const cZ = THREE.MathUtils.clamp(pz, R_CTRL_MIN_Z, R_CTRL_MAX_Z);
+  const cD = (px - cX) * (px - cX) + (pz - cZ) * (pz - cZ);
+
+  const dX = THREE.MathUtils.clamp(px, R_DOOR_MIN_X, R_DOOR_MAX_X);
+  const dZ = THREE.MathUtils.clamp(pz, R_DOOR_MIN_Z, R_DOOR_MAX_Z);
+  const dD = (px - dX) * (px - dX) + (pz - dZ) * (pz - dZ);
+
+  const lX = THREE.MathUtils.clamp(px, R_LOBBY_MIN_X, R_LOBBY_MAX_X);
+  const lZ = THREE.MathUtils.clamp(pz, R_LOBBY_MIN_Z, R_LOBBY_MAX_Z);
+  const lD = (px - lX) * (px - lX) + (pz - lZ) * (pz - lZ);
+
+  if (cD <= dD && cD <= lD) {
+    pos.x = cX;
+    pos.z = cZ;
+  } else if (dD <= lD) {
+    pos.x = dX;
+    pos.z = dZ;
+  } else {
+    pos.x = lX;
+    pos.z = lZ;
+  }
+}
+
 function resolveControlRoomCollisions(pos: THREE.Vector3): void {
+  const doorPassable =
+    useGameStore.getState().lobbyMenuPhase !== "menu_locked" &&
+    airlockDoorState.openProgress > AIRLOCK_PASSABLE_OPEN_THRESHOLD;
+
   for (let pass = 0; pass < 2; pass++) {
-    pos.x = THREE.MathUtils.clamp(pos.x, -5.48, 5.48);
-    pos.z = THREE.MathUtils.clamp(pos.z, -3.42, 4.08);
-    for (let i = 0; i < CONTROL_ROOM_COLLIDERS.length; i++) {
-      pushCircleOutOfOBB(pos, PLAYER_RADIUS, CONTROL_ROOM_COLLIDERS[i]);
+    clampToWalkableEnvelope(pos, doorPassable);
+    if (pos.z < 4.65) {
+      for (let i = 0; i < CONTROL_ROOM_COLLIDERS.length; i++) {
+        pushCircleOutOfOBB(pos, PLAYER_RADIUS, CONTROL_ROOM_COLLIDERS[i]);
+      }
+    }
+    if (pos.z > 4.55) {
+      for (let i = 0; i < LOBBY_COLLIDERS.length; i++) {
+        pushCircleOutOfOBB(pos, PLAYER_RADIUS, LOBBY_COLLIDERS[i]);
+      }
     }
   }
-  pos.x = THREE.MathUtils.clamp(pos.x, -5.48, 5.48);
-  pos.z = THREE.MathUtils.clamp(pos.z, -3.42, 4.08);
+  clampToWalkableEnvelope(pos, doorPassable);
 }
 
 function shortestAngleDiff(a: number, b: number): number {
@@ -266,7 +371,7 @@ export const CameraController: React.FC = () => {
   const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk);
 
   const playerPosRef = useRef(
-    new THREE.Vector3(SPAWN_X, STANDING_EYE_Y, SPAWN_Z),
+    new THREE.Vector3(LOBBY_SPAWN_X, STANDING_EYE_Y, LOBBY_SPAWN_Z),
   );
   const currentEyeYRef = useRef(STANDING_EYE_Y);
   const velocityRef = useRef({ vx: 0, vz: 0 });
@@ -274,10 +379,10 @@ export const CameraController: React.FC = () => {
   const headBobOffsetRef = useRef(0);
 
   const lookStateRef = useRef({
-    targetYaw: BAY_STANDING_SPOTS.overview.yaw,
-    targetPitch: BAY_STANDING_SPOTS.overview.pitch,
-    currentYaw: BAY_STANDING_SPOTS.overview.yaw,
-    currentPitch: BAY_STANDING_SPOTS.overview.pitch,
+    targetYaw: LOBBY_SPAWN_YAW,
+    targetPitch: LOBBY_SPAWN_PITCH,
+    currentYaw: LOBBY_SPAWN_YAW,
+    currentPitch: LOBBY_SPAWN_PITCH,
   });
 
   const moveKeysRef = useRef({
@@ -292,12 +397,12 @@ export const CameraController: React.FC = () => {
 
   const glideTargetRef = useRef({
     active: false,
-    x: SPAWN_X,
-    z: SPAWN_Z,
+    x: LOBBY_SPAWN_X,
+    z: LOBBY_SPAWN_Z,
   });
   const rmbHeldRef = useRef<boolean>(false);
 
-  const skipNextPoseSyncRef = useRef<boolean>(false);
+  const skipNextPoseSyncRef = useRef<boolean>(true);
   const prevSeatedRef = useRef<boolean>(useGameStore.getState().isSeatedAtDesk);
   const activePointerIdRef = useRef<number | null>(null);
   const releaseRafRef = useRef<number>(0);
@@ -338,7 +443,10 @@ export const CameraController: React.FC = () => {
     const gs = useGameStore.getState();
     const raycaster = centerHoverRaycasterRef.current;
     raycaster.near = 0.05;
-    raycaster.far = gs.phase !== "playing" ? MENU_FAR : REACH_MAX_DIST;
+    raycaster.far =
+      gs.phase !== "playing" || gs.lobbyMenuPhase === "menu_locked"
+        ? MENU_FAR
+        : REACH_MAX_DIST;
     raycaster.setFromCamera(centerNdcRef.current, r3fState.camera);
     const hits = raycaster.intersectObjects(candidates, true);
     let hovering = false;
@@ -353,6 +461,10 @@ export const CameraController: React.FC = () => {
 
   // Glide smoothly to station standing spot when activeStation changes via [0]-[6] or UI
   useEffect(() => {
+    if (useGameStore.getState().lobbyMenuPhase !== "entered_control_room") {
+      skipNextPoseSyncRef.current = false;
+      return;
+    }
     if (skipNextPoseSyncRef.current) {
       skipNextPoseSyncRef.current = false;
       return;
@@ -410,7 +522,7 @@ export const CameraController: React.FC = () => {
             ? GRAB_ACTIVE_FAR
             : gs.isSeatedAtDesk
               ? SEATED_DESK_FAR
-              : gs.phase !== "playing"
+              : gs.phase !== "playing" || gs.lobbyMenuPhase === "menu_locked"
                 ? MENU_FAR
                 : REACH_MAX_DIST;
 
@@ -854,6 +966,14 @@ export const CameraController: React.FC = () => {
         }
       };
 
+      if (
+        e.key >= "0" &&
+        e.key <= "7" &&
+        useGameStore.getState().lobbyMenuPhase !== "entered_control_room"
+      ) {
+        return;
+      }
+
       if (e.key === "1") {
         e.preventDefault();
         leaveSeatedIfNeeded();
@@ -979,13 +1099,21 @@ export const CameraController: React.FC = () => {
     const isGrabbing = pointerLockInteraction.isGrabbingControl;
     const isSeated = gs.isSeatedAtDesk;
     const canMove =
-      gs.phase === "playing" && gs.isShiftControlReady && !isSeated && !isGrabbing;
+      gs.phase === "playing" &&
+      !isSeated &&
+      !isGrabbing &&
+      !pointerLockInteraction.mainMenuOpen &&
+      !pointerLockInteraction.debugMenuOpen &&
+      !pointerLockInteraction.shiftTransitionActive;
 
     const playerPos = playerPosRef.current;
     const vel = velocityRef.current;
     const glide = glideTargetRef.current;
 
-    const nearDesk = !isSeated && checkWithinDeskRange(playerPos.x, playerPos.z);
+    const nearDesk =
+      gs.lobbyMenuPhase === "entered_control_room" &&
+      !isSeated &&
+      checkWithinDeskRange(playerPos.x, playerPos.z);
     if (nearDesk !== gs.canSitAtDesk) {
       gs.setCanSitAtDesk(nearDesk);
     }
@@ -1129,8 +1257,16 @@ export const CameraController: React.FC = () => {
       } else if (glide.active && canMove) {
         const prevX = playerPos.x;
         const prevZ = playerPos.z;
-        playerPos.x = THREE.MathUtils.damp(playerPos.x, glide.x, 7.5, dt);
-        playerPos.z = THREE.MathUtils.damp(playerPos.z, glide.z, 7.5, dt);
+        const doorPassable =
+          airlockDoorState.openProgress > AIRLOCK_PASSABLE_OPEN_THRESHOLD;
+        let stepTargetX = glide.x;
+        let stepTargetZ = glide.z;
+        if (playerPos.z > 4.06 && glide.z < 4.06) {
+          stepTargetX = 0;
+          stepTargetZ = doorPassable ? 3.95 : 5.15;
+        }
+        playerPos.x = THREE.MathUtils.damp(playerPos.x, stepTargetX, 7.5, dt);
+        playerPos.z = THREE.MathUtils.damp(playerPos.z, stepTargetZ, 7.5, dt);
         resolveControlRoomCollisions(playerPos);
         vel.vx = dt > 1e-4 ? (playerPos.x - prevX) / dt : 0;
         vel.vz = dt > 1e-4 ? (playerPos.z - prevZ) / dt : 0;

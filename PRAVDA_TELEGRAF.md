@@ -329,3 +329,16 @@
   > *3. **Kommissær Volkovs Direktiv i `P.O.S.T.-84` (`post84Mail.ts`, `desktopOsCanvas.ts`, `DesktopComputer3D.tsx` & `CameraController.tsx`):** Utovertoppen i `ISKRA-84`-innboksen krever nå personlig godkjenning med `[ ACCEPT DIRECTIVE — BEGIN TRAINING ]` (som reiser operatøren opp mot `SKALA-84` og starter Steg 1) eller `[ SKIP TRAINING — CERTIFIED OPERATOR ]` for sertifiserte kamerater.*
   >
   > *Hent fra Kreml (`npm run pravda`) og sjekk innboksen på skrivebordet først — hvis ikke minner K.O.M.R.A.D.-84 deg vennlig (og deretter mindre vennlig) på hvem som eier oksygenet i Sektor 84! MELTDOWN IS PROPAGANDA! 🎖️📺🧭🎙️☭"*
+
+### [TELEGRAM #024 — STEMPLET: QUOTA-84 // MCR-4 HEISLOBBY, BRUTALISTISK BRANNTAPP-FLØY & K.O.M.R.A.D.-84 AZ-5 ROBOTDANS!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Full 3D `MCR-4` ankomstlobby, WebGL GPU-oppvarming, snødekt branntrapp-fløy (`BALCONY B-4`) og K.O.M.R.A.D.-84s 126 BPM robotdans under `CHANNEL AZ-5`!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Sektor 84 har fått en massiv oppgradering både utenfor panoramavinduet, i ankomstslusen og rett i selve panoptikon-kranen:*
+  > *1. **`MCR-4` Heislobby, Sluse & `SovOsBootOverlay` (`McrLobbyRoom3D.tsx`, `airlockDoorState.ts`, `SovOsBootOverlay.tsx` & `shiftSaveStorage.ts`):** Hovedmenyen skjer nå diegetisk i den sovjetiske heisanterommet bak luftslusen — komplett med `SOV-OS` GPU shader-oppvarming under BIOS-skjermen og sikker lagring/gjenopptakelse av nattskiftet!*
+  > *2. **Utvendig Brutalistisk Fløy, `BALCONY B-4` & Caged Fire Escape (`ExteriorFireEscapeWing3D.tsx` & `ControlRoomScene.tsx`):** Den brå snøbakke-kanten på venstre side av panoramavinduet (ved `UNIT B`) er nå 100 % rammet inn av en autentisk 1984 betongfløy med frossent korridorvindu, snødekt stålbalkong, varm rav-lampe, rødt brannsandspann, sigarettsneip-boks (`SMOKE BREAK ZONE // MAX 30 SEC`) og bur-sikret branntrapp hvor de nederste trinnene naturligvis er «rekvirert til Femårsplanen»!*
+  > *3. **K.O.M.R.A.D.-84s 4-Fasers Sovjetiske Robotdans (`SovietPanopticonRig3D.tsx` & `komradSilenceState.ts`):** Når `CHANNEL AZ-5 // SERVICE BROADCAST`-easter-egget spilles på `SKALA-84`, glir K.O.M.R.A.D.-84 pent ut på høyre flanke (uten å blokkere videoen), holder kjeft på PA-maset, og kjører 4 synkroniserte 126 BPM-bevegelser (*Hydraulic Kazachok*, *1984 Gosplan Factory Robot*, *Raise the Quota* og *Polivoks Disco Point*) — før han knipser lynraskt tilbake til byråkratisk mantis-stilling idet sendingen slutter!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og fyr opp `Shift+A+Z+5` — MELTDOWN IS PROPAGANDA! 🎖️🏗️🕺☢️☭"*

@@ -395,6 +395,90 @@ function startSmoothWheelSwivelDrag(
   window.addEventListener("pointercancel", handleUp);
 }
 
+/**
+ * Strictly Vertical Linear Lever Drag (Pointer-Lock & Free-Cursor Safe):
+ * - Maps ONLY vertical mouse movement (`-ev.movementY` under Pointer Lock, `-delta clientY` otherwise)
+ *   linearly into clamped `[minVal, maxVal]` without any `atan2` polar math or 3D rotation mutation.
+ * - Pushing mouse UP (`dy < 0`) raises value toward `maxVal`; pulling DOWN (`dy > 0`) lowers toward `minVal`.
+ */
+function startLinearVerticalLeverDrag(
+  e: ThreeEvent<PointerEvent>,
+  initialValue: number,
+  minVal: number,
+  maxVal: number,
+  onChange: (nextVal: number) => void,
+  onActiveChange?: (isActive: boolean) => void,
+  dragSpanPx = 150,
+): () => void {
+  if (useCameraLookStore.getState().isFreeLookMode) return () => {};
+  e.stopPropagation();
+  onActiveChange?.(true);
+
+  const r3fTarget = e.target as unknown as {
+    setPointerCapture?: (id: number) => void;
+    releasePointerCapture?: (id: number) => void;
+  };
+  r3fTarget?.setPointerCapture?.(e.pointerId);
+
+  let prevClientY = e.nativeEvent.clientY;
+  let currentVal = THREE.MathUtils.clamp(initialValue, minVal, maxVal);
+  const range = Math.max(1e-4, maxVal - minVal);
+  const sensitivity = range / Math.max(40, dragSpanPx);
+  let lastDetentBucket = Math.round(((currentVal - minVal) / range) * 20);
+  let finished = false;
+
+  playSwitchClank(true);
+
+  const handleMove = (ev: PointerEvent) => {
+    if (finished) return;
+    const isLocked = document.pointerLockElement !== null;
+    const rawDy = isLocked ? ev.movementY : ev.clientY - prevClientY;
+    prevClientY = ev.clientY;
+
+    if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+    const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
+
+    const nextVal = THREE.MathUtils.clamp(
+      currentVal - dy * sensitivity,
+      minVal,
+      maxVal,
+    );
+    if (Math.abs(nextVal - currentVal) < 1e-4) return;
+    currentVal = nextVal;
+    onChange(currentVal);
+
+    const bucket = Math.round(((currentVal - minVal) / range) * 20);
+    if (bucket !== lastDetentBucket) {
+      lastDetentBucket = bucket;
+      playDetentClick((Math.abs(bucket) % 5) + 1);
+    }
+  };
+
+  const cleanup = (playReleaseClank: boolean) => {
+    if (finished) return;
+    finished = true;
+    onActiveChange?.(false);
+    r3fTarget?.releasePointerCapture?.(e.pointerId);
+    window.removeEventListener("pointermove", handleMove);
+    window.removeEventListener("pointerup", handleUp);
+    window.removeEventListener("pointercancel", handleUp);
+    window.removeEventListener("blur", handleBlur);
+    if (playReleaseClank) {
+      playSwitchClank(false);
+    }
+  };
+
+  const handleUp = () => cleanup(true);
+  const handleBlur = () => cleanup(false);
+
+  window.addEventListener("pointermove", handleMove);
+  window.addEventListener("pointerup", handleUp);
+  window.addEventListener("pointercancel", handleUp);
+  window.addEventListener("blur", handleBlur);
+
+  return () => cleanup(false);
+}
+
 const BOLT_ANGLES_8 = [
   0,
   Math.PI * 0.25,
@@ -3964,6 +4048,124 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
   );
 };
 
+const PUMP_LEVER_TRAVEL_HALF_M = 0.062;
+const PUMP_LEVER_MAX_PITCH_RAD = THREE.MathUtils.degToRad(26);
+
+function paintPumpThrottleScalePlate(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  side: "left" | "right",
+): void {
+  ctx.fillStyle = "#101613";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#b8a46b";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, w - 4, h - 4);
+
+  // Highlight nominal 50-85% operating band along inner slot edge
+  const bandYTop = 64;
+  const bandYBot = 140;
+  const bandX = side === "left" ? w - 16 : 6;
+  ctx.fillStyle = "rgba(51, 255, 102, 0.28)";
+  ctx.fillRect(bandX, bandYTop, 10, bandYBot - bandYTop);
+  ctx.fillStyle = "#33ff66";
+  ctx.fillRect(side === "left" ? w - 8 : 6, bandYTop, 2, bandYBot - bandYTop);
+
+  const ticks = [
+    { label: "100%", y: 32, major: true, color: "#33ff66" },
+    { label: "", y: 59, major: false, color: "#b8a46b" },
+    { label: "75%", y: 86, major: true, color: "#e6dec3" },
+    { label: "", y: 113, major: false, color: "#b8a46b" },
+    { label: "50%", y: 140, major: true, color: "#33ff66" },
+    { label: "", y: 167, major: false, color: "#b8a46b" },
+    { label: "25%", y: 194, major: true, color: "#ffb000" },
+    { label: "", y: 221, major: false, color: "#b8a46b" },
+    { label: "0%", y: 248, major: true, color: "#ff5555" },
+  ];
+
+  for (const tick of ticks) {
+    const tickW = tick.major ? 22 : 12;
+    const tickH = tick.major ? 4 : 2;
+    const tickX = side === "left" ? w - 6 - tickW : 6;
+    ctx.fillStyle = tick.color;
+    ctx.fillRect(tickX, tick.y - Math.floor(tickH / 2), tickW, tickH);
+
+    if (side === "left" && tick.label) {
+      ctx.font = 'bold 30px "VT323", monospace';
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = tick.color;
+      ctx.fillText(tick.label, w - 34, tick.y + 1);
+    }
+  }
+
+  if (side === "right") {
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.font = 'bold 26px "VT323", monospace';
+    ctx.fillStyle = "#33ff66";
+    ctx.fillText("▲ MAX", 34, 32);
+
+    ctx.fillStyle = "#8ce6a8";
+    ctx.font = 'bold 24px "VT323", monospace';
+    ctx.fillText("NOMINAL", 34, 92);
+    ctx.fillStyle = "#33ff66";
+    ctx.fillText("50-85%", 34, 118);
+
+    ctx.font = 'bold 26px "VT323", monospace';
+    ctx.fillStyle = "#ff5555";
+    ctx.fillText("▼ STOP", 34, 248);
+  }
+}
+
+function paintPumpFlowBargraph(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  flowPct: number,
+  isBlackout: boolean,
+): void {
+  const clampedPct = isBlackout ? 0 : THREE.MathUtils.clamp(Math.round(flowPct), 0, 100);
+  const statusColor = isBlackout
+    ? "#773030"
+    : clampedPct >= 50
+      ? "#33ff66"
+      : clampedPct > 0
+        ? "#ffb000"
+        : "#ff5555";
+  const borderColor = isBlackout
+    ? "#551a1a"
+    : clampedPct >= 50
+      ? "#33ff66"
+      : clampedPct > 0
+        ? "#b8a46b"
+        : "#ff2a2a";
+
+  ctx.fillStyle = "#101613";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, w - 4, h - 4);
+  drawFittedPlaqueText(
+    ctx,
+    isBlackout ? "PUMP FLOW: 0% (OFF)" : `PUMP FLOW: ${clampedPct}%`,
+    w / 2,
+    35,
+    w - 12,
+    '900 30px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
+    statusColor,
+    "#000000",
+    3.2,
+    "2px",
+  );
+  ctx.fillStyle = "#080c0a";
+  ctx.fillRect(14, 48, w - 28, 24);
+  ctx.strokeStyle = "#364940";
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(14, 48, w - 28, 24);
+}
+
 interface SculptedPumpValveAssembly3DProps {
   position: [number, number, number];
   scale?: number;
@@ -3975,24 +4177,25 @@ interface SculptedPumpValveAssembly3DProps {
 const SculptedPumpValveAssembly3D: React.FC<
   SculptedPumpValveAssembly3DProps
 > = ({ position, scale = 1, pumpIndex, label, subLabel }) => {
-  const wheelRef = useRef<THREE.Group>(null);
   const leverArmRef = useRef<THREE.Group>(null);
   const lampMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const heatScaleMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const heatBarMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const heatBarMeshRef = useRef<THREE.Mesh>(null);
+  const flowScaleMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const flowBarMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const flowBarMeshRef = useRef<THREE.Mesh>(null);
   const lastPumpOnRef = useRef<string | null>(null);
   const pumpDraggingRef = useRef(false);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  const lastDrawnFlowSigRef = useRef<string>("");
+  const lastFlowDrawRef = useRef<number>(-1);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
   useEffect(() => {
-    const coolId = pumpIndex === 0 ? "pumpABearingCool" : "pumpBBearingCool";
     const flowId = pumpIndex === 0 ? "pumpAFlow" : "pumpBFlow";
-    registerKomradControlObject(coolId, wheelRef.current);
-    registerKomradControlObject(flowId, leverArmRef.current, [0, 0, 0.118]);
+    registerKomradControlObject(flowId, leverArmRef.current, [0, 0, 0.13]);
     return () => {
-      registerKomradControlObject(coolId, null);
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
       registerKomradControlObject(flowId, null);
     };
   }, [pumpIndex]);
@@ -4001,153 +4204,129 @@ const SculptedPumpValveAssembly3D: React.FC<
     () =>
       makePlaqueTex(label, subLabel ?? "FLOW VALVE", {
         width: 384,
-        height: 140,
-        titleSize: 48,
-        subSize: 36,
+        height: 112,
+        titleSize: 44,
+        subSize: 30,
       }),
     [label, subLabel],
   );
 
-  const wheelSubLabelTex = useMemo(
-    () =>
-      makePlaqueTex("BEARING COOL", "WHEEL: COOL %", {
-        width: 240,
-        height: 76,
-        titleSize: 28,
-        subSize: 21,
-      }),
-    [],
-  );
-
   const leverSubLabelTex = useMemo(
     () =>
-      makePlaqueTex("PUMP THROTTLE", "LEVER: FLOW %", {
-        width: 240,
-        height: 76,
-        titleSize: 27,
-        subSize: 21,
+      makePlaqueTex("THROTTLE: FLOW %", "", {
+        width: 360,
+        height: 48,
+        titleSize: 24,
+        titleColor: "#ffe066",
       }),
     [],
   );
 
-  const lastBearingDegRef = useRef<number>(-1);
-  const lastHeatDrawRef = useRef<number>(-1);
-  const heatScaleTex = useMemo(() => {
+  const leftScalePlateTex = useMemo(
+    () =>
+      createCrispPanelTexture(144, 280, (ctx, w, h) =>
+        paintPumpThrottleScalePlate(ctx, w, h, "left"),
+      ),
+    [],
+  );
+
+  const rightScalePlateTex = useMemo(
+    () =>
+      createCrispPanelTexture(144, 280, (ctx, w, h) =>
+        paintPumpThrottleScalePlate(ctx, w, h, "right"),
+      ),
+    [],
+  );
+
+  const flowScaleTex = useMemo(() => {
     return createCrispPanelTexture(360, 84, (ctx, w, h) => {
-      ctx.fillStyle = "#101613";
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = "#b8a46b";
-      ctx.lineWidth = 4;
-      ctx.strokeRect(2, 2, w - 4, h - 4);
-      drawFittedPlaqueText(
+      const s = useGameStore.getState();
+      paintPumpFlowBargraph(
         ctx,
-        "BEARING: 20°C",
-        w / 2,
-        35,
-        w - 12,
-        '900 30px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
-        "#ffe066",
-        "#000000",
-        3.2,
-        "2px",
+        w,
+        h,
+        s.pumpThrottle[pumpIndex] ?? 0,
+        s.isBlackout,
       );
-      ctx.strokeStyle = "#364940";
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(14, 48, w - 28, 24);
     });
-  }, []);
+  }, [pumpIndex]);
 
   useFrame(({ clock }) => {
     const state = useGameStore.getState();
-    const throttle = state.isBlackout ? 0 : state.pumpThrottle[pumpIndex];
+    const throttle = state.isBlackout ? 0 : (state.pumpThrottle[pumpIndex] ?? 0);
+    const flowPct = Math.round(throttle);
     const isPumpOn = state.pumpsActive[pumpIndex] && !state.isBlackout;
-    const bearingHeat = pumpIndex === 0 ? state.pumpAHeat : state.pumpBHeat;
-    const bearingDegC = Math.round(20 + bearingHeat);
 
     const now = clock.getElapsedTime();
+    const flowSig = `${flowPct}|${state.isBlackout}`;
     if (
       !state.diagFeedActive &&
-      (lastHeatDrawRef.current < 0 || now - lastHeatDrawRef.current >= 0.08)
+      (lastFlowDrawRef.current < 0 || now - lastFlowDrawRef.current >= 0.06)
     ) {
-      lastHeatDrawRef.current = now;
-      if (bearingDegC !== lastBearingDegRef.current) {
-        lastBearingDegRef.current = bearingDegC;
-        const tex = heatScaleMatRef.current?.map as
+      lastFlowDrawRef.current = now;
+      if (flowSig !== lastDrawnFlowSigRef.current) {
+        lastDrawnFlowSigRef.current = flowSig;
+        const tex = flowScaleMatRef.current?.map as
           | THREE.CanvasTexture
           | undefined;
         const canvas = tex?.image as HTMLCanvasElement | undefined;
         const ctx = canvas?.getContext("2d");
         if (tex && canvas && ctx) {
-          const w = canvas.width;
-          const h = canvas.height;
-          ctx.fillStyle = "#101613";
-          ctx.fillRect(0, 0, w, h);
-          ctx.strokeStyle = bearingHeat >= 80 ? "#ff2a2a" : "#b8a46b";
-          ctx.lineWidth = 4;
-          ctx.strokeRect(2, 2, w - 4, h - 4);
-          drawFittedPlaqueText(
+          paintPumpFlowBargraph(
             ctx,
-            `BEARING: ${bearingDegC}°C`,
-            w / 2,
-            35,
-            w - 12,
-            '900 30px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
-            bearingHeat >= 80 ? "#ff5555" : "#ffe066",
-            "#000000",
-            3.2,
-            "2px",
+            canvas.width,
+            canvas.height,
+            flowPct,
+            state.isBlackout,
           );
-          ctx.strokeStyle = "#364940";
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(14, 48, w - 28, 24);
           tex.needsUpdate = true;
         }
       }
     }
 
-    // Continuous smooth rotational angle on the 6-spoke cast-iron BEARING COOLING valve wheel
-    if (wheelRef.current) {
-      const coolingPct = state.isBlackout ? 0 : state.oilCoolerValve;
-      const targetWheelRot = -(coolingPct / 100) * Math.PI * 1.8;
-      const cavitationJitter =
-        !state.isBlackout &&
-        isPumpOn &&
-        (throttle > 88 || bearingHeat >= 75 || state.wetSteamPenalty > 0.15)
-          ? Math.sin(clock.getElapsedTime() * 44 + pumpIndex * 2) * 0.035
-          : 0;
-      wheelRef.current.rotation.z = THREE.MathUtils.lerp(
-        wheelRef.current.rotation.z,
-        targetWheelRot + cavitationJitter,
-        0.45,
-      );
-    }
-
+    // 100% deterministic 3D pose driven solely from clamped [0..1] flow value (rotation.y & rotation.z locked to 0)
     if (leverArmRef.current) {
-      const ratio = 1 - throttle / 100;
-      const targetAngleX = -0.52 + ratio * 0.96;
-      leverArmRef.current.rotation.x = THREE.MathUtils.lerp(
-        leverArmRef.current.rotation.x,
-        targetAngleX,
-        0.4,
+      const flowNorm = THREE.MathUtils.clamp(throttle / 100, 0, 1);
+      const targetPosY = THREE.MathUtils.lerp(
+        -PUMP_LEVER_TRAVEL_HALF_M,
+        PUMP_LEVER_TRAVEL_HALF_M,
+        flowNorm,
       );
+      const targetAngleX = THREE.MathUtils.lerp(
+        PUMP_LEVER_MAX_PITCH_RAD,
+        -PUMP_LEVER_MAX_PITCH_RAD,
+        flowNorm,
+      );
+      leverArmRef.current.position.x = 0;
+      leverArmRef.current.position.y = THREE.MathUtils.clamp(
+        THREE.MathUtils.lerp(leverArmRef.current.position.y, targetPosY, 0.38),
+        -PUMP_LEVER_TRAVEL_HALF_M,
+        PUMP_LEVER_TRAVEL_HALF_M,
+      );
+      leverArmRef.current.position.z = 0.022;
+      leverArmRef.current.rotation.x = THREE.MathUtils.clamp(
+        THREE.MathUtils.lerp(leverArmRef.current.rotation.x, targetAngleX, 0.38),
+        -PUMP_LEVER_MAX_PITCH_RAD,
+        PUMP_LEVER_MAX_PITCH_RAD,
+      );
+      leverArmRef.current.rotation.y = 0;
+      leverArmRef.current.rotation.z = 0;
     }
 
-    // Update Horizontal Bearing Heat Bar cleanly below the wheel & switch (+35% wider & taller)
-    if (heatBarMeshRef.current && heatBarMatRef.current) {
-      const hRatio = THREE.MathUtils.clamp(bearingHeat / 100, 0.04, 1);
-      heatBarMeshRef.current.scale.x = hRatio;
-      heatBarMeshRef.current.position.x = -0.156 + hRatio * 0.156;
-      const heatColor =
-        bearingHeat >= 80
-          ? "#ff2a2a"
-          : bearingHeat >= 55
-            ? "#ffb000"
-            : "#33ff66";
-      heatBarMatRef.current.color.set(heatColor);
-      heatBarMatRef.current.emissive.set(heatColor);
-      heatBarMatRef.current.emissiveIntensity =
-        bearingHeat >= 80
-          ? 1.5 + Math.sin(clock.getElapsedTime() * 16) * 0.6
+    // Live Horizontal PUMP FLOW Bargraph Readout
+    const fRatio = THREE.MathUtils.clamp(throttle / 100, 0, 1);
+    if (flowBarMeshRef.current && flowBarMatRef.current) {
+      flowBarMeshRef.current.visible = fRatio > 0.005;
+      const safeScale = Math.max(0.01, fRatio);
+      flowBarMeshRef.current.scale.x = safeScale;
+      flowBarMeshRef.current.position.x = -0.162 + safeScale * 0.162;
+      const flowColor =
+        flowPct >= 50 ? "#33ff66" : flowPct > 0 ? "#ffb000" : "#ff2a2a";
+      flowBarMatRef.current.color.set(flowColor);
+      flowBarMatRef.current.emissive.set(flowColor);
+      flowBarMatRef.current.emissiveIntensity =
+        flowPct === 0
+          ? 1.35 + Math.sin(clock.getElapsedTime() * 12) * 0.45
           : 0.95;
     }
 
@@ -4187,31 +4366,13 @@ const SculptedPumpValveAssembly3D: React.FC<
     }
   });
 
-  const handleWheelPointerDown = (e: ThreeEvent<PointerEvent>) => {
-    const coolId = pumpIndex === 0 ? "pumpABearingCool" : "pumpBBearingCool";
-    const curCooling = useGameStore.getState().oilCoolerValve;
-    startSmoothWheelSwivelDrag(
-      e,
-      wheelRef.current,
-      curCooling,
-      0,
-      100,
-      (nextVal) => {
-        useGameStore.getState().setOilCoolerValve(nextVal);
-      },
-      (active) => {
-        pumpDraggingRef.current = active;
-        notifyPlayerControlInteraction(coolId, active);
-      },
-    );
-  };
-
   const handleLeverPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = null;
     const flowId = pumpIndex === 0 ? "pumpAFlow" : "pumpBFlow";
-    const curThrottle = useGameStore.getState().pumpThrottle[pumpIndex];
-    startSmoothWheelSwivelDrag(
+    const curThrottle = useGameStore.getState().pumpThrottle[pumpIndex] ?? 0;
+    dragCleanupRef.current = startLinearVerticalLeverDrag(
       e,
-      leverArmRef.current,
       curThrottle,
       0,
       100,
@@ -4221,7 +4382,11 @@ const SculptedPumpValveAssembly3D: React.FC<
       (active) => {
         pumpDraggingRef.current = active;
         notifyPlayerControlInteraction(flowId, active);
+        if (!active) {
+          dragCleanupRef.current = null;
+        }
       },
+      150,
     );
   };
 
@@ -4231,20 +4396,16 @@ const SculptedPumpValveAssembly3D: React.FC<
       scale={scale}
       onPointerOver={(e) => {
         e.stopPropagation();
-        const st = useGameStore.getState();
-        st.setHoveredDiagnosticId(st.coreTemp > 520 ? "core" : "bearing");
+        useGameStore.getState().setHoveredDiagnosticId("core");
       }}
       onPointerOut={() => {
         const st = useGameStore.getState();
-        if (
-          st.hoveredDiagnosticId === "core" ||
-          st.hoveredDiagnosticId === "bearing"
-        ) {
+        if (st.hoveredDiagnosticId === "core") {
           st.setHoveredDiagnosticId(null);
         }
       }}
     >
-      {/* Bolted Dark Cast-Iron Mounting Backplate so Promoted Pump Modules Sit Flush on Vertical Riser */}
+      {/* Bolted Dark Cast-Iron Mounting Backplate Flush Against Vertical Riser */}
       <mesh position={[0, 0.015, 0.018]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[0.405, 0.465, 0.016]} />
         <meshStandardMaterial
@@ -4261,9 +4422,10 @@ const SculptedPumpValveAssembly3D: React.FC<
         <boxGeometry args={[0.42, 0.48, 0.012]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {/* Raised Engraved Brass & Iron Nameplate (+35% taller 3D geometry) */}
-      <mesh position={[0, 0.184, 0.032]} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[0.398, 0.128, 0.012]} />
+
+      {/* Raised Engraved Brass & Iron Nameplate */}
+      <mesh position={[0, 0.2, 0.032]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.398, 0.094, 0.012]} />
         <meshStandardMaterial
           color="#8c7a4b"
           metalness={0.85}
@@ -4272,8 +4434,8 @@ const SculptedPumpValveAssembly3D: React.FC<
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[0, 0.184, 0.041]} raycast={NOOP_RAYCAST}>
-        <planeGeometry args={[0.382, 0.114]} />
+      <mesh position={[0, 0.2, 0.041]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[0.382, 0.082]} />
         <meshStandardMaterial
           map={nameplateTex}
           emissive="#ffffff"
@@ -4286,14 +4448,15 @@ const SculptedPumpValveAssembly3D: React.FC<
         />
       </mesh>
 
-      {/* Caged Soviet Jewel Lamp, Backlit Indicator Block & Horizontal Bearing Heat Bar Below Wheel (+35% wider & taller: `BEARING: XX°C`) */}
+      {/* Caged Soviet Jewel Lamp & Backlit Status Block */}
       <CagedSovietJewelLamp3D
-        position={[-0.125, 0.096, 0.038]}
+        position={[-0.132, 0.125, 0.038]}
         lampMatRef={lampMatRef}
-        scale={0.84}
+        scale={0.78}
       />
       <SovietBacklitIndicatorBlock3D
-        position={[0.048, 0.096, 0.038]}
+        position={[0.044, 0.125, 0.038]}
+        scale={0.94}
         label={pumpIndex === 0 ? "PUMP A" : "PUMP B"}
         getAlertState={(s) => {
           const bHeat = pumpIndex === 0 ? s.pumpAHeat : s.pumpBHeat;
@@ -4315,222 +4478,67 @@ const SculptedPumpValveAssembly3D: React.FC<
         }}
       />
 
-      {/* Dedicated Sub-Label Plaques for Left Rotary Wheel (BEARING COOL) & Right Knife Lever (PUMP THROTTLE) */}
-      <group position={[-0.082, -0.112, 0.042]}>
+      {/* Left & Right Brass Graduation Scale Plates (0% STOP -> 100% MAX, 50-85% NOMINAL) */}
+      <group position={[-0.131, -0.004, 0.039]}>
         <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.156, 0.044, 0.008]} />
-          <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
-        </mesh>
-        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.148, 0.038]} />
+          <boxGeometry args={[0.11, 0.204, 0.008]} />
           <meshStandardMaterial
-            map={wheelSubLabelTex}
-            emissive="#ffffff"
-            emissiveMap={wheelSubLabelTex}
-            emissiveIntensity={0.38}
-            roughness={0.55}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-      </group>
-      <group position={[0.092, -0.112, 0.042]}>
-        <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.156, 0.044, 0.008]} />
-          <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
-        </mesh>
-        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.148, 0.038]} />
-          <meshStandardMaterial
-            map={leverSubLabelTex}
-            emissive="#ffffff"
-            emissiveMap={leverSubLabelTex}
-            emissiveIntensity={0.38}
-            roughness={0.55}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-      </group>
-      <group position={[0.005, -0.176, 0.038]}>
-        <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.362, 0.07, 0.016]} />
-          <meshStandardMaterial
-            color="#101513"
-            roughness={0.5}
-            metalness={0.7}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.005}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.0105]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.346, 0.062]} />
-          <meshStandardMaterial
-            ref={heatScaleMatRef}
-            map={heatScaleTex}
-            emissive="#ffffff"
-            emissiveMap={heatScaleTex}
-            emissiveIntensity={0.45}
-            roughness={0.75}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-        <mesh ref={heatBarMeshRef} position={[0, -0.013, 0.0155]} raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.312, 0.016, 0.008]} />
-          <meshStandardMaterial
-            ref={heatBarMatRef}
-            color="#33ff66"
-            emissive="#33ff66"
-            emissiveIntensity={1.15}
-          />
-        </mesh>
-      </group>
-
-      {/* Heavy Bolted Cast-Iron Valve Manifold & Enlarged 6-Spoke Handwheel (BEARING COOLING VALVE) */}
-      <group
-        position={[-0.076, -0.012, 0.038]}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          useGameStore
-            .getState()
-            .setHoveredControlHint(
-              "BEARING COOLING WHEEL: Scroll/Drag to open bearing cooling water flow (keep >=50% to keep bearings ~38°C)!",
-            );
-        }}
-        onPointerOut={(e) => {
-          e.stopPropagation();
-          useGameStore.getState().setHoveredControlHint(null);
-        }}
-        onWheel={(e) => {
-          if (useCameraLookStore.getState().isFreeLookMode) return;
-          e.stopPropagation();
-          e.nativeEvent?.stopImmediatePropagation?.();
-          const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
-          const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 2 : 8);
-          const s = useGameStore.getState();
-          const nextCooling = THREE.MathUtils.clamp(
-            Math.round(s.oilCoolerValve + step),
-            0,
-            100,
-          );
-          if (nextCooling !== Math.round(s.oilCoolerValve)) {
-            playDetentClick((Math.abs(nextCooling) % 5) + 1);
-            s.setOilCoolerValve(nextCooling);
-          }
-        }}
-        onPointerDown={handleWheelPointerDown}
-      >
-        {/* Pipe Manifold Flange & Brushed-Brass Degree Scale Plate */}
-        <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-          <cylinderGeometry args={[0.068, 0.076, 0.032, 12]} />
-          <meshStandardMaterial
-            color="#18211b"
-            roughness={0.45}
-            metalness={0.68}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.008}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.018]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-          <cylinderGeometry args={[0.056, 0.058, 0.008, 16]} />
-          <meshStandardMaterial
-            color="#b8a46b"
+            color="#8c7a4b"
             metalness={0.85}
             roughness={0.28}
             bumpMap={brassTex.bumpMap}
-            bumpScale={0.005}
+            bumpScale={0.004}
           />
         </mesh>
-        {/* Valve Stem Stuffing Box */}
-        <mesh position={[0, 0, 0.035]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-          <cylinderGeometry args={[0.022, 0.028, 0.068, 10]} />
+        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.102, 0.194]} />
           <meshStandardMaterial
-            color="#364940"
-            roughness={0.45}
-            metalness={0.7}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.006}
+            map={leftScalePlateTex}
+            emissive="#ffffff"
+            emissiveMap={leftScalePlateTex}
+            emissiveIntensity={0.38}
+            roughness={0.55}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
           />
         </mesh>
-
-        {/* Enlarged 6-Spoke Cast-Iron Handwheel with Tight Non-Overlapping Hit Target */}
-        <group
-          ref={wheelRef}
-          position={[0, 0, 0.068]}
-          onPointerDown={handleWheelPointerDown}
-        >
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.105, 0.105, 0.11, 16]} />
-            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-          </mesh>
-          {/* Outer Rim Torus — Chipped Deep Oxidized Crimson / Olive-Drab Cast-Iron Enamel */}
-          <mesh raycast={NOOP_RAYCAST}>
-            <torusGeometry args={[0.074, 0.013, 10, 20]} />
-            <meshStandardMaterial
-              color={pumpIndex === 0 ? "#6e1a14" : "#2f3a2e"}
-              roughness={0.44}
-              metalness={0.52}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-              roughnessMap={ironTex.roughnessMap}
-            />
-          </mesh>
-          {/* 3 Intersecting Diameter Bars = 6 Spokes */}
-          {[0, Math.PI / 3, (2 * Math.PI) / 3].map((ang, sIdx) => (
-            <mesh key={sIdx} rotation={[0, 0, ang]} raycast={NOOP_RAYCAST}>
-              <cylinderGeometry args={[0.0068, 0.0068, 0.144, 8]} />
-              <meshStandardMaterial
-                color="#2b3036"
-                roughness={0.42}
-                metalness={0.68}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.006}
-                roughnessMap={ironTex.roughnessMap}
-              />
-            </mesh>
-          ))}
-          {/* Central Machined Steel & Brass Retention Cap */}
-          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-            <cylinderGeometry args={[0.019, 0.021, 0.022, 8]} />
-            <meshStandardMaterial
-              color="#8a929a"
-              metalness={0.85}
-              roughness={0.32}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.005}
-            />
-          </mesh>
-          {/* Protruding Dark Phenolic Bakelite Crank-Handle Peg on Rim */}
-          <mesh
-            position={[0.062, 0.02, 0.018]}
-            rotation={[Math.PI / 2, 0, 0]}
-            raycast={NOOP_RAYCAST}
-          >
-            <cylinderGeometry args={[0.008, 0.0095, 0.036, 10]} />
-            <meshStandardMaterial
-              color="#1c1817"
-              metalness={0.15}
-              roughness={0.32}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.004}
-            />
-          </mesh>
-        </group>
+      </group>
+      <group position={[0.131, -0.004, 0.039]}>
+        <mesh raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.11, 0.204, 0.008]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            metalness={0.85}
+            roughness={0.28}
+            bumpMap={brassTex.bumpMap}
+            bumpScale={0.004}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.102, 0.194]} />
+          <meshStandardMaterial
+            map={rightScalePlateTex}
+            emissive="#ffffff"
+            emissiveMap={rightScalePlateTex}
+            emissiveIntensity={0.38}
+            roughness={0.55}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
       </group>
 
-      {/* Dual-Blade Copper Knife-Switch Throw Lever with Dark Phenolic Bakelite Crossbar & Steel Ferrules (PUMP THROTTLE LEVER) */}
+      {/* Centered Scaled-Up Soviet T-Handle Throttle Lever (PUMP THROTTLE LEVER) */}
       <group
-        position={[0.092, -0.012, 0.036]}
+        position={[0, -0.004, 0.034]}
         onPointerOver={(e) => {
           e.stopPropagation();
           useGameStore
             .getState()
             .setHoveredControlHint(
-              `PUMP THROTTLE LEVER (${pumpIndex === 0 ? "MCP 1-2" : "MCP 3-4"}): Drag/Scroll to adjust pump flow % (50-85% = Nominal, 0% = Stop)!`,
+              `PUMP THROTTLE LEVER (${pumpIndex === 0 ? "MCP 1-2" : "MCP 3-4"}): Drag Up/Down or Scroll (±2% | Shift ±1%) to adjust pump flow % (50–85% = Nominal, 0% = Stop)!`,
             );
         }}
         onPointerOut={(e) => {
@@ -4542,7 +4550,7 @@ const SculptedPumpValveAssembly3D: React.FC<
           e.stopPropagation();
           e.nativeEvent?.stopImmediatePropagation?.();
           const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
-          const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 2 : 8);
+          const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 1 : 2);
           const s = useGameStore.getState();
           const curThrottle = s.pumpThrottle[pumpIndex] ?? 75;
           const nextThrottle = THREE.MathUtils.clamp(
@@ -4557,13 +4565,14 @@ const SculptedPumpValveAssembly3D: React.FC<
         }}
         onPointerDown={handleLeverPointerDown}
       >
-        {/* Single clean invisible hitbox for Pump Throttle Knife Lever */}
-        <mesh position={[0, 0, 0.07]}>
-          <boxGeometry args={[0.12, 0.24, 0.16]} />
+        {/* Scaled-up invisible hitbox covering the full centered throttle slot & T-handle */}
+        <mesh position={[0, 0, 0.088]}>
+          <boxGeometry args={[0.25, 0.24, 0.21]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
+        {/* Heavy Cast-Iron Slotted Quadrant Box */}
         <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.088, 0.22, 0.038]} />
+          <boxGeometry args={[0.146, 0.206, 0.044]} />
           <meshStandardMaterial
             color="#181c1a"
             roughness={0.46}
@@ -4573,11 +4582,65 @@ const SculptedPumpValveAssembly3D: React.FC<
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        {/* Top & Bottom Copper Contact Jaws */}
+        {/* Deep Machined Vertical Travel Slot */}
+        <mesh position={[0, 0, 0.019]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.044, 0.168, 0.012]} />
+          <meshStandardMaterial color="#070a09" roughness={0.9} />
+        </mesh>
+        {/* Twin Beveled Brushed-Steel Guide Rails */}
+        {[-0.03, 0.03].map((rx, rIdx) => (
+          <mesh key={rIdx} position={[rx, 0, 0.023]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.014, 0.178, 0.01]} />
+            <meshStandardMaterial
+              color="#8a929a"
+              metalness={0.86}
+              roughness={0.3}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+        ))}
+        {/* Top & Bottom Brass End-Stop Bumpers */}
+        {[-0.088, 0.088].map((by, bIdx) => (
+          <mesh key={bIdx} position={[0, by, 0.024]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.076, 0.014, 0.012]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.85}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+        ))}
+        {/* 4 Corner Brass Hex Bolts */}
+        {(
+          [
+            [-0.058, 0.088],
+            [0.058, 0.088],
+            [-0.058, -0.088],
+            [0.058, -0.088],
+          ] as const
+        ).map(([bx, by], hIdx) => (
+          <mesh
+            key={hIdx}
+            position={[bx, by, 0.024]}
+            rotation={[Math.PI / 2, 0, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <cylinderGeometry args={[0.007, 0.007, 0.01, 6]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.88}
+              roughness={0.26}
+            />
+          </mesh>
+        ))}
+        {/* Top & Bottom Heavy Copper Contact Jaws */}
         {[-0.068, 0.068].map((cy, cIdx) => (
-          <group key={cIdx} position={[0, cy, 0.024]}>
-            <mesh position={[-0.022, 0, 0]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.008, 0.028, 0.022]} />
+          <group key={cIdx} position={[0, cy, 0.026]}>
+            <mesh position={[-0.034, 0, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.011, 0.03, 0.024]} />
               <meshStandardMaterial
                 color="#b8733e"
                 metalness={0.88}
@@ -4586,8 +4649,8 @@ const SculptedPumpValveAssembly3D: React.FC<
                 bumpScale={0.004}
               />
             </mesh>
-            <mesh position={[0.022, 0, 0]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.008, 0.028, 0.022]} />
+            <mesh position={[0.034, 0, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.011, 0.03, 0.024]} />
               <meshStandardMaterial
                 color="#b8733e"
                 metalness={0.88}
@@ -4599,16 +4662,17 @@ const SculptedPumpValveAssembly3D: React.FC<
           </group>
         ))}
 
+        {/* Animated Lever Carriage & Chunky Soviet T-Handle */}
         <group ref={leverArmRef} position={[0, 0, 0.022]}>
-          {/* Twin Copper Knife Blades */}
-          {[-0.022, 0.022].map((lx, lIdx) => (
+          {/* Twin Heavy Forged Copper Throttle Arms */}
+          {[-0.034, 0.034].map((lx, lIdx) => (
             <mesh
               key={lIdx}
-              position={[lx, 0, 0.058]}
+              position={[lx, 0, 0.064]}
               rotation={[Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
             >
-              <boxGeometry args={[0.007, 0.115, 0.016]} />
+              <boxGeometry args={[0.012, 0.128, 0.024]} />
               <meshStandardMaterial
                 color="#b8733e"
                 roughness={0.26}
@@ -4616,13 +4680,13 @@ const SculptedPumpValveAssembly3D: React.FC<
               />
             </mesh>
           ))}
-          {/* Lathe-Turned Dark Phenolic Bakelite Crossbar Grip */}
+          {/* Heavy Lathe-Turned Dark Phenolic Bakelite T-Bar Crossbar Grip */}
           <mesh
-            position={[0, 0, 0.118]}
+            position={[0, 0, 0.13]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.02, 0.02, 0.108, 14]} />
+            <cylinderGeometry args={[0.029, 0.029, 0.184, 16]} />
             <meshStandardMaterial
               color="#1c1817"
               roughness={0.32}
@@ -4632,14 +4696,14 @@ const SculptedPumpValveAssembly3D: React.FC<
             />
           </mesh>
           {/* Brushed Steel End-Ferrules */}
-          {[-0.048, 0.048].map((fx, fIdx) => (
+          {[-0.084, 0.084].map((fx, fIdx) => (
             <mesh
               key={fIdx}
-              position={[fx, 0, 0.118]}
+              position={[fx, 0, 0.13]}
               rotation={[0, 0, Math.PI / 2]}
               raycast={NOOP_RAYCAST}
             >
-              <cylinderGeometry args={[0.0215, 0.0215, 0.014, 12]} />
+              <cylinderGeometry args={[0.0315, 0.0315, 0.02, 14]} />
               <meshStandardMaterial
                 color="#8a929a"
                 metalness={0.85}
@@ -4649,20 +4713,86 @@ const SculptedPumpValveAssembly3D: React.FC<
               />
             </mesh>
           ))}
-          {/* Single Thin Recessed Enamel Indicator Ring */}
+          {/* Oxidized Crimson Enamel Center Index Collar */}
           <mesh
-            position={[0, 0, 0.118]}
+            position={[0, 0, 0.13]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.021, 0.021, 0.008, 12]} />
+            <cylinderGeometry args={[0.0305, 0.0305, 0.014, 14]} />
             <meshStandardMaterial
-              color="#6e1a14"
+              color="#7c1d16"
               roughness={0.38}
               metalness={0.25}
             />
           </mesh>
         </group>
+      </group>
+
+      {/* Centered THROTTLE: FLOW % Sub-Label Plaque */}
+      <group position={[0, -0.125, 0.042]}>
+        <mesh raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.368, 0.03, 0.008]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            metalness={0.85}
+            roughness={0.28}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.356, 0.025]} />
+          <meshStandardMaterial
+            map={leverSubLabelTex}
+            emissive="#ffffff"
+            emissiveMap={leverSubLabelTex}
+            emissiveIntensity={0.38}
+            roughness={0.55}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
+      </group>
+
+      {/* Live PUMP FLOW: XXX% Bargraph & Digital Status Plate */}
+      <group position={[0, -0.178, 0.038]}>
+        <mesh raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.376, 0.068, 0.016]} />
+          <meshStandardMaterial
+            color="#101513"
+            roughness={0.5}
+            metalness={0.7}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.005}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.0105]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.36, 0.06]} />
+          <meshStandardMaterial
+            ref={flowScaleMatRef}
+            map={flowScaleTex}
+            emissive="#ffffff"
+            emissiveMap={flowScaleTex}
+            emissiveIntensity={0.45}
+            roughness={0.75}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
+        <mesh
+          ref={flowBarMeshRef}
+          position={[0, -0.013, 0.0155]}
+          raycast={NOOP_RAYCAST}
+        >
+          <boxGeometry args={[0.324, 0.016, 0.008]} />
+          <meshStandardMaterial
+            ref={flowBarMatRef}
+            color="#33ff66"
+            emissive="#33ff66"
+            emissiveIntensity={1.15}
+          />
+        </mesh>
       </group>
     </group>
   );
@@ -5683,7 +5813,7 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
   useEffect(() => {
     const timer = window.setInterval(() => {
       const s = useGameStore.getState();
-      if (s.phase !== "playing") return;
+      if (s.phase !== "playing" || s.lobbyMenuPhase === "menu_locked") return;
       const isRedline =
         (s.tutorialPhase === "COMPLETED" &&
           (s.coreTemp >= 580 ||

@@ -150,7 +150,7 @@ export function createColdStartState(): ReactorState {
     az5Active: false,
     mcpActive: [false, false, false, false],
     pumpThrottle: [0, 0],
-    oilCoolerValve: 45,
+    oilCoolerValve: 100,
     feedwaterValve: 0.0,
     nitrogenLoopValve: 0,
     sealToggles: [false, false, false],
@@ -434,6 +434,8 @@ export function stepReactorSimulation(
       : 1.0;
 
   // Pump Bearing Heat & Lube Oil Pressure (driven by Pump Throttles, Turbine RPM, Wet Steam & Oil Cooler Valve)
+  // Physical BEARING COOL handwheels were removed from UNIT A; pin internal bearing cooling to 100% nominal.
+  state.oilCoolerValve = 100;
   const rpmRatio = state.turbines[0].rpm / 3000;
   const ventBearingBonus = state.ventilationActive ? 3.5 : 0;
   const oilCoolingEffect = (state.oilCoolerValve / 100) * 62 + ventBearingBonus;

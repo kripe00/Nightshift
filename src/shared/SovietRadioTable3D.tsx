@@ -5,6 +5,7 @@ import {
   silenceAllLegacyGlobalBgm,
   unregisterTrackedMedia,
 } from "../modules/inspector/audio";
+import { registerLobbyAmbientFadeInTrigger } from "./airlockDoorState";
 import { useCameraLookStore } from "./CameraController";
 import {
   notifyPlayerControlInteraction,
@@ -42,6 +43,7 @@ const STATION_CAPTURE_HALF_MHZ = 0.42;
 const BASE_MUSIC_VOLUME = 0.82;
 const AMBIENT_TARGET_GAIN = 0.16;
 const AUDIO_CROSSFADE_SEC = 0.6;
+const MENU_AMBIENT_FADE_IN_SEC = 4.0;
 const DEFAULT_RADIO_VOLUME_PCT = 65;
 const RADIO_FLOOR_STATIC_LEVEL = 0.004;
 const VOLUME_KNOB_ANGLE_MIN = -Math.PI * 0.75;
@@ -1141,6 +1143,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
     const duckedRef = useRef<boolean>(false);
     const distanceGainRef = useRef<number>(0.48);
     const ambientFadeRef = useRef<number>(0);
+    const useSlowAmbientFadeInRef = useRef<boolean>(true);
     const radioFadeRef = useRef<number>(0);
     const needsGestureUnlockRef = useRef<boolean>(false);
     const gestureUnlockAttachedRef = useRef<boolean>(false);
@@ -1709,6 +1712,18 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
       publishSubtitle(cues ? findSubtitleCueText(cues, cur) : null);
     }, [publishSubtitle]);
 
+    const ensureAmbientSrcLoaded = (
+      engine: RadioAudioEngine,
+      preloadMode: "metadata" | "auto",
+    ): void => {
+      if (preloadMode === "auto" || !engine.ambientPlayer.getAttribute("src")) {
+        engine.ambientPlayer.preload = preloadMode;
+      }
+      if (!engine.ambientPlayer.getAttribute("src")) {
+        engine.ambientPlayer.src = resolvePublicAudioUrl(AMBIENT_SOUNDTRACK_SRC);
+      }
+    };
+
     const ensureAudioEngine = useCallback((): RadioAudioEngine | null => {
       silenceAllLegacyGlobalBgm();
       const existing = audioEngineRef.current;
@@ -1739,17 +1754,16 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
 
       const player = new Audio();
       player.dataset.okean84Radio = "1";
-      player.preload = "auto";
+      player.preload = "none";
       player.loop = false;
       player.volume = 0;
 
-      // Dedicated off-radio ambient soundtrack (`night-shift.mp3`) — marked exempt from legacy silencer BEFORE setting src
+      // Dedicated off-radio ambient soundtrack (`night-shift.mp3`) — deferred until boot completes / shift starts
       const ambientPlayer = new Audio();
       ambientPlayer.dataset.okean84Radio = "1";
-      ambientPlayer.preload = "auto";
+      ambientPlayer.preload = "none";
       ambientPlayer.loop = true;
       ambientPlayer.volume = 0;
-      ambientPlayer.src = resolvePublicAudioUrl(AMBIENT_SOUNDTRACK_SRC);
 
       const recentPlayedIds: string[] = [];
       const firstSong = pickNextUnifiedRadioSong(recentPlayedIds);
@@ -1807,25 +1821,43 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         }
 
         const gs = useGameStore.getState();
+        const inLobbyMenuLocked = gs.lobbyMenuPhase === "menu_locked";
         const shouldDuck =
-          gs.diagFeedActive || gs.isMusicMuted || gs.phase !== "playing";
+          gs.diagFeedActive ||
+          gs.isMusicMuted ||
+          gs.phase !== "playing" ||
+          inLobbyMenuLocked;
         duckedRef.current = shouldDuck;
+
+        if (inLobbyMenuLocked) {
+          ambientFadeRef.current = 0;
+          useSlowAmbientFadeInRef.current = true;
+        }
 
         const radioWantOn = !shouldDuck && powerOnRef.current;
         const ambientWantOn = !shouldDuck && !powerOnRef.current;
 
+        const ambientFadeDur = useSlowAmbientFadeInRef.current
+          ? MENU_AMBIENT_FADE_IN_SEC
+          : AUDIO_CROSSFADE_SEC;
+        const ambientStep = dt > 0 ? dt / ambientFadeDur : 0;
         const step = dt > 0 ? dt / AUDIO_CROSSFADE_SEC : 0;
-        if (step > 0) {
+        if (ambientStep > 0) {
           if (ambientFadeRef.current < (ambientWantOn ? 1 : 0)) {
-            ambientFadeRef.current = Math.min(1, ambientFadeRef.current + step);
+            ambientFadeRef.current = Math.min(1, ambientFadeRef.current + ambientStep);
           } else if (ambientFadeRef.current > (ambientWantOn ? 1 : 0)) {
             ambientFadeRef.current = Math.max(0, ambientFadeRef.current - step);
           }
+        }
+        if (step > 0) {
           if (radioFadeRef.current < (radioWantOn ? 1 : 0)) {
             radioFadeRef.current = Math.min(1, radioFadeRef.current + step);
           } else if (radioFadeRef.current > (radioWantOn ? 1 : 0)) {
             radioFadeRef.current = Math.max(0, radioFadeRef.current - step);
           }
+        }
+        if (ambientFadeRef.current >= 0.999 || powerOnRef.current) {
+          useSlowAmbientFadeInRef.current = false;
         }
 
         const wantAnyAudio =
@@ -1845,10 +1877,14 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         }
 
         // 1. Control-Room Ambient Soundtrack (active whenever radio is OFF)
+        const ambRaw = ambientFadeRef.current;
+        const ambShaped = useSlowAmbientFadeInRef.current
+          ? ambRaw * ambRaw * (3 - 2 * ambRaw)
+          : ambRaw;
         const targetAmbientVol = shouldDuck
           ? 0
           : THREE.MathUtils.clamp(
-              ambientFadeRef.current * AMBIENT_TARGET_GAIN,
+              ambShaped * AMBIENT_TARGET_GAIN,
               0,
               1,
             );
@@ -1860,6 +1896,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           !needsGestureUnlockRef.current
         ) {
           if (engine.ambientPlayer.paused && !engine.ambientPlayInFlight) {
+            ensureAmbientSrcLoaded(engine, "auto");
             engine.ambientPlayInFlight = true;
             const seq = ++engine.ambientPlaySeq;
             const ambPromise = engine.ambientPlayer.play();
@@ -1962,6 +1999,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
             engine.program.savedOffsetSec > 0.05
               ? engine.program.savedOffsetSec
               : null;
+          engine.player.preload = "auto";
           engine.player.src = resolvePublicAudioUrl(targetSrc);
         }
 
@@ -2245,7 +2283,12 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         syncVolumeVisuals(true);
       }
 
-      if (gs.phase === "playing" && !gs.isMusicMuted && !audioEngineRef.current) {
+      if (
+        gs.phase === "playing" &&
+        gs.lobbyMenuPhase !== "menu_locked" &&
+        !gs.isMusicMuted &&
+        !audioEngineRef.current
+      ) {
         ensureAudioEngine();
       }
 
@@ -2285,14 +2328,80 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         });
       }
 
-      ensureAudioEngine();
+      let deferredAudioTimer = 0;
+      if (gsInit.lobbyMenuPhase !== "menu_locked") {
+        ensureAudioEngine();
+      } else {
+        deferredAudioTimer = window.setTimeout(() => {
+          if (unmounted) return;
+          const latest = useGameStore.getState();
+          if (latest.isMusicMuted || latest.diagFeedActive) return;
+          const eng = ensureAudioEngine();
+          if (eng && !eng.disposed) {
+            ensureAmbientSrcLoaded(eng, "metadata");
+          }
+        }, 2800);
+      }
       registerKomradControlObject("radioPower", powerBtnMeshRef.current);
       registerKomradControlObject("radioVolume", wheelGroupRef.current, [
         0,
         0,
         0.033,
       ]);
-      if (gsInit.phase === "playing" && !gsInit.isMusicMuted && !gsInit.diagFeedActive) {
+      registerLobbyAmbientFadeInTrigger(() => {
+        if (unmounted) return;
+        const gs = useGameStore.getState();
+        if (gs.isMusicMuted || gs.diagFeedActive || gs.phase !== "playing") {
+          return;
+        }
+        const eng = ensureAudioEngine();
+        if (!eng || eng.disposed) return;
+        ensureAmbientSrcLoaded(eng, "auto");
+        needsGestureUnlockRef.current = false;
+        if (eng.ctx.state === "suspended") {
+          void eng.ctx.resume().catch(() => {});
+        }
+        ambientFadeRef.current = 0;
+        useSlowAmbientFadeInRef.current = true;
+        eng.ambientPlayer.volume = 0;
+        if (
+          !powerOnRef.current &&
+          eng.ambientPlayer.paused &&
+          !eng.ambientPlayInFlight
+        ) {
+          eng.ambientPlayInFlight = true;
+          const seq = ++eng.ambientPlaySeq;
+          const ambPromise = eng.ambientPlayer.play();
+          if (ambPromise !== undefined) {
+            ambPromise
+              .then(() => {
+                if (eng.ambientPlaySeq !== seq) return;
+                eng.ambientPlayInFlight = false;
+                const latest = useGameStore.getState();
+                if (
+                  eng.disposed ||
+                  latest.lobbyMenuPhase === "menu_locked" ||
+                  latest.isMusicMuted ||
+                  latest.diagFeedActive
+                ) {
+                  eng.ambientPlayer.pause();
+                }
+              })
+              .catch(() => {
+                if (eng.ambientPlaySeq !== seq) return;
+                eng.ambientPlayInFlight = false;
+              });
+          } else {
+            eng.ambientPlayInFlight = false;
+          }
+        }
+      });
+      if (
+        gsInit.phase === "playing" &&
+        gsInit.lobbyMenuPhase !== "menu_locked" &&
+        !gsInit.isMusicMuted &&
+        !gsInit.diagFeedActive
+      ) {
         syncUnifiedAudio(0, distanceGainRef.current);
       }
 
@@ -2319,18 +2428,21 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
           return;
         }
         const gs = useGameStore.getState();
+        const shouldDuck =
+          gs.diagFeedActive ||
+          gs.isMusicMuted ||
+          gs.phase !== "playing" ||
+          gs.lobbyMenuPhase === "menu_locked";
+        if (shouldDuck) {
+          return;
+        }
+
         const eng = ensureAudioEngine();
         if (!eng || eng.disposed) return;
 
         needsGestureUnlockRef.current = false;
         if (eng.ctx.state === "suspended") {
           void eng.ctx.resume().catch(() => {});
-        }
-
-        const shouldDuck =
-          gs.diagFeedActive || gs.isMusicMuted || gs.phase !== "playing";
-        if (shouldDuck) {
-          return;
         }
 
         syncUnifiedAudio(0.05, distanceGainRef.current);
@@ -2343,6 +2455,10 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
 
       return () => {
         unmounted = true;
+        if (deferredAudioTimer) {
+          window.clearTimeout(deferredAudioTimer);
+        }
+        registerLobbyAmbientFadeInTrigger(null);
         registerKomradControlObject("radioPower", null);
         registerKomradControlObject("radioVolume", null);
         removeUnlockListeners();

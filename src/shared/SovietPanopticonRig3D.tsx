@@ -1,7 +1,9 @@
 import { useFrame } from "@react-three/fiber";
 import React, { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { getSkalaDiagFeedElement } from "../modules/inspector/audio";
 import {
+  controlRoomPowerState,
   getKomradPixelSprites,
   type KomradPixelSpriteBank,
   type KomradPortraitPose,
@@ -48,9 +50,9 @@ const PATROL_X_MAX = 3.85;
 const PATROL_Z_MIN = -1.5;
 const PATROL_Z_MAX = 1.25;
 
-const INITIAL_TROLLEY_X = 3.05;
-const INITIAL_TROLLEY_Z = 0.45;
-const INITIAL_YAW = -Math.PI / 2;
+const INITIAL_TROLLEY_X = 0.0;
+const INITIAL_TROLLEY_Z = -0.15;
+const INITIAL_YAW = 0.0;
 
 const ACTUATION_X_MIN = -4.42;
 const ACTUATION_X_MAX = 4.48;
@@ -95,6 +97,20 @@ const CRANE_ACTUATION_SMOOTH_TIME_XZ = 0.28;
 const CRANE_ACTUATION_MAX_SPEED_Y = 2.2;
 const CRANE_ACTUATION_MAX_ACCEL_Y = 7.0;
 const CRANE_ACTUATION_SMOOTH_TIME_Y = 0.26;
+
+const DANCE_ANCHOR_X = 2.02;
+const DANCE_ANCHOR_Z = -1.4;
+const DANCE_BASE_Y = 1.88;
+const DANCE_BPM = 126;
+const DANCE_BEATS_PER_SEC = DANCE_BPM / 60;
+const DANCE_PERSONAL_SPACE_DIST = 1.85;
+const DANCE_PUSH_RADIUS = 1.95;
+const DANCE_CRANE_MAX_SPEED_XZ = 3.2;
+const DANCE_CRANE_MAX_ACCEL_XZ = 11.0;
+const DANCE_CRANE_SMOOTH_TIME_XZ = 0.22;
+const DANCE_CRANE_MAX_SPEED_Y = 2.4;
+const DANCE_CRANE_MAX_ACCEL_Y = 12.0;
+const DANCE_CRANE_SMOOTH_TIME_Y = 0.16;
 
 interface KeepOutOBB {
   readonly cx: number;
@@ -222,6 +238,7 @@ export interface PanopticonTargetResult {
 const _projTmp: XZPoint = { x: 0, z: 0 };
 const _driftProjTmp: XZPoint = { x: 0, z: 0 };
 const _steerTmp: XZPoint = { x: 0, z: 0 };
+const _danceTargetTmp: XZPoint = { x: DANCE_ANCHOR_X, z: DANCE_ANCHOR_Z };
 const _craneXZOut: CraneXZStepOut = { x: 0, z: 0, vx: 0, vz: 0 };
 const _craneYOut: Crane1DStepOut = { value: 1.96, velocity: 0 };
 const _safeTargetOut: PanopticonTargetResult = {
@@ -741,6 +758,10 @@ const _wristYAxis = new THREE.Vector3();
 const _wristZAxis = new THREE.Vector3();
 const _wristUpRef = new THREE.Vector3();
 const _xAxisUnit = new THREE.Vector3(1, 0, 0);
+const _turretCrtStandbyTint = new THREE.Color("#203626");
+const _turretCrtFullTint = new THREE.Color("#ffffff");
+const _opticStandbyLo = new THREE.Color("#d91818");
+const _opticStandbyHi = new THREE.Color("#ff4433");
 const _wristIdleRelQuat = new THREE.Quaternion().setFromEuler(
   new THREE.Euler(0.28, 0, 0),
 );
@@ -891,6 +912,8 @@ function paintTurretFaceCRT(
   spectrum16?: Uint8Array,
   activeWord?: string | null,
   voxLoaded?: boolean,
+  isDancing = false,
+  danceBeat = 0,
 ): void {
   if (isBlackout) {
     ctx.fillStyle = "#050706";
@@ -928,10 +951,22 @@ function paintTurretFaceCRT(
   ctx.textAlign = "left";
   ctx.fillText("K.O.M.R.A.D.-84 // SEC-84", 24, 42, w - 160);
 
-  const badgeText =
-    mood === "critical" ? "ALERT!" : mood === "warning" ? "WATCH" : "OPTIC";
-  ctx.fillStyle =
-    mood === "critical" && blinkPhase % 2 === 0 ? "#ff4433" : pal.primary;
+  const badgeText = isDancing
+    ? danceBeat % 2 === 0
+      ? "AZ-5"
+      : "GROOVE"
+    : mood === "critical"
+      ? "ALERT!"
+      : mood === "warning"
+        ? "WATCH"
+        : "OPTIC";
+  ctx.fillStyle = isDancing
+    ? danceBeat % 2 === 0
+      ? "#ffb000"
+      : "#39ff7a"
+    : mood === "critical" && blinkPhase % 2 === 0
+      ? "#ff4433"
+      : pal.primary;
   ctx.fillRect(w - 134, 19, 110, 32);
   ctx.fillStyle = "#060906";
   ctx.font = 'bold 19px "Kremlin", "Courier Prime", monospace';
@@ -980,7 +1015,11 @@ function paintTurretFaceCRT(
 
   for (let i = 0; i < bars; i++) {
     let amp: number;
-    if (isTalking && voxLoaded && spectrum16) {
+    if (isDancing) {
+      const waveA = 0.5 + 0.5 * Math.sin(blinkPhase * 1.45 + i * 0.55);
+      const waveB = 0.5 + 0.5 * Math.cos(blinkPhase * 0.9 - i * 0.35);
+      amp = Math.min(1, 0.16 + 0.84 * waveA * (0.55 + 0.45 * waveB));
+    } else if (isTalking && voxLoaded && spectrum16) {
       const binAmp = (spectrum16[i] ?? 0) / 255;
       amp = Math.min(1, 0.08 + binAmp * 0.92);
     } else {
@@ -996,22 +1035,28 @@ function paintTurretFaceCRT(
     }
     const barH = Math.max(4, Math.round(amp * 26));
     ctx.fillStyle =
-      amp > 0.72 ? pal.secondary : isTalking ? pal.primary : pal.dim;
+      amp > 0.72
+        ? pal.secondary
+        : isDancing || isTalking
+          ? pal.primary
+          : pal.dim;
     ctx.fillRect(startX + i * (bw + bgap), barBoxY + 31 - barH, bw, barH);
   }
 
-  ctx.fillStyle = isTalking ? pal.secondary : pal.dim;
+  ctx.fillStyle = isDancing || isTalking ? pal.secondary : pal.dim;
   ctx.font = 'bold 18px "VT323", monospace';
   ctx.textAlign = "center";
-  const statusLabel = isTalking
-    ? voxLoaded
-      ? activeWord
-        ? `VOX // [${activeWord.toUpperCase()}]`
-        : "VOX // PA BUS ACTIVE"
-      : activeVowel
-        ? `VODER // PHONEME [${activeVowel}]${rolledR ? " + TRILL [R]" : ""}`
-        : "VODER // ARTICULATION PAUSE"
-    : "GANTRY PANOPTICON // TRACKING";
+  const statusLabel = isDancing
+    ? "PROTOCOL AZ-5 // MORALE DANCE"
+    : isTalking
+      ? voxLoaded
+        ? activeWord
+          ? `VOX // [${activeWord.toUpperCase()}]`
+          : "VOX // PA BUS ACTIVE"
+        : activeVowel
+          ? `VODER // PHONEME [${activeVowel}]${rolledR ? " + TRILL [R]" : ""}`
+          : "VODER // ARTICULATION PAUSE"
+      : "GANTRY PANOPTICON // TRACKING";
   ctx.fillText(statusLabel, w / 2, barBoxY + 51);
 
   // Subtle CRT scanlines
@@ -1056,6 +1101,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
   // Boss head details refs
   const turretCrtMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const turretOpticMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const opticGlowLightRef = useRef<THREE.PointLight>(null);
   const leftHornRef = useRef<THREE.Group>(null);
   const rightHornRef = useRef<THREE.Group>(null);
   const shutterBladeRefs = useRef<(THREE.Mesh | null)[]>([
@@ -1080,6 +1126,8 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     anchorCamInit: false,
     lastSeatedAtDesk: false,
     wasArmActive: false,
+    wasDancing: false,
+    danceElapsedSec: 0,
     nextDriftSec: SUPERVISORY_DRIFT_INTERVAL_SEC,
     driftPhase: 0,
     curSpineDrop: 0.65,
@@ -1215,8 +1263,12 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         ts.anchorCamInit = false;
         ts.lastSeatedAtDesk = false;
         ts.wasArmActive = false;
+        ts.wasDancing = false;
+        ts.danceElapsedSec = 0;
         ts.nextDriftSec = t + SUPERVISORY_DRIFT_INTERVAL_SEC;
       }
+      ts.wasDancing = false;
+      ts.danceElapsedSec = 0;
       cancelKomradActuation();
     }
 
@@ -1259,6 +1311,98 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       ts.curYaw,
     );
 
+    const isDancing =
+      s.diagFeedActive &&
+      !isBlackout &&
+      s.phase === "playing" &&
+      s.lobbyMenuPhase === "entered_control_room" &&
+      !armState.active;
+    const prevWasDancing = ts.wasDancing;
+    const enteredDance = !prevWasDancing && isDancing;
+    const exitedDance = prevWasDancing && !isDancing;
+    ts.wasDancing = isDancing;
+
+    if (enteredDance) {
+      ts.danceElapsedSec = 0;
+    }
+
+    let beatFloat = 0;
+    let beatIndex = 0;
+    let beatFrac = 0;
+    let movePhase = 0;
+    let beatPulse = 0;
+    let offBeatPulse = 0;
+    let danceSwayX = 0;
+    let danceBounceY = 0;
+    let danceYawOffset = 0;
+    let dancePitchOffset = 0;
+    let danceRollTarget = 0;
+
+    if (isDancing) {
+      ts.danceElapsedSec += dt;
+      const diagVid = getSkalaDiagFeedElement();
+      const useVidClock =
+        diagVid !== null &&
+        !diagVid.paused &&
+        diagVid.readyState >= 2 &&
+        Number.isFinite(diagVid.currentTime);
+      const danceTime = useVidClock ? diagVid.currentTime : ts.danceElapsedSec;
+      beatFloat = danceTime * DANCE_BEATS_PER_SEC;
+      beatIndex = Math.floor(beatFloat);
+      beatFrac = beatFloat - beatIndex;
+      movePhase = Math.floor(beatIndex / 8) % 4;
+      beatPulse = Math.pow(Math.max(0, 1 - beatFrac * 2.4), 2);
+      offBeatPulse = Math.pow(
+        Math.max(0, 1 - Math.abs(beatFrac - 0.5) * 4.0),
+        2,
+      );
+
+      if (movePhase === 0) {
+        // Move A: "The Hydraulic Kazachok" (Alternating Cossack Arm Kicks + Piston Squat)
+        danceBounceY = -0.14 * Math.cos(beatFloat * Math.PI * 2);
+        danceSwayX =
+          (beatIndex % 2 === 0 ? -1 : 1) * 0.1 * Math.sin(beatFrac * Math.PI);
+        danceYawOffset =
+          (beatIndex % 2 === 0 ? -1 : 1) * 0.08 * Math.sin(beatFrac * Math.PI);
+        dancePitchOffset = -0.07 * Math.cos(beatFloat * Math.PI * 2);
+        danceRollTarget =
+          (beatIndex % 2 === 0 ? 1 : -1) * 0.055 * Math.sin(beatFrac * Math.PI);
+      } else if (movePhase === 1) {
+        // Move B: "1984 Gosplan Factory Robot" (90-deg Stiff Servo Lock & Wrist Spin)
+        const stepT = THREE.MathUtils.clamp(beatFrac * 5.0, 0, 1);
+        const snapEase = stepT * stepT * (3 - 2 * stepT);
+        danceBounceY = (beatIndex % 2 === 0 ? -0.07 : 0.06) * snapEase;
+        danceSwayX = 0;
+        danceYawOffset = (beatIndex % 2 === 0 ? -1 : 1) * 0.09 * snapEase;
+        dancePitchOffset = (beatIndex % 2 === 0 ? 0.05 : -0.04) * snapEase;
+        danceRollTarget =
+          (beatIndex % 2 === 0 ? 1 : -1) * 0.1396 * (0.35 + 0.65 * snapEase);
+      } else if (movePhase === 2) {
+        // Move C: "Raise the Quota" (Double Overhead Roof-Raiser + Pincer Claps)
+        danceSwayX = Math.sin((beatFloat / 2) * Math.PI) * 0.32;
+        danceBounceY = 0.09 * Math.sin(beatFloat * Math.PI * 2);
+        danceYawOffset = Math.sin((beatFloat / 2) * Math.PI) * 0.1;
+        dancePitchOffset = 0.12 * Math.sin(beatFloat * Math.PI * 2);
+        danceRollTarget = Math.sin((beatFloat / 2) * Math.PI) * 0.07;
+      } else {
+        // Move D: "Polivoks Disco Point" (Alternating Diagonal Reach & Figure-8 Groove)
+        const phase8 = (beatFloat / 4) * Math.PI * 2;
+        danceSwayX = Math.sin(phase8) * 0.24;
+        danceBounceY = Math.sin(phase8 * 2) * 0.09;
+        danceYawOffset = Math.sin(phase8) * 0.14;
+        dancePitchOffset = Math.sin(phase8 * 2) * 0.07;
+        danceRollTarget = -Math.sin(phase8) * 0.1;
+      }
+    }
+
+    if (exitedDance) {
+      ts.curRoll = 0;
+      ts.rollImpulse = 0;
+      ts.shakeAmp = 0;
+      ts.arms[0].curRoll = wrapAngleRad(ts.arms[0].curRoll);
+      ts.arms[1].curRoll = wrapAngleRad(ts.arms[1].curRoll);
+    }
+
     let desiredTargetY = 1.96;
 
     if (isBlackout) {
@@ -1277,6 +1421,18 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       );
       ts.curHeadY = yStep.value;
       ts.velY = yStep.velocity;
+      ts.wasArmActive = false;
+    } else if (s.lobbyMenuPhase !== "entered_control_room") {
+      ts.curX = THREE.MathUtils.damp(ts.curX, INITIAL_TROLLEY_X, 4.0, dt);
+      ts.curZ = THREE.MathUtils.damp(ts.curZ, INITIAL_TROLLEY_Z, 4.0, dt);
+      ts.velX = 0;
+      ts.velZ = 0;
+      desiredTargetY = 1.76 + Math.sin(t * 0.85) * 0.02;
+      ts.curHeadY = THREE.MathUtils.damp(ts.curHeadY, desiredTargetY, 4.0, dt);
+      ts.velY = 0;
+      ts.anchorX = INITIAL_TROLLEY_X;
+      ts.anchorZ = INITIAL_TROLLEY_Z;
+      ts.anchorCamInit = false;
       ts.wasArmActive = false;
     } else if (armState.active) {
       const actX = THREE.MathUtils.clamp(
@@ -1331,6 +1487,76 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       ts.anchorX = ts.curX;
       ts.anchorZ = ts.curZ;
       ts.wasArmActive = true;
+    } else if (isDancing) {
+      _danceTargetTmp.x = DANCE_ANCHOR_X + danceSwayX;
+      _danceTargetTmp.z = DANCE_ANCHOR_Z;
+
+      const dDanceCam = Math.hypot(
+        _danceTargetTmp.x - camPos.x,
+        _danceTargetTmp.z - camPos.z,
+      );
+      if (dDanceCam < DANCE_PERSONAL_SPACE_DIST) {
+        let px = _danceTargetTmp.x - camPos.x;
+        let pz = _danceTargetTmp.z - camPos.z;
+        if (dDanceCam < 1e-4) {
+          px = 0.85;
+          pz = 0.45;
+        } else {
+          px /= dDanceCam;
+          pz /= dDanceCam;
+        }
+        _danceTargetTmp.x = camPos.x + px * DANCE_PUSH_RADIUS;
+        _danceTargetTmp.z = camPos.z + pz * DANCE_PUSH_RADIUS;
+      }
+
+      _danceTargetTmp.x = THREE.MathUtils.clamp(_danceTargetTmp.x, 1.85, 3.65);
+      _danceTargetTmp.z = THREE.MathUtils.clamp(_danceTargetTmp.z, -1.45, 1.15);
+      pushPointOutOfOBB(_danceTargetTmp, PATROL_KEEP_OUT_OBBS[1]);
+      pushPointOutOfOBB(_danceTargetTmp, PATROL_KEEP_OUT_OBBS[2]);
+      _danceTargetTmp.x = THREE.MathUtils.clamp(_danceTargetTmp.x, 1.85, 3.65);
+      _danceTargetTmp.z = THREE.MathUtils.clamp(_danceTargetTmp.z, -1.45, 1.15);
+
+      desiredTargetY = THREE.MathUtils.clamp(
+        DANCE_BASE_Y + danceBounceY,
+        TURRET_Y_EYE_MIN,
+        TURRET_Y_EYE_MAX,
+      );
+
+      const xzStep = stepHeavyCraneXZ(
+        ts.curX,
+        ts.curZ,
+        ts.velX,
+        ts.velZ,
+        _danceTargetTmp.x,
+        _danceTargetTmp.z,
+        dt,
+        DANCE_CRANE_MAX_SPEED_XZ,
+        DANCE_CRANE_MAX_ACCEL_XZ,
+        DANCE_CRANE_SMOOTH_TIME_XZ,
+        false,
+        _craneXZOut,
+      );
+      ts.curX = xzStep.x;
+      ts.curZ = xzStep.z;
+      ts.velX = xzStep.vx;
+      ts.velZ = xzStep.vz;
+
+      const yStep = stepHeavyCraneAxis1D(
+        ts.curHeadY,
+        ts.velY,
+        desiredTargetY,
+        dt,
+        DANCE_CRANE_MAX_SPEED_Y,
+        DANCE_CRANE_MAX_ACCEL_Y,
+        DANCE_CRANE_SMOOTH_TIME_Y,
+        _craneYOut,
+      );
+      ts.curHeadY = yStep.value;
+      ts.velY = yStep.velocity;
+
+      ts.anchorX = ts.curX;
+      ts.anchorZ = ts.curZ;
+      ts.wasArmActive = false;
     } else {
       if (!ts.anchorCamInit) {
         ts.lastAnchorCamX = camPos.x;
@@ -1361,6 +1587,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
 
       if (
         exitedArm ||
+        exitedDance ||
         seatedChanged ||
         anchorUnsafe ||
         personalSpaceBreach ||
@@ -1509,16 +1736,18 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       ? 0.25
       : armState.active
         ? 0.94
-        : vocal.mood === "critical"
-          ? 1.0
-          : vocal.isTalking || s.isSeatedAtDesk
-            ? 0.92
-            : 0.78;
+        : isDancing
+          ? 0.9
+          : vocal.mood === "critical"
+            ? 1.0
+            : vocal.isTalking || s.isSeatedAtDesk
+              ? 0.92
+              : 0.78;
 
-    const lambdaSwoop = 3.2;
+    const lambdaSwoop = isDancing ? 6.5 : 3.2;
     ts.curSwoop = THREE.MathUtils.damp(ts.curSwoop, targetSwoop, lambdaSwoop, dt);
 
-    const breathe = isBlackout ? 0 : Math.sin(t * 1.3);
+    const breathe = isBlackout || isDancing ? 0 : Math.sin(t * 1.3);
     const theta1 =
       THREE.MathUtils.lerp(0.95, 0.14, ts.curSwoop) + breathe * 0.028;
     const thetaForearm =
@@ -1537,7 +1766,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     ts.curSpineDrop = THREE.MathUtils.damp(
       ts.curSpineDrop,
       desiredSpineDrop,
-      armState.active ? 4.8 : 3.8,
+      armState.active ? 4.8 : isDancing ? 11.0 : 3.8,
       dt,
     );
 
@@ -1565,9 +1794,22 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       ts.curSpineDrop -
       armVerticalDrop;
 
-    const aimX = armState.active && !isBlackout ? armState.targetWorldPos.x : camPos.x;
-    const aimY = armState.active && !isBlackout ? armState.targetWorldPos.y : camPos.y;
-    const aimZ = armState.active && !isBlackout ? armState.targetWorldPos.z : camPos.z;
+    const inLobbyWaiting = s.lobbyMenuPhase !== "entered_control_room";
+    const aimX = inLobbyWaiting
+      ? 0.0
+      : armState.active && !isBlackout
+        ? armState.targetWorldPos.x
+        : camPos.x;
+    const aimY = inLobbyWaiting
+      ? 1.65
+      : armState.active && !isBlackout
+        ? armState.targetWorldPos.y
+        : camPos.y;
+    const aimZ = inLobbyWaiting
+      ? 4.64
+      : armState.active && !isBlackout
+        ? armState.targetWorldPos.z
+        : camPos.z;
     const tdx = aimX - ts.curX;
     const tdy = aimY - wristWorldY;
     const tdz = aimZ - ts.curZ;
@@ -1587,12 +1829,19 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
 
     const desiredYaw = isBlackout
       ? ts.curYaw
-      : liveYaw +
-        (!armState.active && !vocal.isTalking && vocal.mood === "normal"
-          ? Math.sin(t * 0.42) * 0.035
-          : 0);
+      : isDancing
+        ? liveYaw + danceYawOffset
+        : liveYaw +
+          (!armState.active && !vocal.isTalking && vocal.mood === "normal"
+            ? Math.sin(t * 0.42) * 0.035
+            : 0);
     const yawErr = wrapAngleRad(desiredYaw - ts.curYaw);
-    if (!isBlackout && Math.abs(yawErr) > TURRET_SLEW_WHIR_THRESHOLD_RAD) {
+    if (
+      !isBlackout &&
+      !inLobbyWaiting &&
+      !isDancing &&
+      Math.abs(yawErr) > TURRET_SLEW_WHIR_THRESHOLD_RAD
+    ) {
       playTurretServoWhir(Math.abs(yawErr));
     }
 
@@ -1600,23 +1849,35 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       ? 2.8
       : armState.active
         ? 5.0
-        : vocal.mood === "critical"
-          ? 3.8
-          : 3.2;
+        : isDancing
+          ? 7.5
+          : vocal.mood === "critical"
+            ? 3.8
+            : 3.2;
     if (!isBlackout) {
       ts.curYaw = wrapAngleRad(
         THREE.MathUtils.damp(ts.curYaw, ts.curYaw + yawErr, lambdaYaw, dt),
       );
     }
 
-    const desiredPitch = isBlackout ? TURRET_BLACKOUT_PITCH : livePitch;
+    const desiredPitch = isBlackout
+      ? TURRET_BLACKOUT_PITCH
+      : isDancing
+        ? THREE.MathUtils.clamp(
+            livePitch + dancePitchOffset,
+            TURRET_PITCH_MIN,
+            TURRET_PITCH_MAX,
+          )
+        : livePitch;
     const lambdaPitch = isBlackout
       ? 2.8
       : armState.active
         ? 4.8
-        : vocal.mood === "critical"
-          ? 3.8
-          : 3.1;
+        : isDancing
+          ? 8.5
+          : vocal.mood === "critical"
+            ? 3.8
+            : 3.1;
     ts.curPitch = THREE.MathUtils.clamp(
       THREE.MathUtils.damp(ts.curPitch, desiredPitch, lambdaPitch, dt),
       armState.active || isBlackout
@@ -1628,11 +1889,22 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     ts.rollImpulse = THREE.MathUtils.damp(ts.rollImpulse, 0, 2.8, dt);
     const desiredRoll = isBlackout
       ? -0.14
-      : Math.sin(t * 0.55) * 0.045 -
-        THREE.MathUtils.clamp(yawErr * 0.2, -0.13, 0.13) +
-        (vocal.isTalking && vocal.clauseTerminator === "?" ? 0.16 : 0) +
-        ts.rollImpulse;
-    ts.curRoll = THREE.MathUtils.damp(ts.curRoll, desiredRoll, 3.0, dt);
+      : isDancing
+        ? danceRollTarget
+        : Math.sin(t * 0.55) * 0.045 -
+          THREE.MathUtils.clamp(yawErr * 0.2, -0.13, 0.13) +
+          (vocal.isTalking && vocal.clauseTerminator === "?" ? 0.16 : 0) +
+          ts.rollImpulse;
+    if (exitedDance) {
+      ts.curRoll = 0;
+    } else {
+      ts.curRoll = THREE.MathUtils.damp(
+        ts.curRoll,
+        desiredRoll,
+        isDancing ? 11.0 : 3.0,
+        dt,
+      );
+    }
 
     const targetRecoil =
       !isBlackout && vocal.isTalking
@@ -1654,7 +1926,9 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     if (wristGimbalRef.current) {
       wristGimbalRef.current.rotation.x =
         -(ts.curPitch + ts.curRecoil) - thetaForearm;
-      wristGimbalRef.current.rotation.z = ts.curRoll + shakeWave;
+      wristGimbalRef.current.rotation.z = exitedDance
+        ? 0
+        : ts.curRoll + shakeWave;
     }
     if (armChassisRef.current) {
       armChassisRef.current.rotation.x = -thetaForearm;
@@ -1694,7 +1968,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
           ? Math.sin(t * 36 + armIdx * 2.1) * 0.008
           : 0;
 
-      // Expressive resting / speech / alert target in shoulder-local space
+      // Expressive resting / speech / alert / dance target in shoulder-local space
       let idleX = -side * 0.14 + speechShiftX + critTremor;
       let idleY = -0.32 + breathShiftY;
       let idleZ = 0.26 + speechShiftZ;
@@ -1702,6 +1976,8 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       let idlePoleY = 0.25;
       let idlePoleZ = -0.75;
       let idleOpen = 0.22;
+      let idleRoll = 0;
+      let lambdaPose = isBlackout ? 3.5 : 6.5;
 
       if (isBlackout) {
         idleX = side * 0.04;
@@ -1711,6 +1987,82 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         idlePoleY = 0.05;
         idlePoleZ = -0.9;
         idleOpen = 0.42;
+      } else if (isDancing) {
+        if (movePhase === 0) {
+          // Move A: "The Hydraulic Kazachok" (Alternating Cossack Arm Kicks)
+          const isKickOut = (beatIndex + armIdx) % 2 === 0;
+          const kickArc = Math.sin(beatFrac * Math.PI);
+          if (isKickOut) {
+            idleX = side * (0.58 + 0.14 * kickArc);
+            idleY = -0.14 + 0.14 * kickArc;
+            idleZ = 0.4;
+            idlePoleX = side * 0.85;
+            idlePoleY = 0.25;
+            idlePoleZ = -0.5;
+          } else {
+            idleX = -side * 0.22;
+            idleY = -0.22;
+            idleZ = 0.54;
+            idlePoleX = side * 0.65;
+            idlePoleY = 0.15;
+            idlePoleZ = -0.72;
+          }
+          idleOpen = 0.1 + 0.85 * offBeatPulse;
+          idleRoll = (beatIndex % 2 === 0 ? 1 : -1) * 0.45 * side * offBeatPulse;
+          lambdaPose = 15.0;
+        } else if (movePhase === 1) {
+          // Move B: "1984 Gosplan Factory Robot" (90-deg Servo Lock & Wrist Spin)
+          const isUp = (beatIndex + armIdx) % 2 === 0;
+          const stepT = THREE.MathUtils.clamp(beatFrac * 5.0, 0, 1);
+          const localBeat = beatIndex % 8;
+          idleX = side * 0.34;
+          idleY = isUp ? 0.44 : -0.46;
+          idleZ = 0.34;
+          idlePoleX = side * 0.9;
+          idlePoleY = isUp ? -0.35 : 0.35;
+          idlePoleZ = -0.18;
+          idleOpen = isUp ? 0.82 : 0.15;
+          idleRoll = (localBeat + stepT) * Math.PI * side;
+          lambdaPose = 20.0;
+        } else if (movePhase === 2) {
+          // Move C: "Raise the Quota" (Double Overhead Roof-Raiser + Pincer Claps)
+          const pump =
+            0.5 + 0.5 * Math.sin(beatFloat * Math.PI * 2 - Math.PI * 0.5);
+          idleX = side * (0.28 + 0.14 * pump);
+          idleY = 0.46 + 0.28 * pump;
+          idleZ = 0.24;
+          idlePoleX = side * 0.85;
+          idlePoleY = -0.2;
+          idlePoleZ = -0.45;
+          idleOpen =
+            Math.abs(Math.sin(beatFloat * Math.PI * 2)) > 0.45 ? 0.95 : 0.08;
+          idleRoll = side * 0.35 * Math.sin(beatFloat * Math.PI * 2);
+          lambdaPose = 14.0;
+        } else {
+          // Move D: "Polivoks Disco Point" (Alternating Diagonal Reach & Groove)
+          const pointRight = Math.floor(beatFloat / 2) % 2 === 0;
+          const isHighPoint = (armIdx === 1) === pointRight;
+          if (isHighPoint) {
+            idleX = side * 0.56;
+            idleY = 0.62 + 0.08 * beatPulse;
+            idleZ = 0.36;
+            idlePoleX = side * 0.78;
+            idlePoleY = -0.1;
+            idlePoleZ = -0.5;
+            idleOpen = 0.14;
+            idleRoll = side * 0.25;
+          } else {
+            idleX = -side * 0.22;
+            idleY = -0.42 - 0.06 * beatPulse;
+            idleZ = 0.44;
+            idlePoleX = side * 0.68;
+            idlePoleY = 0.22;
+            idlePoleZ = -0.7;
+            idleOpen = 0.68 + 0.24 * offBeatPulse;
+            idleRoll = -side * 0.55;
+          }
+          lambdaPose = 14.0;
+        }
       } else if (vocal.mood === "critical") {
         // Intimidating wider overwatch flare + pulsing open pincers
         idleX = side * 0.18 + speechShiftX + critTremor;
@@ -1783,15 +2135,27 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
           dt,
         );
       } else {
-        const lambdaIdle = isBlackout ? 3.5 : 6.5;
-        as.curWrist.x = THREE.MathUtils.damp(as.curWrist.x, idleX, lambdaIdle, dt);
-        as.curWrist.y = THREE.MathUtils.damp(as.curWrist.y, idleY, lambdaIdle, dt);
-        as.curWrist.z = THREE.MathUtils.damp(as.curWrist.z, idleZ, lambdaIdle, dt);
-        as.curPole.x = THREE.MathUtils.damp(as.curPole.x, idlePoleX, lambdaIdle, dt);
-        as.curPole.y = THREE.MathUtils.damp(as.curPole.y, idlePoleY, lambdaIdle, dt);
-        as.curPole.z = THREE.MathUtils.damp(as.curPole.z, idlePoleZ, lambdaIdle, dt);
-        as.curOpen = THREE.MathUtils.damp(as.curOpen, idleOpen, 8.5, dt);
-        as.curRoll = THREE.MathUtils.damp(as.curRoll, 0, 7.0, dt);
+        if (Math.abs(idleRoll) < 0.6 && Math.abs(as.curRoll) > Math.PI) {
+          as.curRoll = wrapAngleRad(as.curRoll);
+        }
+        as.curWrist.x = THREE.MathUtils.damp(as.curWrist.x, idleX, lambdaPose, dt);
+        as.curWrist.y = THREE.MathUtils.damp(as.curWrist.y, idleY, lambdaPose, dt);
+        as.curWrist.z = THREE.MathUtils.damp(as.curWrist.z, idleZ, lambdaPose, dt);
+        as.curPole.x = THREE.MathUtils.damp(as.curPole.x, idlePoleX, lambdaPose, dt);
+        as.curPole.y = THREE.MathUtils.damp(as.curPole.y, idlePoleY, lambdaPose, dt);
+        as.curPole.z = THREE.MathUtils.damp(as.curPole.z, idlePoleZ, lambdaPose, dt);
+        as.curOpen = THREE.MathUtils.damp(
+          as.curOpen,
+          idleOpen,
+          isDancing ? 16.0 : 8.5,
+          dt,
+        );
+        as.curRoll = THREE.MathUtils.damp(
+          as.curRoll,
+          idleRoll,
+          isDancing ? 16.0 : 7.0,
+          dt,
+        );
       }
 
       const ik = solveTwoBoneArmIK(
@@ -1863,8 +2227,14 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       if (ledMat) {
         if (isBlackout) {
           ledMat.color.setHex(0x161a18);
+        } else if (inLobbyWaiting || controlRoomPowerState.zone2 <= 0.01) {
+          ledMat.color.setHex(0x163820);
         } else if (isActiveArm) {
           ledMat.color.setHex(0xffb830);
+        } else if (isDancing) {
+          ledMat.color.setHex(
+            (beatIndex + armIdx) % 2 === 0 ? 0xffb830 : 0x33ff66,
+          );
         } else if (vocal.mood === "critical") {
           ledMat.color.setHex(
             Math.floor(t * 8 + armIdx) % 2 === 0 ? 0xff3b2f : 0x550c0c,
@@ -1877,11 +2247,14 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       }
     }
 
-    // PA Horn speech vibration pulse
-    const hornPulse =
-      !isBlackout && vocal.isTalking
-        ? vocal.energy * (0.5 + 0.5 * Math.sin(t * 42))
-        : 0;
+    // PA Horn speech / dance beat vibration pulse
+    const hornPulse = isBlackout
+      ? 0
+      : isDancing
+        ? beatPulse * 0.65
+        : vocal.isTalking
+          ? vocal.energy * (0.5 + 0.5 * Math.sin(t * 42))
+          : 0;
     if (leftHornRef.current) {
       const hs = 1 + hornPulse * 0.08;
       leftHornRef.current.scale.set(hs, hs, 1 + hornPulse * 0.12);
@@ -1895,6 +2268,17 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     if (turretOpticMatRef.current) {
       if (isBlackout) {
         turretOpticMatRef.current.color.setHex(0x220808);
+      } else if (inLobbyWaiting) {
+        const pulse = 0.5 + 0.5 * Math.sin(t * 2.1);
+        turretOpticMatRef.current.color.lerpColors(
+          _opticStandbyLo,
+          _opticStandbyHi,
+          pulse,
+        );
+      } else if (isDancing) {
+        turretOpticMatRef.current.color.setHex(
+          beatPulse > 0.35 ? 0xff4433 : 0x991212,
+        );
       } else if (vocal.mood === "critical") {
         turretOpticMatRef.current.color.setHex(
           Math.floor(t * 8) % 2 === 0 ? 0xff4433 : 0xa61212,
@@ -1906,13 +2290,45 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       }
     }
 
+    if (opticGlowLightRef.current) {
+      if (isBlackout) {
+        opticGlowLightRef.current.intensity = 0.0002;
+      } else if (inLobbyWaiting) {
+        const pulse = 0.5 + 0.5 * Math.sin(t * 2.1);
+        opticGlowLightRef.current.intensity = 0.42 + pulse * 0.18;
+      } else {
+        opticGlowLightRef.current.intensity = Math.max(
+          0.0002,
+          0.45 * (1 - controlRoomPowerState.zone2),
+        );
+      }
+    }
+
+    if (turretCrtMatRef.current) {
+      if (isBlackout) {
+        turretCrtMatRef.current.color.copy(_turretCrtFullTint);
+      } else if (inLobbyWaiting) {
+        turretCrtMatRef.current.color.copy(_turretCrtStandbyTint);
+      } else {
+        turretCrtMatRef.current.color.lerpColors(
+          _turretCrtStandbyTint,
+          _turretCrtFullTint,
+          controlRoomPowerState.zone2,
+        );
+      }
+    }
+
     const targetAperture = isBlackout
       ? 0.08
-      : vocal.mood === "critical"
-        ? 1.0
-        : vocal.isTalking
-          ? 0.55 + vocal.energy * 0.45
-          : 0.4;
+      : inLobbyWaiting
+        ? 0.62 + Math.sin(t * 1.4) * 0.08
+        : isDancing
+          ? 0.35 + beatPulse * 0.55
+          : vocal.mood === "critical"
+            ? 1.0
+            : vocal.isTalking
+              ? 0.55 + vocal.energy * 0.45
+              : 0.4;
     ts.curAperture = THREE.MathUtils.damp(ts.curAperture, targetAperture, 4.0, dt);
     const bladeRadius = 0.056 + ts.curAperture * 0.032;
     for (let bi = 0; bi < 4; bi++) {
@@ -1928,27 +2344,32 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     }
 
     // Throttled <= 10Hz live face-only 512x512 CRT redraw with strict dirty check
-    if (t - ts.lastDrawSec >= 0.1) {
-      const blinkBucket = vocal.isTalking
-        ? Math.floor(t * 10)
-        : Math.floor(t * 1.5);
-      const pose: KomradPortraitPose = vocal.isTalking
-        ? vocal.mouthOpen === 2
-          ? "talk2"
-          : vocal.mouthOpen === 1
-            ? "talk1"
-            : "idle"
-        : blinkBucket % 9 === 0
-          ? "blink"
-          : blinkBucket % 6 === 2
-            ? "scan"
-            : "idle";
+    if (exitedDance || t - ts.lastDrawSec >= 0.1) {
+      const blinkBucket = isDancing
+        ? Math.floor(beatFloat * 4)
+        : vocal.isTalking
+          ? Math.floor(t * 10)
+          : Math.floor(t * 1.5);
+      const pose: KomradPortraitPose = isDancing
+        ? "idle"
+        : vocal.isTalking
+          ? vocal.mouthOpen === 2
+            ? "talk2"
+            : vocal.mouthOpen === 1
+              ? "talk1"
+              : "idle"
+          : blinkBucket % 9 === 0
+            ? "blink"
+            : blinkBucket % 6 === 2
+              ? "scan"
+              : "idle";
       const energyQ = Math.round(vocal.energy * 10);
       const specSig =
-        vocal.isTalking && vocal.voxLoaded
+        !isDancing && vocal.isTalking && vocal.voxLoaded
           ? `${Math.round(vocal.spectrum16[0] / 28)}-${Math.round(vocal.spectrum16[5] / 28)}-${Math.round(vocal.spectrum16[10] / 28)}-${Math.round(vocal.spectrum16[15] / 28)}`
           : "";
-      const sig = `${isBlackout}|${vocal.mood}|${pose}|${vocal.isTalking}|${energyQ}|${vocal.activeVowel ?? ""}|${vocal.rolledR}|${vocal.activeWord ?? ""}|${vocal.voxLoaded ? 1 : 0}|${specSig}|${
+      const danceBeatParity = isDancing ? beatIndex % 2 : 0;
+      const sig = `${isBlackout}|${isDancing}|${danceBeatParity}|${isDancing ? blinkBucket : 0}|${vocal.mood}|${pose}|${vocal.isTalking}|${energyQ}|${vocal.activeVowel ?? ""}|${vocal.rolledR}|${vocal.activeWord ?? ""}|${vocal.voxLoaded ? 1 : 0}|${specSig}|${
         vocal.mood === "critical" ? blinkBucket % 2 : 0
       }`;
 
@@ -1977,6 +2398,8 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
             vocal.spectrum16,
             vocal.activeWord,
             vocal.voxLoaded,
+            isDancing,
+            danceBeatParity,
           );
           tex.needsUpdate = true;
         }
@@ -2498,6 +2921,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
                       <meshBasicMaterial
                         ref={turretCrtMatRef}
                         map={turretCrtTex}
+                        color="#203626"
                         toneMapped={false}
                         fog={false}
                         polygonOffset
@@ -2592,6 +3016,15 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
                           fog={false}
                         />
                       </mesh>
+                      <pointLight
+                        ref={opticGlowLightRef}
+                        castShadow={false}
+                        position={[0, 0, 0.11]}
+                        color="#ff261f"
+                        intensity={0.48}
+                        distance={1.6}
+                        decay={2}
+                      />
                       {[0, 1, 2, 3].map((fi) => {
                         const ang = (fi * Math.PI) / 2 + Math.PI / 4;
                         return (

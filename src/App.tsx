@@ -1,17 +1,20 @@
 import { Canvas } from '@react-three/fiber'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   playKnifeSwitchSlam,
   silenceAllLegacyGlobalBgm,
 } from './modules/inspector/audio'
+import { useDeskStore } from './modules/inspector/useDeskStore'
 import { playSwitchClank } from './modules/reactor/audioSynth'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
-import { MainMenuOverlay } from './shared/MainMenuOverlay'
 import {
   pointerLockInteraction,
   subscribePointerLockInteraction,
+  updatePointerLockInteraction,
 } from './shared/pointerLockState'
+import { saveCurrentShiftToStorage } from './shared/shiftSaveStorage'
+import { SceneGpuWarmup, SovOsBootOverlay } from './shared/SovOsBootOverlay'
 import { TutorialCompassHud } from './shared/TutorialCompassHud'
 import {
   doesRadioDominateSubtitles,
@@ -32,7 +35,6 @@ function CenterReticle() {
       const gs = useGameStore.getState()
       const visible =
         gs.phase === 'playing' &&
-        gs.isShiftControlReady &&
         pointerLockInteraction.isPointerLocked &&
         !gs.isSeatedAtDesk &&
         !pointerLockInteraction.debugMenuOpen &&
@@ -264,16 +266,47 @@ function RadioBroadcastSubtitleHud({ mainMenuOpen }: { mainMenuOpen: boolean }) 
 
 export function App() {
   const phase = useGameStore((s) => s.phase)
+  const lobbyMenuPhase = useGameStore((s) => s.lobbyMenuPhase)
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
+  const shiftTimeMinutes = useGameStore((s) => s.shiftTimeMinutes)
+  const tutorialPhase = useGameStore((s) => s.tutorialPhase)
+  const activeMandate = useGameStore((s) => s.activeMandate)
+  const activePost84Order = useGameStore((s) => s.activePost84Order)
+  const commendations = useDeskStore((s) => s.commendations)
+  const citations = useDeskStore((s) => s.citations)
+  const deskDocsLen = useDeskStore((s) => s.documents.length)
   const tick = useGameStore((s) => s.tick)
   const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk)
   const canSitAtDesk = useGameStore((s) => s.canSitAtDesk)
+  const [gpuWarmupDone, setGpuWarmupDone] = useState(false)
+  const [bootReady, setBootReady] = useState(false)
+  const bootReadyRef = useRef(false)
+  const handleGpuWarmupComplete = useCallback(() => {
+    setGpuWarmupDone(true)
+  }, [])
+  const handleBootComplete = useCallback(() => {
+    bootReadyRef.current = true
+    updatePointerLockInteraction({ mainMenuOpen: false })
+    setBootReady(true)
+  }, [])
+
   const [menusOpen, setMenusOpen] = useState<boolean>(
     () => pointerLockInteraction.mainMenuOpen || pointerLockInteraction.debugMenuOpen
   )
   const [mainMenuOpen, setMainMenuOpen] = useState<boolean>(
     () => pointerLockInteraction.mainMenuOpen
   )
+
+  useEffect(() => {
+    if (!bootReady) {
+      updatePointerLockInteraction({ mainMenuOpen: true })
+    }
+    return () => {
+      if (!bootReady) {
+        updatePointerLockInteraction({ mainMenuOpen: false })
+      }
+    }
+  }, [bootReady])
 
   useEffect(() => {
     const syncMenus = () => {
@@ -291,6 +324,43 @@ export function App() {
   }, [phase])
 
   useEffect(() => {
+    if (
+      phase !== 'playing' ||
+      lobbyMenuPhase !== 'entered_control_room' ||
+      !isShiftControlReady
+    ) {
+      return
+    }
+    saveCurrentShiftToStorage()
+  }, [
+    phase,
+    lobbyMenuPhase,
+    isShiftControlReady,
+    shiftTimeMinutes,
+    tutorialPhase,
+    activeMandate,
+    activePost84Order,
+    commendations,
+    citations,
+    deskDocsLen,
+  ])
+
+  useEffect(() => {
+    if (
+      phase !== 'playing' ||
+      lobbyMenuPhase !== 'entered_control_room' ||
+      !isShiftControlReady
+    ) {
+      return
+    }
+    const onBeforeUnload = () => {
+      saveCurrentShiftToStorage()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [phase, lobbyMenuPhase, isShiftControlReady])
+
+  useEffect(() => {
     if (phase !== 'playing' || !isShiftControlReady) return
     const interval = window.setInterval(() => {
       tick()
@@ -303,6 +373,7 @@ export function App() {
   // Holding Shift + Space starts (or switches into) Endless Sandbox / No-Fail Test Mode (isGodMode = true).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!bootReadyRef.current) return
       if (e.code === 'Backspace') {
         const s = useGameStore.getState()
         if (s.phase === 'playing' && s.isShiftControlReady && s.tutorialPhase !== 'COMPLETED') {
@@ -370,15 +441,21 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  const effectiveMainMenuOpen = mainMenuOpen || !bootReady
+  const effectiveMenusOpen = menusOpen || !bootReady
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#080b09] select-none">
-      <MainMenuOverlay />
+      <SovOsBootOverlay
+        gpuWarmupDone={gpuWarmupDone}
+        onBootComplete={handleBootComplete}
+      />
       <DebugMenu />
       <CenterReticle />
-      <TutorialCompassHud menusOpen={menusOpen} />
+      <TutorialCompassHud menusOpen={effectiveMenusOpen} />
 
       {/* Subtle Contextual [E] SIT AT DESK Prompt When Walking Near Inspector Desk */}
-      {phase === 'playing' && isShiftControlReady && !isSeatedAtDesk && canSitAtDesk && !menusOpen && (
+      {phase === 'playing' && isShiftControlReady && !isSeatedAtDesk && canSitAtDesk && !effectiveMenusOpen && (
         <div className="pointer-events-none fixed bottom-11 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#ffb000]/75 bg-[#07160c]/90 px-3 py-0.5 font-mono text-xs font-bold tracking-widest text-[#ffb000] shadow-md">
           [E] SIT AT DESK
         </div>
@@ -396,14 +473,15 @@ export function App() {
       {/* 100% True 3D First-Person Soviet Control Room Canvas (Locked dpr=1, unshadowed, stencil-free for 60 FPS micro-pixel aesthetic) */}
       <Canvas
         dpr={1}
-        camera={{ position: [0, 1.65, 0.6], fov: 68, near: 0.12, far: 150 }}
+        camera={{ position: [-0.38, 1.65, 8.42], fov: 68, near: 0.12, far: 150 }}
         gl={{ powerPreference: 'high-performance', antialias: false, stencil: false }}
       >
         <ControlRoomScene />
+        <SceneGpuWarmup onComplete={handleGpuWarmupComplete} />
       </Canvas>
 
-      <KomradBroadcastSubtitleHud mainMenuOpen={mainMenuOpen} />
-      <RadioBroadcastSubtitleHud mainMenuOpen={mainMenuOpen} />
+      <KomradBroadcastSubtitleHud mainMenuOpen={effectiveMainMenuOpen} />
+      <RadioBroadcastSubtitleHud mainMenuOpen={effectiveMainMenuOpen} />
     </div>
   )
 }

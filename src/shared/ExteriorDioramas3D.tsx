@@ -1737,9 +1737,9 @@ const MinimalSteelDripLip3D: React.FC = React.memo(() => {
         <boxGeometry args={[3.84, 0.014, 0.11]} />
         <meshBasicMaterial color="#182026" fog={false} />
       </mesh>
-      {/* Flush Dark Exterior Bunker Wall Ending Exactly at +X Outer Corner (6.08, 4.58) */}
-      <mesh position={[3.46, -7.0, -0.08]} raycast={NOOP_RAYCAST} frustumCulled={false}>
-        <planeGeometry args={[12.08, 12.1]} />
+      {/* Flush Dark Exterior Bunker Wall Under Window 2 Ending at Lobby Corner (worldX = +1.58..+6.08) */}
+      <mesh position={[-0.33, -7.0, -0.08]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <planeGeometry args={[4.5, 12.1]} />
         <meshBasicMaterial color="#080e15" fog={false} />
       </mesh>
     </group>

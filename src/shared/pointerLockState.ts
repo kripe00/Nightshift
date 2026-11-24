@@ -20,9 +20,9 @@ export interface PlayerCameraPose {
 }
 
 export const playerCameraPose: PlayerCameraPose = {
-  x: 0,
-  z: 0.52,
-  yaw: 0,
+  x: -0.38,
+  z: 8.42,
+  yaw: -0.125,
   isSeatedAtDesk: false,
 }
 
@@ -34,7 +34,7 @@ export const pointerLockInteraction: PointerLockInteractionSnapshot = {
   virtualX: 0,
   virtualY: 0,
   debugMenuOpen: false,
-  mainMenuOpen: true,
+  mainMenuOpen: false,
   shiftTransitionActive: false,
 }
 

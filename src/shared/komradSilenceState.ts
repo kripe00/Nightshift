@@ -2,8 +2,11 @@
 // Shared read/write coordination across useGameStore, komradVoiceSynth, and DesktopComputer3D
 // without introducing circular module imports.
 
+import type { LobbyMenuPhase } from './types'
+
 export interface KomradSilenceStateSnapshot {
   phase: string
+  lobbyMenuPhase?: LobbyMenuPhase
   isShiftControlReady: boolean
   tutorialPhase: string
   coreMeltdown: boolean
@@ -12,6 +15,7 @@ export interface KomradSilenceStateSnapshot {
   ciaIntrusionActive: boolean
   isBlackout: boolean
   isGodMode: boolean
+  diagFeedActive?: boolean
   coreTemp: number
   drumPressure: number
   voidFraction: number
@@ -145,8 +149,11 @@ export function canEmitKomradIdleChatter(
 ): boolean {
   if (
     state.phase !== 'playing' ||
+    (state.lobbyMenuPhase !== undefined &&
+      state.lobbyMenuPhase !== 'entered_control_room') ||
     !state.isShiftControlReady ||
     state.tutorialPhase !== 'COMPLETED' ||
+    state.diagFeedActive ||
     isKomradEmergencyOrAlarmActive(state) ||
     isTransmitting
   ) {

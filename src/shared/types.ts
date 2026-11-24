@@ -34,6 +34,7 @@ export type DiagnosticAlarmId =
   | 'grid'
   | 'order'
 export type GamePhase = 'boot' | 'playing' | 'victory' | 'meltdown' | 'gulag'
+export type LobbyMenuPhase = 'menu_locked' | 'door_opening' | 'entered_control_room'
 export type CameraStation =
   | 'overview'
   | 'reactor'
@@ -166,9 +167,47 @@ export interface ActivePost84PowerOrder {
   sectorMaxMW?: Partial<Record<SectorNodeId, number>>
 }
 
+export interface SavedGameStatePayload extends Partial<ReactorState> {
+  shiftNumber: number
+  shiftTimeMinutes: number
+  treasonStrikes: number
+  lastDecisionFeedback: string | null
+  activeMandate: OperationalMandate | null
+  activePost84Order?: ActivePost84PowerOrder | null
+  tutorialPhase?: TutorialPhase
+  tutorialStep?: TutorialStep
+  coreTemp: number
+  pressureBar: number
+  radiationLevel: number
+  powerAllocation: Record<SystemType, number>
+  redlineInstability: number
+  isBlackout: boolean
+  pumpsActive: [boolean, boolean]
+  pumpThrottle: [number, number]
+  pumpAHeat: number
+  pumpBHeat: number
+  lubeOilPressure: number
+  oilCoolerValve: number
+  boronTankLevel: number
+  graphiteTemp: number
+  nitrogenLoopValve: number
+  heliumPressure: number
+  bubblerLevel: number
+  sealToggles: [boolean, boolean, boolean]
+  containmentSealLocked: boolean
+  gridHz: number
+  excitationTrim: number
+  ventilationActive: boolean
+  kgbLineActive: boolean
+  auxLoopBActive?: boolean
+  controlRodLevel?: number
+  vodkaDroughtTimer?: number
+}
+
 export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspecting'> {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
+  lobbyMenuPhase: LobbyMenuPhase
   isShiftControlReady: boolean
   komradOpeningDispatched: boolean
   activeStation: CameraStation
@@ -272,6 +311,7 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   komradSubtitle: KomradSubtitleState | null
 
   // Shared Actions
+  setLobbyMenuPhase: (phase: LobbyMenuPhase) => void
   setShiftControlReady: (ready: boolean) => void
   launchKomradOpeningDispatch: () => void
   setActiveStation: (station: CameraStation) => void
@@ -279,7 +319,8 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   toggleSeatedAtDesk: () => void
   setCanSitAtDesk: (canSit: boolean) => void
   startShift: () => void
-  resetShift: () => void
+  resetShift: (targetLobbyPhase?: LobbyMenuPhase) => void
+  restoreSavedShift: (savedGame: Partial<SavedGameStatePayload>) => void
   skipTutorial: () => void
   acceptVolkovTrainingDirective: () => void
   advanceTutorialStep: () => void

@@ -53,7 +53,9 @@ import type {
   HotspotSeverity,
   KomradMessageEntry,
   KomradMood,
+  LobbyMenuPhase,
   OperationalMandate,
+  SavedGameStatePayload,
   SectorNodeId,
   SystemType,
   TerminalLogEntry,
@@ -166,7 +168,7 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
     az5Active: state.az5Active,
     mcpActive: [...state.mcpActive],
     pumpThrottle: [state.pumpThrottle[0], state.pumpThrottle[1]],
-    oilCoolerValve: state.oilCoolerValve,
+    oilCoolerValve: 100,
     feedwaterValve: state.feedwaterValve,
     nitrogenLoopValve: state.nitrogenLoopValve,
     sealToggles: [
@@ -440,7 +442,7 @@ export function getContextualDiagnosticHint(
         return '⚠️ HIGH STEAM PRESSURE (>76 BAR): INSERT BORON RODS (UNIT A-2) & VENT/DRAIN EXCESS STEAM (UNIT B)!'
       case 'bearing':
         if (maxPumpHeat > 65 || state.lubeOilPressure < 42) {
-          return `⚙️ PUMP BEARINGS HOT (${Math.round(20 + maxPumpHeat)}°C / OIL ${Math.round(state.lubeOilPressure)} PSI): OPEN BEARING COOLER VALVES ON UNIT A / A-2!`
+          return `⚙️ PUMP BEARINGS HOT (${Math.round(20 + maxPumpHeat)}°C / OIL ${Math.round(state.lubeOilPressure)} PSI): TRIM PUMP THROTTLE (UNIT A) OR FIX WET STEAM ON UNIT B!`
         }
         if (state.boronTankLevel < 25) {
           return `🧪 LOW BORON TANK (${Math.round(state.boronTankLevel)}%): PASSIVE FEED TRICKLE ACTIVE — REFUEL AMBER CHANNELS ON UNIT A-2 [KEY 3]!`
@@ -1184,11 +1186,12 @@ export function hasAudibleRadioSubtitle(
 export const useGameStore = create<GameState>((set, get) => ({
   ...INITIAL_MAPPED,
   phase: 'playing',
+  lobbyMenuPhase: 'menu_locked',
   isShiftControlReady: false,
   komradOpeningDispatched: false,
   activeStation: 'overview',
   isSeatedAtDesk: false,
-  canSitAtDesk: true,
+  canSitAtDesk: false,
   shiftNumber: 1,
   shiftTimeMinutes: 0,
   isShiftKeyHeld: false,
@@ -1236,33 +1239,69 @@ export const useGameStore = create<GameState>((set, get) => ({
   radioBroadcastSubtitle: null,
   komradSubtitle: null,
 
+  setLobbyMenuPhase: (lobbyMenuPhase: LobbyMenuPhase) => {
+    set((state) => {
+      const ready =
+        lobbyMenuPhase === 'entered_control_room' &&
+        !pointerLockInteraction.mainMenuOpen &&
+        !pointerLockInteraction.shiftTransitionActive
+      if (
+        state.lobbyMenuPhase === lobbyMenuPhase &&
+        state.isShiftControlReady === ready
+      ) {
+        return state
+      }
+      return {
+        lobbyMenuPhase,
+        isShiftControlReady: ready,
+        ...(lobbyMenuPhase !== 'entered_control_room'
+          ? { isSeatedAtDesk: false, canSitAtDesk: false }
+          : {}),
+      }
+    })
+  },
+
   setShiftControlReady: (ready: boolean) => {
-    set((state) =>
-      state.isShiftControlReady === ready ? state : { isShiftControlReady: ready }
-    )
+    set((state) => {
+      const effectiveReady =
+        ready && state.lobbyMenuPhase === 'entered_control_room'
+      return state.isShiftControlReady === effectiveReady
+        ? state
+        : { isShiftControlReady: effectiveReady }
+    })
   },
 
   launchKomradOpeningDispatch: () => {
     set((state) => {
       if (
         state.komradOpeningDispatched ||
+        state.lobbyMenuPhase !== 'entered_control_room' ||
         !state.isShiftControlReady ||
         state.phase !== 'playing'
       ) {
         return state
       }
-      const bootMsgs = createInitialKomradFeed()
-      const tutMsg =
-        state.tutorialPhase !== 'COMPLETED' &&
-        state.tutorialPhase !== 'AWAITING_VOLKOV_MAIL'
-          ? buildTutorialPhaseKomradMsg(state.shiftTimeMinutes, state.tutorialPhase)
-          : null
-      if (tutMsg) {
-        bootMsgs.push(tutMsg)
+      if (
+        state.shiftTimeMinutes === 0 &&
+        state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
+      ) {
+        const bootMsgs = createInitialKomradFeed()
+        return {
+          komradOpeningDispatched: true,
+          komradMessages: appendKomradFeed(state.komradMessages, ...bootMsgs),
+        }
       }
+      const welcomeBackMsg = createKomradMsg(
+        state.shiftTimeMinutes,
+        'WELCOME BACK TO DUTY, COMRADE. SECTOR 84 TELEMETRY RESTORED. MELTDOWN REMAINS WESTERN PROPAGANDA.',
+        'normal',
+        'K.O.M.R.A.D.-84',
+        'Welcome back to duty, comrade. Sector eighty four telemetry restored. Meltdown remains Western propaganda.',
+        true
+      )
       return {
         komradOpeningDispatched: true,
-        komradMessages: appendKomradFeed(state.komradMessages, ...bootMsgs),
+        komradMessages: appendKomradFeed(state.komradMessages, welcomeBackMsg),
       }
     })
   },
@@ -1416,7 +1455,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         az5Active: false,
         mcpActive: [true, true, true, true],
         pumpThrottle: [60, 60],
-        oilCoolerValve: 50,
+        oilCoolerValve: 100,
         feedwaterValve: 0.50,
         nitrogenLoopValve: 50,
         sealToggles: [true, true, true],
@@ -1714,46 +1753,50 @@ export const useGameStore = create<GameState>((set, get) => ({
       KOMRAD_OPENING_PROPAGANDA_VOX,
       'normal'
     )
-    const controlReadyNow =
-      !pointerLockInteraction.mainMenuOpen &&
-      !pointerLockInteraction.shiftTransitionActive
-    set((state) => ({
-      ...mapped,
-      phase: 'playing',
-      isShiftControlReady: controlReadyNow,
-      komradOpeningDispatched: false,
-      isSeatedAtDesk: false,
-      activeMandate: null,
-      activePost84Order: null,
-      lastDecisionFeedback: mapped.tutorialPrompt.header,
-      selectedH2OSubstationId: 1,
-      hzOutOfBoundsSeconds: 0,
-      vodkaDroughtTimer: 0,
-      gridTransientImpulse: 0,
-      steamTransientImpulse: 0,
-      voltageDipIntensity: 0,
-      tutorialDrainSeconds: 0,
-      tutorialHintsHidden: false,
-      activeCrisisCoach: null,
-      dismissedCrisisIds: [],
-      shiftTimeMinutes: 0,
-      shiftRunId: state.shiftRunId + 1,
-      hoveredDiagnosticId: null,
-      hoveredControlHint: null,
-      diagFeedActive: false,
-      radioOn: false,
-      radioBroadcastSubtitle: null,
-      komradSubtitle: null,
-      terminalEntries: [...state.terminalEntries.slice(-24), entry],
-      terminalLogs: [
-        ...state.terminalLogs.slice(-24),
-        `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-      ],
-      komradMessages: [],
-    }))
+    set((state) => {
+      const controlReadyNow =
+        state.lobbyMenuPhase === 'entered_control_room' &&
+        !pointerLockInteraction.mainMenuOpen &&
+        !pointerLockInteraction.shiftTransitionActive
+      return {
+        ...mapped,
+        phase: 'playing',
+        isShiftControlReady: controlReadyNow,
+        komradOpeningDispatched: false,
+        isSeatedAtDesk: false,
+        canSitAtDesk: false,
+        activeMandate: null,
+        activePost84Order: null,
+        lastDecisionFeedback: mapped.tutorialPrompt.header,
+        selectedH2OSubstationId: 1,
+        hzOutOfBoundsSeconds: 0,
+        vodkaDroughtTimer: 0,
+        gridTransientImpulse: 0,
+        steamTransientImpulse: 0,
+        voltageDipIntensity: 0,
+        tutorialDrainSeconds: 0,
+        tutorialHintsHidden: false,
+        activeCrisisCoach: null,
+        dismissedCrisisIds: [],
+        shiftTimeMinutes: 0,
+        shiftRunId: state.shiftRunId + 1,
+        hoveredDiagnosticId: null,
+        hoveredControlHint: null,
+        diagFeedActive: false,
+        radioOn: false,
+        radioBroadcastSubtitle: null,
+        komradSubtitle: null,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: [],
+      }
+    })
   },
 
-  resetShift: () => {
+  resetShift: (targetLobbyPhase?: LobbyMenuPhase) => {
     resetKomradTrackers()
     const cold = createColdStartState()
     const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
@@ -1765,50 +1808,232 @@ export const useGameStore = create<GameState>((set, get) => ({
         'normal'
       ),
     ]
-    const controlReadyNow =
-      !pointerLockInteraction.mainMenuOpen &&
-      !pointerLockInteraction.shiftTransitionActive
+    const validTargetPhase: LobbyMenuPhase | undefined =
+      targetLobbyPhase === 'menu_locked' ||
+      targetLobbyPhase === 'door_opening' ||
+      targetLobbyPhase === 'entered_control_room'
+        ? targetLobbyPhase
+        : undefined
+    set((state) => {
+      const nextLobbyPhase = validTargetPhase ?? state.lobbyMenuPhase
+      const controlReadyNow =
+        nextLobbyPhase === 'entered_control_room' &&
+        !pointerLockInteraction.mainMenuOpen &&
+        !pointerLockInteraction.shiftTransitionActive
+      return {
+        ...mapped,
+        phase: 'playing',
+        lobbyMenuPhase: nextLobbyPhase,
+        isShiftControlReady: controlReadyNow,
+        komradOpeningDispatched: false,
+        isSeatedAtDesk: false,
+        canSitAtDesk: false,
+        shiftNumber: 1,
+        activeMandate: null,
+        activePost84Order: null,
+        lastDecisionFeedback: mapped.tutorialPrompt.header,
+        selectedH2OSubstationId: 1,
+        treasonStrikes: 0,
+        tutorialDrainSeconds: 0,
+        tutorialHintsHidden: false,
+        activeCrisisCoach: null,
+        dismissedCrisisIds: [],
+        shiftRunId: state.shiftRunId + 1,
+        hoveredDiagnosticId: null,
+        hoveredControlHint: null,
+        diagFeedActive: false,
+        radioOn: false,
+        radioBroadcastSubtitle: null,
+        komradSubtitle: null,
+        vodkaDroughtTimer: 0,
+        redlineInstability: 0,
+        isInspectingDesk: false,
+        excitationTrim: 0.0,
+        hzOutOfBoundsSeconds: 0,
+        boronCooldown: 0,
+        az5Available: true,
+        az5Cooldown: 0,
+        gridTransientImpulse: 0,
+        steamTransientImpulse: 0,
+        voltageDipIntensity: 0,
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        komradOverrideLocked: false,
+        activeDirectives: [],
+        printerProgress: 0,
+        shiftTimeMinutes: 0,
+        terminalEntries: freshEntries,
+        terminalLogs: freshEntries.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
+        komradMessages: [],
+      }
+    })
+  },
+
+  restoreSavedShift: (savedGame: Partial<SavedGameStatePayload>) => {
+    resetKomradTrackers()
+    const baseReactor = createColdStartState()
+
+    const numOr = (val: unknown, fallback: number): number =>
+      typeof val === 'number' && Number.isFinite(val) ? val : fallback
+    const boolOr = (val: unknown, fallback: boolean): boolean =>
+      typeof val === 'boolean' ? val : fallback
+
+    const savedControlRods =
+      typeof savedGame.controlRods === 'number' && Number.isFinite(savedGame.controlRods)
+        ? savedGame.controlRods
+        : typeof savedGame.controlRodLevel === 'number' && Number.isFinite(savedGame.controlRodLevel)
+          ? Math.max(0, Math.min(1, savedGame.controlRodLevel / 100))
+          : baseReactor.controlRods
+
+    const mergedReactor: ReactorState = {
+      ...baseReactor,
+      controlRods: savedControlRods,
+      batteryStoredMWh: numOr(savedGame.batteryStoredMWh, baseReactor.batteryStoredMWh),
+      batteryOutputValve: numOr(savedGame.batteryOutputValve, baseReactor.batteryOutputValve),
+      energyCreatedMW: numOr(savedGame.energyCreatedMW, baseReactor.energyCreatedMW),
+      energyDemandMW: numOr(savedGame.energyDemandMW, baseReactor.energyDemandMW),
+      totalElectricalMW: numOr(savedGame.totalElectricalMW, baseReactor.totalElectricalMW),
+      thermalPower: numOr(savedGame.thermalPower, baseReactor.thermalPower),
+      coreTemp: numOr(savedGame.coreTemp, baseReactor.coreTemp),
+      graphiteTemp: numOr(savedGame.graphiteTemp, baseReactor.graphiteTemp),
+      drumPressure: numOr(
+        savedGame.drumPressure,
+        numOr(savedGame.pressureBar, baseReactor.drumPressure)
+      ),
+      drumWaterLevel: numOr(savedGame.drumWaterLevel, baseReactor.drumWaterLevel),
+      bubblerLevel: numOr(savedGame.bubblerLevel, baseReactor.bubblerLevel),
+      heliumPressure: numOr(savedGame.heliumPressure, baseReactor.heliumPressure),
+      nitrogenLoopValve: numOr(savedGame.nitrogenLoopValve, baseReactor.nitrogenLoopValve),
+      feedwaterValve: numOr(savedGame.feedwaterValve, baseReactor.feedwaterValve),
+      waterReservoir: numOr(savedGame.waterReservoir, baseReactor.waterReservoir),
+      pripyatWater: numOr(savedGame.pripyatWater, baseReactor.pripyatWater),
+      kolkhozWater: numOr(savedGame.kolkhozWater, baseReactor.kolkhozWater),
+      vodkaWater: numOr(savedGame.vodkaWater, baseReactor.vodkaWater),
+      xenon: numOr(savedGame.xenon, baseReactor.xenon),
+      iodine: numOr(savedGame.iodine, baseReactor.iodine),
+      voidFraction: numOr(savedGame.voidFraction, baseReactor.voidFraction),
+      roomRadiation: numOr(
+        savedGame.roomRadiation,
+        numOr(savedGame.radiationLevel, baseReactor.roomRadiation)
+      ),
+      mcpActive:
+        Array.isArray(savedGame.mcpActive) && savedGame.mcpActive.length === 4
+          ? savedGame.mcpActive.map((v) => Boolean(v))
+          : Array.isArray(savedGame.pumpsActive) && savedGame.pumpsActive.length === 2
+            ? [
+                Boolean(savedGame.pumpsActive[0]),
+                Boolean(savedGame.pumpsActive[0]),
+                Boolean(savedGame.pumpsActive[1]),
+                Boolean(savedGame.pumpsActive[1]),
+              ]
+            : [...baseReactor.mcpActive],
+      pumpThrottle:
+        Array.isArray(savedGame.pumpThrottle) && savedGame.pumpThrottle.length === 2
+          ? [
+              numOr(savedGame.pumpThrottle[0], baseReactor.pumpThrottle[0]),
+              numOr(savedGame.pumpThrottle[1], baseReactor.pumpThrottle[1]),
+            ]
+          : [...baseReactor.pumpThrottle],
+      pumpAHeat: numOr(savedGame.pumpAHeat, baseReactor.pumpAHeat),
+      pumpBHeat: numOr(savedGame.pumpBHeat, baseReactor.pumpBHeat),
+      lubeOilPressure: numOr(savedGame.lubeOilPressure, baseReactor.lubeOilPressure),
+      oilCoolerValve: numOr(savedGame.oilCoolerValve, baseReactor.oilCoolerValve),
+      boronTankLevel: numOr(savedGame.boronTankLevel, baseReactor.boronTankLevel),
+      boronReservePool: numOr(savedGame.boronReservePool, baseReactor.boronReservePool),
+      sealToggles:
+        Array.isArray(savedGame.sealToggles) && savedGame.sealToggles.length === 3
+          ? [
+              Boolean(savedGame.sealToggles[0]),
+              Boolean(savedGame.sealToggles[1]),
+              Boolean(savedGame.sealToggles[2]),
+            ]
+          : [...baseReactor.sealToggles],
+      ventilationActive: boolOr(savedGame.ventilationActive, baseReactor.ventilationActive),
+      avrActive: boolOr(savedGame.avrActive, baseReactor.avrActive),
+      kgbLineActive: boolOr(savedGame.kgbLineActive, baseReactor.kgbLineActive),
+      condenserVacActive: boolOr(
+        savedGame.condenserVacActive,
+        boolOr(savedGame.auxLoopBActive, baseReactor.condenserVacActive)
+      ),
+      coreTileAnomalies:
+        savedGame.coreTileAnomalies && typeof savedGame.coreTileAnomalies === 'object'
+          ? { ...savedGame.coreTileAnomalies }
+          : { ...baseReactor.coreTileAnomalies },
+      turbines:
+        Array.isArray(savedGame.turbines) && savedGame.turbines.length === 2
+          ? [
+              { ...baseReactor.turbines[0], ...savedGame.turbines[0] },
+              { ...baseReactor.turbines[1], ...savedGame.turbines[1] },
+            ]
+          : [{ ...baseReactor.turbines[0] }, { ...baseReactor.turbines[1] }],
+      substations:
+        Array.isArray(savedGame.substations) &&
+        savedGame.substations.length === baseReactor.substations.length
+          ? savedGame.substations.map((sub, idx) => ({
+              ...baseReactor.substations[idx],
+              ...sub,
+            }))
+          : baseReactor.substations.map((s) => ({ ...s })),
+    }
+
+    const validTutorialPhases: readonly TutorialPhase[] = [
+      'AWAITING_VOLKOV_MAIL',
+      'STEP_0_PICKUP_WEPAD',
+      'STEP_1_COOLING',
+      'STEP_2_PULL_RODS',
+      'STEP_3_BUILD_STEAM',
+      'STEP_4_SPIN_TURBINE',
+      'STEP_5_SYNC_GRID',
+      'STEP_6_BASELINE_600MW',
+      'STEP_7_VOID_DRILL',
+      'STEP_8_XENON_DRILL',
+      'COMPLETED',
+    ]
+    const savedTutorialPhase: TutorialPhase =
+      savedGame.tutorialPhase && validTutorialPhases.includes(savedGame.tutorialPhase)
+        ? savedGame.tutorialPhase
+        : 'AWAITING_VOLKOV_MAIL'
+
+    const mapped = mapReactorToGameStateFields(mergedReactor, savedTutorialPhase)
+    const restoredShiftTime = numOr(savedGame.shiftTimeMinutes, 0)
+    const resumeLogEntry = createLogEntry(
+      restoredShiftTime,
+      'K.O.M.R.A.D.-84',
+      'DUTY CHECKPOINT LOADED. CROSS AIRLOCK INTO CONTROL HALL MCR-4.',
+      'normal'
+    )
+
     set((state) => ({
       ...mapped,
       phase: 'playing',
-      isShiftControlReady: controlReadyNow,
+      lobbyMenuPhase: 'door_opening',
+      isShiftControlReady: false,
       komradOpeningDispatched: false,
       isSeatedAtDesk: false,
-      activeMandate: null,
-      activePost84Order: null,
-      lastDecisionFeedback: mapped.tutorialPrompt.header,
-      selectedH2OSubstationId: 1,
-      treasonStrikes: 0,
-      tutorialDrainSeconds: 0,
-      tutorialHintsHidden: false,
-      activeCrisisCoach: null,
-      dismissedCrisisIds: [],
-      shiftRunId: state.shiftRunId + 1,
+      canSitAtDesk: false,
+      shiftNumber: numOr(savedGame.shiftNumber, 1),
+      shiftTimeMinutes: restoredShiftTime,
+      treasonStrikes: numOr(savedGame.treasonStrikes, 0),
+      lastDecisionFeedback:
+        savedGame.lastDecisionFeedback ?? mapped.tutorialPrompt.header,
+      activeMandate: savedGame.activeMandate ?? null,
+      activePost84Order: savedGame.activePost84Order ?? null,
+      redlineInstability: numOr(savedGame.redlineInstability, 0),
+      isBlackout: boolOr(savedGame.isBlackout, false),
+      excitationTrim: numOr(savedGame.excitationTrim, 0.0),
+      vodkaDroughtTimer: numOr(savedGame.vodkaDroughtTimer, 0),
       hoveredDiagnosticId: null,
+      hoveredControlHint: null,
       diagFeedActive: false,
       radioOn: false,
       radioBroadcastSubtitle: null,
       komradSubtitle: null,
-      vodkaDroughtTimer: 0,
-      redlineInstability: 0,
-      isInspectingDesk: false,
-      excitationTrim: 0.0,
-      hzOutOfBoundsSeconds: 0,
-      boronCooldown: 0,
-      az5Available: true,
-      az5Cooldown: 0,
-      gridTransientImpulse: 0,
-      steamTransientImpulse: 0,
-      voltageDipIntensity: 0,
-      ciaIntrusionActive: false,
-      ciaIntrusionProgress: 0,
-      komradOverrideLocked: false,
-      activeDirectives: [],
-      printerProgress: 0,
-      shiftTimeMinutes: 0,
-      terminalEntries: freshEntries,
-      terminalLogs: freshEntries.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
       komradMessages: [],
+      terminalEntries: [resumeLogEntry],
+      terminalLogs: [
+        `[${resumeLogEntry.timestamp}] ${resumeLogEntry.sender}: ${resumeLogEntry.text}`,
+      ],
+      shiftRunId: state.shiftRunId + 1,
     }))
   },
 
@@ -2228,11 +2453,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setOilCoolerValve: (valvePct: number) => {
+    void valvePct
     set((state) => {
-      const clamped = Math.max(0, Math.min(100, Number(valvePct.toFixed(1))))
-      if (Math.abs(clamped - state.oilCoolerValve) < 0.05) return state
+      if (state.oilCoolerValve === 100) return state
       return {
-        oilCoolerValve: clamped,
+        oilCoolerValve: 100,
       }
     })
   },
@@ -2878,7 +3103,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   tickThermodynamics: (dtSeconds: number) => {
     const state = get()
-    if ((state.phase !== 'playing' && state.phase !== 'boot') || !state.isShiftControlReady) {
+    if (
+      (state.phase !== 'playing' && state.phase !== 'boot') ||
+      state.lobbyMenuPhase !== 'entered_control_room' ||
+      !state.isShiftControlReady
+    ) {
       return
     }
     const frameDt = Math.max(0, Math.min(0.25, dtSeconds))
@@ -2910,6 +3139,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         } else if (
           !state.isSeatedAtDesk &&
+          !state.diagFeedActive &&
           !isKomradTransmitting() &&
           !doesRadioDominateSubtitles(
             state.radioOn,
@@ -3838,6 +4068,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     if (
       state.phase !== 'playing' ||
+      state.lobbyMenuPhase !== 'entered_control_room' ||
       !state.isShiftControlReady ||
       state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
     ) {

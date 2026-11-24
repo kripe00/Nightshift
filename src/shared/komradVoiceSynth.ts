@@ -397,7 +397,7 @@ const ROUTINE_MASTER_GAIN = 0.5;
 const ALERT_MASTER_GAIN = 0.72;
 const MONOLOGUE_MIN_GAP_SEC = 75;
 const MONOLOGUE_EXTRA_GAP_SEC = 45;
-const KOMRAD_OPENING_SETTLE_DELAY_SEC = 0.5;
+const KOMRAD_OPENING_SETTLE_DELAY_SEC = 0.25;
 
 interface VoiceAudioChain {
   ctx: AudioContext;
@@ -437,6 +437,10 @@ let voxLoadState: VoxLoadState = "idle";
 let voxManifest: VoxManifest | null = null;
 const voxBuffers = new Map<string, AudioBuffer>();
 const voxClipBuffers = new Map<string, AudioBuffer>();
+let prefetchedManifest: VoxManifest | null = null;
+let voxPrefetchPromise: Promise<void> | null = null;
+const prefetchedPackBytes = new Map<string, ArrayBuffer>();
+const prefetchedClipBytes = new Map<string, ArrayBuffer>();
 
 let activeUtteranceGain: GainNode | null = null;
 let activeUtteranceNodes = new Set<AudioScheduledSourceNode>();
@@ -768,7 +772,11 @@ function ensureKomradAudioUnlockListeners(): void {
     if (!audio) return;
     const finishUnlock = () => {
       if (audio.state !== "running") return;
-      if (useGameStore.getState().phase === "playing" && !useGameStore.getState().isMusicMuted) {
+      if (
+        useGameStore.getState().phase === "playing" &&
+        useGameStore.getState().lobbyMenuPhase !== "menu_locked" &&
+        !useGameStore.getState().isMusicMuted
+      ) {
         ensureVoxPreloaded(audio);
       }
       window.removeEventListener("pointerdown", tryUnlockAudio);
@@ -1922,6 +1930,7 @@ function canKomradSpeakAudio(): boolean {
   if (s.isMusicMuted) return false;
   if (s.diagFeedActive) return false;
   if (s.phase !== "playing") return false;
+  if (s.lobbyMenuPhase !== "entered_control_room") return false;
   if (!s.isShiftControlReady) return false;
   if (s.isBlackout && !s.isGodMode) return false;
   if (isRadioHoldoffActive()) return false;
@@ -2198,6 +2207,62 @@ function updateMasterDucking(allowed: boolean, activeLevel: number): void {
   masterGain.gain.linearRampToValueAtTime(target, now + 0.025);
 }
 
+function yieldMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Quietly pre-fetches the K.O.M.R.A.D.-84 VOX manifest and raw audio buffers into
+ * memory during boot without touching AudioContext or emitting sound.
+ */
+export function prefetchKomradVoxAssets(): void {
+  if (typeof fetch !== "function" || voxPrefetchPromise !== null) return;
+
+  voxPrefetchPromise = (async () => {
+    try {
+      const resp = await fetch(VOX_MANIFEST_URL);
+      if (!resp.ok) return;
+      const manifest = (await resp.json()) as VoxManifest;
+      if (!manifest?.packs?.length || !manifest?.words) return;
+      prefetchedManifest = manifest;
+
+      for (const pack of manifest.packs) {
+        if (!prefetchedPackBytes.has(pack.id)) {
+          try {
+            const packResp = await fetch(pack.src);
+            if (packResp.ok) {
+              prefetchedPackBytes.set(pack.id, await packResp.arrayBuffer());
+            }
+          } catch {
+            // Best-effort prefetch
+          }
+          await yieldMs(20);
+        }
+      }
+
+      if (manifest.clips?.length) {
+        for (const clip of manifest.clips) {
+          if (!prefetchedClipBytes.has(clip.id)) {
+            try {
+              const clipResp = await fetch(clip.src);
+              if (clipResp.ok) {
+                prefetchedClipBytes.set(clip.id, await clipResp.arrayBuffer());
+              }
+            } catch {
+              // Best-effort prefetch
+            }
+            await yieldMs(35);
+          }
+        }
+      }
+    } catch {
+      // Network errors during prefetch never block boot
+    }
+  })();
+}
+
 function ensureVoxPreloaded(audio: AudioContext): void {
   if (voxLoadState !== "idle" || audio.state !== "running") return;
   if (typeof fetch !== "function") {
@@ -2208,22 +2273,31 @@ function ensureVoxPreloaded(audio: AudioContext): void {
   voxLoadState = "loading";
   void (async () => {
     try {
-      const resp = await fetch(VOX_MANIFEST_URL);
-      if (!resp.ok) {
-        throw new Error(`VOX manifest HTTP ${resp.status}`);
+      let manifest = prefetchedManifest;
+      if (!manifest) {
+        const resp = await fetch(VOX_MANIFEST_URL);
+        if (!resp.ok) {
+          throw new Error(`VOX manifest HTTP ${resp.status}`);
+        }
+        manifest = (await resp.json()) as VoxManifest;
       }
-      const manifest = (await resp.json()) as VoxManifest;
       if (!manifest?.packs?.length || !manifest?.words) {
         throw new Error("Invalid VOX manifest format");
       }
 
       const decodedPacks = await Promise.all(
         manifest.packs.map(async (pack) => {
-          const packResp = await fetch(pack.src);
-          if (!packResp.ok) {
-            throw new Error(`VOX pack ${pack.src} HTTP ${packResp.status}`);
+          const cachedBytes = prefetchedPackBytes.get(pack.id);
+          let arr: ArrayBuffer;
+          if (cachedBytes) {
+            arr = cachedBytes.slice(0);
+          } else {
+            const packResp = await fetch(pack.src);
+            if (!packResp.ok) {
+              throw new Error(`VOX pack ${pack.src} HTTP ${packResp.status}`);
+            }
+            arr = await packResp.arrayBuffer();
           }
-          const arr = await packResp.arrayBuffer();
           const audioBuf = await audio.decodeAudioData(arr);
           return [pack.id, audioBuf] as const;
         }),
@@ -2238,22 +2312,26 @@ function ensureVoxPreloaded(audio: AudioContext): void {
       vocalState.voxLoaded = true;
 
       if (manifest.clips?.length) {
-        const clipResults = await Promise.allSettled(
-          manifest.clips.map(async (clip) => {
-            const clipResp = await fetch(clip.src);
-            if (!clipResp.ok) {
-              throw new Error(`VOX clip ${clip.src} HTTP ${clipResp.status}`);
-            }
-            const arr = await clipResp.arrayBuffer();
-            const audioBuf = await audio.decodeAudioData(arr);
-            return [clip.id, audioBuf] as const;
-          }),
-        );
         voxClipBuffers.clear();
-        for (const res of clipResults) {
-          if (res.status === "fulfilled") {
-            voxClipBuffers.set(res.value[0], res.value[1]);
+        for (const clip of manifest.clips) {
+          try {
+            const cachedClip = prefetchedClipBytes.get(clip.id);
+            let arr: ArrayBuffer;
+            if (cachedClip) {
+              arr = cachedClip.slice(0);
+            } else {
+              const clipResp = await fetch(clip.src);
+              if (!clipResp.ok) {
+                continue;
+              }
+              arr = await clipResp.arrayBuffer();
+            }
+            const audioBuf = await audio.decodeAudioData(arr);
+            voxClipBuffers.set(clip.id, audioBuf);
+          } catch {
+            // Skip individual failed monologue clip cleanly
           }
+          await yieldMs(30);
         }
       }
     } catch {
@@ -3278,6 +3356,7 @@ export function playTurretServoWhir(slewRadians: number): void {
     s.isMusicMuted ||
     s.diagFeedActive ||
     s.phase !== "playing" ||
+    s.lobbyMenuPhase !== "entered_control_room" ||
     (s.isBlackout && !s.isGodMode)
   ) {
     return;
@@ -3524,7 +3603,13 @@ export function stepKomradSpeech(
     voxLoadStartedElapsedSec = -1;
   }
 
-  if (s.phase === "playing" && !s.isMusicMuted && audio && audioRunning) {
+  if (
+    s.phase === "playing" &&
+    s.lobbyMenuPhase !== "menu_locked" &&
+    !s.isMusicMuted &&
+    audio &&
+    audioRunning
+  ) {
     ensureVoiceChain(audio, targetMasterLevel);
     ensureVoxPreloaded(audio);
   }
@@ -3537,7 +3622,7 @@ export function stepKomradSpeech(
     voxLoadState === "failed" ||
     (voxLoadStartedElapsedSec >= 0 && elapsedSec - voxLoadStartedElapsedSec >= 2.2);
 
-  if (!s.isShiftControlReady) {
+  if (!s.isShiftControlReady || s.lobbyMenuPhase !== "entered_control_room") {
     if (voxSpeakingAudioActive || visualTypingActive) {
       visualTypingActive = false;
       markKomradTransmissionEnd();
@@ -3570,7 +3655,12 @@ export function stepKomradSpeech(
       elapsedSec + MONOLOGUE_MIN_GAP_SEC + Math.random() * MONOLOGUE_EXTRA_GAP_SEC;
   }
 
-  if (s.phase === "playing" && !isBlackout && !s.komradOpeningDispatched) {
+  if (
+    s.phase === "playing" &&
+    !isBlackout &&
+    !s.komradOpeningDispatched &&
+    !s.diagFeedActive
+  ) {
     openingSettleElapsedSec += dt;
     if (openingSettleElapsedSec >= KOMRAD_OPENING_SETTLE_DELAY_SEC) {
       useGameStore.getState().launchKomradOpeningDispatch();
@@ -3612,6 +3702,15 @@ export function stepKomradSpeech(
       lastUtteranceEndElapsedSec = elapsedSec;
       charCursor = latestMsg.text.length;
       markKomradTransmissionEnd();
+    }
+    if (visualTypingActive) {
+      visualTypingActive = false;
+      charCursor = latestMsg.text.length;
+      markKomradTransmissionEnd();
+    }
+    if (s.diagFeedActive && pendingVoxMsg && pendingVoxMsgPriority < 3) {
+      pendingVoxMsg = null;
+      pendingVoxMsgPriority = 0;
     }
     if (subtitleSnapshot.clause !== null || visualSubtitleActive) {
       clearKomradSubtitleNow();
@@ -3726,7 +3825,7 @@ export function stepKomradSpeech(
       if (!radioActive && !s.diagFeedActive) {
         beginVisualSubtitle(latestMsg, msgMood);
       }
-    } else if (latestMsg.text.length > 0) {
+    } else if (!s.diagFeedActive && latestMsg.text.length > 0) {
       charCursor = 0;
       charAccumSec = 0;
       vocalState.msgStartSec = elapsedSec;
@@ -3737,7 +3836,7 @@ export function stepKomradSpeech(
         beginVisualSubtitle(latestMsg, msgMood);
       }
     } else {
-      charCursor = 0;
+      charCursor = s.diagFeedActive ? latestMsg.text.length : 0;
       vocalState.activeMsgId = latestMsg.id;
       if (visualTypingActive) {
         visualTypingActive = false;
