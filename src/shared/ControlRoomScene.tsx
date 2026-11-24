@@ -31,6 +31,7 @@ import { playerCameraPose } from "./pointerLockState";
 import {
   getKomradVowelBand,
   stepKomradSpeech,
+  triggerPreVolkovPanelLockFeedback,
   type KomradVowelKey,
 } from "./komradVoiceSynth";
 import {
@@ -68,7 +69,7 @@ import {
   registerKremlinCanvasRedraw,
 } from "./kremlinFontReady";
 import type { KomradMessageEntry, KomradMood } from "./types";
-import { useGameStore } from "./useGameStore";
+import { isPreVolkovPanelLocked, useGameStore } from "./useGameStore";
 
 const ExternalInspectorDesk3D = Reflect.get(
   InspectorModule,
@@ -7540,6 +7541,10 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 toggleDragCleanupRef.current?.();
                 const auxId = auxKomradIds[tIdx];
                 if (auxId) notifyPlayerControlInteraction(auxId, true);

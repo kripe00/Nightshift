@@ -315,6 +315,36 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    const syncSeatedCursor = () => {
+      const gs = useGameStore.getState()
+      const hideOsCursor =
+        bootReadyRef.current &&
+        gs.phase === 'playing' &&
+        gs.isSeatedAtDesk &&
+        (!gs.isBlackout || gs.isGodMode) &&
+        !pointerLockInteraction.debugMenuOpen &&
+        !pointerLockInteraction.mainMenuOpen &&
+        !pointerLockInteraction.shiftTransitionActive
+
+      document.documentElement.classList.toggle('iskra-terminal-seated', hideOsCursor)
+      document.body.classList.toggle('iskra-terminal-seated', hideOsCursor)
+      if (hideOsCursor && document.body.style.cursor) {
+        document.body.style.cursor = ''
+      }
+    }
+
+    syncSeatedCursor()
+    const unsubGame = useGameStore.subscribe(syncSeatedCursor)
+    const unsubLock = subscribePointerLockInteraction(syncSeatedCursor)
+    return () => {
+      unsubGame()
+      unsubLock()
+      document.documentElement.classList.remove('iskra-terminal-seated')
+      document.body.classList.remove('iskra-terminal-seated')
+    }
+  }, [bootReady])
+
+  useEffect(() => {
     silenceAllLegacyGlobalBgm()
   }, [phase])
 

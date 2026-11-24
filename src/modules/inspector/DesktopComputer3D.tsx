@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import type {
   KomradMessageEntry,
@@ -12,6 +12,7 @@ import { useDeskStore } from './useDeskStore'
 import { onKremlinFontReady } from '../../shared/kremlinFontReady'
 import { controlRoomPowerState } from '../../shared/ControlRoomScene'
 import { notifyPost84OrderEvent } from '../../shared/komradSilenceState'
+import { pointerLockInteraction } from '../../shared/pointerLockState'
 import { saveCurrentShiftToStorage } from '../../shared/shiftSaveStorage'
 import {
   playCarriageReturnDing,
@@ -46,7 +47,10 @@ import {
 } from './post84Mail'
 
 const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => {}
+const DEFAULT_MESH_RAYCAST: THREE.Object3D['raycast'] = THREE.Mesh.prototype.raycast
 
+const SCREEN_PLANE_W = 0.928
+const SCREEN_PLANE_H = 0.58
 const MOUSE_RANGE_X = 0.052
 const MOUSE_RANGE_Z = 0.044
 const MOUSE_TARGET_DEADZONE = 0.0028
@@ -114,7 +118,10 @@ function pushKomradTerminalNotice(
   }))
 }
 
-function readTelemetrySnapshot(osState?: DesktopOsState): {
+function readTelemetrySnapshot(
+  osState?: DesktopOsState,
+  hoveredId: string | null = null
+): {
   snapshot: DesktopTelemetrySnapshot
   key: string
 } {
@@ -160,6 +167,17 @@ function readTelemetrySnapshot(osState?: DesktopOsState): {
     isMailOpen && osState?.selectedMailId
       ? osState.mailMessages.find((m) => m.id === osState.selectedMailId)?.order
       : undefined
+  const unreadCount = osState
+    ? osState.mailMessages.filter((m) => m.status === 'unread').length
+    : 0
+  const mailDigest = osState
+    ? osState.mailMessages
+        .map(
+          (m) =>
+            `${m.id}:${m.status}:${m.order?.orderState ?? '-'}:${m.trainingDirective?.state ?? '-'}`
+        )
+        .join(',')
+    : ''
 
   const keyParts: Array<string | number> = [
     snapshot.shiftNumber,
@@ -169,6 +187,15 @@ function readTelemetrySnapshot(osState?: DesktopOsState): {
     snapshot.isBlackout ? 1 : 0,
     Math.round(snapshot.coreTemp),
     snapshot.radiationLevel >= 8.0 ? 1 : 0,
+    gs.activePost84Order?.orderId ?? '',
+    osState ? osState.openWindows.join(',') : '',
+    osState ? osState.minimizedWindows.join(',') : '',
+    osState?.selectedMailId ?? '',
+    osState?.mailScrollOffset ?? 0,
+    osState?.lastStatusNotice ?? '',
+    unreadCount,
+    mailDigest,
+    hoveredId ?? '',
   ]
 
   if (selectedOrderMsg) {
@@ -315,7 +342,16 @@ function hydratePost84Snapshot(snapshot: Post84InboxSnapshot): {
 
 export function DesktopComputer3D() {
   const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk)
+  const { camera, gl } = useThree()
   const osStateRef = useRef<DesktopOsState>(createInitialDesktopOsState())
+  const screenMeshRef = useRef<THREE.Mesh | null>(null)
+  const projRaycasterRef = useRef(new THREE.Raycaster())
+  const projNdcRef = useRef(new THREE.Vector2())
+  const projPlaneRef = useRef(new THREE.Plane())
+  const projHitWorldRef = useRef(new THREE.Vector3())
+  const projHitLocalRef = useRef(new THREE.Vector3())
+  const projInvMatRef = useRef(new THREE.Matrix4())
+  const projLocalNormalRef = useRef(new THREE.Vector3(0, 0, 1))
   const hoveredIdRef = useRef<string | null>(null)
   const cursorPosRef = useRef<{ x: number; y: number } | null>(null)
   const latestTelemetryRef = useRef<DesktopTelemetrySnapshot>(readTelemetrySnapshot().snapshot)
@@ -454,6 +490,81 @@ export function DesktopComputer3D() {
       useGameStore.getState().setActivePost84Order(null)
     }
   }, [badge, cableGeo, mouseCableGeo, screenTex])
+
+  const applySeatedCursorUv = useCallback((rawU: number, rawV: number) => {
+    const u = THREE.MathUtils.clamp(rawU, 0.01, 0.99)
+    const v = THREE.MathUtils.clamp(rawV, 0.01, 0.99)
+    const raw = uvToCanvasCoords(u, v)
+    const coords = { x: Math.round(raw.x), y: Math.round(raw.y) }
+
+    const rawX = THREE.MathUtils.clamp((u - 0.5) * 0.104, -MOUSE_RANGE_X, MOUSE_RANGE_X)
+    const rawZ = THREE.MathUtils.clamp((0.5 - v) * 0.088, -MOUSE_RANGE_Z, MOUSE_RANGE_Z)
+    if (
+      Math.hypot(rawX - mouseTargetRef.current.x, rawZ - mouseTargetRef.current.z) >=
+      MOUSE_TARGET_DEADZONE
+    ) {
+      mouseTargetRef.current.x = rawX
+      mouseTargetRef.current.z = rawZ
+    }
+
+    const hit = hitTestDesktopOs(osStateRef.current, coords.x, coords.y)
+    const nextHover = hit ? hit.id : null
+    const prevCursor = cursorPosRef.current
+    const cursorMoved =
+      prevCursor === null || prevCursor.x !== coords.x || prevCursor.y !== coords.y
+
+    if (cursorMoved || hoveredIdRef.current !== nextHover) {
+      cursorPosRef.current = coords
+      hoveredIdRef.current = nextHover
+      dirtyRef.current = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isSeatedAtDesk) return
+    const onSeatedPointerMove = (ev: PointerEvent) => {
+      const gs = useGameStore.getState()
+      if (
+        !gs.isSeatedAtDesk ||
+        gs.phase !== 'playing' ||
+        (gs.isBlackout && !gs.isGodMode) ||
+        document.pointerLockElement !== null ||
+        pointerLockInteraction.debugMenuOpen ||
+        pointerLockInteraction.mainMenuOpen
+      ) {
+        return
+      }
+      const mesh = screenMeshRef.current
+      if (!mesh) return
+      const rect = gl.domElement.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+
+      const nx = ((ev.clientX - rect.left) / rect.width) * 2 - 1
+      const ny = -((ev.clientY - rect.top) / rect.height) * 2 + 1
+      projNdcRef.current.set(nx, ny)
+      projRaycasterRef.current.setFromCamera(projNdcRef.current, camera)
+
+      mesh.updateWorldMatrix(true, false)
+      projPlaneRef.current
+        .set(projLocalNormalRef.current, 0)
+        .applyMatrix4(mesh.matrixWorld)
+
+      if (projRaycasterRef.current.ray.intersectPlane(projPlaneRef.current, projHitWorldRef.current)) {
+        projInvMatRef.current.copy(mesh.matrixWorld).invert()
+        projHitLocalRef.current
+          .copy(projHitWorldRef.current)
+          .applyMatrix4(projInvMatRef.current)
+        const rawU = projHitLocalRef.current.x / SCREEN_PLANE_W + 0.5
+        const rawV = projHitLocalRef.current.y / SCREEN_PLANE_H + 0.5
+        applySeatedCursorUv(rawU, rawV)
+      }
+    }
+
+    window.addEventListener('pointermove', onSeatedPointerMove, { passive: true })
+    return () => {
+      window.removeEventListener('pointermove', onSeatedPointerMove)
+    }
+  }, [applySeatedCursorUv, camera, gl, isSeatedAtDesk])
 
   useFrame((_, delta) => {
     const dt = Math.min(0.05, delta)
@@ -599,7 +710,7 @@ export function DesktopComputer3D() {
               orderProgressSaveAccumRef.current = 0
               syncSnapshotToStore()
               saveCurrentShiftToStorage()
-              const refreshed = readTelemetrySnapshot(osStateRef.current)
+              const refreshed = readTelemetrySnapshot(osStateRef.current, hoveredIdRef.current)
               latestTelemetryRef.current = refreshed.snapshot
               lastTelemetryKeyRef.current = refreshed.key
               dirtyRef.current = true
@@ -658,7 +769,7 @@ export function DesktopComputer3D() {
               }
               orderProgressSaveAccumRef.current = 0
               syncSnapshotToStore()
-              const refreshed = readTelemetrySnapshot(osStateRef.current)
+              const refreshed = readTelemetrySnapshot(osStateRef.current, hoveredIdRef.current)
               latestTelemetryRef.current = refreshed.snapshot
               lastTelemetryKeyRef.current = refreshed.key
               dirtyRef.current = true
@@ -689,7 +800,11 @@ export function DesktopComputer3D() {
       dirtyRef.current = true
     }
 
-    const isSeatedActive = gs.isSeatedAtDesk && document.pointerLockElement === null
+    const isSeatedActive =
+      gs.isSeatedAtDesk &&
+      gs.phase === 'playing' &&
+      (!gs.isBlackout || gs.isGodMode) &&
+      document.pointerLockElement === null
     if (!isSeatedActive) {
       mouseTargetRef.current.x = 0
       mouseTargetRef.current.z = 0
@@ -698,6 +813,19 @@ export function DesktopComputer3D() {
         hoveredIdRef.current = null
         dirtyRef.current = true
       }
+    } else if (cursorPosRef.current === null) {
+      const centerCoords = {
+        x: Math.round(DESKTOP_CANVAS_W * 0.5),
+        y: Math.round(DESKTOP_CANVAS_H * 0.5),
+      }
+      const centerHit = hitTestDesktopOs(
+        osStateRef.current,
+        centerCoords.x,
+        centerCoords.y
+      )
+      cursorPosRef.current = centerCoords
+      hoveredIdRef.current = centerHit ? centerHit.id : null
+      dirtyRef.current = true
     }
 
     // Smooth 3D physical mouse movement strictly while seated, snapping cleanly at rest
@@ -751,7 +879,7 @@ export function DesktopComputer3D() {
     telemetryAccumRef.current += dt
     if (telemetryAccumRef.current >= 0.16) {
       telemetryAccumRef.current = 0
-      const { snapshot, key } = readTelemetrySnapshot(osStateRef.current)
+      const { snapshot, key } = readTelemetrySnapshot(osStateRef.current, hoveredIdRef.current)
       if (key !== lastTelemetryKeyRef.current) {
         lastTelemetryKeyRef.current = key
         latestTelemetryRef.current = snapshot
@@ -785,34 +913,20 @@ export function DesktopComputer3D() {
     const gs = useGameStore.getState()
     if (!gs.isSeatedAtDesk || document.pointerLockElement !== null) return
 
-    const raw = uvToCanvasCoords(e.uv.x, e.uv.y)
-    const coords = { x: Math.round(raw.x), y: Math.round(raw.y) }
-
-    const rawX = THREE.MathUtils.clamp((e.uv.x - 0.5) * 0.104, -MOUSE_RANGE_X, MOUSE_RANGE_X)
-    const rawZ = THREE.MathUtils.clamp((0.5 - e.uv.y) * 0.088, -MOUSE_RANGE_Z, MOUSE_RANGE_Z)
-    if (
-      Math.hypot(rawX - mouseTargetRef.current.x, rawZ - mouseTargetRef.current.z) >=
-      MOUSE_TARGET_DEADZONE
-    ) {
-      mouseTargetRef.current.x = rawX
-      mouseTargetRef.current.z = rawZ
-    }
-
-    const hit = hitTestDesktopOs(osStateRef.current, coords.x, coords.y)
-    const nextHover = hit ? hit.id : null
-    const prevCursor = cursorPosRef.current
-    const cursorMoved =
-      prevCursor === null || prevCursor.x !== coords.x || prevCursor.y !== coords.y
-
-    if (cursorMoved || hoveredIdRef.current !== nextHover) {
-      cursorPosRef.current = coords
-      hoveredIdRef.current = nextHover
-      dirtyRef.current = true
-    }
+    applySeatedCursorUv(e.uv.x, e.uv.y)
   }
 
   const handleScreenPointerOut = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
+    const gs = useGameStore.getState()
+    if (
+      gs.isSeatedAtDesk &&
+      gs.phase === 'playing' &&
+      (!gs.isBlackout || gs.isGodMode) &&
+      document.pointerLockElement === null
+    ) {
+      return
+    }
     mouseTargetRef.current.x = 0
     mouseTargetRef.current.z = 0
     if (cursorPosRef.current !== null || hoveredIdRef.current !== null) {
@@ -824,6 +938,7 @@ export function DesktopComputer3D() {
 
   const handleScreenPointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
+    if (e.button !== 0) return
     const gs = useGameStore.getState()
     if (!gs.isSeatedAtDesk || document.pointerLockElement !== null) return
 
@@ -874,9 +989,6 @@ export function DesktopComputer3D() {
           'OPERATOR',
           false
         )
-        const refreshed = readTelemetrySnapshot(osStateRef.current)
-        latestTelemetryRef.current = refreshed.snapshot
-        lastTelemetryKeyRef.current = refreshed.key
       }
     }
 
@@ -900,6 +1012,9 @@ export function DesktopComputer3D() {
 
     const newHit = hitTestDesktopOs(nextState, coords.x, coords.y)
     hoveredIdRef.current = newHit ? newHit.id : null
+    const refreshed = readTelemetrySnapshot(osStateRef.current, hoveredIdRef.current)
+    latestTelemetryRef.current = refreshed.snapshot
+    lastTelemetryKeyRef.current = refreshed.key
     syncSnapshotToStore()
     dirtyRef.current = true
   }
@@ -992,13 +1107,14 @@ export function DesktopComputer3D() {
             <meshBasicMaterial color="#030a05" />
           </mesh>
           <mesh
+            ref={screenMeshRef}
             position={[0, 0.008, 0.185]}
-            raycast={isSeatedAtDesk ? undefined : NOOP_RAYCAST}
+            raycast={isSeatedAtDesk ? DEFAULT_MESH_RAYCAST : NOOP_RAYCAST}
             onPointerMove={handleScreenPointerMove}
             onPointerOut={handleScreenPointerOut}
             onPointerDown={handleScreenPointerDown}
           >
-            <planeGeometry args={[0.928, 0.58]} />
+            <planeGeometry args={[SCREEN_PLANE_W, SCREEN_PLANE_H]} />
             <meshBasicMaterial
               ref={screenMatRef}
               color="#242424"

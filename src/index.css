@@ -13,3 +13,9 @@
   --font-vt323: "VT323", monospace;
   --font-courier: "Courier Prime", monospace;
 }
+
+html.iskra-terminal-seated,
+html.iskra-terminal-seated *,
+html.iskra-terminal-seated canvas {
+  cursor: none !important;
+}

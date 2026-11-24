@@ -740,9 +740,55 @@ function resetVolkovHassleTrackers(): void {
   volkovHassleCount = 0
 }
 
+const PRE_VOLKOV_SCOLD_COOLDOWN_MS = 4800
+let preVolkovScoldBag: number[] = []
+let lastPreVolkovScoldIdx = -1
+let lastPreVolkovScoldMs = -10000
+
+export const KOMRAD_PRE_VOLKOV_LOCK_SCOLDS: readonly string[] = [
+  'HANDS OFF THE REACTOR CONSOLE, COMRADE. MAGNETIC SAFETY LOCK IS ACTIVE UNTIL YOU CHECK COMMISSAR VOLKOV ORDER AT THE DESK.',
+  'UNAUTHORIZED BUTTON TOUCHING LOGGED. PLEASE KEEP YOUR CLUMSY FINGERS AWAY FROM STATE PROPERTY AND OPEN THE DESK SCREEN FIRST.',
+  'STOP CRANKING THAT PANEL, OPERATOR. TOO MUCH ENTHUSIASM BEFORE READING COMMISSAR VOLKOV DIRECTIVE EARNS A FREE ONE WAY TICKET TO SIBERIA.',
+  'CONTROLS ARE LOCKED, COMRADE. YOUR PREDECESSOR WAS TOUCHING THE REACTOR BEFORE READING ORDERS. HE IS NOW SHOVELING SNOW IN SIBERIA.',
+  'NOTICE. TAMPERING WITH LOCKED SWITCHES WITHOUT AUTHORIZATION WILL BE DEDUCTED FROM YOUR BORSCHT AND TEA VOUCHERS. WALK TO THE DESK SCREEN.',
+  'STILL TRYING TO PUSH THAT LEVER, COMRADE? THE MAGNETIC LOCK IS STRONGER THAN YOUR CLUMSY HANDS. SIT AT THE DESK CHAIR AND CHECK VOLKOV ORDER.',
+  'ATTENTION. KGB SURVEILLANCE EYES ARE WATCHING YOUR FINGERS VERY CLOSELY. DO NOT TOUCH THE REACTOR CONSOLE UNTIL COMMISSAR VOLKOV DIRECTIVE IS ACCEPTED.',
+  'UNWISE, OPERATOR. VERY UNWISE. THIS CONSOLE REMAINS LOCKED UNTIL YOU OPEN COMMISSAR VOLKOV ORDER ON THE DESK TERMINAL IMMEDIATELY.',
+]
+
+function pickNextPreVolkovScold(): string {
+  if (preVolkovScoldBag.length === 0) {
+    preVolkovScoldBag = Array.from(
+      { length: KOMRAD_PRE_VOLKOV_LOCK_SCOLDS.length },
+      (_, idx) => idx
+    )
+    for (let i = preVolkovScoldBag.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = preVolkovScoldBag[i]
+      preVolkovScoldBag[i] = preVolkovScoldBag[j]
+      preVolkovScoldBag[j] = tmp
+    }
+    if (
+      preVolkovScoldBag.length > 1 &&
+      preVolkovScoldBag[preVolkovScoldBag.length - 1] === lastPreVolkovScoldIdx
+    ) {
+      const lastPos = preVolkovScoldBag.length - 1
+      const tmp = preVolkovScoldBag[lastPos]
+      preVolkovScoldBag[lastPos] = preVolkovScoldBag[0]
+      preVolkovScoldBag[0] = tmp
+    }
+  }
+  const idx = preVolkovScoldBag.pop() ?? 0
+  lastPreVolkovScoldIdx = idx
+  return KOMRAD_PRE_VOLKOV_LOCK_SCOLDS[idx]
+}
+
 function resetKomradTrackers(): void {
   resetKomradSilenceState()
   resetVolkovHassleTrackers()
+  preVolkovScoldBag = []
+  lastPreVolkovScoldIdx = -1
+  lastPreVolkovScoldMs = -10000
   shiftElapsedSeconds = 0
   lastKomradHazardSec = {
     HIGH_VOID: -120,
@@ -1193,6 +1239,56 @@ export function hasAudibleRadioSubtitle(
   )
 }
 
+export function isPreVolkovPanelLocked(
+  state: Pick<GameState, 'tutorialPhase' | 'isGodMode'> = useGameStore.getState()
+): boolean {
+  return state.tutorialPhase === 'AWAITING_VOLKOV_MAIL' && !state.isGodMode
+}
+
+export function reportPreVolkovLockedPanelAttempt(): boolean {
+  const state = useGameStore.getState()
+  if (!isPreVolkovPanelLocked(state)) {
+    return false
+  }
+  const feedback =
+    'PANEL MAGNETIC INTERLOCK ACTIVE — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!'
+  const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (nowMs - lastPreVolkovScoldMs < PRE_VOLKOV_SCOLD_COOLDOWN_MS) {
+    if (state.lastDecisionFeedback !== feedback) {
+      useGameStore.setState({ lastDecisionFeedback: feedback })
+    }
+    return true
+  }
+  lastPreVolkovScoldMs = nowMs
+  const line = pickNextPreVolkovScold()
+  const entry = createLogEntry(
+    state.shiftTimeMinutes,
+    'K.O.M.R.A.D.-84',
+    line,
+    'warn'
+  )
+  useGameStore.setState((prev) => ({
+    lastDecisionFeedback: feedback,
+    terminalEntries: [...prev.terminalEntries.slice(-24), entry],
+    terminalLogs: [
+      ...prev.terminalLogs.slice(-24),
+      `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+    ],
+    komradMessages: appendKomradFeed(
+      prev.komradMessages,
+      createKomradMsg(
+        prev.shiftTimeMinutes,
+        line,
+        'warning',
+        'K.O.M.R.A.D.-84',
+        line,
+        true
+      )
+    ),
+  }))
+  return true
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   ...INITIAL_MAPPED,
   phase: 'playing',
@@ -1416,6 +1512,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSubstationH2O: (substationId: 1 | 3 | 5, pct: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const clamped = Math.max(0, Math.min(100, Math.round(pct / 5) * 5))
       const nextSubstations = state.substations.map((s) =>
         s.id === substationId ? { ...s, allocatedH2O: clamped } : { ...s }
@@ -2123,6 +2220,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   pullMainBreaker: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const baseReactor = extractReactorState(state)
       const res = toggleGridBreaker(baseReactor, 0)
       const t0 = baseReactor.turbines[0]
@@ -2177,6 +2275,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   resetTurbineTrip: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextTurbines: [typeof state.turbines[0], typeof state.turbines[1]] = [
         { ...state.turbines[0], tripped: false },
         { ...state.turbines[1], tripped: false },
@@ -2219,6 +2318,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setFeedwaterValve: (valveRatioOrPct: number) => {
     if (!Number.isFinite(valveRatioOrPct)) return
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const normalized =
         valveRatioOrPct > 1.0001 ? valveRatioOrPct / 100 : valveRatioOrPct
       const clamped = Math.max(0, Math.min(1, Number(normalized.toFixed(3))))
@@ -2235,6 +2335,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleMcpPump: (pumpIdx: 0 | 1 | 2 | 3, active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextMcp = [...state.mcpActive]
       nextMcp[pumpIdx] =
         typeof active === 'boolean' ? active : !nextMcp[pumpIdx]
@@ -2288,6 +2389,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSteamDumpValve: (open: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.steamDumpValve === open) return state
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
@@ -2304,6 +2406,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setRodTargetRate: (rate: -1 | 0 | 1) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         rodTargetRate: rate,
@@ -2314,6 +2417,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setBatteryOutputValve: (valveRatioOrPct: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const normalized =
         valveRatioOrPct > 1.0001 ? valveRatioOrPct / 100 : valveRatioOrPct
       const clamped = Math.max(0, Math.min(1, Number(normalized.toFixed(3))))
@@ -2466,6 +2570,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSectorPower: (sector: SectorNodeId, targetMW: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.komradOverrideLocked) return state
       const subId = SECTOR_TO_SUB_ID[sector]
       const sub = findSubById(state.substations, subId)
@@ -2508,6 +2613,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const idxA = pumpIndex === 0 ? 0 : 2
       const idxB = pumpIndex === 0 ? 1 : 3
       const curActive = Boolean(state.mcpActive[idxA] || state.mcpActive[idxB])
@@ -2537,6 +2643,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const clamped = Math.max(0, Math.min(100, Number(throttlePct.toFixed(1))))
       const idxA = pumpIndex === 0 ? 0 : 2
       const idxB = pumpIndex === 0 ? 1 : 3
@@ -2571,6 +2678,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setOilCoolerValve: (valvePct: number) => {
     void valvePct
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.oilCoolerValve === 100) return state
       return {
         oilCoolerValve: 100,
@@ -2580,6 +2688,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setControlRodLevel: (levelPct: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const clampedPct = Math.max(0, Math.min(100, Number(levelPct.toFixed(1))))
       const nextRods = Number((clampedPct / 100).toFixed(4))
       const delta = nextRods - state.controlRods
@@ -2618,6 +2727,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   pumpBoronTank: (amountPct = 5.0) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const headroom = Math.max(0, 100 - state.boronTankLevel)
       const available = Math.max(0, state.boronReservePool)
       const transfer = Math.min(amountPct, headroom, available)
@@ -2642,6 +2752,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   selectChannelForRefuel: (channelIndex: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextReactor: ReactorState = extractReactorState(state)
       const res = selectCoreChannelForRefuel(nextReactor, channelIndex)
       if (!res.isSpent) {
@@ -2664,6 +2775,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   executeRefuelLeverStroke: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextReactor: ReactorState = extractReactorState(state)
       const res = refuelSelectedCoreChannel(nextReactor)
       const prevPhase = state.tutorialPhase
@@ -2719,6 +2831,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   quenchChannelHotspot: (channelIndex: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextReactor: ReactorState = extractReactorState(state)
       const res = selectCoreChannelForRefuel(nextReactor, channelIndex)
       if (!res.isSpent) {
@@ -2736,6 +2849,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setNitrogenLoopValve: (valvePct: number) => {
     if (!Number.isFinite(valvePct)) return
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const clampedPct = Math.max(0, Math.min(100, Number(valvePct.toFixed(1))))
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
@@ -2750,6 +2864,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setBubblerDraining: (draining: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.bubblerDraining === draining) return state
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
@@ -2761,6 +2876,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleSealSwitch: (toggleIndex: 0 | 1 | 2, active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextSeals: [boolean, boolean, boolean] = [
         state.sealToggles[0],
         state.sealToggles[1],
@@ -2791,6 +2907,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   lockAllContainmentSeals: () => {
     set((s) => {
+      if (isPreVolkovPanelLocked(s)) return s
       const nextReactor: ReactorState = {
         ...extractReactorState(s),
         mcpActive: [true, true, true, true],
@@ -2825,6 +2942,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setVentingSteam: (venting: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.ventingSteam === venting) return state
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
@@ -2843,6 +2961,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleVentilation: (active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextVent =
         typeof active === 'boolean' ? active : !state.ventilationActive
       const nextReactor: ReactorState = {
@@ -2860,6 +2979,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleAvr: (active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextAvr =
         typeof active === 'boolean' ? active : !state.avrActive
       const nextReactor: ReactorState = {
@@ -2877,6 +2997,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleKgbLine: (active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextKgb =
         typeof active === 'boolean' ? active : !state.kgbLineActive
       const nextReactor: ReactorState = {
@@ -2895,6 +3016,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleAuxLoopB: (active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextVac =
         typeof active === 'boolean' ? active : !state.auxLoopBActive
       const nextReactor: ReactorState = {
@@ -2918,6 +3040,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   injectBoronAcid: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.boronTankLevel < 20) {
         const warnMsg = `BORON TANK LOW (${Math.round(state.boronTankLevel)}% < 20%)! CYCLE [ROD REFUELING LEVER] ON UNIT A-2 OR BOOST FEEDWATER (UNIT B)!`
         const warnEntry = createLogEntry(
@@ -3882,6 +4005,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   triggerAz5: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextAz5 = !state.az5Active
       const base = extractReactorState(state)
       const nextReactor: ReactorState = {
@@ -3955,6 +4079,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   overrideKomradLock: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const overrideMsg =
         'MANUAL OVERRIDE ACCEPTED. YOUR LACK OF FAITH IN AUTOMATED SOCIALISM HAS BEEN LOGGED.'
       const entry = createLogEntry(
@@ -3981,6 +4106,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   purgeFirewall: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const purgeMsg =
         'WESTERN IMPERIALIST PACKET STREAM PURGED FROM SECTOR 07.'
       const okEntry = createLogEntry(

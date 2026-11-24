@@ -14,7 +14,12 @@ import {
   resetKomradSilenceState,
 } from "./komradSilenceState";
 import type { KomradMessageEntry, KomradMood } from "./types";
-import { doesRadioDominateSubtitles, useGameStore } from "./useGameStore";
+import {
+  doesRadioDominateSubtitles,
+  isPreVolkovPanelLocked,
+  reportPreVolkovLockedPanelAttempt,
+  useGameStore,
+} from "./useGameStore";
 
 export type KomradVowelKey =
   | "AA"
@@ -459,6 +464,7 @@ let voxQueueCursor = 0;
 let voxCursorAudioSec = 0;
 let voxUtteranceEndAudioSec = 0;
 let voxActiveMood: KomradMood = "normal";
+let voxClauseIndex = 0;
 let voxTimeline: VoxTimelineSegment[] = [];
 let voxTimelineIdx = 0;
 let voxSpeakingAudioActive = false;
@@ -1943,7 +1949,7 @@ function canKomradSpeakAudio(): boolean {
   return true;
 }
 
-function createAsymmetricTubeCurve(): Float32Array<ArrayBuffer> {
+function createSovietDacGritCurve(): Float32Array<ArrayBuffer> {
   const samples = 1024;
   const buffer = new ArrayBuffer(samples * Float32Array.BYTES_PER_ELEMENT);
   const curve = new Float32Array(buffer);
@@ -1951,7 +1957,9 @@ function createAsymmetricTubeCurve(): Float32Array<ArrayBuffer> {
   let maxAbs = 0.001;
   for (let i = 0; i < samples; i++) {
     const x = (i * 2) / (samples - 1) - 1;
-    const y = x >= 0 ? Math.tanh(x * 2.1) : Math.tanh(x * 1.65) - 0.05 * x * x;
+    const tube = x >= 0 ? Math.tanh(x * 2.15) : Math.tanh(x * 1.75) - 0.06 * x * x;
+    const quantized = Math.round(x * 48) / 48;
+    const y = tube * 0.82 + quantized * 0.18;
     raw[i] = y;
     const a = Math.abs(y);
     if (a > maxAbs) maxAbs = a;
@@ -2027,9 +2035,9 @@ function ensureVoiceChain(
   consonantBusInput.gain.value = 1.0;
 
   // Unified Dark Soviet Mainframe Vocoder & Overwatch PA Horn Bus:
-  // Highpass 95Hz -> Dark Chest +5.5dB @ 155Hz -> 56Hz Ring-Mod ->
-  // Parallel 9.2ms Metallic Comb Resonator -> Asymmetric Tube Saturation ->
-  // PA Presence +3.5dB @ 1450Hz -> Dark Lowpass 2750Hz -> 36ms Bunker Slapback
+  // Highpass 95Hz -> Iron Chest +5.2dB @ 210Hz -> Steel Horn +3.8dB @ 1150Hz ->
+  // Parallel 60Hz Triangle Ring-Mod (22% wet) -> Parallel 12.4ms Metallic Comb (0.28 fb, 3.5kHz damp) ->
+  // Cold DAC Bit-Grit WaveShaper -> Steep 4200Hz Telemetry Roll-off -> 36ms Slapback -> Fast Compressor
   const paHighpass = audio.createBiquadFilter();
   paHighpass.type = "highpass";
   paHighpass.frequency.value = 95;
@@ -2037,61 +2045,70 @@ function ensureVoiceChain(
 
   const chestResonance = audio.createBiquadFilter();
   chestResonance.type = "peaking";
-  chestResonance.frequency.value = 155;
-  chestResonance.Q.value = 1.25;
-  chestResonance.gain.value = 5.5;
+  chestResonance.frequency.value = 210;
+  chestResonance.Q.value = 1.35;
+  chestResonance.gain.value = 5.2;
 
-  const ringModGain = audio.createGain();
-  ringModGain.gain.value = 1.0;
+  const hornResonance = audio.createBiquadFilter();
+  hornResonance.type = "peaking";
+  hornResonance.frequency.value = 1150;
+  hornResonance.Q.value = 1.65;
+  hornResonance.gain.value = 3.8;
+
+  const ringModEntry = audio.createGain();
+  ringModEntry.gain.value = 1.0;
+
+  const ringModDry = audio.createGain();
+  ringModDry.gain.value = 0.8;
+
+  // Audio-rate amplitude modulation (60 Hz triangle carrier, 22% wet mix)
+  const ringModMul = audio.createGain();
+  ringModMul.gain.value = 0.0;
 
   const ringModOsc = audio.createOscillator();
-  ringModOsc.type = "sine";
-  ringModOsc.frequency.value = 56;
-
-  const ringModDepth = audio.createGain();
-  ringModDepth.gain.value = 0.15;
-  ringModOsc.connect(ringModDepth);
-  ringModDepth.connect(ringModGain.gain);
+  ringModOsc.type = "triangle";
+  ringModOsc.frequency.value = 60;
+  ringModOsc.connect(ringModMul.gain);
   ringModOsc.start();
 
-  // Parallel Metallic Comb Resonator (9.2ms delay, fb 0.40, wet 0.35)
+  const ringModWet = audio.createGain();
+  ringModWet.gain.value = 0.22;
+
+  const ringModSum = audio.createGain();
+  ringModSum.gain.value = 1.0;
+
+  // Parallel Hollow Metallic Chassis Comb Resonator (12.4ms delay, fb 0.28, damped 3.5kHz, wet 0.30)
   const combDry = audio.createGain();
-  combDry.gain.value = 0.78;
+  combDry.gain.value = 0.8;
 
   const combDelay = audio.createDelay(0.05);
-  combDelay.delayTime.value = 0.0092;
+  combDelay.delayTime.value = 0.0124;
 
   const combDamp = audio.createBiquadFilter();
   combDamp.type = "lowpass";
-  combDamp.frequency.value = 2600;
-  combDamp.Q.value = 0.7;
+  combDamp.frequency.value = 3500;
+  combDamp.Q.value = 0.75;
 
   const combFeedback = audio.createGain();
-  combFeedback.gain.value = 0.4;
+  combFeedback.gain.value = 0.28;
 
   const combWet = audio.createGain();
-  combWet.gain.value = 0.35;
+  combWet.gain.value = 0.3;
 
   const combSum = audio.createGain();
   combSum.gain.value = 1.0;
 
   const driveGain = audio.createGain();
-  driveGain.gain.value = 1.05;
+  driveGain.gain.value = 1.08;
 
   const paShaper = audio.createWaveShaper();
-  paShaper.curve = createAsymmetricTubeCurve();
+  paShaper.curve = createSovietDacGritCurve();
   paShaper.oversample = "2x";
-
-  const paPresence = audio.createBiquadFilter();
-  paPresence.type = "peaking";
-  paPresence.frequency.value = 1450;
-  paPresence.Q.value = 1.15;
-  paPresence.gain.value = 3.5;
 
   const paLowpass = audio.createBiquadFilter();
   paLowpass.type = "lowpass";
-  paLowpass.frequency.value = 2750;
-  paLowpass.Q.value = 0.85;
+  paLowpass.frequency.value = 4200;
+  paLowpass.Q.value = 1.05;
 
   const consHighpass = audio.createBiquadFilter();
   consHighpass.type = "highpass";
@@ -2101,7 +2118,7 @@ function ensureVoiceChain(
   const dryGain = audio.createGain();
   dryGain.gain.value = 0.94;
 
-  // 36ms concrete bunker slapback (wet = 0.14)
+  // 36ms concrete bunker slapback (wet = 0.13)
   const slapDelay = audio.createDelay(0.12);
   slapDelay.delayTime.value = 0.036;
 
@@ -2114,10 +2131,20 @@ function ensureVoiceChain(
   slapFeedback.gain.value = 0.14;
 
   const slapWet = audio.createGain();
-  slapWet.gain.value = 0.14;
+  slapWet.gain.value = 0.13;
 
   const paBusSum = audio.createGain();
   paBusSum.gain.value = 1.0;
+
+  const compressor = audio.createDynamicsCompressor();
+  compressor.threshold.value = -18;
+  compressor.knee.value = 12;
+  compressor.ratio.value = 4.5;
+  compressor.attack.value = 0.004;
+  compressor.release.value = 0.14;
+
+  const makeupGain = audio.createGain();
+  makeupGain.gain.value = 1.16;
 
   const analyser = audio.createAnalyser();
   analyser.fftSize = 64;
@@ -2135,15 +2162,23 @@ function ensureVoiceChain(
   voxInput.connect(paHighpass);
   busInput.connect(paHighpass);
   paHighpass.connect(chestResonance);
-  chestResonance.connect(ringModGain);
+  chestResonance.connect(hornResonance);
+  hornResonance.connect(ringModEntry);
 
   consonantBusInput.connect(consHighpass);
-  consHighpass.connect(ringModGain);
+  consHighpass.connect(ringModEntry);
 
-  ringModGain.connect(combDry);
+  ringModEntry.connect(ringModDry);
+  ringModDry.connect(ringModSum);
+
+  ringModEntry.connect(ringModMul);
+  ringModMul.connect(ringModWet);
+  ringModWet.connect(ringModSum);
+
+  ringModSum.connect(combDry);
   combDry.connect(combSum);
 
-  ringModGain.connect(combDelay);
+  ringModSum.connect(combDelay);
   combDelay.connect(combDamp);
   combDamp.connect(combFeedback);
   combFeedback.connect(combDelay);
@@ -2152,8 +2187,7 @@ function ensureVoiceChain(
 
   combSum.connect(driveGain);
   driveGain.connect(paShaper);
-  paShaper.connect(paPresence);
-  paPresence.connect(paLowpass);
+  paShaper.connect(paLowpass);
 
   paLowpass.connect(dryGain);
   dryGain.connect(paBusSum);
@@ -2165,7 +2199,9 @@ function ensureVoiceChain(
   slapBp.connect(slapWet);
   slapWet.connect(paBusSum);
 
-  paBusSum.connect(analyser);
+  paBusSum.connect(compressor);
+  compressor.connect(makeupGain);
+  makeupGain.connect(analyser);
   analyser.connect(masterGain);
   masterGain.connect(audio.destination);
 
@@ -2358,6 +2394,7 @@ function releaseActiveUtteranceNodes(fadeSec: number): void {
 
   voxQueue = [];
   voxQueueCursor = 0;
+  voxClauseIndex = 0;
   voxTimeline = [];
   voxTimelineIdx = 0;
   voxUtteranceEndAudioSec = 0;
@@ -2423,6 +2460,7 @@ function finishActiveUtterance(elapsedSec: number): void {
   voxSpeakingAudioActive = false;
   voxHardDeadlineMs = 0;
   lastUtteranceEndElapsedSec = elapsedSec;
+  const closeMood = voxActiveMood || subtitleSnapshot.mood;
   const finalClause =
     activeSubtitleClauses.length > 0
       ? activeSubtitleClauses[activeSubtitleClauses.length - 1].text
@@ -2433,17 +2471,18 @@ function finishActiveUtterance(elapsedSec: number): void {
     subtitleHoldUntilMs = nowPerfMs() + KOMRAD_SUBTITLE_LINGER_MS;
     emitKomradSubtitle(
       finalClause,
-      voxActiveMood || subtitleSnapshot.mood,
+      closeMood,
       false,
       activeUtteranceCleanText || subtitleSnapshot.fullText,
       null,
     );
   }
   releaseActiveUtteranceNodes(0.04);
+  playRelayClack(computeTargetMasterGain(undefined, closeMood), true);
   markKomradTransmissionEnd();
 }
 
-function playRelayClack(targetMasterLevel: number): void {
+function playRelayClack(targetMasterLevel: number, isClose = false): void {
   if (!canKomradSpeakAudio()) return;
   const audio = getAudioContext();
   if (!audio || audio.state !== "running") return;
@@ -2456,13 +2495,13 @@ function playRelayClack(targetMasterLevel: number): void {
 
   const clickBp = audio.createBiquadFilter();
   clickBp.type = "bandpass";
-  clickBp.frequency.setValueAtTime(1600, t0);
-  clickBp.Q.setValueAtTime(3.0, t0);
+  clickBp.frequency.setValueAtTime(isClose ? 1350 : 1750, t0);
+  clickBp.Q.setValueAtTime(3.2, t0);
 
   const clickGain = audio.createGain();
   clickGain.gain.setValueAtTime(0.0001, t0);
-  clickGain.gain.linearRampToValueAtTime(0.095, t0 + 0.002);
-  clickGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.014);
+  clickGain.gain.linearRampToValueAtTime(isClose ? 0.065 : 0.085, t0 + 0.0015);
+  clickGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.009);
 
   noiseSrc.connect(clickBp);
   clickBp.connect(clickGain);
@@ -2470,19 +2509,19 @@ function playRelayClack(targetMasterLevel: number): void {
 
   const thumpOsc = audio.createOscillator();
   thumpOsc.type = "triangle";
-  thumpOsc.frequency.setValueAtTime(210, t0);
-  thumpOsc.frequency.exponentialRampToValueAtTime(85, t0 + 0.018);
+  thumpOsc.frequency.setValueAtTime(isClose ? 175 : 220, t0);
+  thumpOsc.frequency.exponentialRampToValueAtTime(75, t0 + 0.01);
 
   const thumpGain = audio.createGain();
   thumpGain.gain.setValueAtTime(0.0001, t0);
-  thumpGain.gain.linearRampToValueAtTime(0.08, t0 + 0.003);
-  thumpGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.022);
+  thumpGain.gain.linearRampToValueAtTime(isClose ? 0.055 : 0.075, t0 + 0.002);
+  thumpGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.011);
 
   thumpOsc.connect(thumpGain);
   thumpGain.connect(chain.masterGain);
 
-  const stopAt = t0 + 0.026;
-  noiseSrc.start(t0, Math.random() * 0.8, 0.024);
+  const stopAt = t0 + 0.014;
+  noiseSrc.start(t0, Math.random() * 0.8, 0.012);
   thumpOsc.start(t0);
   thumpOsc.stop(stopAt);
   thumpOsc.onended = () => {
@@ -2492,6 +2531,97 @@ function playRelayClack(targetMasterLevel: number): void {
     thumpOsc.disconnect();
     thumpGain.disconnect();
   };
+}
+
+export function playLockedPanelClunk(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, computeTargetMasterGain(undefined, "warning"));
+  const t0 = audio.currentTime;
+
+  // 1. Heavy cast-iron padlock stop thump
+  const thumpOsc = audio.createOscillator();
+  thumpOsc.type = "triangle";
+  thumpOsc.frequency.setValueAtTime(145, t0);
+  thumpOsc.frequency.exponentialRampToValueAtTime(48, t0 + 0.075);
+
+  const thumpGain = audio.createGain();
+  thumpGain.gain.setValueAtTime(0.0001, t0);
+  thumpGain.gain.linearRampToValueAtTime(0.22, t0 + 0.004);
+  thumpGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.085);
+
+  thumpOsc.connect(thumpGain);
+  thumpGain.connect(audio.destination);
+
+  // 2. Metallic padlock pin-snap transient
+  const snapSrc = audio.createBufferSource();
+  snapSrc.buffer = chain.noiseBuffer;
+
+  const snapBp = audio.createBiquadFilter();
+  snapBp.type = "bandpass";
+  snapBp.frequency.setValueAtTime(1900, t0);
+  snapBp.Q.setValueAtTime(3.2, t0);
+
+  const snapGain = audio.createGain();
+  snapGain.gain.setValueAtTime(0.0001, t0);
+  snapGain.gain.linearRampToValueAtTime(0.15, t0 + 0.002);
+  snapGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.028);
+
+  snapSrc.connect(snapBp);
+  snapBp.connect(snapGain);
+  snapGain.connect(audio.destination);
+
+  // 3. Magnetic interlock solenoid buzz
+  const buzzOsc = audio.createOscillator();
+  buzzOsc.type = "sawtooth";
+  buzzOsc.frequency.setValueAtTime(100, t0);
+
+  const buzzBp = audio.createBiquadFilter();
+  buzzBp.type = "bandpass";
+  buzzBp.frequency.setValueAtTime(240, t0);
+  buzzBp.Q.setValueAtTime(2.4, t0);
+
+  const buzzGain = audio.createGain();
+  buzzGain.gain.setValueAtTime(0.0001, t0);
+  buzzGain.gain.linearRampToValueAtTime(0.08, t0 + 0.008);
+  buzzGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.095);
+
+  buzzOsc.connect(buzzBp);
+  buzzBp.connect(buzzGain);
+  buzzGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.105;
+  thumpOsc.start(t0);
+  snapSrc.start(t0, Math.random() * 0.7, 0.032);
+  buzzOsc.start(t0);
+  thumpOsc.stop(stopAt);
+  buzzOsc.stop(stopAt);
+  buzzOsc.onended = () => {
+    thumpOsc.disconnect();
+    thumpGain.disconnect();
+    snapSrc.disconnect();
+    snapBp.disconnect();
+    snapGain.disconnect();
+    buzzOsc.disconnect();
+    buzzBp.disconnect();
+    buzzGain.disconnect();
+  };
+}
+
+export function triggerPreVolkovPanelLockFeedback(): boolean {
+  if (!isPreVolkovPanelLocked()) {
+    return false;
+  }
+  playLockedPanelClunk();
+  reportPreVolkovLockedPanelAttempt();
+  return true;
 }
 
 function startOpenPaCarrierBed(
@@ -2569,7 +2699,7 @@ function scheduleFormantWord(
   if (syllables.length === 0) return 0.14;
 
   const rate = getBasePlaybackRate(mood);
-  const basePitch = mood === "critical" ? 136 : mood === "warning" ? 132 : 128;
+  const basePitch = mood === "critical" ? 108 : mood === "warning" ? 105 : 102;
   const interSylGap = 0.004;
   let cursor = when;
   let prevF: [number, number, number] = [...NEUTRAL_FORMANTS];
@@ -2578,8 +2708,7 @@ function scheduleFormantWord(
     const syl = syllables[si];
     const isFinal = si === syllables.length - 1;
     const isStressed = stressed || syl.stressed;
-    const pitchMod = isStressed ? 1.03 : isFinal && syllables.length > 1 ? 0.97 : 1.0;
-    const f0 = basePitch * pitchMod;
+    const f0 = basePitch;
     const dur = Math.max(
       0.055,
       (syl.durSec / rate) * (isStressed && si === 0 ? 1.06 : 1.0),
@@ -2848,8 +2977,10 @@ function scheduleFormantWord(
   return Math.max(0.11, cursor - interSylGap - when);
 }
 
+const SERVO_PITCH_STEPS = [0, -0.01, 0.006, -0.008] as const;
+
 function getBasePlaybackRate(mood: KomradMood): number {
-  return mood === "critical" ? 1.12 : mood === "warning" ? 1.08 : 1.04;
+  return mood === "critical" ? 0.9 : mood === "warning" ? 0.89 : 0.88;
 }
 
 function normalizeTextForClipMatch(text: string): string {
@@ -3122,14 +3253,27 @@ function beginVoxUtterance(
     firstWord,
   );
   voxQueueCursor = 0;
+  voxClauseIndex = 0;
   voxCursorAudioSec = audio.currentTime + 0.045;
   voxUtteranceEndAudioSec = voxCursorAudioSec;
   voxActiveMood = mood;
   voxTimeline = [];
   voxTimelineIdx = 0;
   voxSpeakingAudioActive = voxQueue.length > 0;
+  const baseRate = getBasePlaybackRate(mood);
+  let estimatedSec = 0;
+  for (let qi = 0; qi < voxQueue.length; qi++) {
+    const q = voxQueue[qi];
+    if (q.kind === "word") {
+      estimatedSec += q.entry.dur / baseRate;
+    } else if (q.kind === "pause") {
+      estimatedSec += q.durSec;
+    } else {
+      estimatedSec += 0.42 / baseRate;
+    }
+  }
   voxHardDeadlineMs = voxSpeakingAudioActive
-    ? nowPerfMs() + Math.max(4500, voxQueue.length * 420 + 3000)
+    ? nowPerfMs() + Math.max(5000, estimatedSec * 1000 + 3500)
     : 0;
   visualTypingActive = false;
   if (voxSpeakingAudioActive) {
@@ -3153,7 +3297,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
   const drive = mood === "critical" ? 1.42 : mood === "warning" ? 1.22 : 1.05;
   chain.driveGain.gain.setTargetAtTime(drive, audio.currentTime, 0.015);
 
-  // Fast, brisk baritone playback rate (1.04x normal / 1.08x warning / 1.12x critical)
+  // Cold baritone playback rate (0.88x normal / 0.89x warning / 0.90x critical) + robotic servo-step monotone
   const rate = getBasePlaybackRate(mood);
   const uttGain = activeUtteranceGain;
   const nodesSet = activeUtteranceNodes;
@@ -3167,6 +3311,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
     voxQueueCursor += 1;
 
     if (item.kind === "pause") {
+      voxClauseIndex += 1;
       const pStart = voxCursorAudioSec;
       const pEnd = pStart + item.durSec;
       voxTimeline.push({
@@ -3187,7 +3332,10 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
     if (item.kind === "word") {
       const buf = voxBuffers.get(item.entry.pack);
       if (buf) {
-        const effectiveDur = item.entry.dur / rate;
+        const servoOffset =
+          SERVO_PITCH_STEPS[voxClauseIndex % SERVO_PITCH_STEPS.length];
+        const wordRate = Math.max(0.865, Math.min(0.905, rate + servoOffset));
+        const effectiveDur = item.entry.dur / wordRate;
         const when = voxCursorAudioSec;
         const fadeIn = Math.min(0.005, effectiveDur * 0.15);
         const fadeOut = Math.min(0.024, effectiveDur * 0.25);
@@ -3195,7 +3343,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
 
         const src = audio.createBufferSource();
         src.buffer = buf;
-        src.playbackRate.setValueAtTime(rate, when);
+        src.playbackRate.setValueAtTime(wordRate, when);
 
         const wordGain = audio.createGain();
         wordGain.gain.setValueAtTime(0.0001, when);
@@ -3210,7 +3358,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
         wordGain.connect(uttGain);
 
         nodesSet.add(src);
-        src.start(when, item.entry.start, item.entry.dur);
+        src.start(when, item.entry.start, effectiveDur + 0.005);
         src.onended = () => {
           nodesSet.delete(src);
           src.disconnect();

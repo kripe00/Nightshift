@@ -34,7 +34,8 @@ import {
   getHammeredIronTextures,
 } from "./proceduralMaterials";
 import type { SectorNodeId } from "./types";
-import { useGameStore } from "./useGameStore";
+import { triggerPreVolkovPanelLockFeedback } from "./komradVoiceSynth";
+import { isPreVolkovPanelLocked, useGameStore } from "./useGameStore";
 
 function createCrispPanelTexture(
   width: number,
@@ -256,6 +257,10 @@ function startSmoothWheelSwivelDrag(
 ): () => void {
   if (useCameraLookStore.getState().isFreeLookMode) return () => {};
   e.stopPropagation();
+  if (isPreVolkovPanelLocked()) {
+    triggerPreVolkovPanelLockFeedback();
+    return () => {};
+  }
   onActiveChange?.(true);
 
   const r3fTarget = e.target as unknown as {
@@ -357,6 +362,10 @@ function startLinearVerticalLeverDrag(
 ): () => void {
   if (useCameraLookStore.getState().isFreeLookMode) return () => {};
   e.stopPropagation();
+  if (isPreVolkovPanelLocked()) {
+    triggerPreVolkovPanelLockFeedback();
+    return () => {};
+  }
   onActiveChange?.(true);
 
   const r3fTarget = e.target as unknown as {
@@ -4602,6 +4611,10 @@ const SculptedPumpValveAssembly3D: React.FC<
           if (useCameraLookStore.getState().isFreeLookMode) return;
           e.stopPropagation();
           e.nativeEvent?.stopImmediatePropagation?.();
+          if (isPreVolkovPanelLocked()) {
+            triggerPreVolkovPanelLockFeedback();
+            return;
+          }
           const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
           const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 1 : 2);
           const s = useGameStore.getState();
@@ -5152,6 +5165,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     const state = useGameStore.getState();
     if (state.komradOverrideLocked) {
       playLeverRatchet(0.45);
@@ -5248,6 +5265,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
     e.nativeEvent?.stopImmediatePropagation?.();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     const s = useGameStore.getState();
     const stepMW = e.deltaY < 0 ? 25 : -25;
     const nextMW = Math.max(0, Math.min(250, s.sectorMW[sector] + stepMW));
@@ -5645,6 +5666,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           }}
           onClick={(e) => {
             e.stopPropagation();
+            if (isPreVolkovPanelLocked()) {
+              triggerPreVolkovPanelLockFeedback();
+              return;
+            }
             const s = useGameStore.getState();
             if (s.komradOverrideLocked) {
               playLeverRatchet(0.4);
@@ -6391,6 +6416,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             position={[0, 0, 0.048]}
             onClick={(e) => {
               e.stopPropagation();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               notifyPlayerControlInteraction("az5", true);
               notifyPlayerControlInteraction("az5", false);
               if (!az5CoverOpen) {
@@ -6464,6 +6493,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             position={[0, 0.105, 0.034]}
             onClick={(e) => {
               e.stopPropagation();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               notifyPlayerControlInteraction("az5Cover", true);
               notifyPlayerControlInteraction("az5Cover", false);
               setAz5CoverOpen((prev) => {
@@ -6511,6 +6544,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             onPointerDown={(e) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               notifyPlayerControlInteraction("boron", true);
               notifyPlayerControlInteraction("boron", false);
               const s = useGameStore.getState();
@@ -6781,6 +6818,10 @@ export const HighDetailKnifeBreaker3D: React.FC<
           if (useCameraLookStore.getState().isFreeLookMode) return;
           e.stopPropagation();
           e.nativeEvent?.stopImmediatePropagation?.();
+          if (isPreVolkovPanelLocked()) {
+            triggerPreVolkovPanelLockFeedback();
+            return;
+          }
           const s = useGameStore.getState();
           const wantClose = e.deltaY < 0;
           const isClosed = Boolean(s.turbines[0]?.gridConnected);
@@ -6797,6 +6838,10 @@ export const HighDetailKnifeBreaker3D: React.FC<
         onPointerDown={(e) => {
           if (useCameraLookStore.getState().isFreeLookMode) return;
           e.stopPropagation();
+          if (isPreVolkovPanelLocked()) {
+            triggerPreVolkovPanelLockFeedback();
+            return;
+          }
           breakerDragCleanupRef.current?.();
           const s = useGameStore.getState();
           let prevClientY = e.nativeEvent.clientY;
@@ -8756,6 +8801,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   onPointerDown={(e) => {
                     if (useCameraLookStore.getState().isFreeLookMode) return;
                     e.stopPropagation();
+                    if (isPreVolkovPanelLocked()) {
+                      triggerPreVolkovPanelLockFeedback();
+                      return;
+                    }
                     coreDragCleanupRef.current?.();
                     notifyPlayerControlInteraction("coreChannelTile", true);
                     const s = useGameStore.getState();
@@ -8974,6 +9023,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 const isShift = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
                 const stepPct = isShift ? 1 : 5;
                 const deltaPct = e.deltaY < 0 ? stepPct : -stepPct;
@@ -9233,6 +9286,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 refuelDragCleanupRef.current?.();
                 notifyPlayerControlInteraction("rodRefuelLever", true);
                 refuelStrokeFiredRef.current = false;
@@ -9619,6 +9676,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
                 const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 1 : 5);
                 const s = useGameStore.getState();
@@ -9888,6 +9949,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   if (useCameraLookStore.getState().isFreeLookMode) return;
                   e.stopPropagation();
                   e.nativeEvent?.stopImmediatePropagation?.();
+                  if (isPreVolkovPanelLocked()) {
+                    triggerPreVolkovPanelLockFeedback();
+                    return;
+                  }
                   const wantOn = e.deltaY < 0;
                   const s = useGameStore.getState();
                   if (s.sealToggles[tIdx] !== wantOn) {
@@ -9898,6 +9963,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 onClick={(e) => {
                   if (useCameraLookStore.getState().isFreeLookMode) return;
                   e.stopPropagation();
+                  if (isPreVolkovPanelLocked()) {
+                    triggerPreVolkovPanelLockFeedback();
+                    return;
+                  }
                   notifyPlayerControlInteraction(`mcpSealToggle${tIdx}`, true);
                   notifyPlayerControlInteraction(`mcpSealToggle${tIdx}`, false);
                   playSwitchClank(true);
@@ -9983,6 +10052,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 const wantOn = e.deltaY < 0;
                 const s = useGameStore.getState();
                 if (wantOn) {
@@ -9998,6 +10071,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 notifyPlayerControlInteraction("emergSealLock", true);
                 notifyPlayerControlInteraction("emergSealLock", false);
                 emergSealDepressRef.current = 1.0;
@@ -10114,6 +10191,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 if (e.deltaY === 0) return;
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 const wantOpen = e.deltaY > 0;
                 const s = useGameStore.getState();
                 if (s.bubblerDraining !== wantOpen) {
@@ -10126,6 +10207,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 drainDragCleanupRef.current?.();
                 notifyPlayerControlInteraction("bubblerDrain", true);
                 const wasOpen = useGameStore.getState().bubblerDraining;
@@ -11021,6 +11106,10 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
   const triggerOverrideStation = (e: ThreeEvent<MouseEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     overridePulseRef.current = 1.0;
     playSwitchClank(true);
     useGameStore.getState().overrideKomradLock();
@@ -11029,6 +11118,10 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
   const triggerPurgeStation = (e: ThreeEvent<MouseEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     purgePressAnimRef.current = 1.0;
     playSwitchClank(true);
     useGameStore.getState().purgeFirewall();
