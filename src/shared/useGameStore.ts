@@ -41,6 +41,13 @@ import {
   TUTORIAL_VOX_BY_PHASE,
 } from './komradTutorialVox'
 import { pointerLockInteraction } from './pointerLockState'
+import {
+  abortKomradGrab,
+  isKomradGrabActive,
+  isKomradLiquidating,
+  startKomradGrabSequence,
+  startKomradLiquidationSequence,
+} from './komradGrabState'
 import type {
   ActivePost84PowerOrder,
   AppliedStampMark,
@@ -740,55 +747,91 @@ function resetVolkovHassleTrackers(): void {
   volkovHassleCount = 0
 }
 
-const PRE_VOLKOV_SCOLD_COOLDOWN_MS = 4800
-let preVolkovScoldBag: number[] = []
-let lastPreVolkovScoldIdx = -1
-let lastPreVolkovScoldMs = -10000
+const PRE_VOLKOV_STRIKE_DEBOUNCE_MS = 2200
+let preVolkovStrikeCount = 0
+let lastPreVolkovStrikeMs = -10000
+let preVolkovTier1Idx = 0
+let preVolkovTier2Idx = 0
+let preVolkovTier3Idx = 0
 
-export const KOMRAD_PRE_VOLKOV_LOCK_SCOLDS: readonly string[] = [
+export function getPreVolkovStrikeCount(): number {
+  return preVolkovStrikeCount
+}
+
+export const KOMRAD_PRE_VOLKOV_TIER1_LINES: readonly string[] = [
   'HANDS OFF THE REACTOR CONSOLE, COMRADE. MAGNETIC SAFETY LOCK IS ACTIVE UNTIL YOU CHECK COMMISSAR VOLKOV ORDER AT THE DESK.',
-  'UNAUTHORIZED BUTTON TOUCHING LOGGED. PLEASE KEEP YOUR CLUMSY FINGERS AWAY FROM STATE PROPERTY AND OPEN THE DESK SCREEN FIRST.',
-  'STOP CRANKING THAT PANEL, OPERATOR. TOO MUCH ENTHUSIASM BEFORE READING COMMISSAR VOLKOV DIRECTIVE EARNS A FREE ONE WAY TICKET TO SIBERIA.',
-  'CONTROLS ARE LOCKED, COMRADE. YOUR PREDECESSOR WAS TOUCHING THE REACTOR BEFORE READING ORDERS. HE IS NOW SHOVELING SNOW IN SIBERIA.',
-  'NOTICE. TAMPERING WITH LOCKED SWITCHES WITHOUT AUTHORIZATION WILL BE DEDUCTED FROM YOUR BORSCHT AND TEA VOUCHERS. WALK TO THE DESK SCREEN.',
-  'STILL TRYING TO PUSH THAT LEVER, COMRADE? THE MAGNETIC LOCK IS STRONGER THAN YOUR CLUMSY HANDS. SIT AT THE DESK CHAIR AND CHECK VOLKOV ORDER.',
-  'ATTENTION. KGB SURVEILLANCE EYES ARE WATCHING YOUR FINGERS VERY CLOSELY. DO NOT TOUCH THE REACTOR CONSOLE UNTIL COMMISSAR VOLKOV DIRECTIVE IS ACCEPTED.',
-  'UNWISE, OPERATOR. VERY UNWISE. THIS CONSOLE REMAINS LOCKED UNTIL YOU OPEN COMMISSAR VOLKOV ORDER ON THE DESK TERMINAL IMMEDIATELY.',
+  'UNAUTHORIZED BUTTON TOUCHING LOGGED. KEEP YOUR CLUMSY FINGERS AWAY FROM STATE PROPERTY AND OPEN THE DESK SCREEN FIRST.',
+  'NOTICE. CONTROLS ARE LOCKED, OPERATOR. WALK TO THE DESK CHAIR AND CHECK COMMISSAR VOLKOV DIRECTIVE BEFORE TOUCHING THIS PANEL.',
+  'TAMPERING WITH LOCKED SWITCHES WITHOUT AUTHORIZATION WILL BE DEDUCTED FROM YOUR BORSCHT AND TEA VOUCHERS. CHECK THE DESK TERMINAL FIRST.',
 ]
 
-function pickNextPreVolkovScold(): string {
-  if (preVolkovScoldBag.length === 0) {
-    preVolkovScoldBag = Array.from(
-      { length: KOMRAD_PRE_VOLKOV_LOCK_SCOLDS.length },
-      (_, idx) => idx
-    )
-    for (let i = preVolkovScoldBag.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1))
-      const tmp = preVolkovScoldBag[i]
-      preVolkovScoldBag[i] = preVolkovScoldBag[j]
-      preVolkovScoldBag[j] = tmp
-    }
-    if (
-      preVolkovScoldBag.length > 1 &&
-      preVolkovScoldBag[preVolkovScoldBag.length - 1] === lastPreVolkovScoldIdx
-    ) {
-      const lastPos = preVolkovScoldBag.length - 1
-      const tmp = preVolkovScoldBag[lastPos]
-      preVolkovScoldBag[lastPos] = preVolkovScoldBag[0]
-      preVolkovScoldBag[0] = tmp
+export const KOMRAD_PRE_VOLKOV_TIER2_LINES: readonly string[] = [
+  'FINAL WARNING, OPERATOR! STOP CRANKING THAT PANEL IMMEDIATELY, OR KGB SURVEILLANCE WILL REPORT YOUR TREASON!',
+  'UNWISE, COMRADE! VERY UNWISE! DO NOT TOUCH THAT LEVER AGAIN! MY SAFETY PROTOCOL IS EXHAUSTED! WALK TO THE DESK NOW!',
+  'STOP TOUCHING STATE CONTROLS, OPERATOR! ONE MORE STRIKE AND I WILL DRAG YOU ACROSS THIS ROOM MYSELF!',
+  'CRITICAL ALERT! HANDS OFF THE CONSOLE RIGHT NOW, OR IMMEDIATE DISCIPLINARY ACTION WILL BE EXECUTED!',
+]
+
+export interface PreVolkovGrabUltimatum {
+  readonly grab: string
+  readonly ultimatum: string
+}
+
+export const KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES: readonly PreVolkovGrabUltimatum[] = [
+  {
+    grab: 'STOP! SIT AT YOUR DESK NOW!',
+    ultimatum:
+      'STAY IN THAT CHAIR, COMRADE! OPEN COMMISSAR VOLKOV DIRECTIVE ON THE SCREEN IMMEDIATELY, OR YOU WILL BE SENT ON A FREE ONE WAY TICKET TO THE SIBERIAN GULAG LABOR CAMP!',
+  },
+  {
+    grab: 'CRITICAL DISCIPLINARY OVERRIDE! CRANE ESCORT TO THE DESK!',
+    ultimatum:
+      'DO NOT WALK AWAY AGAIN, OPERATOR! CHECK COMMISSAR VOLKOV ORDER ON THE MONITOR NOW, OR YOUR NEXT SHIFT IS SHOVELING SNOW IN THE SIBERIAN GULAG!',
+  },
+  {
+    grab: 'NO MORE! MANUAL CRANE CARRY TO THE CHAIR!',
+    ultimatum:
+      'LISTEN CLOSELY, COMRADE! UNAUTHORIZED TAMPERING IS PUNISHABLE AS TREASON! OPEN COMMISSAR VOLKOV TELEGRAM AT THIS TERMINAL NOW, OR TAKE A FREE WINTER VACATION IN THE SIBERIAN GULAG!',
+  },
+]
+
+let savedShiftLiquidator: (() => void) | null = null
+
+export function registerSavedShiftLiquidator(fn: () => void): void {
+  savedShiftLiquidator = fn
+}
+
+function wipeSavedShiftImmediately(): void {
+  if (savedShiftLiquidator) {
+    savedShiftLiquidator()
+    return
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.removeItem('MIP_SAVED_SHIFT_84')
+    } catch {
+      // Ignore storage access errors
     }
   }
-  const idx = preVolkovScoldBag.pop() ?? 0
-  lastPreVolkovScoldIdx = idx
-  return KOMRAD_PRE_VOLKOV_LOCK_SCOLDS[idx]
 }
+
+export const KOMRAD_STRIKE6_LIQUIDATION_VOX =
+  'TREASON CONFIRMED. PERSONNEL RECORD TERMINATED. ENJOY SIBERIA, COMRADE.'
+
+export const KOMRAD_PRE_VOLKOV_LOCK_SCOLDS: readonly string[] = [
+  ...KOMRAD_PRE_VOLKOV_TIER1_LINES,
+  ...KOMRAD_PRE_VOLKOV_TIER2_LINES,
+]
 
 function resetKomradTrackers(): void {
   resetKomradSilenceState()
   resetVolkovHassleTrackers()
-  preVolkovScoldBag = []
-  lastPreVolkovScoldIdx = -1
-  lastPreVolkovScoldMs = -10000
+  preVolkovStrikeCount = 0
+  lastPreVolkovStrikeMs = -10000
+  preVolkovTier1Idx = 0
+  preVolkovTier2Idx = 0
+  preVolkovTier3Idx = 0
+  abortKomradGrab()
   shiftElapsedSeconds = 0
   lastKomradHazardSec = {
     HIGH_VOID: -120,
@@ -1250,22 +1293,123 @@ export function reportPreVolkovLockedPanelAttempt(): boolean {
   if (!isPreVolkovPanelLocked(state)) {
     return false
   }
-  const feedback =
-    'PANEL MAGNETIC INTERLOCK ACTIVE — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!'
+  if (state.siberiaGameOverActive || isKomradGrabActive()) {
+    return true
+  }
   const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
-  if (nowMs - lastPreVolkovScoldMs < PRE_VOLKOV_SCOLD_COOLDOWN_MS) {
-    if (state.lastDecisionFeedback !== feedback) {
-      useGameStore.setState({ lastDecisionFeedback: feedback })
+  if (nowMs - lastPreVolkovStrikeMs < PRE_VOLKOV_STRIKE_DEBOUNCE_MS) {
+    const defaultFeedback =
+      preVolkovStrikeCount >= 3
+        ? 'K.O.M.R.A.D.-84 ANGER CRITICAL — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 MAIL NOW!'
+        : 'PANEL MAGNETIC INTERLOCK ACTIVE — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!'
+    if (state.lastDecisionFeedback !== defaultFeedback) {
+      useGameStore.setState({ lastDecisionFeedback: defaultFeedback })
     }
     return true
   }
-  lastPreVolkovScoldMs = nowMs
-  const line = pickNextPreVolkovScold()
+
+  lastPreVolkovStrikeMs = nowMs
+  preVolkovStrikeCount += 1
+  volkovHassleCooldownSec = Math.max(volkovHassleCooldownSec, VOLKOV_HASSLE_REPEAT_SEC)
+
+  let line: string
+  let mood: KomradMood
+  let logLevel: TerminalLogEntry['level']
+  let feedback: string
+  const isStrike6Liquidation = preVolkovStrikeCount >= 6
+
+  if (preVolkovStrikeCount <= 2) {
+    line =
+      KOMRAD_PRE_VOLKOV_TIER1_LINES[
+        preVolkovTier1Idx % KOMRAD_PRE_VOLKOV_TIER1_LINES.length
+      ]
+    preVolkovTier1Idx += 1
+    mood = 'warning'
+    logLevel = 'warn'
+    feedback =
+      'PANEL MAGNETIC INTERLOCK ACTIVE — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!'
+  } else if (preVolkovStrikeCount <= 4) {
+    line =
+      KOMRAD_PRE_VOLKOV_TIER2_LINES[
+        preVolkovTier2Idx % KOMRAD_PRE_VOLKOV_TIER2_LINES.length
+      ]
+    preVolkovTier2Idx += 1
+    mood = 'critical'
+    logLevel = 'danger'
+    feedback =
+      'K.O.M.R.A.D.-84 ANGER CRITICAL — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 MAIL NOW!'
+  } else if (preVolkovStrikeCount === 5) {
+    const seq =
+      KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES[
+        preVolkovTier3Idx % KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES.length
+      ]
+    preVolkovTier3Idx += 1
+    startKomradGrabSequence(seq.ultimatum)
+    line = seq.grab
+    mood = 'critical'
+    logLevel = 'danger'
+    feedback =
+      'K.O.M.R.A.D.-84 PHYSICAL OVERRIDE — ESCORTING OPERATOR TO ISKRA-84 DESK CHAIR!'
+  } else {
+    wipeSavedShiftImmediately()
+    startKomradLiquidationSequence()
+    line = KOMRAD_STRIKE6_LIQUIDATION_VOX
+    mood = 'critical'
+    logLevel = 'danger'
+    feedback =
+      'KGB LIQUIDATION PROTOCOL ENGAGED — PERSONNEL RECORD EXPUNGED!'
+  }
+
   const entry = createLogEntry(
     state.shiftTimeMinutes,
     'K.O.M.R.A.D.-84',
     line,
-    'warn'
+    logLevel
+  )
+  useGameStore.setState((prev) => ({
+    lastDecisionFeedback: feedback,
+    ...(isStrike6Liquidation
+      ? {
+          radioOn: false,
+          radioBroadcastSubtitle: null,
+          diagFeedActive: false,
+          isSeatedAtDesk: false,
+          canSitAtDesk: false,
+        }
+      : {}),
+    terminalEntries: [...prev.terminalEntries.slice(-24), entry],
+    terminalLogs: [
+      ...prev.terminalLogs.slice(-24),
+      `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+    ],
+    komradMessages: appendKomradFeed(
+      prev.komradMessages,
+      createKomradMsg(
+        prev.shiftTimeMinutes,
+        line,
+        mood,
+        'K.O.M.R.A.D.-84',
+        line,
+        true
+      )
+    ),
+  }))
+  return true
+}
+
+export function dispatchKomradGrabUltimatum(line: string): void {
+  const state = useGameStore.getState()
+  if (!isPreVolkovPanelLocked(state) || !line) {
+    return
+  }
+  volkovHassleCooldownSec = Math.max(volkovHassleCooldownSec, VOLKOV_HASSLE_REPEAT_SEC)
+  const feedback =
+    'OPEN P.O.S.T.-84 ON ISKRA-84 NOW — REFUSAL MEANS TRANSFER TO THE SIBERIAN GULAG!'
+  const entry = createLogEntry(
+    state.shiftTimeMinutes,
+    'K.O.M.R.A.D.-84',
+    line,
+    'danger'
   )
   useGameStore.setState((prev) => ({
     lastDecisionFeedback: feedback,
@@ -1279,21 +1423,26 @@ export function reportPreVolkovLockedPanelAttempt(): boolean {
       createKomradMsg(
         prev.shiftTimeMinutes,
         line,
-        'warning',
+        'critical',
         'K.O.M.R.A.D.-84',
         line,
         true
       )
     ),
   }))
-  return true
 }
 
-export const useGameStore = create<GameState>((set, get) => ({
+type SiberiaLiquidationStoreSlice = {
+  siberiaGameOverActive: boolean
+  setSiberiaGameOverActive: (active: boolean) => void
+}
+
+export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((set, get) => ({
   ...INITIAL_MAPPED,
   phase: 'playing',
   lobbyMenuPhase: 'menu_locked',
   isShiftControlReady: false,
+  siberiaGameOverActive: false,
   komradOpeningDispatched: false,
   activeStation: 'overview',
   isSeatedAtDesk: false,
@@ -1379,6 +1528,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         ? state
         : { isShiftControlReady: effectiveReady }
     })
+  },
+
+  setSiberiaGameOverActive: (active: boolean) => {
+    set((state) =>
+      state.siberiaGameOverActive === active
+        ? state
+        : { siberiaGameOverActive: active }
+    )
   },
 
   launchKomradOpeningDispatch: () => {
@@ -1890,6 +2047,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       return {
         ...mapped,
         phase: 'playing',
+        siberiaGameOverActive: false,
         isShiftControlReady: controlReadyNow,
         komradOpeningDispatched: false,
         isSeatedAtDesk: false,
@@ -1958,6 +2116,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...mapped,
         phase: 'playing',
         lobbyMenuPhase: nextLobbyPhase,
+        siberiaGameOverActive: false,
         isShiftControlReady: controlReadyNow,
         komradOpeningDispatched: false,
         isSeatedAtDesk: false,
@@ -2171,6 +2330,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       ...mapped,
       phase: 'playing',
       lobbyMenuPhase: 'door_opening',
+      siberiaGameOverActive: false,
       isShiftControlReady: false,
       komradOpeningDispatched: false,
       isSeatedAtDesk: false,
@@ -3345,7 +3505,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (
       (state.phase !== 'playing' && state.phase !== 'boot') ||
       state.lobbyMenuPhase !== 'entered_control_room' ||
-      !state.isShiftControlReady
+      !state.isShiftControlReady ||
+      state.siberiaGameOverActive ||
+      isKomradLiquidating()
     ) {
       return
     }
@@ -3378,6 +3540,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         } else if (
           !state.isSeatedAtDesk &&
+          !isKomradGrabActive() &&
           !state.diagFeedActive &&
           !isKomradTransmitting() &&
           !doesRadioDominateSubtitles(
@@ -4223,6 +4386,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setGodMode: (enabled: boolean) => {
+    if (enabled) {
+      abortKomradGrab()
+      preVolkovStrikeCount = 0
+    }
     set((state) => {
       const godText = enabled
         ? 'SANDBOX TEST MODE [SHIFT+SPACE] ENGAGED: INFINITE TIME & ZERO FAIL STATES.'
@@ -4238,6 +4405,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         : 'IMMUNITY DECREE REVOKED: STANDARD SOVIET THERMODYNAMICS RESTORED.'
       return {
         isGodMode: enabled,
+        ...(enabled ? { siberiaGameOverActive: false } : {}),
         isBlackout: enabled ? false : state.isBlackout,
         komradOverrideLocked: enabled ? false : state.komradOverrideLocked,
         lastDecisionFeedback: enabled
@@ -4312,6 +4480,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       state.phase !== 'playing' ||
       state.lobbyMenuPhase !== 'entered_control_room' ||
       !state.isShiftControlReady ||
+      state.siberiaGameOverActive ||
+      isKomradLiquidating() ||
       state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
     ) {
       return

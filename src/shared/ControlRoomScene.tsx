@@ -27,6 +27,7 @@ import {
   playAirlockPneumaticSlide,
   playAirlockWheelSpin,
 } from "./airlockDoorState";
+import { isKomradLiquidating } from "./komradGrabState";
 import { playerCameraPose } from "./pointerLockState";
 import {
   getKomradVowelBand,
@@ -7917,17 +7918,20 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       state.sectorMW.kgb +
       state.sectorMW.vodka +
       state.sectorMW.steel;
-    const isAlarmActive = coreTemp >= 750 || totalMW > maxSafePower;
+    const isLiquidating = isKomradLiquidating();
+    const liquidationDark = isLiquidating || state.siberiaGameOverActive;
+    const isAlarmActive =
+      coreTemp >= 750 || totalMW > maxSafePower || isLiquidating;
 
     // Continuous 50Hz / 3000 RPM Turbine-Generator Pitch Hum
     updateTurbinePitchHum(
       state.turbineRpm,
       totalAllocatedMW,
       state.voltageDipIntensity,
-      isBlackout || lobbyMenuPhase === "menu_locked",
+      isBlackout || lobbyMenuPhase === "menu_locked" || liquidationDark,
     );
 
-    if (lobbyMenuPhase !== "entered_control_room") {
+    if (lobbyMenuPhase !== "entered_control_room" || liquidationDark) {
       controlRoomPowerState.active = false;
       controlRoomPowerState.elapsed = 0;
       controlRoomPowerState.zone1 = 0;
@@ -7973,17 +7977,30 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
     const z2 = controlRoomPowerState.zone2;
     const z3 = controlRoomPowerState.zone3;
     const powerBlend = z1 * 0.32 + z2 * 0.36 + z3 * 0.32;
+    const liquidationStrobe = isLiquidating
+      ? Math.pow(Math.max(0, Math.sin(t * 16.0)), 2)
+      : 0;
 
     if (hemiLightRef.current) {
-      const nominalHemi = isBlackout ? 0.18 : 0.95;
-      hemiLightRef.current.intensity = Math.max(
-        MIN_STANDBY_LIGHT_INTENSITY,
-        0.04 + (nominalHemi - 0.04) * powerBlend,
-      );
+      if (liquidationDark) {
+        hemiLightRef.current.intensity = MIN_STANDBY_LIGHT_INTENSITY;
+      } else {
+        const nominalHemi = isBlackout ? 0.18 : 0.95;
+        hemiLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          0.04 + (nominalHemi - 0.04) * powerBlend,
+        );
+      }
     }
 
     if (bunkerMainLightRef.current) {
-      if (isBlackout) {
+      if (liquidationDark) {
+        bunkerMainLightRef.current.color.copy(SCENE_COLOR_RED);
+        bunkerMainLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          liquidationStrobe * 2.2,
+        );
+      } else if (isBlackout) {
         bunkerMainLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_BLACKOUT);
         bunkerMainLightRef.current.intensity = Math.max(
           MIN_STANDBY_LIGHT_INTENSITY,
@@ -8010,7 +8027,10 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
     }
 
     if (frontBankLightRef.current) {
-      if (isBlackout) {
+      if (liquidationDark) {
+        frontBankLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_BLACKOUT);
+        frontBankLightRef.current.intensity = MIN_STANDBY_LIGHT_INTENSITY;
+      } else if (isBlackout) {
         frontBankLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_BLACKOUT);
         frontBankLightRef.current.intensity = Math.max(
           MIN_STANDBY_LIGHT_INTENSITY,
@@ -8038,7 +8058,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
 
     if (deskSpotRef.current) {
       let nominalDeskSpot = 0;
-      if (isBlackout || powerAllocation.facility <= 0) {
+      if (liquidationDark || isBlackout || powerAllocation.facility <= 0) {
         nominalDeskSpot = 0;
       } else if (powerAllocation.facility <= 10) {
         nominalDeskSpot = 1.9;
@@ -8055,12 +8075,14 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
     }
 
     if (klaxonSpinnerRef.current && isAlarmActive) {
-      klaxonSpinnerRef.current.rotation.y = t * 5.5;
+      klaxonSpinnerRef.current.rotation.y = t * (isLiquidating ? 14.0 : 5.5);
     }
     if (klaxonLampMatRef.current) {
-      klaxonLampMatRef.current.emissiveIntensity = isAlarmActive
-        ? 1.4 + Math.sin(t * 4.2) * 0.75
-        : 0.05;
+      klaxonLampMatRef.current.emissiveIntensity = isLiquidating
+        ? 2.2 + liquidationStrobe * 1.8
+        : isAlarmActive
+          ? 1.4 + Math.sin(t * 4.2) * 0.75
+          : 0.05;
     }
   });
 

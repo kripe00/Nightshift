@@ -8,6 +8,14 @@ import {
   airlockDoorState,
 } from "./airlockDoorState";
 import {
+  abortKomradGrab,
+  isKomradGrabActive,
+  komradGrabState,
+  snapshotGrabCameraPose,
+  stepKomradGrab,
+} from "./komradGrabState";
+import { playKgbLiquidationStampThud } from "./komradVoiceSynth";
+import {
   canEngageCanvasPointerLock,
   classifyPressTarget,
   hasHoverableControlHandler,
@@ -474,6 +482,7 @@ export const CameraController: React.FC = () => {
   const setActiveStation = useGameStore((s) => s.setActiveStation);
   const phase = useGameStore((s) => s.phase);
   const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk);
+  const siberiaGameOverActive = useGameStore((s) => s.siberiaGameOverActive);
 
   const playerPosRef = useRef(
     new THREE.Vector3(LOBBY_SPAWN_X, STANDING_EYE_Y, LOBBY_SPAWN_Z),
@@ -509,6 +518,10 @@ export const CameraController: React.FC = () => {
 
   const skipNextPoseSyncRef = useRef<boolean>(true);
   const prevSeatedRef = useRef<boolean>(useGameStore.getState().isSeatedAtDesk);
+  const prevLobbyPhaseRef = useRef<string>(
+    useGameStore.getState().lobbyMenuPhase,
+  );
+  const prevShiftRunIdRef = useRef<number>(useGameStore.getState().shiftRunId);
   const activePointerIdRef = useRef<number | null>(null);
   const releaseRafRef = useRef<number>(0);
   const centerHoverRaycasterRef = useRef(new THREE.Raycaster());
@@ -587,9 +600,9 @@ export const CameraController: React.FC = () => {
     };
   }, [activeStation]);
 
-  // Auto-exit Pointer Lock and clear held locomotion keys when gameplay pauses or seated at Inspector Desk
+  // Auto-exit Pointer Lock and clear held locomotion keys when gameplay pauses, seated at Inspector Desk, or in Siberia Game Over
   useEffect(() => {
-    if (isSeatedAtDesk || phase !== "playing") {
+    if (isSeatedAtDesk || phase !== "playing" || siberiaGameOverActive) {
       moveKeysRef.current.forward = false;
       moveKeysRef.current.backward = false;
       moveKeysRef.current.left = false;
@@ -602,7 +615,13 @@ export const CameraController: React.FC = () => {
     const syncAllowedLock = () => {
       const gs = useGameStore.getState();
       if (
-        !canEngageCanvasPointerLock(gs.phase, gs.isSeatedAtDesk) &&
+        (!canEngageCanvasPointerLock(
+          gs.phase,
+          gs.isSeatedAtDesk,
+          gs.lobbyMenuPhase,
+        ) ||
+          gs.siberiaGameOverActive ||
+          isKomradGrabActive()) &&
         document.pointerLockElement === gl.domElement
       ) {
         document.exitPointerLock?.();
@@ -610,7 +629,7 @@ export const CameraController: React.FC = () => {
     };
     syncAllowedLock();
     return subscribePointerLockInteraction(syncAllowedLock);
-  }, [gl, phase, isSeatedAtDesk]);
+  }, [gl, phase, isSeatedAtDesk, siberiaGameOverActive]);
 
   useEffect(() => {
     installSafePointerCaptureShim();
@@ -758,7 +777,13 @@ export const CameraController: React.FC = () => {
     const requestCanvasLockIfAllowed = () => {
       const gs = useGameStore.getState();
       if (document.pointerLockElement === gl.domElement) return;
-      if (!canEngageCanvasPointerLock(gs.phase, gs.isSeatedAtDesk, gs.lobbyMenuPhase)) return;
+      if (
+        gs.siberiaGameOverActive ||
+        isKomradGrabActive() ||
+        !canEngageCanvasPointerLock(gs.phase, gs.isSeatedAtDesk, gs.lobbyMenuPhase)
+      ) {
+        return;
+      }
       try {
         const req = gl.domElement.requestPointerLock?.() as
           | Promise<void>
@@ -826,6 +851,9 @@ export const CameraController: React.FC = () => {
     };
 
     const handleCanvasClick = () => {
+      if (isKomradGrabActive() || useGameStore.getState().siberiaGameOverActive) {
+        return;
+      }
       requestCanvasLockIfAllowed();
     };
 
@@ -912,6 +940,9 @@ export const CameraController: React.FC = () => {
 
     // Runs in window bubble phase right after R3F populates internal.initialHits on canvas
     const handleBubblePointerDown = (e: PointerEvent) => {
+      if (isKomradGrabActive() || useGameStore.getState().siberiaGameOverActive) {
+        return;
+      }
       if (e.button === 2) {
         const gs = useGameStore.getState();
         if (
@@ -979,6 +1010,9 @@ export const CameraController: React.FC = () => {
     };
 
     const handleMouseMove = (e: MouseEvent) => {
+      if (isKomradGrabActive() || useGameStore.getState().siberiaGameOverActive) {
+        return;
+      }
       // Only rotate camera while Pointer Lock is active and no 3D control is held
       if (document.pointerLockElement !== gl.domElement) return;
       if (pointerLockInteraction.isGrabbingControl) return;
@@ -994,6 +1028,18 @@ export const CameraController: React.FC = () => {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingInInput(e.target)) return;
+      if (isKomradGrabActive() || useGameStore.getState().siberiaGameOverActive) {
+        if (
+          e.code === "KeyE" ||
+          e.key === "Escape" ||
+          e.code === "Space" ||
+          e.code === "Enter" ||
+          (e.key >= "0" && e.key <= "7")
+        ) {
+          e.preventDefault();
+        }
+        return;
+      }
 
       const mk = moveKeysRef.current;
       if (e.code === "KeyW") {
@@ -1158,6 +1204,7 @@ export const CameraController: React.FC = () => {
     window.addEventListener("blur", handleWindowBlur);
 
     return () => {
+      abortKomradGrab();
       if (releaseRafRef.current) {
         window.cancelAnimationFrame(releaseRafRef.current);
       }
@@ -1202,8 +1249,157 @@ export const CameraController: React.FC = () => {
     const look = lookStateRef.current;
     const mk = moveKeysRef.current;
     const isGrabbing = pointerLockInteraction.isGrabbingControl;
-    const isSeated = gs.isSeatedAtDesk;
+    const playerPos = playerPosRef.current;
+    const vel = velocityRef.current;
+    const glide = glideTargetRef.current;
+
+    const returnedToLockedLobby =
+      gs.lobbyMenuPhase === "menu_locked" &&
+      (prevLobbyPhaseRef.current !== "menu_locked" ||
+        gs.shiftRunId !== prevShiftRunIdRef.current);
+    prevLobbyPhaseRef.current = gs.lobbyMenuPhase;
+    prevShiftRunIdRef.current = gs.shiftRunId;
+
+    if (returnedToLockedLobby) {
+      playerPos.set(LOBBY_SPAWN_X, STANDING_EYE_Y, LOBBY_SPAWN_Z);
+      currentEyeYRef.current = STANDING_EYE_Y;
+      headBobOffsetRef.current = 0;
+      headBobPhaseRef.current = 0;
+      vel.vx = 0;
+      vel.vz = 0;
+      glide.active = false;
+      rmbHeldRef.current = false;
+      look.currentYaw = LOBBY_SPAWN_YAW;
+      look.targetYaw = LOBBY_SPAWN_YAW;
+      look.currentPitch = LOBBY_SPAWN_PITCH;
+      look.targetPitch = LOBBY_SPAWN_PITCH;
+      prevSeatedRef.current = false;
+      skipNextPoseSyncRef.current = true;
+      state.camera.position.set(LOBBY_SPAWN_X, STANDING_EYE_Y, LOBBY_SPAWN_Z);
+      state.camera.rotation.order = "YXZ";
+      state.camera.rotation.set(LOBBY_SPAWN_PITCH, LOBBY_SPAWN_YAW, 0, "YXZ");
+      state.camera.rotation.z = 0;
+      playerCameraPose.x = LOBBY_SPAWN_X;
+      playerCameraPose.z = LOBBY_SPAWN_Z;
+      playerCameraPose.yaw = LOBBY_SPAWN_YAW;
+      playerCameraPose.isSeatedAtDesk = false;
+      if (document.pointerLockElement === gl.domElement) {
+        document.exitPointerLock?.();
+      }
+    }
+
+    if (
+      isKomradGrabActive() &&
+      (gs.phase !== "playing" ||
+        gs.lobbyMenuPhase !== "entered_control_room" ||
+        (komradGrabState.phase !== "liquidating" && gs.isBlackout && !gs.isGodMode))
+    ) {
+      abortKomradGrab();
+    }
+
+    const komradGrabActive = isKomradGrabActive();
+
+    if (komradGrabActive) {
+      mk.forward = false;
+      mk.backward = false;
+      mk.left = false;
+      mk.right = false;
+      mk.shift = false;
+      mk.zKey = false;
+      mk.digit5 = false;
+      vel.vx = 0;
+      vel.vz = 0;
+      glide.active = false;
+      rmbHeldRef.current = false;
+      if (pointerLockInteraction.isGrabbingControl) {
+        activePointerIdRef.current = null;
+        updatePointerLockInteraction({
+          isGrabbingControl: false,
+          isDragCapableGrab: false,
+          isHoveringControl: false,
+        });
+      }
+
+      if (komradGrabState.cameraSnapNeeded) {
+        snapshotGrabCameraPose(
+          playerPos.x,
+          currentEyeYRef.current,
+          playerPos.z,
+          look.currentYaw,
+          look.currentPitch,
+        );
+      }
+
+      stepKomradGrab(dt);
+
+      if (komradGrabState.liquidationCompletePending) {
+        komradGrabState.liquidationCompletePending = false;
+        gs.setSeatedAtDesk(false);
+        gs.setSiberiaGameOverActive(true);
+        if (document.pointerLockElement === gl.domElement) {
+          document.exitPointerLock?.();
+        }
+        playKgbLiquidationStampThud();
+      } else if (komradGrabState.seatedHandoffPending) {
+        komradGrabState.seatedHandoffPending = false;
+        playerPos.x = SEATED_DESK_POSE.x;
+        playerPos.z = SEATED_DESK_POSE.z;
+        currentEyeYRef.current = SEATED_DESK_POSE.y;
+        headBobOffsetRef.current = 0;
+        look.currentYaw = SEATED_DESK_POSE.yaw;
+        look.targetYaw = SEATED_DESK_POSE.yaw;
+        look.currentPitch = SEATED_DESK_POSE.pitch;
+        look.targetPitch = SEATED_DESK_POSE.pitch;
+        prevSeatedRef.current = true;
+        state.camera.position.set(
+          SEATED_DESK_POSE.x,
+          SEATED_DESK_POSE.y,
+          SEATED_DESK_POSE.z,
+        );
+        state.camera.rotation.order = "YXZ";
+        state.camera.rotation.set(
+          SEATED_DESK_POSE.pitch,
+          SEATED_DESK_POSE.yaw,
+          0,
+          "YXZ",
+        );
+        state.camera.rotation.z = 0;
+        skipNextPoseSyncRef.current = gs.activeStation !== "inspector";
+        gs.setSeatedAtDesk(true);
+        setActiveStation("inspector");
+        if (document.pointerLockElement === gl.domElement) {
+          document.exitPointerLock?.();
+        }
+        playSwitchClank(true);
+      } else {
+        playerPos.x = komradGrabState.camX;
+        playerPos.z = komradGrabState.camZ;
+        currentEyeYRef.current = komradGrabState.camY;
+        headBobOffsetRef.current = 0;
+        look.currentYaw = komradGrabState.camYaw;
+        look.targetYaw = komradGrabState.camYaw;
+        look.currentPitch = komradGrabState.camPitch;
+        look.targetPitch = komradGrabState.camPitch;
+        state.camera.position.set(
+          komradGrabState.camX,
+          komradGrabState.camY,
+          komradGrabState.camZ,
+        );
+        state.camera.rotation.order = "YXZ";
+        state.camera.rotation.set(
+          komradGrabState.camPitch,
+          komradGrabState.camYaw,
+          komradGrabState.camRoll,
+          "YXZ",
+        );
+      }
+    }
+
+    const isSeatedNow = useGameStore.getState().isSeatedAtDesk;
+    const isSeated = isSeatedNow;
     const canMove =
+      !komradGrabActive &&
+      !gs.siberiaGameOverActive &&
       gs.phase === "playing" &&
       !isSeated &&
       !isGrabbing &&
@@ -1211,11 +1407,8 @@ export const CameraController: React.FC = () => {
       !pointerLockInteraction.debugMenuOpen &&
       !pointerLockInteraction.shiftTransitionActive;
 
-    const playerPos = playerPosRef.current;
-    const vel = velocityRef.current;
-    const glide = glideTargetRef.current;
-
     const nearDesk =
+      !komradGrabActive &&
       gs.lobbyMenuPhase === "entered_control_room" &&
       !isSeated &&
       checkWithinDeskRange(playerPos.x, playerPos.z);
@@ -1223,7 +1416,7 @@ export const CameraController: React.FC = () => {
       gs.setCanSitAtDesk(nearDesk);
     }
 
-    if (prevSeatedRef.current && !isSeated && !glide.active) {
+    if (!komradGrabActive && prevSeatedRef.current && !isSeated && !glide.active) {
       look.targetYaw = setShortestTargetYaw(
         look.currentYaw,
         STAND_UP_SPOT.yaw,
@@ -1235,7 +1428,9 @@ export const CameraController: React.FC = () => {
     }
     prevSeatedRef.current = isSeated;
 
-    if (isSeated) {
+    if (komradGrabActive) {
+      // Camera pose driven above by komradGrabState
+    } else if (isSeated) {
       glide.active = false;
       vel.vx = 0;
       vel.vz = 0;
@@ -1469,8 +1664,13 @@ export const CameraController: React.FC = () => {
     const isRmbFocus =
       rmbHeldRef.current &&
       gs.phase === "playing" &&
-      !isGrabbing;
-    const baseFov = isSeated ? SEATED_DESK_POSE.fov : BASE_FOV;
+      !gs.siberiaGameOverActive &&
+      !isGrabbing &&
+      !komradGrabActive;
+    const baseFov =
+      isSeated || komradGrabState.phase === "dropping"
+        ? SEATED_DESK_POSE.fov
+        : BASE_FOV;
     const zoomFov = isSeated ? RMB_SEATED_ZOOM_FOV : RMB_ZOOM_FOV;
     const targetFov = isRmbFocus ? zoomFov : baseFov;
 

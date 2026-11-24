@@ -10,7 +10,18 @@ import {
 } from "./ControlRoomScene";
 import { NOOP_RAYCAST } from "./ExteriorDioramas3D";
 import {
+  abortKomradGrab,
+  isKomradGrabActive,
+  isKomradLiquidating,
+  komradGrabState,
+  snapshotGrabGantryPose,
+  stepKomradGrab,
+} from "./komradGrabState";
+import {
   getKomradVowelBand,
+  playChairLeatheretteThud,
+  playKomradCollarClampClang,
+  playKomradPneumaticDropHiss,
   playTurretServoWhir,
   stepKomradSpeech,
   type KomradVowelKey,
@@ -33,7 +44,12 @@ import {
   getHammeredIronTextures,
 } from "./proceduralMaterials";
 import type { KomradMood } from "./types";
-import { useGameStore } from "./useGameStore";
+import {
+  dispatchKomradGrabUltimatum,
+  getPreVolkovStrikeCount,
+  isPreVolkovPanelLocked,
+  useGameStore,
+} from "./useGameStore";
 
 const GANTRY_RAIL_Y = 3.76;
 const GANTRY_RAIL_HALF_X = 4.65;
@@ -226,6 +242,7 @@ export interface PanopticonTargetInput {
   mood: KomradMood;
   isBlackout: boolean;
   elapsedSec: number;
+  preferCloseEdge?: boolean;
 }
 
 export interface PanopticonTargetResult {
@@ -392,6 +409,7 @@ export function computeSafePanopticonTarget( // oxlint-disable-line react/only-e
     mood,
     isBlackout,
     elapsedSec,
+    preferCloseEdge = false,
   } = input;
 
   if (isBlackout) {
@@ -418,11 +436,13 @@ export function computeSafePanopticonTarget( // oxlint-disable-line react/only-e
   const candX = _projTmp.x;
   const candZ = _projTmp.z;
   const distRef = Math.hypot(candX - camPos.x, candZ - camPos.z);
+  const closeEdgeRad = MIN_TROLLEY_DIST + 0.08;
 
   if (
     isStrictlySafeCorridor(candX, candZ) &&
     distRef >= MIN_TROLLEY_DIST &&
-    distRef <= MAX_TROLLEY_DIST
+    distRef <= MAX_TROLLEY_DIST &&
+    (!preferCloseEdge || distRef <= closeEdgeRad + 0.25)
   ) {
     out.targetX = candX;
     out.targetY = targetY;
@@ -438,12 +458,17 @@ export function computeSafePanopticonTarget( // oxlint-disable-line react/only-e
     dz = camPos.z > 0.2 ? -0.55 : 0.55;
   }
   const baseAngle = Math.atan2(dz, dx);
-  const primaryRad =
-    distRef > MAX_TROLLEY_DIST ? IDEAL_TROLLEY_DIST : PUSH_TARGET_TROLLEY_DIST;
-  const secondaryRad =
-    primaryRad === PUSH_TARGET_TROLLEY_DIST
+  const primaryRad = preferCloseEdge
+    ? closeEdgeRad
+    : distRef > MAX_TROLLEY_DIST
       ? IDEAL_TROLLEY_DIST
       : PUSH_TARGET_TROLLEY_DIST;
+  const secondaryRad = preferCloseEdge
+    ? PUSH_TARGET_TROLLEY_DIST
+    : primaryRad === PUSH_TARGET_TROLLEY_DIST
+      ? IDEAL_TROLLEY_DIST
+      : PUSH_TARGET_TROLLEY_DIST;
+  const idealGoalRad = preferCloseEdge ? closeEdgeRad : IDEAL_TROLLEY_DIST;
 
   let bestX = candX;
   let bestZ = candZ;
@@ -466,7 +491,7 @@ export function computeSafePanopticonTarget( // oxlint-disable-line react/only-e
       if (dCam < MIN_TROLLEY_DIST) continue;
 
       const travel = Math.hypot(px - curX, pz - curZ);
-      const distErr = Math.abs(dCam - IDEAL_TROLLEY_DIST);
+      const distErr = Math.abs(dCam - idealGoalRad);
       const flipPen =
         px * preferredSide < -0.25 && curX * preferredSide > 0.25 ? 0.5 : 0;
       const overMaxPen =
@@ -510,7 +535,7 @@ export function computeSafePanopticonTarget( // oxlint-disable-line react/only-e
     if (dCam < MIN_TROLLEY_DIST) continue;
 
     const travel = Math.hypot(px - curX, pz - curZ);
-    const distErr = Math.abs(dCam - IDEAL_TROLLEY_DIST);
+    const distErr = Math.abs(dCam - idealGoalRad);
     const flipPen =
       px * preferredSide < -0.25 && curX * preferredSide > 0.25 ? 0.5 : 0;
     const overMaxPen =
@@ -801,6 +826,12 @@ const _wristYAxis = new THREE.Vector3();
 const _wristZAxis = new THREE.Vector3();
 const _wristUpRef = new THREE.Vector3();
 const _xAxisUnit = new THREE.Vector3(1, 0, 0);
+const _grabCamFwd = new THREE.Vector3();
+const _grabCamRight = new THREE.Vector3();
+const _grabCamUp = new THREE.Vector3();
+const _grabClawWorld = new THREE.Vector3();
+const _grabEulerTmp = new THREE.Euler(0, 0, 0, "YXZ");
+const _grabQuatTmp = new THREE.Quaternion();
 const _turretCrtStandbyTint = new THREE.Color("#203626");
 const _turretCrtFullTint = new THREE.Color("#ffffff");
 const _opticStandbyLo = new THREE.Color("#d91818");
@@ -978,8 +1009,13 @@ function paintTurretFaceCRT(
   ctx.fillStyle = pal.bg;
   ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = pal.primary;
-  ctx.lineWidth = 4;
+  ctx.strokeStyle =
+    mood === "critical"
+      ? blinkPhase % 2 === 0
+        ? "#ff4433"
+        : "#991616"
+      : pal.primary;
+  ctx.lineWidth = mood === "critical" ? 6 : 4;
   ctx.strokeRect(6, 6, w - 12, h - 12);
 
   // Header strip
@@ -1184,6 +1220,9 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     shakeAmp: 0,
     lastMood: "normal" as KomradMood,
     lastTreasonStrikes: 0,
+    lastPreVolkovStrikes: 0,
+    postGrabRetreatTimer: 0,
+    wasGrabActive: false,
     lastShiftRunId: -1,
     lastControlSig: 0,
     lastControlsInit: false,
@@ -1261,6 +1300,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
 
   useEffect(() => {
     return () => {
+      abortKomradGrab();
       turretCrtTex.dispose();
       radCheekTex.dispose();
       armHazardTex.dispose();
@@ -1312,13 +1352,51 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         ts.anchorCamInit = false;
         ts.lastSeatedAtDesk = false;
         ts.wasArmActive = false;
+        ts.wasGrabActive = false;
+        ts.postGrabRetreatTimer = 0;
+        ts.lastPreVolkovStrikes = 0;
         ts.wasDancing = false;
         ts.danceElapsedSec = 0;
         ts.arms[0].curRoll = 0;
         ts.arms[1].curRoll = 0;
         ts.nextDriftSec = t + SUPERVISORY_DRIFT_INTERVAL_SEC;
       }
+      abortKomradGrab();
+      ts.postGrabRetreatTimer = 0;
+      ts.wasGrabActive = false;
+      ts.lastPreVolkovStrikes = 0;
       cancelKomradActuation();
+    } else if (s.lobbyMenuPhase !== "entered_control_room" && isKomradGrabActive()) {
+      abortKomradGrab();
+      ts.postGrabRetreatTimer = 0;
+      ts.wasGrabActive = false;
+    }
+
+    let grabActive = isKomradGrabActive();
+    if (grabActive) {
+      cancelKomradActuation();
+      if (komradGrabState.gantrySnapNeeded) {
+        snapshotGrabGantryPose(ts.curX, ts.curHeadY, ts.curZ);
+      }
+      stepKomradGrab(dt);
+      if (komradGrabState.clampEventPending) {
+        komradGrabState.clampEventPending = false;
+        playKomradCollarClampClang();
+        ts.shakeAmp = isKomradLiquidating() ? 0.36 : 0.22;
+      }
+      if (komradGrabState.releaseHissEventPending) {
+        komradGrabState.releaseHissEventPending = false;
+        playKomradPneumaticDropHiss();
+      }
+      if (komradGrabState.thudEventPending) {
+        komradGrabState.thudEventPending = false;
+        playChairLeatheretteThud();
+      }
+      if (komradGrabState.ultimatumEventPending) {
+        komradGrabState.ultimatumEventPending = false;
+        dispatchKomradGrabUltimatum(komradGrabState.pendingUltimatumLine);
+      }
+      grabActive = isKomradGrabActive();
     }
 
     const controlSig =
@@ -1365,7 +1443,8 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       !isBlackout &&
       s.phase === "playing" &&
       s.lobbyMenuPhase === "entered_control_room" &&
-      !armState.active;
+      !armState.active &&
+      !grabActive;
     const prevWasDancing = ts.wasDancing;
     const enteredDance = !prevWasDancing && isDancing;
     const exitedDance = prevWasDancing && !isDancing;
@@ -1485,6 +1564,120 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       ts.anchorZ = INITIAL_TROLLEY_Z;
       ts.anchorCamInit = false;
       ts.wasArmActive = false;
+    } else if (grabActive) {
+      const isLiquidating = komradGrabState.phase === "liquidating";
+      desiredTargetY = komradGrabState.gantryTargetY;
+      if (isLiquidating) {
+        if (komradGrabState.phaseElapsed < 0.65) {
+          const xzStep = stepHeavyCraneXZ(
+            ts.curX,
+            ts.curZ,
+            ts.velX,
+            ts.velZ,
+            komradGrabState.gantryTargetX,
+            komradGrabState.gantryTargetZ,
+            dt,
+            6.8,
+            34.0,
+            0.1,
+            false,
+            _craneXZOut,
+          );
+          ts.curX = xzStep.x;
+          ts.curZ = xzStep.z;
+          ts.velX = xzStep.vx;
+          ts.velZ = xzStep.vz;
+          if (komradGrabState.phaseElapsed > 0.38) {
+            const snapAlpha = 1 - Math.exp(-18 * dt);
+            ts.curX = THREE.MathUtils.lerp(
+              ts.curX,
+              komradGrabState.gantryTargetX,
+              snapAlpha,
+            );
+            ts.curZ = THREE.MathUtils.lerp(
+              ts.curZ,
+              komradGrabState.gantryTargetZ,
+              snapAlpha,
+            );
+          }
+        } else {
+          const dragFollowAlpha = 1 - Math.exp(-18 * dt);
+          const nextX = THREE.MathUtils.lerp(
+            ts.curX,
+            komradGrabState.gantryTargetX,
+            dragFollowAlpha,
+          );
+          const nextZ = THREE.MathUtils.lerp(
+            ts.curZ,
+            komradGrabState.gantryTargetZ,
+            dragFollowAlpha,
+          );
+          ts.velX = dt > 1e-5 ? (nextX - ts.curX) / dt : 0;
+          ts.velZ = dt > 1e-5 ? (nextZ - ts.curZ) / dt : 0;
+          ts.curX = nextX;
+          ts.curZ = nextZ;
+        }
+      } else if (komradGrabState.phase === "intercept") {
+        const xzStep = stepHeavyCraneXZ(
+          ts.curX,
+          ts.curZ,
+          ts.velX,
+          ts.velZ,
+          komradGrabState.gantryTargetX,
+          komradGrabState.gantryTargetZ,
+          dt,
+          6.5,
+          26.0,
+          0.14,
+          false,
+          _craneXZOut,
+        );
+        ts.curX = xzStep.x;
+        ts.curZ = xzStep.z;
+        ts.velX = xzStep.vx;
+        ts.velZ = xzStep.vz;
+        if (komradGrabState.phaseElapsed > 0.45) {
+          const snapAlpha = 1 - Math.exp(-16 * dt);
+          ts.curX = THREE.MathUtils.lerp(
+            ts.curX,
+            komradGrabState.gantryTargetX,
+            snapAlpha,
+          );
+          ts.curZ = THREE.MathUtils.lerp(
+            ts.curZ,
+            komradGrabState.gantryTargetZ,
+            snapAlpha,
+          );
+        }
+      } else {
+        const carryFollowAlpha = 1 - Math.exp(-16 * dt);
+        const nextX = THREE.MathUtils.lerp(
+          ts.curX,
+          komradGrabState.gantryTargetX,
+          carryFollowAlpha,
+        );
+        const nextZ = THREE.MathUtils.lerp(
+          ts.curZ,
+          komradGrabState.gantryTargetZ,
+          carryFollowAlpha,
+        );
+        ts.velX = dt > 1e-5 ? (nextX - ts.curX) / dt : 0;
+        ts.velZ = dt > 1e-5 ? (nextZ - ts.curZ) / dt : 0;
+        ts.curX = nextX;
+        ts.curZ = nextZ;
+      }
+      const nextY = THREE.MathUtils.lerp(
+        ts.curHeadY,
+        desiredTargetY,
+        1 - Math.exp(-14 * dt),
+      );
+      ts.velY = dt > 1e-5 ? (nextY - ts.curHeadY) / dt : 0;
+      ts.curHeadY = nextY;
+      ts.anchorX = ts.curX;
+      ts.anchorZ = ts.curZ;
+      ts.wasGrabActive = true;
+      ts.wasArmActive = false;
+      playTurretServoWhir(1.2);
     } else if (armState.active) {
       const actX = THREE.MathUtils.clamp(
         armState.standoffGantryPos.x,
@@ -1644,6 +1837,24 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
 
       const exitedArm = ts.wasArmActive;
       ts.wasArmActive = false;
+      const exitedGrab = ts.wasGrabActive || komradGrabState.justFinishedGrab;
+      if (exitedGrab) {
+        ts.wasGrabActive = false;
+        komradGrabState.justFinishedGrab = false;
+        ts.postGrabRetreatTimer = 1.1;
+      }
+      const preVolkovLocked = isPreVolkovPanelLocked(s);
+      const preVolkovStrikes = preVolkovLocked ? getPreVolkovStrikeCount() : 0;
+      const tier2Escalated =
+        preVolkovLocked &&
+        preVolkovStrikes >= 3 &&
+        preVolkovStrikes !== ts.lastPreVolkovStrikes;
+      if (tier2Escalated) {
+        ts.shakeAmp = 0.28;
+      }
+      ts.lastPreVolkovStrikes = preVolkovLocked ? preVolkovStrikes : 0;
+      const preferCloseEdge = preVolkovLocked && preVolkovStrikes >= 3;
+
       const seatedChanged = s.isSeatedAtDesk !== ts.lastSeatedAtDesk;
       ts.lastSeatedAtDesk = s.isSeatedAtDesk;
 
@@ -1666,7 +1877,9 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
 
       if (
         exitedArm ||
+        exitedGrab ||
         exitedDance ||
+        tier2Escalated ||
         seatedChanged ||
         anchorUnsafe ||
         personalSpaceBreach ||
@@ -1685,6 +1898,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
             mood: vocal.mood,
             isBlackout: false,
             elapsedSec: t,
+            preferCloseEdge,
           },
           _safeTargetOut,
         );
@@ -1753,11 +1967,24 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         _steerTmp,
       );
 
+      let effectiveMinCamDist = MIN_TROLLEY_DIST * 0.92;
+      if (ts.postGrabRetreatTimer > 0) {
+        ts.postGrabRetreatTimer = Math.max(0, ts.postGrabRetreatTimer - dt);
+        if (liveDistToCam >= MIN_TROLLEY_DIST * 0.92) {
+          ts.postGrabRetreatTimer = 0;
+        } else {
+          effectiveMinCamDist = Math.min(
+            MIN_TROLLEY_DIST * 0.92,
+            liveDistToCam,
+          );
+        }
+      }
+
       const patrolMaxSpeed =
-        liveDistToCam < PUSH_TARGET_TROLLEY_DIST
+        ts.postGrabRetreatTimer > 0 || liveDistToCam < PUSH_TARGET_TROLLEY_DIST
           ? THREE.MathUtils.clamp(
               CRANE_PATROL_MAX_SPEED_XZ +
-                (PUSH_TARGET_TROLLEY_DIST - liveDistToCam) * 3.0,
+                Math.max(0.6, PUSH_TARGET_TROLLEY_DIST - liveDistToCam) * 3.0,
               CRANE_PATROL_MAX_SPEED_XZ,
               CRANE_PATROL_RETREAT_MAX_SPEED_XZ,
             )
@@ -1778,7 +2005,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         _craneXZOut,
         camPos.x,
         camPos.z,
-        MIN_TROLLEY_DIST * 0.92,
+        effectiveMinCamDist,
       );
       ts.curX = xzStep.x;
       ts.curZ = xzStep.z;
@@ -1816,15 +2043,17 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     // Articulated arm pose + telescoping vertical spine column reaching eye level (~1.65m..2.05m)
     const targetSwoop = isBlackout
       ? 0.25
-      : armState.active
-        ? 0.94
-        : isDancing
-          ? 0.9
-          : vocal.mood === "critical"
-            ? 1.0
-            : vocal.isTalking || s.isSeatedAtDesk
-              ? 0.92
-              : 0.78;
+      : grabActive
+        ? 0.65
+        : armState.active
+          ? 0.94
+          : isDancing
+            ? 0.9
+            : vocal.mood === "critical"
+              ? 1.0
+              : vocal.isTalking || s.isSeatedAtDesk
+                ? 0.92
+                : 0.78;
 
     const lambdaSwoop = isDancing ? 6.5 : 3.2;
     ts.curSwoop = THREE.MathUtils.damp(ts.curSwoop, targetSwoop, lambdaSwoop, dt);
@@ -1879,19 +2108,25 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     const inLobbyWaiting = s.lobbyMenuPhase !== "entered_control_room";
     const aimX = inLobbyWaiting
       ? 0.0
-      : armState.active && !isBlackout
-        ? armState.targetWorldPos.x
-        : camPos.x;
+      : grabActive && !isBlackout
+        ? komradGrabState.camX
+        : armState.active && !isBlackout
+          ? armState.targetWorldPos.x
+          : camPos.x;
     const aimY = inLobbyWaiting
       ? 1.65
-      : armState.active && !isBlackout
-        ? armState.targetWorldPos.y
-        : camPos.y;
+      : grabActive && !isBlackout
+        ? komradGrabState.camY
+        : armState.active && !isBlackout
+          ? armState.targetWorldPos.y
+          : camPos.y;
     const aimZ = inLobbyWaiting
       ? 4.64
-      : armState.active && !isBlackout
-        ? armState.targetWorldPos.z
-        : camPos.z;
+      : grabActive && !isBlackout
+        ? komradGrabState.camZ
+        : armState.active && !isBlackout
+          ? armState.targetWorldPos.z
+          : camPos.z;
     const tdx = aimX - ts.curX;
     const tdy = aimY - wristWorldY;
     const tdz = aimZ - ts.curZ;
@@ -1929,13 +2164,15 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
 
     const lambdaYaw = isBlackout
       ? 2.8
-      : armState.active
-        ? 5.0
-        : isDancing
-          ? 7.5
-          : vocal.mood === "critical"
-            ? 3.8
-            : 3.2;
+      : grabActive
+        ? 10.0
+        : armState.active
+          ? 5.0
+          : isDancing
+            ? 7.5
+            : vocal.mood === "critical"
+              ? 3.8
+              : 3.2;
     if (!isBlackout) {
       ts.curYaw = wrapAngleRad(
         THREE.MathUtils.damp(ts.curYaw, ts.curYaw + yawErr, lambdaYaw, dt),
@@ -1953,13 +2190,15 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         : livePitch;
     const lambdaPitch = isBlackout
       ? 2.8
-      : armState.active
-        ? 4.8
-        : isDancing
-          ? 8.5
-          : vocal.mood === "critical"
-            ? 3.8
-            : 3.1;
+      : grabActive
+        ? 10.0
+        : armState.active
+          ? 4.8
+          : isDancing
+            ? 8.5
+            : vocal.mood === "critical"
+              ? 3.8
+              : 3.1;
     ts.curPitch = THREE.MathUtils.clamp(
       THREE.MathUtils.damp(ts.curPitch, desiredPitch, lambdaPitch, dt),
       armState.active || isBlackout
@@ -1967,6 +2206,10 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         : TURRET_PITCH_MIN,
       pitchMax,
     );
+
+    komradGrabState.gantryHeadWorldX = ts.curX + Math.sin(ts.curYaw) * 0.58;
+    komradGrabState.gantryHeadWorldY = wristWorldY + 0.02;
+    komradGrabState.gantryHeadWorldZ = ts.curZ + Math.cos(ts.curYaw) * 0.58;
 
     ts.rollImpulse = THREE.MathUtils.damp(ts.rollImpulse, 0, 2.8, dt);
     const desiredRoll = isBlackout
@@ -2027,6 +2270,19 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         .transformDirection(_armChassisInvMat)
         .normalize();
       hasArmInv = true;
+    }
+
+    if (grabActive && hasArmInv && !isBlackout) {
+      _grabEulerTmp.set(
+        komradGrabState.camPitch,
+        komradGrabState.camYaw,
+        komradGrabState.camRoll,
+        "YXZ",
+      );
+      _grabQuatTmp.setFromEuler(_grabEulerTmp);
+      _grabCamFwd.set(0, 0, -1).applyQuaternion(_grabQuatTmp);
+      _grabCamRight.set(1, 0, 0).applyQuaternion(_grabQuatTmp);
+      _grabCamUp.set(0, 1, 0).applyQuaternion(_grabQuatTmp);
     }
 
     for (let armIdx = 0; armIdx < 2; armIdx++) {
@@ -2170,14 +2426,102 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
           0.22 + 0.16 * vocal.energy * (0.5 + 0.5 * Math.sin(t * 14 + armIdx));
       }
 
+      const isGrabArm =
+        grabActive &&
+        hasArmInv &&
+        komradGrabState.armReachBlend > 0.001 &&
+        !isBlackout;
+
       const isActiveArm =
+        !isGrabArm &&
         hasArmInv &&
         armState.active &&
         armState.activeArm === sideKey &&
         armState.ikBlend > 0.001 &&
         !isBlackout;
 
-      if (isActiveArm) {
+      if (isGrabArm) {
+        const b = komradGrabState.armReachBlend;
+        const playerSide = -side;
+        const isLiquidatingArm = komradGrabState.phase === "liquidating";
+        const isClampedPose =
+          (komradGrabState.phase === "intercept" && komradGrabState.clampFired) ||
+          komradGrabState.phase === "carrying" ||
+          (isLiquidatingArm && komradGrabState.clampFired);
+        const lat = isLiquidatingArm
+          ? isClampedPose
+            ? 0.22
+            : 0.34
+          : isClampedPose
+            ? 0.25
+            : 0.34;
+        const vert = isLiquidatingArm
+          ? isClampedPose
+            ? -0.14
+            : -0.15
+          : isClampedPose
+            ? -0.16
+            : -0.15;
+        const fwd = isLiquidatingArm
+          ? isClampedPose
+            ? 0.3
+            : 0.4
+          : isClampedPose
+            ? 0.36
+            : 0.42;
+
+        _grabClawWorld
+          .set(
+            komradGrabState.camX,
+            komradGrabState.camY,
+            komradGrabState.camZ,
+          )
+          .addScaledVector(_grabCamRight, playerSide * lat)
+          .addScaledVector(_grabCamUp, vert)
+          .addScaledVector(_grabCamFwd, fwd);
+
+        _clawLocal.copy(_grabClawWorld).applyMatrix4(_armChassisInvMat);
+        _normalLocal
+          .set(
+            side * MANIPULATOR_SHOULDER_LOCAL_X - _clawLocal.x,
+            MANIPULATOR_SHOULDER_LOCAL_Y - _clawLocal.y,
+            MANIPULATOR_SHOULDER_LOCAL_Z - _clawLocal.z,
+          )
+          .normalize();
+
+        const ikWristX =
+          _clawLocal.x +
+          _normalLocal.x * MANIPULATOR_CLAW_LEN -
+          side * MANIPULATOR_SHOULDER_LOCAL_X;
+        const ikWristY =
+          _clawLocal.y +
+          _normalLocal.y * MANIPULATOR_CLAW_LEN -
+          MANIPULATOR_SHOULDER_LOCAL_Y;
+        const ikWristZ =
+          _clawLocal.z +
+          _normalLocal.z * MANIPULATOR_CLAW_LEN -
+          MANIPULATOR_SHOULDER_LOCAL_Z;
+
+        _armTargetTmp.set(
+          THREE.MathUtils.lerp(idleX, ikWristX, b),
+          THREE.MathUtils.lerp(idleY, ikWristY, b),
+          THREE.MathUtils.lerp(idleZ, ikWristZ, b),
+        );
+        _armPoleTmp.set(
+          THREE.MathUtils.lerp(idlePoleX, side * 0.72, b),
+          THREE.MathUtils.lerp(idlePoleY, 0.35, b),
+          THREE.MathUtils.lerp(idlePoleZ, -0.35, b),
+        );
+        as.curWrist.copy(_armTargetTmp);
+        as.curPole.copy(_armPoleTmp);
+        as.curOpen = THREE.MathUtils.damp(
+          as.curOpen,
+          komradGrabState.clawOpen,
+          22,
+          dt,
+        );
+        as.curRoll = THREE.MathUtils.damp(as.curRoll, side * 0.25 * b, 14, dt);
+      } else if (isActiveArm) {
         const b = armState.ikBlend;
         const ikWristX =
           _clawLocal.x +
@@ -2264,7 +2608,12 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         _forearmQuatTmp.copy(ik.upperQuat).multiply(_elbowQuatTmp);
         _wristIdleQuatTmp.copy(_forearmQuatTmp).multiply(_wristIdleRelQuat);
 
-        if (isActiveArm && armState.ikBlend > 0.001) {
+        const wristBlend = isGrabArm
+          ? komradGrabState.armReachBlend
+          : isActiveArm
+            ? armState.ikBlend
+            : 0;
+        if (wristBlend > 0.001) {
           _wristYAxis.copy(_normalLocal);
           if (_wristYAxis.lengthSq() < 1e-6) {
             _wristYAxis.set(0, 1, 0);
@@ -2283,7 +2632,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
 
           _wristChassisQuatTmp
             .copy(_wristIdleQuatTmp)
-            .slerp(_wristGripQuatTmp, armState.ikBlend);
+            .slerp(_wristGripQuatTmp, wristBlend);
         } else {
           _wristChassisQuatTmp.copy(_wristIdleQuatTmp);
         }
@@ -2309,6 +2658,10 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       if (ledMat) {
         if (isBlackout) {
           ledMat.color.setHex(0x161a18);
+        } else if (isGrabArm) {
+          ledMat.color.setHex(
+            Math.floor(t * 14 + armIdx) % 2 === 0 ? 0xff2a2a : 0xffb000,
+          );
         } else if (inLobbyWaiting || controlRoomPowerState.zone2 <= 0.01) {
           ledMat.color.setHex(0x163820);
         } else if (isActiveArm) {
@@ -2347,9 +2700,15 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     }
 
     // Articulated Cyclops Optic Lens & 4 Motorized Brass Shutter Blades
+    const liquidationGlare =
+      komradGrabState.phase === "liquidating" || s.siberiaGameOverActive;
     if (turretOpticMatRef.current) {
       if (isBlackout) {
         turretOpticMatRef.current.color.setHex(0x220808);
+      } else if (liquidationGlare) {
+        turretOpticMatRef.current.color.setHex(
+          Math.floor(t * 16) % 2 === 0 ? 0xff2a2a : 0x660606,
+        );
       } else if (inLobbyWaiting) {
         const pulse = 0.5 + 0.5 * Math.sin(t * 2.1);
         turretOpticMatRef.current.color.lerpColors(
@@ -2375,6 +2734,8 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     if (opticGlowLightRef.current) {
       if (isBlackout) {
         opticGlowLightRef.current.intensity = 0.0002;
+      } else if (liquidationGlare) {
+        opticGlowLightRef.current.intensity = 2.6 + Math.sin(t * 24) * 0.9;
       } else if (inLobbyWaiting) {
         const pulse = 0.5 + 0.5 * Math.sin(t * 2.1);
         opticGlowLightRef.current.intensity = 0.42 + pulse * 0.18;
@@ -2387,7 +2748,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     }
 
     if (turretCrtMatRef.current) {
-      if (isBlackout) {
+      if (isBlackout || liquidationGlare) {
         turretCrtMatRef.current.color.copy(_turretCrtFullTint);
       } else if (inLobbyWaiting) {
         turretCrtMatRef.current.color.copy(_turretCrtStandbyTint);

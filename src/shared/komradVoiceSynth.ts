@@ -4,7 +4,11 @@
 // routes 100% of speech (VOX slices, full .ogg clips, and OOV multi-syllable formant words) through a unified
 // Dark Soviet Mainframe Vocoder + Bunker PA Horn Bus + AnalyserNode for 1:1 lip-sync.
 
-import { getAudioContext } from "../modules/inspector/audio";
+import {
+  getAudioContext,
+  silenceAllLegacyGlobalBgm,
+} from "../modules/inspector/audio";
+import { isKomradGrabActive, isKomradLiquidating } from "./komradGrabState";
 import {
   canEmitKomradIdleChatter,
   isKomradNonCriticalCooldownActive,
@@ -16,6 +20,7 @@ import {
 import type { KomradMessageEntry, KomradMood } from "./types";
 import {
   doesRadioDominateSubtitles,
+  getPreVolkovStrikeCount,
   isPreVolkovPanelLocked,
   reportPreVolkovLockedPanelAttempt,
   useGameStore,
@@ -1929,6 +1934,9 @@ export function decomposeWordToSyllables(rawWord: string): SyllableSpec[] {
 
 function isRadioHoldoffActive(): boolean {
   const s = useGameStore.getState();
+  if (isKomradLiquidating() || s.siberiaGameOverActive) {
+    return false;
+  }
   const nowMs = nowPerfMs();
   if (doesRadioDominateSubtitles(s.radioOn, s.radioVolume, s.radioBroadcastSubtitle)) {
     lastRadioSubtitleActiveMs = nowMs;
@@ -2615,12 +2623,477 @@ export function playLockedPanelClunk(): void {
   };
 }
 
+export function playKomradGrabServoCharge(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+  const dur = 0.55;
+
+  const driveOsc = audio.createOscillator();
+  driveOsc.type = "sawtooth";
+  driveOsc.frequency.setValueAtTime(105, t0);
+  driveOsc.frequency.exponentialRampToValueAtTime(265, t0 + dur * 0.72);
+  driveOsc.frequency.linearRampToValueAtTime(220, t0 + dur);
+
+  const subOsc = audio.createOscillator();
+  subOsc.type = "triangle";
+  subOsc.frequency.setValueAtTime(54, t0);
+  subOsc.frequency.linearRampToValueAtTime(112, t0 + dur);
+
+  const servoLp = audio.createBiquadFilter();
+  servoLp.type = "lowpass";
+  servoLp.frequency.setValueAtTime(520, t0);
+  servoLp.Q.setValueAtTime(2.2, t0);
+
+  const servoGain = audio.createGain();
+  servoGain.gain.setValueAtTime(0.0001, t0);
+  servoGain.gain.linearRampToValueAtTime(0.16, t0 + 0.04);
+  servoGain.gain.setValueAtTime(0.14, t0 + dur - 0.1);
+  servoGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+  const gearNoise = audio.createBufferSource();
+  gearNoise.buffer = chain.noiseBuffer;
+
+  const gearBp = audio.createBiquadFilter();
+  gearBp.type = "bandpass";
+  gearBp.frequency.setValueAtTime(760, t0);
+  gearBp.frequency.linearRampToValueAtTime(1240, t0 + dur * 0.8);
+  gearBp.Q.setValueAtTime(3.0, t0);
+
+  const gearGain = audio.createGain();
+  gearGain.gain.setValueAtTime(0.0001, t0);
+  gearGain.gain.linearRampToValueAtTime(0.08, t0 + 0.05);
+  gearGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+  driveOsc.connect(servoLp);
+  subOsc.connect(servoLp);
+  servoLp.connect(servoGain);
+  servoGain.connect(audio.destination);
+
+  gearNoise.connect(gearBp);
+  gearBp.connect(gearGain);
+  gearGain.connect(audio.destination);
+
+  const stopAt = t0 + dur + 0.015;
+  driveOsc.start(t0);
+  subOsc.start(t0);
+  gearNoise.start(t0, Math.random() * 0.4, dur + 0.01);
+  driveOsc.stop(stopAt);
+  subOsc.stop(stopAt);
+  driveOsc.onended = () => {
+    driveOsc.disconnect();
+    subOsc.disconnect();
+    servoLp.disconnect();
+    servoGain.disconnect();
+    gearNoise.disconnect();
+    gearBp.disconnect();
+    gearGain.disconnect();
+  };
+}
+
+export function playKomradCollarClampClang(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  const thumpOsc = audio.createOscillator();
+  thumpOsc.type = "triangle";
+  thumpOsc.frequency.setValueAtTime(185, t0);
+  thumpOsc.frequency.exponentialRampToValueAtTime(44, t0 + 0.14);
+
+  const thumpGain = audio.createGain();
+  thumpGain.gain.setValueAtTime(0.0001, t0);
+  thumpGain.gain.linearRampToValueAtTime(0.32, t0 + 0.005);
+  thumpGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+
+  thumpOsc.connect(thumpGain);
+  thumpGain.connect(audio.destination);
+
+  const ringA = audio.createOscillator();
+  ringA.type = "square";
+  ringA.frequency.setValueAtTime(790, t0);
+
+  const ringB = audio.createOscillator();
+  ringB.type = "triangle";
+  ringB.frequency.setValueAtTime(1580, t0);
+
+  const ringBp = audio.createBiquadFilter();
+  ringBp.type = "bandpass";
+  ringBp.frequency.setValueAtTime(1120, t0);
+  ringBp.Q.setValueAtTime(4.2, t0);
+
+  const ringGain = audio.createGain();
+  ringGain.gain.setValueAtTime(0.0001, t0);
+  ringGain.gain.linearRampToValueAtTime(0.18, t0 + 0.003);
+  ringGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.24);
+
+  ringA.connect(ringBp);
+  ringB.connect(ringBp);
+  ringBp.connect(ringGain);
+  ringGain.connect(audio.destination);
+
+  const snapSrc = audio.createBufferSource();
+  snapSrc.buffer = chain.noiseBuffer;
+
+  const snapBp = audio.createBiquadFilter();
+  snapBp.type = "bandpass";
+  snapBp.frequency.setValueAtTime(2400, t0);
+  snapBp.Q.setValueAtTime(2.4, t0);
+
+  const snapGain = audio.createGain();
+  snapGain.gain.setValueAtTime(0.0001, t0);
+  snapGain.gain.linearRampToValueAtTime(0.26, t0 + 0.002);
+  snapGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.055);
+
+  snapSrc.connect(snapBp);
+  snapBp.connect(snapGain);
+  snapGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.26;
+  thumpOsc.start(t0);
+  ringA.start(t0);
+  ringB.start(t0);
+  snapSrc.start(t0, Math.random() * 0.5, 0.06);
+  thumpOsc.stop(stopAt);
+  ringA.stop(stopAt);
+  ringB.stop(stopAt);
+  ringA.onended = () => {
+    thumpOsc.disconnect();
+    thumpGain.disconnect();
+    ringA.disconnect();
+    ringB.disconnect();
+    ringBp.disconnect();
+    ringGain.disconnect();
+    snapSrc.disconnect();
+    snapBp.disconnect();
+    snapGain.disconnect();
+  };
+}
+
+export function playKomradPneumaticDropHiss(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+  const dur = 0.32;
+
+  const hissSrc = audio.createBufferSource();
+  hissSrc.buffer = chain.noiseBuffer;
+
+  const hissBp = audio.createBiquadFilter();
+  hissBp.type = "bandpass";
+  hissBp.frequency.setValueAtTime(2900, t0);
+  hissBp.frequency.exponentialRampToValueAtTime(900, t0 + dur);
+  hissBp.Q.setValueAtTime(1.6, t0);
+
+  const hissGain = audio.createGain();
+  hissGain.gain.setValueAtTime(0.0001, t0);
+  hissGain.gain.linearRampToValueAtTime(0.22, t0 + 0.015);
+  hissGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+  hissSrc.connect(hissBp);
+  hissBp.connect(hissGain);
+  hissGain.connect(audio.destination);
+
+  const valveOsc = audio.createOscillator();
+  valveOsc.type = "triangle";
+  valveOsc.frequency.setValueAtTime(640, t0);
+  valveOsc.frequency.exponentialRampToValueAtTime(180, t0 + 0.045);
+
+  const valveGain = audio.createGain();
+  valveGain.gain.setValueAtTime(0.0001, t0);
+  valveGain.gain.linearRampToValueAtTime(0.12, t0 + 0.003);
+  valveGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+
+  valveOsc.connect(valveGain);
+  valveGain.connect(audio.destination);
+
+  hissSrc.start(t0, Math.random() * 0.4, dur + 0.02);
+  valveOsc.start(t0);
+  valveOsc.stop(t0 + dur + 0.03);
+  valveOsc.onended = () => {
+    hissSrc.disconnect();
+    hissBp.disconnect();
+    hissGain.disconnect();
+    valveOsc.disconnect();
+    valveGain.disconnect();
+  };
+}
+
+export function playChairLeatheretteThud(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  const thudOsc = audio.createOscillator();
+  thudOsc.type = "sine";
+  thudOsc.frequency.setValueAtTime(98, t0);
+  thudOsc.frequency.exponentialRampToValueAtTime(30, t0 + 0.16);
+
+  const thudGain = audio.createGain();
+  thudGain.gain.setValueAtTime(0.0001, t0);
+  thudGain.gain.linearRampToValueAtTime(0.38, t0 + 0.008);
+  thudGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+
+  thudOsc.connect(thudGain);
+  thudGain.connect(audio.destination);
+
+  const leatherSrc = audio.createBufferSource();
+  leatherSrc.buffer = chain.noiseBuffer;
+
+  const leatherLp = audio.createBiquadFilter();
+  leatherLp.type = "lowpass";
+  leatherLp.frequency.setValueAtTime(280, t0);
+  leatherLp.Q.setValueAtTime(1.1, t0);
+
+  const leatherGain = audio.createGain();
+  leatherGain.gain.setValueAtTime(0.0001, t0);
+  leatherGain.gain.linearRampToValueAtTime(0.24, t0 + 0.006);
+  leatherGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+
+  leatherSrc.connect(leatherLp);
+  leatherLp.connect(leatherGain);
+  leatherGain.connect(audio.destination);
+
+  const springOsc = audio.createOscillator();
+  springOsc.type = "sawtooth";
+  springOsc.frequency.setValueAtTime(285, t0 + 0.03);
+  springOsc.frequency.linearRampToValueAtTime(235, t0 + 0.22);
+
+  const springBp = audio.createBiquadFilter();
+  springBp.type = "bandpass";
+  springBp.frequency.setValueAtTime(540, t0);
+  springBp.Q.setValueAtTime(4.5, t0);
+
+  const springGain = audio.createGain();
+  springGain.gain.setValueAtTime(0.0001, t0);
+  springGain.gain.setValueAtTime(0.0001, t0 + 0.03);
+  springGain.gain.linearRampToValueAtTime(0.045, t0 + 0.06);
+  springGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.24);
+
+  springOsc.connect(springBp);
+  springBp.connect(springGain);
+  springGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.25;
+  thudOsc.start(t0);
+  leatherSrc.start(t0, Math.random() * 0.5, 0.16);
+  springOsc.start(t0);
+  thudOsc.stop(stopAt);
+  springOsc.stop(stopAt);
+  springOsc.onended = () => {
+    thudOsc.disconnect();
+    thumpCleanup();
+  };
+  function thumpCleanup() {
+    thudGain.disconnect();
+    leatherSrc.disconnect();
+    leatherLp.disconnect();
+    leatherGain.disconnect();
+    springOsc.disconnect();
+    springBp.disconnect();
+    springGain.disconnect();
+  }
+}
+
+export function playLiquidationBreakerBlackout(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  // 1. Heavy substation contactor slam (THUNK)
+  const slamOsc = audio.createOscillator();
+  slamOsc.type = "triangle";
+  slamOsc.frequency.setValueAtTime(118, t0);
+  slamOsc.frequency.exponentialRampToValueAtTime(26, t0 + 0.16);
+
+  const slamGain = audio.createGain();
+  slamGain.gain.setValueAtTime(0.0001, t0);
+  slamGain.gain.linearRampToValueAtTime(0.42, t0 + 0.004);
+  slamGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+
+  slamOsc.connect(slamGain);
+  slamGain.connect(audio.destination);
+
+  // 2. High-voltage arc crackle burst (BUZZ)
+  const arcSrc = audio.createBufferSource();
+  arcSrc.buffer = chain.noiseBuffer;
+
+  const arcBp = audio.createBiquadFilter();
+  arcBp.type = "bandpass";
+  arcBp.frequency.setValueAtTime(1750, t0);
+  arcBp.frequency.exponentialRampToValueAtTime(340, t0 + 0.34);
+  arcBp.Q.setValueAtTime(1.8, t0);
+
+  const arcGain = audio.createGain();
+  arcGain.gain.setValueAtTime(0.0001, t0);
+  arcGain.gain.linearRampToValueAtTime(0.32, t0 + 0.004);
+  arcGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.36);
+
+  arcSrc.connect(arcBp);
+  arcBp.connect(arcGain);
+  arcGain.connect(audio.destination);
+
+  // 3. 50Hz / 100Hz mains transformer power-down droop
+  const humA = audio.createOscillator();
+  const humB = audio.createOscillator();
+  humA.type = "sawtooth";
+  humB.type = "triangle";
+  humA.frequency.setValueAtTime(100, t0);
+  humA.frequency.exponentialRampToValueAtTime(28, t0 + 0.62);
+  humB.frequency.setValueAtTime(50, t0);
+  humB.frequency.exponentialRampToValueAtTime(18, t0 + 0.62);
+
+  const humLp = audio.createBiquadFilter();
+  humLp.type = "lowpass";
+  humLp.frequency.setValueAtTime(320, t0);
+
+  const humGain = audio.createGain();
+  humGain.gain.setValueAtTime(0.0001, t0);
+  humGain.gain.linearRampToValueAtTime(0.2, t0 + 0.02);
+  humGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.64);
+
+  humA.connect(humLp);
+  humB.connect(humLp);
+  humLp.connect(humGain);
+  humGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.66;
+  slamOsc.start(t0);
+  arcSrc.start(t0, Math.random() * 0.4, 0.38);
+  humA.start(t0);
+  humB.start(t0);
+  slamOsc.stop(stopAt);
+  humA.stop(stopAt);
+  humB.stop(stopAt);
+  humA.onended = () => {
+    slamOsc.disconnect();
+    slamGain.disconnect();
+    arcSrc.disconnect();
+    arcBp.disconnect();
+    arcGain.disconnect();
+    humA.disconnect();
+    humB.disconnect();
+    humLp.disconnect();
+    humGain.disconnect();
+  };
+}
+
+export function playKgbLiquidationStampThud(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  const bodyOsc = audio.createOscillator();
+  bodyOsc.type = "sine";
+  bodyOsc.frequency.setValueAtTime(125, t0);
+  bodyOsc.frequency.exponentialRampToValueAtTime(34, t0 + 0.14);
+
+  const bodyGain = audio.createGain();
+  bodyGain.gain.setValueAtTime(0.0001, t0);
+  bodyGain.gain.linearRampToValueAtTime(0.42, t0 + 0.004);
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+
+  bodyOsc.connect(bodyGain);
+  bodyGain.connect(audio.destination);
+
+  const slapSrc = audio.createBufferSource();
+  slapSrc.buffer = chain.noiseBuffer;
+
+  const slapBp = audio.createBiquadFilter();
+  slapBp.type = "bandpass";
+  slapBp.frequency.setValueAtTime(920, t0);
+  slapBp.Q.setValueAtTime(1.5, t0);
+
+  const slapGain = audio.createGain();
+  slapGain.gain.setValueAtTime(0.0001, t0);
+  slapGain.gain.linearRampToValueAtTime(0.28, t0 + 0.002);
+  slapGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.08);
+
+  slapSrc.connect(slapBp);
+  slapBp.connect(slapGain);
+  slapGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.2;
+  bodyOsc.start(t0);
+  slapSrc.start(t0, Math.random() * 0.4, 0.09);
+  bodyOsc.stop(stopAt);
+  bodyOsc.onended = () => {
+    bodyOsc.disconnect();
+    bodyGain.disconnect();
+    slapSrc.disconnect();
+    slapBp.disconnect();
+    slapGain.disconnect();
+  };
+}
+
 export function triggerPreVolkovPanelLockFeedback(): boolean {
   if (!isPreVolkovPanelLocked()) {
     return false;
   }
-  playLockedPanelClunk();
+  const s = useGameStore.getState();
+  if (s.siberiaGameOverActive || isKomradGrabActive()) {
+    return true;
+  }
+  const wasGrabActive = isKomradGrabActive();
   reportPreVolkovLockedPanelAttempt();
+  if (!wasGrabActive && isKomradLiquidating()) {
+    silenceAllLegacyGlobalBgm();
+    playLiquidationBreakerBlackout();
+    playKomradGrabServoCharge();
+  } else if (!wasGrabActive && isKomradGrabActive()) {
+    playLockedPanelClunk();
+    playKomradGrabServoCharge();
+  } else {
+    playLockedPanelClunk();
+  }
   return true;
 }
 
@@ -3607,6 +4080,10 @@ export function computeKomradLiveMood(
     s.powerAllocation.defense +
     s.powerAllocation.facility;
 
+  const preVolkovLocked = isPreVolkovPanelLocked(s);
+  const preVolkovStrikes = preVolkovLocked ? getPreVolkovStrikeCount() : 0;
+  const grabActive = isKomradGrabActive();
+
   const liveCritical =
     s.coreMeltdown ||
     s.steamExplosion ||
@@ -3619,7 +4096,10 @@ export function computeKomradLiveMood(
     s.az5Active ||
     spentCount >= 3 ||
     s.treasonStrikes >= 2 ||
-    totalAllocatedPower > s.maxSafePower;
+    totalAllocatedPower > s.maxSafePower ||
+    preVolkovStrikes >= 3 ||
+    grabActive ||
+    s.siberiaGameOverActive;
 
   const liveWarning =
     !liveCritical &&
@@ -3630,6 +4110,7 @@ export function computeKomradLiveMood(
       s.xenon > 38 ||
       Math.abs(s.drumWaterLevel) > 130 ||
       s.treasonStrikes >= 1 ||
+      (preVolkovStrikes >= 1 && preVolkovStrikes < 3) ||
       anySubFailing);
 
   let mood: KomradMood = liveCritical
@@ -4282,6 +4763,14 @@ export function stepKomradSpeech(
     totalLen === 0 ? 0 : Math.max(1, Math.min(totalLen, charCursor));
   vocalState.isTalking = false;
   return vocalState;
+}
+
+export function cancelKomradSpeechForReset(): void {
+  cancelActiveVoxUtterance(0.02);
+  pendingVoxMsg = null;
+  pendingVoxMsgPriority = 0;
+  visualTypingActive = false;
+  clearKomradSubtitleNow();
 }
 
 export function getKomradVocalState(): KomradVocalState {

@@ -8,11 +8,20 @@ import { playSwitchClank } from './modules/reactor/audioSynth'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
 import {
+  isKomradGrabActive,
+  isKomradLiquidating,
+  komradGrabState,
+} from './shared/komradGrabState'
+import { cancelKomradSpeechForReset } from './shared/komradVoiceSynth'
+import {
   pointerLockInteraction,
   subscribePointerLockInteraction,
   updatePointerLockInteraction,
 } from './shared/pointerLockState'
-import { saveCurrentShiftToStorage } from './shared/shiftSaveStorage'
+import {
+  resetGameToMcrLobbyAfterLiquidation,
+  saveCurrentShiftToStorage,
+} from './shared/shiftSaveStorage'
 import { SceneGpuWarmup, SovOsBootOverlay } from './shared/SovOsBootOverlay'
 import { TutorialCompassHud } from './shared/TutorialCompassHud'
 import {
@@ -34,6 +43,8 @@ function CenterReticle() {
       const gs = useGameStore.getState()
       const visible =
         gs.phase === 'playing' &&
+        !gs.siberiaGameOverActive &&
+        !isKomradGrabActive() &&
         pointerLockInteraction.isPointerLocked &&
         !gs.isSeatedAtDesk &&
         !pointerLockInteraction.debugMenuOpen &&
@@ -263,10 +274,164 @@ function RadioBroadcastSubtitleHud({ mainMenuOpen }: { mainMenuOpen: boolean }) 
   )
 }
 
+function LiquidationCrtFxOverlay() {
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const vignetteRef = useRef<HTMLDivElement | null>(null)
+  const flashRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let rafId = 0
+    const step = () => {
+      const root = rootRef.current
+      if (root) {
+        const active = komradGrabState.phase === 'liquidating'
+        root.style.display = active ? 'block' : 'none'
+        if (active) {
+          if (vignetteRef.current) {
+            vignetteRef.current.style.opacity = String(
+              Math.min(1, Math.max(0, komradGrabState.liquidationVignette))
+            )
+          }
+          if (flashRef.current) {
+            flashRef.current.style.opacity = String(
+              Math.min(1, Math.max(0, komradGrabState.liquidationFlash))
+            )
+          }
+        }
+      }
+      rafId = window.requestAnimationFrame(step)
+    }
+    rafId = window.requestAnimationFrame(step)
+    return () => window.cancelAnimationFrame(rafId)
+  }, [])
+
+  return (
+    <div
+      ref={rootRef}
+      style={{ display: 'none' }}
+      className="pointer-events-none fixed inset-0 z-40 overflow-hidden select-none"
+    >
+      <div
+        ref={vignetteRef}
+        style={{
+          opacity: 0,
+          background:
+            'radial-gradient(circle at 50% 50%, rgba(255,42,42,0.06) 28%, rgba(90,6,6,0.72) 72%, rgba(4,2,2,0.98) 100%)',
+          backgroundImage:
+            'radial-gradient(circle at 50% 50%, rgba(255,42,42,0.08) 28%, rgba(90,6,6,0.74) 72%, rgba(4,2,2,0.98) 100%), repeating-linear-gradient(0deg, rgba(255,50,50,0.12) 0px, rgba(0,0,0,0.45) 2px, rgba(0,0,0,0.1) 4px)',
+        }}
+        className="absolute inset-0"
+      />
+      <div
+        ref={flashRef}
+        style={{
+          opacity: 0,
+          background:
+            'radial-gradient(ellipse at 50% 50%, rgba(255,236,220,0.98) 0%, rgba(255,58,48,0.92) 38%, rgba(8,2,2,0.98) 82%)',
+        }}
+        className="absolute inset-0"
+      />
+    </div>
+  )
+}
+
+function SiberiaLiquidationGameOverOverlay() {
+  const [stampSlammed, setStampSlammed] = useState(false)
+
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => setStampSlammed(true))
+    return () => window.cancelAnimationFrame(id)
+  }, [])
+
+  const handleReturnToLobby = () => {
+    playKnifeSwitchSlam(true)
+    cancelKomradSpeechForReset()
+    resetGameToMcrLobbyAfterLiquidation()
+  }
+
+  return (
+    <div
+      data-testid="siberia-liquidation-gameover"
+      className="fixed inset-0 z-50 flex cursor-auto items-center justify-center bg-[#060303]/95 p-4 select-none"
+      style={{
+        backgroundImage:
+          'repeating-linear-gradient(0deg, rgba(255,42,42,0.04) 0px, rgba(0,0,0,0.28) 2px, transparent 4px)',
+      }}
+    >
+      <div className="relative w-full max-w-3xl border-2 border-[#ff2a2a]/80 bg-[#0b0707] p-6 text-[#e6dec3] shadow-[0_0_55px_rgba(255,42,42,0.32)] sm:p-8">
+        <div
+          className="mb-4 border-b border-[#ff2a2a]/45 pb-3 text-center text-sm font-bold tracking-[0.18em] text-[#ffb000] uppercase sm:text-base"
+          style={{ fontFamily: '"Kremlin", "VT323", monospace' }}
+        >
+          KGB FOURTH DIRECTORATE // SECTOR 84 PERSONNEL ACTION FORM 84-B
+        </div>
+
+        <div className="my-4 flex justify-center">
+          <div
+            data-testid="personnel-liquidated-stamp"
+            className="border-4 border-[#ff2a2a] bg-[#2a0707]/85 px-5 py-2 text-center text-2xl font-bold tracking-[0.16em] text-[#ff2a2a] uppercase shadow-[0_0_24px_rgba(255,42,42,0.45)] sm:text-3xl"
+            style={{
+              fontFamily: '"Kremlin", "Courier Prime", monospace',
+              transform: stampSlammed
+                ? 'scale(1) rotate(-4deg)'
+                : 'scale(1.85) rotate(-9deg)',
+              opacity: stampSlammed ? 1 : 0.25,
+              transition: 'transform 160ms cubic-bezier(0.2, 0.9, 0.25, 1), opacity 120ms ease-out',
+            }}
+          >
+            [ PERSONNEL FILE LIQUIDATED ]
+          </div>
+        </div>
+
+        <div
+          className="mt-5 space-y-3 border border-[#3a2824] bg-[#120c0b] p-4 text-sm leading-relaxed sm:text-base"
+          style={{ fontFamily: '"Courier Prime", "VT323", monospace' }}
+        >
+          <div>
+            <span className="font-bold text-[#ffb000]">CAUSE OF TERMINATION: </span>
+            <span className="text-[#f3ead4]">
+              REPEATED UNAUTHORIZED TOUCHING OF STATE REACTOR HARDWARE PRIOR TO READING COMMISSAR VOLKOV&apos;S MAIL (6 STRIKES)
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">REASSIGNMENT DESTINATION: </span>
+            <span className="text-[#f3ead4]">
+              SIBERIAN PERMAFROST SHOVEL BRIGADE NO. 19
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">SAVED SHIFT RECORD (MIP_SAVED_SHIFT_84): </span>
+            <span className="font-bold text-[#ff4d4d]">
+              PERMANENTLY EXPUNGED BY STATE DECREE
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">RUBLES CONFISCATED FOR STATE TREASURY: </span>
+            <span className="text-[#f3ead4]">ALL OF THEM</span>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            data-testid="return-to-mcr-lobby-btn"
+            onClick={handleReturnToLobby}
+            className="cursor-pointer border-2 border-[#33ff66] bg-[#071f10] px-6 py-3 text-lg font-bold tracking-[0.12em] text-[#33ff66] uppercase shadow-[0_0_20px_rgba(51,255,102,0.24)] transition hover:bg-[#0e381d] hover:text-[#e6dec3] active:translate-y-0.5 sm:text-xl"
+            style={{ fontFamily: '"VT323", "Courier Prime", monospace' }}
+          >
+            [ REPORT NEW OPERATOR REPLACEMENT TO MCR-4 LOBBY ]
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function App() {
   const phase = useGameStore((s) => s.phase)
   const lobbyMenuPhase = useGameStore((s) => s.lobbyMenuPhase)
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
+  const siberiaGameOverActive = useGameStore((s) => s.siberiaGameOverActive)
   const tutorialPhase = useGameStore((s) => s.tutorialPhase)
   const activePost84Order = useGameStore((s) => s.activePost84Order)
   const quotaCompleted = useGameStore((s) => s.quotaCompleted)
@@ -320,6 +485,8 @@ export function App() {
       const hideOsCursor =
         bootReadyRef.current &&
         gs.phase === 'playing' &&
+        !gs.siberiaGameOverActive &&
+        !isKomradLiquidating() &&
         gs.isSeatedAtDesk &&
         (!gs.isBlackout || gs.isGodMode) &&
         !pointerLockInteraction.debugMenuOpen &&
@@ -357,7 +524,9 @@ export function App() {
     const canSave =
       phase === 'playing' &&
       lobbyMenuPhase === 'entered_control_room' &&
-      isShiftControlReady
+      isShiftControlReady &&
+      !siberiaGameOverActive &&
+      !isKomradLiquidating()
     if (!canSave) return
 
     const interval = window.setInterval(() => {
@@ -379,13 +548,15 @@ export function App() {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
-  }, [phase, lobbyMenuPhase, isShiftControlReady])
+  }, [phase, lobbyMenuPhase, isShiftControlReady, siberiaGameOverActive])
 
   useEffect(() => {
     const canSave =
       phase === 'playing' &&
       lobbyMenuPhase === 'entered_control_room' &&
-      isShiftControlReady
+      isShiftControlReady &&
+      !siberiaGameOverActive &&
+      !isKomradLiquidating()
     const curOrderId = activePost84Order?.orderId ?? null
     const orderJustCompleted =
       quotaCompleted !== prevQuotaRef.current ||
@@ -405,6 +576,7 @@ export function App() {
     phase,
     lobbyMenuPhase,
     isShiftControlReady,
+    siberiaGameOverActive,
     quotaCompleted,
     activePost84Order,
     tutorialPhase,
@@ -425,6 +597,10 @@ export function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!bootReadyRef.current) return
+      const curState = useGameStore.getState()
+      if (curState.siberiaGameOverActive || isKomradGrabActive()) {
+        return
+      }
       if (e.code === 'Backspace') {
         const s = useGameStore.getState()
         if (s.phase === 'playing' && s.isShiftControlReady && s.tutorialPhase !== 'COMPLETED') {
@@ -504,16 +680,18 @@ export function App() {
       <DebugMenu />
       <CenterReticle />
       <TutorialCompassHud menusOpen={effectiveMenusOpen} />
+      <LiquidationCrtFxOverlay />
+      {siberiaGameOverActive && <SiberiaLiquidationGameOverOverlay />}
 
       {/* Subtle Contextual [E] SIT AT DESK Prompt When Walking Near Inspector Desk */}
-      {phase === 'playing' && isShiftControlReady && !isSeatedAtDesk && canSitAtDesk && !effectiveMenusOpen && (
+      {phase === 'playing' && isShiftControlReady && !siberiaGameOverActive && !isSeatedAtDesk && canSitAtDesk && !effectiveMenusOpen && (
         <div className="pointer-events-none fixed bottom-11 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#ffb000]/75 bg-[#07160c]/90 px-3 py-0.5 font-mono text-xs font-bold tracking-widest text-[#ffb000] shadow-md">
           [E] SIT AT DESK
         </div>
       )}
 
       {/* Discreet Control & Locomotion Hint Bar at Bottom of Screen */}
-      {phase === 'playing' && isShiftControlReady && (
+      {phase === 'playing' && isShiftControlReady && !siberiaGameOverActive && (
         <div className="pointer-events-none fixed bottom-2.5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#28b862]/70 bg-[#051209]/90 px-4 py-1 font-mono text-xs font-bold tracking-wider text-[#39ff14] shadow-lg">
           {isSeatedAtDesk
             ? '[LMB]: CLICK ISKRA-84 TERMINAL | [RMB]: ZOOM | [E / ESC]: STAND UP'

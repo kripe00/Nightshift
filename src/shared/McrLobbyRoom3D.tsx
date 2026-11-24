@@ -1,5 +1,11 @@
 import { type ThreeEvent, useFrame } from "@react-three/fiber";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import * as THREE from "three";
 import {
   getAudioContext as getInspectorAudioContext,
@@ -28,6 +34,7 @@ import {
   readSavedShift,
   restoreSavedShiftFromStorage,
   startFreshShiftFromLobby,
+  subscribeSavedShiftStorage,
   type SavedShiftSnapshot,
 } from "./shiftSaveStorage";
 import { useGameStore } from "./useGameStore";
@@ -388,12 +395,16 @@ function drawTerminalCornerBrackets(
 
 const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
   const lobbyMenuPhase = useGameStore((s) => s.lobbyMenuPhase);
-  const [savedShift] = useState<SavedShiftSnapshot | null>(() =>
-    readSavedShift(),
+  const shiftRunId = useGameStore((s) => s.shiftRunId);
+  const savedShift = useSyncExternalStore<SavedShiftSnapshot | null>(
+    subscribeSavedShiftStorage,
+    readSavedShift,
+    () => null,
   );
-  const [menuDismissed, setMenuDismissed] = useState<boolean>(
-    () => useGameStore.getState().lobbyMenuPhase === "entered_control_room",
-  );
+  const [fadedRunId, setFadedRunId] = useState<number | null>(null);
+  const menuDismissed =
+    lobbyMenuPhase === "entered_control_room" ||
+    (lobbyMenuPhase === "door_opening" && fadedRunId === shiftRunId);
 
   const rootGroupRef = useRef<THREE.Group>(null);
   const headerGroupRef = useRef<THREE.Group>(null);
@@ -584,12 +595,27 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
   }, [menuTextures]);
 
   useEffect(() => {
+    if (lobbyMenuPhase !== "menu_locked") return;
+    clickedRef.current = false;
+    dismissedRef.current = false;
+    fadeElapsedRef.current = 0;
+    hoveredBtnRef.current = null;
+    newHoverBlendRef.current = 0;
+    resumeHoverBlendRef.current = 0;
+    if (rootGroupRef.current) {
+      rootGroupRef.current.visible = true;
+      rootGroupRef.current.position.y = 0;
+    }
+  }, [lobbyMenuPhase, shiftRunId]);
+
+  useEffect(() => {
     if (lobbyMenuPhase !== "door_opening") return;
+    const targetRunId = shiftRunId;
     const timer = window.setTimeout(() => {
-      setMenuDismissed(true);
+      setFadedRunId(targetRunId);
     }, Math.ceil(LOBBY_MENU_FADE_DURATION_SEC * 1000) + 50);
     return () => window.clearTimeout(timer);
-  }, [lobbyMenuPhase]);
+  }, [lobbyMenuPhase, shiftRunId]);
 
   useFrame(({ clock }, delta) => {
     if (menuDismissed) return;
@@ -702,7 +728,7 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
     }
   });
 
-  if (menuDismissed || lobbyMenuPhase === "entered_control_room") {
+  if (menuDismissed) {
     return null;
   }
 

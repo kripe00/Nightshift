@@ -1,11 +1,36 @@
+import { silenceAllLegacyGlobalBgm } from '../modules/inspector/audio'
 import { useDeskStore } from '../modules/inspector/useDeskStore'
+import { airlockDoorState } from './airlockDoorState'
+import { abortKomradGrab, isKomradLiquidating } from './komradGrabState'
 import type { SavedGameStatePayload } from './types'
 import {
   getPreOrderSectorTargetsSnapshot,
+  registerSavedShiftLiquidator,
   useGameStore,
 } from './useGameStore'
 
 const STORAGE_KEY = 'MIP_SAVED_SHIFT_84'
+const SECONDARY_STORAGE_KEYS = [
+  'MIP_SAVED_SHIFT_84_BACKUP',
+  'MIP_SHIFT_CHECKPOINT_84',
+  'MIP_DESK_SNAPSHOT_84',
+] as const
+
+const storageListeners = new Set<() => void>()
+let cachedStorageRaw: string | null | undefined = undefined
+let cachedStorageParsed: SavedShiftSnapshot | null = null
+
+function notifySavedShiftListeners(): void {
+  cachedStorageRaw = undefined
+  storageListeners.forEach((listener) => listener())
+}
+
+export function subscribeSavedShiftStorage(listener: () => void): () => void {
+  storageListeners.add(listener)
+  return () => {
+    storageListeners.delete(listener)
+  }
+}
 
 export interface SavedDeskSnapshot {
   documents: ReturnType<typeof useDeskStore.getState>['documents']
@@ -36,7 +61,14 @@ export function readSavedShift(): SavedShiftSnapshot | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
+    if (raw === cachedStorageRaw) {
+      return cachedStorageParsed
+    }
+    cachedStorageRaw = raw
+    if (!raw) {
+      cachedStorageParsed = null
+      return null
+    }
     const parsed = JSON.parse(raw) as Partial<SavedShiftSnapshot>
     if (
       !parsed ||
@@ -48,10 +80,14 @@ export function readSavedShift(): SavedShiftSnapshot | null {
       typeof parsed.desk.commendations !== 'number' ||
       typeof parsed.desk.citations !== 'number'
     ) {
+      cachedStorageParsed = null
       return null
     }
-    return parsed as SavedShiftSnapshot
+    cachedStorageParsed = parsed as SavedShiftSnapshot
+    return cachedStorageParsed
   } catch {
+    cachedStorageRaw = null
+    cachedStorageParsed = null
     return null
   }
 }
@@ -60,6 +96,7 @@ export function saveCurrentShiftToStorage(): void {
   if (typeof window === 'undefined') return
   try {
     const g = useGameStore.getState()
+    if (g.siberiaGameOverActive || isKomradLiquidating()) return
     const d = useDeskStore.getState()
     const snapshot: SavedShiftSnapshot = {
       savedAt: Date.now(),
@@ -150,22 +187,45 @@ export function saveCurrentShiftToStorage(): void {
       },
     }
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot))
+    notifySavedShiftListeners()
   } catch {
     // Ignore storage quota errors
   }
 }
 
-export function clearSavedShiftStorage(): void {
+export function clearSavedShiftFromStorage(): void {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.removeItem(STORAGE_KEY)
+    for (const key of SECONDARY_STORAGE_KEYS) {
+      window.localStorage.removeItem(key)
+    }
+    notifySavedShiftListeners()
   } catch {
     // Ignore storage access errors
   }
 }
 
+export function clearSavedShiftStorage(): void {
+  clearSavedShiftFromStorage()
+}
+
+registerSavedShiftLiquidator(clearSavedShiftFromStorage)
+
+export function resetGameToMcrLobbyAfterLiquidation(): void {
+  clearSavedShiftFromStorage()
+  abortKomradGrab()
+  silenceAllLegacyGlobalBgm()
+  airlockDoorState.wantOpen = false
+  airlockDoorState.wheelProgress = 0
+  airlockDoorState.openProgress = 0
+  airlockDoorState.menuUnlockElapsed = 0
+  useDeskStore.getState().resetDeskStore()
+  useGameStore.getState().resetShift('menu_locked')
+}
+
 export function startFreshShiftFromLobby(): void {
-  clearSavedShiftStorage()
+  clearSavedShiftFromStorage()
   useDeskStore.getState().resetDeskStore()
   useGameStore.getState().resetShift('door_opening')
 }
