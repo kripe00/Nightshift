@@ -120,7 +120,7 @@ export interface TutorialPrompt {
 // Physical RBMK-1000 Constants
 const NOMINAL_THERMAL_MW = 3200;
 const NOMINAL_PRESSURE_BAR = 70;
-const MAX_BATTERY_INPUT_MW = 1050;
+const MAX_BATTERY_INPUT_MW = 1200;
 export const MAX_BATTERY_CAPACITY_MWH = 3000;
 export const INITIAL_BATTERY_CHARGE_RATIO = 0.25;
 export const INITIAL_BATTERY_STORED_MWH =
@@ -150,7 +150,7 @@ export function createColdStartState(): ReactorState {
     az5Active: false,
     mcpActive: [false, false, false, false],
     pumpThrottle: [0, 0],
-    oilCoolerValve: 45,
+    oilCoolerValve: 100,
     feedwaterValve: 0.0,
     nitrogenLoopValve: 0,
     sealToggles: [false, false, false],
@@ -434,6 +434,8 @@ export function stepReactorSimulation(
       : 1.0;
 
   // Pump Bearing Heat & Lube Oil Pressure (driven by Pump Throttles, Turbine RPM, Wet Steam & Oil Cooler Valve)
+  // Physical BEARING COOL handwheels were removed from UNIT A; pin internal bearing cooling to 100% nominal.
+  state.oilCoolerValve = 100;
   const rpmRatio = state.turbines[0].rpm / 3000;
   const ventBearingBonus = state.ventilationActive ? 3.5 : 0;
   const oilCoolingEffect = (state.oilCoolerValve / 100) * 62 + ventBearingBonus;
@@ -444,12 +446,12 @@ export function stepReactorSimulation(
   const targetPumpAHeat =
     loopARunning * (10 + Math.pow(state.pumpThrottle[0] / 100, 1.45) * 68) +
     rpmRatio * 12 +
-    state.wetSteamSeverity * 28 -
+    state.wetSteamSeverity * 12 -
     oilCoolingEffect * 0.68;
   const targetPumpBHeat =
     loopBRunning * (10 + Math.pow(state.pumpThrottle[1] / 100, 1.45) * 68) +
     rpmRatio * 12 +
-    state.wetSteamSeverity * 28 -
+    state.wetSteamSeverity * 12 -
     oilCoolingEffect * 0.68;
 
   state.pumpAHeat += (clamp(targetPumpAHeat, 4, 100) - state.pumpAHeat) * 0.17 * delta;
@@ -733,10 +735,8 @@ export function stepReactorSimulation(
   const voidBoilingPenalty =
     state.voidFraction > 0.34 ? clamp(1.0 - (state.voidFraction - 0.34) * 1.15, 0.32, 1.0) : 1.0;
   const pumpTransferCapMWe = (state.coolantFlow / 0.78) * 760;
-  const rawThermalSteamMWe =
-    state.coreTemp > boilingPoint - 22
-      ? (state.thermalPower / 1920) * 600
-      : (state.thermalPower / 1920) * 180;
+  const boilingBlend = clamp((state.coreTemp - (boilingPoint - 55)) / 50, 0, 1);
+  const rawThermalSteamMWe = (state.thermalPower / 1920) * (180 + 420 * boilingBlend);
   const steamBoiledMWe =
     Math.min(rawThermalSteamMWe, pumpTransferCapMWe * 1.38) *
     waterSubmergence *
@@ -768,24 +768,24 @@ export function stepReactorSimulation(
       netWaterMassMWe > 0 ? netWaterMassMWe * 0.025 : dWaterMmPerSec;
     dWaterMmPerSec = effectiveInflowMm - blowdownRate;
   } else if (
-    isPreUnitBTutorial &&
+    (isPreUnitBTutorial ||
+      (state.thermalPower < 220 && state.coreTemp < boilingPoint - 20)) &&
     netWaterMassMWe > 0 &&
     state.feedwaterValve >= 0.4 &&
     state.feedwaterValve <= 0.58
   ) {
     // Cold/warmup condensate recirculation bypass keeps nominal ~50% startup feedwater gently near 0 mm
-    // during Steps 1-4 (before Step 5 UNIT B training), without blocking manual FW > 58%, FW < 40%, or Drain!
+    // during warmup & early Steps, without blocking manual FW > 58%, FW < 40%, or Drain!
     dWaterMmPerSec = (12 - state.drumWaterLevel) * 0.45;
   } else if (isColdCore && state.feedwaterValve <= 0.12) {
     // Cold shutdown with feedwater closed/near-zero settles drum level smoothly toward 0 mm
     dWaterMmPerSec = -state.drumWaterLevel * 0.28;
-  } else if (Math.abs(netWaterMassMWe) <= 50) {
-    // Stronger automatic drum-separator level self-centering within ±50 MW balance band
-    dWaterMmPerSec += -state.drumWaterLevel * 0.24;
   } else {
-    // Proportional drum-separator overflow return across all operating pressures (stronger above 0 mm)
-    const overflowDamp = state.drumWaterLevel > 0 ? 0.085 : 0.055;
-    dWaterMmPerSec += -state.drumWaterLevel * overflowDamp;
+    // Continuous drum-separator level self-centering blend without a ±50 MW step cliff
+    const centerBlend = clamp(1 - (Math.abs(netWaterMassMWe) - 35) / 65, 0, 1);
+    const baseDamp = state.drumWaterLevel > 0 ? 0.085 : 0.055;
+    const levelDamp = baseDamp + (0.24 - baseDamp) * centerBlend;
+    dWaterMmPerSec += -state.drumWaterLevel * levelDamp;
   }
 
   state.drumWaterLevel = clamp(
@@ -831,6 +831,10 @@ export function stepReactorSimulation(
     state.bubblerDraining && state.drumPressure > 72 && state.bubblerLevel < 95
       ? 145 * pressureHeadRatio
       : 0;
+  const condenserBypassMWe =
+    state.condenserVacActive && !state.az5Active && state.drumPressure > 72
+      ? clamp((state.drumPressure - 72) * 18, 0, 260) * pressureHeadRatio
+      : 0;
 
   const coreOverheatPressureMWe =
     state.coreTemp > 580 ? (state.coreTemp - 580) * 0.35 : 0;
@@ -842,7 +846,8 @@ export function stepReactorSimulation(
     autoGenSteamDrawMWe -
     manualVentMWe -
     safetyReliefMWe -
-    condenserDrainSteamMWe;
+    condenserDrainSteamMWe -
+    condenserBypassMWe;
 
   // Cold reactor with 0 MWt cools back toward 1 BAR atmospheric
   if (state.thermalPower < 10 && state.drumPressure > 1.0) {
@@ -881,14 +886,28 @@ export function stepReactorSimulation(
   const recycledFromBubbler =
     state.bubblerDraining && state.bubblerLevel > 5 ? 5.8 : 0;
 
-  const netWaterDelta =
-    (naturalRiverMakeup + recycledFromBubbler - wastedVentWaterRate - highPumpDrawRate) * delta;
+  const rechargeDelta = (naturalRiverMakeup + recycledFromBubbler) * delta;
+  const drainDelta = (wastedVentWaterRate + highPumpDrawRate) * delta;
 
-  const loopASiphon = (state.pumpThrottle[0] / 100) * 1.15;
-  const loopBSiphon = (state.pumpThrottle[1] / 100) * 1.15;
-  state.pripyatWater = clamp(state.pripyatWater + netWaterDelta * loopASiphon, 5, 100);
-  state.kolkhozWater = clamp(state.kolkhozWater + netWaterDelta * ((loopASiphon + loopBSiphon) * 0.5), 5, 100);
-  state.vodkaWater = clamp(state.vodkaWater + netWaterDelta * loopBSiphon, 5, 100);
+  const loopADrawFactor = (state.pumpThrottle[0] / 100) * 1.15;
+  const loopBDrawFactor = (state.pumpThrottle[1] / 100) * 1.15;
+  state.pripyatWater = clamp(
+    state.pripyatWater + rechargeDelta - drainDelta * Math.max(0.25, loopADrawFactor),
+    5,
+    100
+  );
+  state.kolkhozWater = clamp(
+    state.kolkhozWater +
+      rechargeDelta -
+      drainDelta * Math.max(0.25, (loopADrawFactor + loopBDrawFactor) * 0.5),
+    5,
+    100
+  );
+  state.vodkaWater = clamp(
+    state.vodkaWater + rechargeDelta - drainDelta * Math.max(0.25, loopBDrawFactor),
+    5,
+    100
+  );
   state.waterReservoir = Math.round(
     (state.pripyatWater + state.kolkhozWater + state.vodkaWater) / 3
   );
@@ -910,13 +929,23 @@ export function stepReactorSimulation(
   state.batteryOutputValve = clamp(state.batteryOutputValve, 0, 1);
   const requestedGridMW = Math.round(state.batteryOutputValve * 1000);
 
-  // Battery supplies requestedGridMW while stored charge > 1 MWh; if depleted, caps at energyCreatedMW
-  const deliveredGridMW =
-    state.az5Active || state.coreMeltdown || state.steamExplosion
-      ? 0
-      : state.batteryStoredMWh > 1.0
-        ? requestedGridMW
-        : Math.min(requestedGridMW, state.energyCreatedMW);
+  // Smoothly taper battery discharge as stored charge approaches 0 MWh instead of a hard cliff
+  const BATTERY_TAPER_MWH = 20.0;
+  let deliveredGridMW = 0;
+  if (!state.az5Active && !state.coreMeltdown && !state.steamExplosion) {
+    if (requestedGridMW <= state.energyCreatedMW) {
+      deliveredGridMW = requestedGridMW;
+    } else {
+      const deficitMW = requestedGridMW - state.energyCreatedMW;
+      const taperT = clamp(state.batteryStoredMWh / BATTERY_TAPER_MWH, 0, 1);
+      const smoothTaper = taperT * taperT * (3 - 2 * taperT);
+      const maxStepDrawMW =
+        delta > 1e-4 ? state.batteryStoredMWh / (BATTERY_DISCHARGE_RATE * delta) : deficitMW;
+      deliveredGridMW = Math.round(
+        state.energyCreatedMW + Math.min(deficitMW * smoothTaper, maxStepDrawMW)
+      );
+    }
+  }
 
   const netChargeFlowMW = state.energyCreatedMW - deliveredGridMW;
   const batteryRate =
@@ -1123,13 +1152,13 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       return {
         phase: 'STEP_3_BUILD_STEAM',
         header: 'STEP 5/6 — STEAM DRUM WATER & PRESSURE',
-        body: 'Turn FEEDWATER VALVE UP (~50%) to restore Drum Water toward 0 mm. Hold STEAM VENT if Pressure > 75 BAR.',
+        body: 'Turn FEEDWATER VALVE UP (~50%) to restore Drum Water toward 0 mm. Pull BUBBLER DRAIN lever if Pressure > 75 BAR.',
         hint: 'Boiling turns water into steam. Too little water melts the core; too much pressure (> 75 BAR) stresses the pipes.',
         panelKey: 'UNIT B (Right Wing • [KEY 3])',
-        actionLine: 'Set FEEDWATER VALVE to ~50% (and Steam Vent if > 78 BAR)',
+        actionLine: 'Set FEEDWATER VALVE to ~50% (and Bubbler Drain lever if > 78 BAR)',
         whyLines: [
           'Feedwater refills the boiler drum so water stays safely near 0 mm.',
-          'Hold Steam Vent briefly if pressure climbs above 75 BAR.',
+          'Pull Bubbler Drain lever briefly if pressure climbs above 75 BAR.',
         ],
         volkovQuote:
           'CHECK UNIT BRAVO STEAM DRUM PANEL. RAISE FEEDWATER FLOW FOR LOW WATER LEVEL.',
@@ -1153,10 +1182,10 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       return {
         phase: 'STEP_6_BASELINE_600MW',
         header: 'STEP 3/6 — DELIVER ELECTRICITY TO GRID',
-        body: 'Drag or click all 6 bottom Power Sliders to match their green 100 MW targets (600 MW total).',
+        body: 'Drag or click all 6 bottom Power Levers to match their green 100 MW targets (600 MW total).',
         hint: 'Making heat is step one — you keep the region powered by matching each sector demand. UNIT C Batteries buffer sudden jumps!',
         panelKey: 'UNIT A (Front-Left • [KEY 1])',
-        actionLine: 'Match all 6 Grid Power Sliders to green target MW (100 MW each)',
+        actionLine: 'Match all 6 Grid Power Levers to green target MW (100 MW each)',
         whyLines: [
           'Sending each sector its green target MW avoids blackouts & strikes.',
           'UNIT C (Left Wall [KEY 5]) Batteries automatically buffer sudden spikes.',
@@ -1193,7 +1222,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
     }
 
     case 'STEP_7_VOID_DRILL': {
-      if (state.voidFraction < 0.2 && state.feedwaterValve >= 0.45) {
+      if (state.voidFraction < 0.2 && (state.feedwaterValve >= 0.45 || state.boronDampingTimer > 0)) {
         state.voidFraction = 0.1;
         state.xenon = 8;
         state.drumWaterLevel = 0;
@@ -1227,10 +1256,8 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       const deltaMW = Math.round(dispatchedMW - demandMW);
       const targetMWt = Math.round((demandMW / 600) * 1920);
       const reqFeedwaterPct = Math.min(100, Math.round((demandMW / 600) * 50));
-      const reqWheelPct = Math.min(100, Math.round(demandMW / 10));
       const curRodPct = Math.round(state.controlRods * 100);
       const curFwPct = Math.round(state.feedwaterValve * 100);
-      const curWheelPct = Math.round(state.batteryOutputValve * 100);
 
       const isPlusOrder =
         totalTargetMW > totalAllocatedMW + 5 ||
@@ -1251,32 +1278,32 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         const s3Ok = !unmetSub && Math.abs(totalAllocatedMW - totalTargetMW) < 6;
         const s4Ok = Math.abs(deltaMW) <= 25;
         const nextPanel = !s4Ok
-          ? 'GO TO: [KEY 5] UNIT C (BATTERY WHEEL)'
+          ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
           : !s3Ok
             ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
             : !s1Ok
               ? 'GO TO: [KEY 6] UNIT A-2 (BORON RODS)'
               : 'GO TO: [KEY 3] UNIT B (FEEDWATER)';
         const nextAction = !s4Ok
-          ? `3. CHECK UNIT C AUTO-DRAIN (${curWheelPct}% -> ${reqWheelPct}%) TO ${demandMW} MW`
+          ? `3. SET UNIT A SECTOR LEVERS TO ${demandMW} MW (UNIT C BATTERY OUTPUT)`
           : !s3Ok
-            ? `2. SET ${unmetSub ? unmetSub.name : 'SECTOR'} SLIDER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
+            ? `2. SET ${unmetSub ? unmetSub.name : 'SECTOR'} LEVER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
             : !s1Ok
               ? `1. RODS UP (${curRodPct}%) -> ~${targetMWt} MWt TO RECHARGE BATTERY`
               : `1B. FEEDWATER UP ${curFwPct}% -> ${reqFeedwaterPct}%`;
         return {
           phase: 'COMPLETED',
           header: `>> ACTIVE +MW ORDER (OUT ${Math.round(dispatchedMW)} -> DEMAND ${demandMW} MW):`,
-          body: `${s1Ok && s2Ok ? '[OK]' : '[1]'} RODS UP [A-2] (${curRodPct}%) + WATER [B] (${curFwPct}%->${reqFeedwaterPct}%) | ${s3Ok ? '[OK]' : '[2]'} SLIDER [A]`,
-          hint: `${s4Ok ? '[OK]' : '[3]'} SET SECTOR SLIDERS [A] TO DEMAND (${demandMW} MW) — UNIT C BATTERY BUFFERS WHILE RODS CLIMB!`,
+          body: `${s1Ok && s2Ok ? '[OK]' : '[1]'} RODS UP [A-2] (${curRodPct}%) + WATER [B] (${curFwPct}%->${reqFeedwaterPct}%) | ${s3Ok ? '[OK]' : '[2]'} LEVER [A]`,
+          hint: `${s4Ok ? '[OK]' : '[3]'} SET SECTOR LEVERS [A] TO DEMAND (${demandMW} MW) — UNIT C BATTERY OUTPUT BUFFERS WHILE RODS CLIMB!`,
           panelKey: nextPanel,
           actionLine: nextAction,
           whyLines: [
             '1. Rods [A-2] + Feedwater [B] recharge the Station Battery.',
-            '2. Set 6 Grid Sliders [A] -> UNIT C automatically buffers flow!',
+            '2. Set 6 Grid Levers [A] -> UNIT C automatically buffers flow!',
           ],
           volkovQuote:
-            '"Battery buffers the grid while you raise the rods, Comrade—just match your UNIT A sliders to demand!"',
+            '"Battery buffers the grid while you raise the rods, Comrade—just match your UNIT A levers to demand!"',
         };
       }
 
@@ -1285,30 +1312,30 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         const s1WheelOk = Math.abs(deltaMW) <= 25;
         const s2RodsOk = state.energyCreatedMW <= demandMW + 160 && state.drumPressure <= 76;
         const nextPanel = !s1LeversOk
-          ? 'GO TO: [KEY 1] UNIT A (SECTOR SLIDER)'
+          ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
           : !s1WheelOk
-            ? 'GO TO: [KEY 1] UNIT A (SECTOR SLIDER)'
+            ? 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)'
             : 'GO TO: [KEY 6] UNIT A-2 (PUSH RODS IN)';
         const nextAction = !s1LeversOk
-          ? `1. LOWER ${unmetSub ? unmetSub.name : 'SECTOR'} SLIDER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
+          ? `1. LOWER ${unmetSub ? unmetSub.name : 'SECTOR'} LEVER -> ${unmetSub ? unmetSub.targetMW : totalTargetMW} MW`
           : !s1WheelOk
-            ? `1B. MATCH ALL 6 SLIDERS [A] TO ${demandMW} MW`
+            ? `1B. MATCH ALL 6 LEVERS [A] TO ${demandMW} MW`
             : !s2RodsOk
               ? `2. LOWER RODS % (${curRodPct}%) SO STEAM DOES NOT OVERPRESSURIZE`
               : 'BATTERY & GRID BALANCED';
         return {
           phase: 'COMPLETED',
           header: `>> ACTIVE -MW ORDER (OUT ${Math.round(dispatchedMW)} -> DEMAND ${demandMW} MW):`,
-          body: `${s1LeversOk && s1WheelOk ? '[OK]' : '[1]'} LOWER SECTOR SLIDERS [A] TO ${demandMW} MW | ${s2RodsOk ? '[OK]' : '[2]'} LOWER RODS % [A-2]`,
+          body: `${s1LeversOk && s1WheelOk ? '[OK]' : '[1]'} LOWER SECTOR LEVERS [A] TO ${demandMW} MW | ${s2RodsOk ? '[OK]' : '[2]'} LOWER RODS % [A-2]`,
           hint: `${s2RodsOk ? '[OK]' : '[2]'} PUSH RODS IN (LOWER % ON [A-2] -> ~${targetMWt} MWt) SO BATTERY DOESN'T OVERCHARGE!`,
           panelKey: nextPanel,
           actionLine: nextAction,
           whyLines: [
-            '1. Lower Sector Sliders [A] to shed excess grid load.',
+            '1. Lower Sector Levers [A] to shed excess grid load.',
             '2. Lower Rods % [A-2] to match Energy Created to Demand!',
           ],
           volkovQuote:
-            '"Ease back your grid sliders, then push Control Rods in so the Battery Bank doesn\'t overcharge!"',
+            '"Ease back your grid levers, then push Control Rods in so the Battery Bank doesn\'t overcharge!"',
         };
       }
 
@@ -1316,7 +1343,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         phase: 'COMPLETED',
         header: `>> BATTERY & GRID BALANCED (${Math.round(dispatchedMW)}/${Math.round(demandMW)} MW):`,
         body: `DISPATCHED OUTPUT MATCHES ENERGY DEMAND (${Math.round((state.batteryStoredMWh / MAX_BATTERY_CAPACITY_MWH) * 100)}% BATTERY STORED)! CHECK [KEY 4] DESK FOR PRAVDA ORDERS.`,
-        hint: '+MW: Raise Rods % [A-2] + FW [B] + Sliders [A]. -MW: Lower Sliders [A] + Lower Rods % [A-2].',
+        hint: '+MW: Raise Rods % [A-2] + FW [B] + Levers [A]. -MW: Lower Levers [A] + Lower Rods % [A-2].',
         panelKey: 'CHECK: [KEY 4] DESK & [KEY 5] UNIT C',
         actionLine: 'AWAIT NEXT PRAVDA-84 POWER ORDER',
         whyLines: [

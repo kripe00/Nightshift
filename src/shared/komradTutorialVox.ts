@@ -89,7 +89,7 @@ export const TUTORIAL_VOX_BY_PHASE: Partial<
   },
   STEP_3_BUILD_STEAM: {
     spokenVoxText:
-      'CHECK UNIT BRAVO STEAM DRUM PANEL. RAISE FEEDWATER FLOW FOR LOW WATER LEVEL. OPEN STEAM VENT FOR HIGH DRUM PRESSURE.',
+      'CHECK UNIT BRAVO STEAM DRUM PANEL. RAISE FEEDWATER FLOW FOR LOW WATER LEVEL. PULL BUBBLER DRAIN LEVER FOR HIGH DRUM PRESSURE.',
     mood: 'warning',
   },
   STEP_7_VOID_DRILL: {
@@ -168,9 +168,9 @@ export const CRISIS_COACH_CARDS: Record<CrisisCoachId, CrisisCoachSpec> = {
     whatHappening:
       'Steam drum pressure is climbing past safe 70 BAR limits — too much pressure can burst pipes.',
     howToFix:
-      'Hold Steam Vent briefly on UNIT B ([KEY 3]) to bleed pressure down to 65-70 BAR, and lower Control Rods slightly on UNIT A-2 if thermal power is above demand.',
+      'Pull the BUBBLER DRAIN lever briefly on UNIT B ([KEY 3]) to bleed pressure down to 65-70 BAR, and lower Control Rods slightly on UNIT A-2 ([KEY 6]) if thermal power is above demand.',
     spokenVoxText:
-      'WARNING OPERATOR. HIGH STEAM DRUM PRESSURE DETECTED. OPEN STEAM VENT ON UNIT BRAVO AND PUSH CONTROL RODS IN ON UNIT ALPHA TWO IMMEDIATELY.',
+      'WARNING OPERATOR. HIGH STEAM DRUM PRESSURE DETECTED. PULL BUBBLER DRAIN LEVER ON UNIT BRAVO AND PUSH CONTROL RODS IN ON UNIT ALPHA TWO IMMEDIATELY.',
     mood: 'warning',
   },
   SPENT_ROD: {

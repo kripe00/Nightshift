@@ -4,7 +4,11 @@
 // routes 100% of speech (VOX slices, full .ogg clips, and OOV multi-syllable formant words) through a unified
 // Dark Soviet Mainframe Vocoder + Bunker PA Horn Bus + AnalyserNode for 1:1 lip-sync.
 
-import { getAudioContext } from "../modules/inspector/audio";
+import {
+  getAudioContext,
+  silenceAllLegacyGlobalBgm,
+} from "../modules/inspector/audio";
+import { isKomradGrabActive, isKomradLiquidating } from "./komradGrabState";
 import {
   canEmitKomradIdleChatter,
   isKomradNonCriticalCooldownActive,
@@ -14,7 +18,13 @@ import {
   resetKomradSilenceState,
 } from "./komradSilenceState";
 import type { KomradMessageEntry, KomradMood } from "./types";
-import { doesRadioDominateSubtitles, useGameStore } from "./useGameStore";
+import {
+  doesRadioDominateSubtitles,
+  getPreVolkovStrikeCount,
+  isPreVolkovPanelLocked,
+  reportPreVolkovLockedPanelAttempt,
+  useGameStore,
+} from "./useGameStore";
 
 export type KomradVowelKey =
   | "AA"
@@ -397,7 +407,7 @@ const ROUTINE_MASTER_GAIN = 0.5;
 const ALERT_MASTER_GAIN = 0.72;
 const MONOLOGUE_MIN_GAP_SEC = 75;
 const MONOLOGUE_EXTRA_GAP_SEC = 45;
-const KOMRAD_OPENING_SETTLE_DELAY_SEC = 0.5;
+const KOMRAD_OPENING_SETTLE_DELAY_SEC = 0.25;
 
 interface VoiceAudioChain {
   ctx: AudioContext;
@@ -437,6 +447,10 @@ let voxLoadState: VoxLoadState = "idle";
 let voxManifest: VoxManifest | null = null;
 const voxBuffers = new Map<string, AudioBuffer>();
 const voxClipBuffers = new Map<string, AudioBuffer>();
+let prefetchedManifest: VoxManifest | null = null;
+let voxPrefetchPromise: Promise<void> | null = null;
+const prefetchedPackBytes = new Map<string, ArrayBuffer>();
+const prefetchedClipBytes = new Map<string, ArrayBuffer>();
 
 let activeUtteranceGain: GainNode | null = null;
 let activeUtteranceNodes = new Set<AudioScheduledSourceNode>();
@@ -455,9 +469,11 @@ let voxQueueCursor = 0;
 let voxCursorAudioSec = 0;
 let voxUtteranceEndAudioSec = 0;
 let voxActiveMood: KomradMood = "normal";
+let voxClauseIndex = 0;
 let voxTimeline: VoxTimelineSegment[] = [];
 let voxTimelineIdx = 0;
 let voxSpeakingAudioActive = false;
+let voxHardDeadlineMs = 0;
 
 let lastTrackedShiftRunId = -1;
 let voxLoadStartedElapsedSec = -1;
@@ -541,6 +557,7 @@ export function cleanSubtitleDisplayText(raw: string): string {
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|\uFE0F|\u200D/gu, " ")
     .replace(/[’‘]/g, "'")
     .replace(/[“”]/g, '"')
+    .replace(/\bPERFORMOM\b/gi, "PERFORMED")
     .replace(/^\s*(?:\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\]\s*)+/, "")
     .replace(
       /^(?:K\.O\.M\.R\.A\.D\.?(?:[-\s]?84)?|KOMRAD(?:[-\s]?84)?|SYS\.DEFENSE|PRINTER|OPERATOR)\s*:\s*/i,
@@ -768,7 +785,11 @@ function ensureKomradAudioUnlockListeners(): void {
     if (!audio) return;
     const finishUnlock = () => {
       if (audio.state !== "running") return;
-      if (useGameStore.getState().phase === "playing" && !useGameStore.getState().isMusicMuted) {
+      if (
+        useGameStore.getState().phase === "playing" &&
+        useGameStore.getState().lobbyMenuPhase !== "menu_locked" &&
+        !useGameStore.getState().isMusicMuted
+      ) {
         ensureVoxPreloaded(audio);
       }
       window.removeEventListener("pointerdown", tryUnlockAudio);
@@ -1188,7 +1209,11 @@ export function tokenizeToVoxQueue(
   text: string,
   words: Record<string, VoxWordEntry>,
 ): VoxQueueItem[] {
-  const normalizedText = text.replace(/[’‘]/g, "'");
+  const normalizedText = text
+    .replace(/[’‘]/g, "'")
+    .replace(/\bPERFORMOM\b/gi, "PERFORMED")
+    .replace(/\bMM\s*\/\s*DD\s*\/\s*1984\b/gi, "AMERICAN DAY YEAR 1984")
+    .replace(/\bOTH\b/g, "RADAR");
   const queue: VoxQueueItem[] = [];
   const hasLowerCase = /[a-z]/.test(normalizedText);
 
@@ -1909,6 +1934,9 @@ export function decomposeWordToSyllables(rawWord: string): SyllableSpec[] {
 
 function isRadioHoldoffActive(): boolean {
   const s = useGameStore.getState();
+  if (isKomradLiquidating() || s.siberiaGameOverActive) {
+    return false;
+  }
   const nowMs = nowPerfMs();
   if (doesRadioDominateSubtitles(s.radioOn, s.radioVolume, s.radioBroadcastSubtitle)) {
     lastRadioSubtitleActiveMs = nowMs;
@@ -1922,13 +1950,14 @@ function canKomradSpeakAudio(): boolean {
   if (s.isMusicMuted) return false;
   if (s.diagFeedActive) return false;
   if (s.phase !== "playing") return false;
+  if (s.lobbyMenuPhase !== "entered_control_room") return false;
   if (!s.isShiftControlReady) return false;
   if (s.isBlackout && !s.isGodMode) return false;
   if (isRadioHoldoffActive()) return false;
   return true;
 }
 
-function createAsymmetricTubeCurve(): Float32Array<ArrayBuffer> {
+function createSovietDacGritCurve(): Float32Array<ArrayBuffer> {
   const samples = 1024;
   const buffer = new ArrayBuffer(samples * Float32Array.BYTES_PER_ELEMENT);
   const curve = new Float32Array(buffer);
@@ -1936,7 +1965,9 @@ function createAsymmetricTubeCurve(): Float32Array<ArrayBuffer> {
   let maxAbs = 0.001;
   for (let i = 0; i < samples; i++) {
     const x = (i * 2) / (samples - 1) - 1;
-    const y = x >= 0 ? Math.tanh(x * 2.1) : Math.tanh(x * 1.65) - 0.05 * x * x;
+    const tube = x >= 0 ? Math.tanh(x * 2.15) : Math.tanh(x * 1.75) - 0.06 * x * x;
+    const quantized = Math.round(x * 48) / 48;
+    const y = tube * 0.82 + quantized * 0.18;
     raw[i] = y;
     const a = Math.abs(y);
     if (a > maxAbs) maxAbs = a;
@@ -2012,9 +2043,9 @@ function ensureVoiceChain(
   consonantBusInput.gain.value = 1.0;
 
   // Unified Dark Soviet Mainframe Vocoder & Overwatch PA Horn Bus:
-  // Highpass 95Hz -> Dark Chest +5.5dB @ 155Hz -> 56Hz Ring-Mod ->
-  // Parallel 9.2ms Metallic Comb Resonator -> Asymmetric Tube Saturation ->
-  // PA Presence +3.5dB @ 1450Hz -> Dark Lowpass 2750Hz -> 36ms Bunker Slapback
+  // Highpass 95Hz -> Iron Chest +5.2dB @ 210Hz -> Steel Horn +3.8dB @ 1150Hz ->
+  // Parallel 60Hz Triangle Ring-Mod (22% wet) -> Parallel 12.4ms Metallic Comb (0.28 fb, 3.5kHz damp) ->
+  // Cold DAC Bit-Grit WaveShaper -> Steep 4200Hz Telemetry Roll-off -> 36ms Slapback -> Fast Compressor
   const paHighpass = audio.createBiquadFilter();
   paHighpass.type = "highpass";
   paHighpass.frequency.value = 95;
@@ -2022,61 +2053,70 @@ function ensureVoiceChain(
 
   const chestResonance = audio.createBiquadFilter();
   chestResonance.type = "peaking";
-  chestResonance.frequency.value = 155;
-  chestResonance.Q.value = 1.25;
-  chestResonance.gain.value = 5.5;
+  chestResonance.frequency.value = 210;
+  chestResonance.Q.value = 1.35;
+  chestResonance.gain.value = 5.2;
 
-  const ringModGain = audio.createGain();
-  ringModGain.gain.value = 1.0;
+  const hornResonance = audio.createBiquadFilter();
+  hornResonance.type = "peaking";
+  hornResonance.frequency.value = 1150;
+  hornResonance.Q.value = 1.65;
+  hornResonance.gain.value = 3.8;
+
+  const ringModEntry = audio.createGain();
+  ringModEntry.gain.value = 1.0;
+
+  const ringModDry = audio.createGain();
+  ringModDry.gain.value = 0.8;
+
+  // Audio-rate amplitude modulation (60 Hz triangle carrier, 22% wet mix)
+  const ringModMul = audio.createGain();
+  ringModMul.gain.value = 0.0;
 
   const ringModOsc = audio.createOscillator();
-  ringModOsc.type = "sine";
-  ringModOsc.frequency.value = 56;
-
-  const ringModDepth = audio.createGain();
-  ringModDepth.gain.value = 0.15;
-  ringModOsc.connect(ringModDepth);
-  ringModDepth.connect(ringModGain.gain);
+  ringModOsc.type = "triangle";
+  ringModOsc.frequency.value = 60;
+  ringModOsc.connect(ringModMul.gain);
   ringModOsc.start();
 
-  // Parallel Metallic Comb Resonator (9.2ms delay, fb 0.40, wet 0.35)
+  const ringModWet = audio.createGain();
+  ringModWet.gain.value = 0.22;
+
+  const ringModSum = audio.createGain();
+  ringModSum.gain.value = 1.0;
+
+  // Parallel Hollow Metallic Chassis Comb Resonator (12.4ms delay, fb 0.28, damped 3.5kHz, wet 0.30)
   const combDry = audio.createGain();
-  combDry.gain.value = 0.78;
+  combDry.gain.value = 0.8;
 
   const combDelay = audio.createDelay(0.05);
-  combDelay.delayTime.value = 0.0092;
+  combDelay.delayTime.value = 0.0124;
 
   const combDamp = audio.createBiquadFilter();
   combDamp.type = "lowpass";
-  combDamp.frequency.value = 2600;
-  combDamp.Q.value = 0.7;
+  combDamp.frequency.value = 3500;
+  combDamp.Q.value = 0.75;
 
   const combFeedback = audio.createGain();
-  combFeedback.gain.value = 0.4;
+  combFeedback.gain.value = 0.28;
 
   const combWet = audio.createGain();
-  combWet.gain.value = 0.35;
+  combWet.gain.value = 0.3;
 
   const combSum = audio.createGain();
   combSum.gain.value = 1.0;
 
   const driveGain = audio.createGain();
-  driveGain.gain.value = 1.05;
+  driveGain.gain.value = 1.08;
 
   const paShaper = audio.createWaveShaper();
-  paShaper.curve = createAsymmetricTubeCurve();
+  paShaper.curve = createSovietDacGritCurve();
   paShaper.oversample = "2x";
-
-  const paPresence = audio.createBiquadFilter();
-  paPresence.type = "peaking";
-  paPresence.frequency.value = 1450;
-  paPresence.Q.value = 1.15;
-  paPresence.gain.value = 3.5;
 
   const paLowpass = audio.createBiquadFilter();
   paLowpass.type = "lowpass";
-  paLowpass.frequency.value = 2750;
-  paLowpass.Q.value = 0.85;
+  paLowpass.frequency.value = 4200;
+  paLowpass.Q.value = 1.05;
 
   const consHighpass = audio.createBiquadFilter();
   consHighpass.type = "highpass";
@@ -2086,7 +2126,7 @@ function ensureVoiceChain(
   const dryGain = audio.createGain();
   dryGain.gain.value = 0.94;
 
-  // 36ms concrete bunker slapback (wet = 0.14)
+  // 36ms concrete bunker slapback (wet = 0.13)
   const slapDelay = audio.createDelay(0.12);
   slapDelay.delayTime.value = 0.036;
 
@@ -2099,10 +2139,20 @@ function ensureVoiceChain(
   slapFeedback.gain.value = 0.14;
 
   const slapWet = audio.createGain();
-  slapWet.gain.value = 0.14;
+  slapWet.gain.value = 0.13;
 
   const paBusSum = audio.createGain();
   paBusSum.gain.value = 1.0;
+
+  const compressor = audio.createDynamicsCompressor();
+  compressor.threshold.value = -18;
+  compressor.knee.value = 12;
+  compressor.ratio.value = 4.5;
+  compressor.attack.value = 0.004;
+  compressor.release.value = 0.14;
+
+  const makeupGain = audio.createGain();
+  makeupGain.gain.value = 1.16;
 
   const analyser = audio.createAnalyser();
   analyser.fftSize = 64;
@@ -2120,15 +2170,23 @@ function ensureVoiceChain(
   voxInput.connect(paHighpass);
   busInput.connect(paHighpass);
   paHighpass.connect(chestResonance);
-  chestResonance.connect(ringModGain);
+  chestResonance.connect(hornResonance);
+  hornResonance.connect(ringModEntry);
 
   consonantBusInput.connect(consHighpass);
-  consHighpass.connect(ringModGain);
+  consHighpass.connect(ringModEntry);
 
-  ringModGain.connect(combDry);
+  ringModEntry.connect(ringModDry);
+  ringModDry.connect(ringModSum);
+
+  ringModEntry.connect(ringModMul);
+  ringModMul.connect(ringModWet);
+  ringModWet.connect(ringModSum);
+
+  ringModSum.connect(combDry);
   combDry.connect(combSum);
 
-  ringModGain.connect(combDelay);
+  ringModSum.connect(combDelay);
   combDelay.connect(combDamp);
   combDamp.connect(combFeedback);
   combFeedback.connect(combDelay);
@@ -2137,8 +2195,7 @@ function ensureVoiceChain(
 
   combSum.connect(driveGain);
   driveGain.connect(paShaper);
-  paShaper.connect(paPresence);
-  paPresence.connect(paLowpass);
+  paShaper.connect(paLowpass);
 
   paLowpass.connect(dryGain);
   dryGain.connect(paBusSum);
@@ -2150,7 +2207,9 @@ function ensureVoiceChain(
   slapBp.connect(slapWet);
   slapWet.connect(paBusSum);
 
-  paBusSum.connect(analyser);
+  paBusSum.connect(compressor);
+  compressor.connect(makeupGain);
+  makeupGain.connect(analyser);
   analyser.connect(masterGain);
   masterGain.connect(audio.destination);
 
@@ -2198,6 +2257,62 @@ function updateMasterDucking(allowed: boolean, activeLevel: number): void {
   masterGain.gain.linearRampToValueAtTime(target, now + 0.025);
 }
 
+function yieldMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Quietly pre-fetches the K.O.M.R.A.D.-84 VOX manifest and raw audio buffers into
+ * memory during boot without touching AudioContext or emitting sound.
+ */
+export function prefetchKomradVoxAssets(): void {
+  if (typeof fetch !== "function" || voxPrefetchPromise !== null) return;
+
+  voxPrefetchPromise = (async () => {
+    try {
+      const resp = await fetch(VOX_MANIFEST_URL);
+      if (!resp.ok) return;
+      const manifest = (await resp.json()) as VoxManifest;
+      if (!manifest?.packs?.length || !manifest?.words) return;
+      prefetchedManifest = manifest;
+
+      for (const pack of manifest.packs) {
+        if (!prefetchedPackBytes.has(pack.id)) {
+          try {
+            const packResp = await fetch(pack.src);
+            if (packResp.ok) {
+              prefetchedPackBytes.set(pack.id, await packResp.arrayBuffer());
+            }
+          } catch {
+            // Best-effort prefetch
+          }
+          await yieldMs(20);
+        }
+      }
+
+      if (manifest.clips?.length) {
+        for (const clip of manifest.clips) {
+          if (!prefetchedClipBytes.has(clip.id)) {
+            try {
+              const clipResp = await fetch(clip.src);
+              if (clipResp.ok) {
+                prefetchedClipBytes.set(clip.id, await clipResp.arrayBuffer());
+              }
+            } catch {
+              // Best-effort prefetch
+            }
+            await yieldMs(35);
+          }
+        }
+      }
+    } catch {
+      // Network errors during prefetch never block boot
+    }
+  })();
+}
+
 function ensureVoxPreloaded(audio: AudioContext): void {
   if (voxLoadState !== "idle" || audio.state !== "running") return;
   if (typeof fetch !== "function") {
@@ -2208,22 +2323,31 @@ function ensureVoxPreloaded(audio: AudioContext): void {
   voxLoadState = "loading";
   void (async () => {
     try {
-      const resp = await fetch(VOX_MANIFEST_URL);
-      if (!resp.ok) {
-        throw new Error(`VOX manifest HTTP ${resp.status}`);
+      let manifest = prefetchedManifest;
+      if (!manifest) {
+        const resp = await fetch(VOX_MANIFEST_URL);
+        if (!resp.ok) {
+          throw new Error(`VOX manifest HTTP ${resp.status}`);
+        }
+        manifest = (await resp.json()) as VoxManifest;
       }
-      const manifest = (await resp.json()) as VoxManifest;
       if (!manifest?.packs?.length || !manifest?.words) {
         throw new Error("Invalid VOX manifest format");
       }
 
       const decodedPacks = await Promise.all(
         manifest.packs.map(async (pack) => {
-          const packResp = await fetch(pack.src);
-          if (!packResp.ok) {
-            throw new Error(`VOX pack ${pack.src} HTTP ${packResp.status}`);
+          const cachedBytes = prefetchedPackBytes.get(pack.id);
+          let arr: ArrayBuffer;
+          if (cachedBytes) {
+            arr = cachedBytes.slice(0);
+          } else {
+            const packResp = await fetch(pack.src);
+            if (!packResp.ok) {
+              throw new Error(`VOX pack ${pack.src} HTTP ${packResp.status}`);
+            }
+            arr = await packResp.arrayBuffer();
           }
-          const arr = await packResp.arrayBuffer();
           const audioBuf = await audio.decodeAudioData(arr);
           return [pack.id, audioBuf] as const;
         }),
@@ -2238,22 +2362,26 @@ function ensureVoxPreloaded(audio: AudioContext): void {
       vocalState.voxLoaded = true;
 
       if (manifest.clips?.length) {
-        const clipResults = await Promise.allSettled(
-          manifest.clips.map(async (clip) => {
-            const clipResp = await fetch(clip.src);
-            if (!clipResp.ok) {
-              throw new Error(`VOX clip ${clip.src} HTTP ${clipResp.status}`);
-            }
-            const arr = await clipResp.arrayBuffer();
-            const audioBuf = await audio.decodeAudioData(arr);
-            return [clip.id, audioBuf] as const;
-          }),
-        );
         voxClipBuffers.clear();
-        for (const res of clipResults) {
-          if (res.status === "fulfilled") {
-            voxClipBuffers.set(res.value[0], res.value[1]);
+        for (const clip of manifest.clips) {
+          try {
+            const cachedClip = prefetchedClipBytes.get(clip.id);
+            let arr: ArrayBuffer;
+            if (cachedClip) {
+              arr = cachedClip.slice(0);
+            } else {
+              const clipResp = await fetch(clip.src);
+              if (!clipResp.ok) {
+                continue;
+              }
+              arr = await clipResp.arrayBuffer();
+            }
+            const audioBuf = await audio.decodeAudioData(arr);
+            voxClipBuffers.set(clip.id, audioBuf);
+          } catch {
+            // Skip individual failed monologue clip cleanly
           }
+          await yieldMs(30);
         }
       }
     } catch {
@@ -2274,6 +2402,7 @@ function releaseActiveUtteranceNodes(fadeSec: number): void {
 
   voxQueue = [];
   voxQueueCursor = 0;
+  voxClauseIndex = 0;
   voxTimeline = [];
   voxTimelineIdx = 0;
   voxUtteranceEndAudioSec = 0;
@@ -2330,11 +2459,16 @@ function releaseActiveUtteranceNodes(fadeSec: number): void {
 }
 
 function cancelActiveVoxUtterance(fadeSec = 0.03): void {
+  voxSpeakingAudioActive = false;
+  voxHardDeadlineMs = 0;
   releaseActiveUtteranceNodes(fadeSec);
 }
 
 function finishActiveUtterance(elapsedSec: number): void {
+  voxSpeakingAudioActive = false;
+  voxHardDeadlineMs = 0;
   lastUtteranceEndElapsedSec = elapsedSec;
+  const closeMood = voxActiveMood || subtitleSnapshot.mood;
   const finalClause =
     activeSubtitleClauses.length > 0
       ? activeSubtitleClauses[activeSubtitleClauses.length - 1].text
@@ -2345,17 +2479,18 @@ function finishActiveUtterance(elapsedSec: number): void {
     subtitleHoldUntilMs = nowPerfMs() + KOMRAD_SUBTITLE_LINGER_MS;
     emitKomradSubtitle(
       finalClause,
-      voxActiveMood || subtitleSnapshot.mood,
+      closeMood,
       false,
       activeUtteranceCleanText || subtitleSnapshot.fullText,
       null,
     );
   }
   releaseActiveUtteranceNodes(0.04);
+  playRelayClack(computeTargetMasterGain(undefined, closeMood), true);
   markKomradTransmissionEnd();
 }
 
-function playRelayClack(targetMasterLevel: number): void {
+function playRelayClack(targetMasterLevel: number, isClose = false): void {
   if (!canKomradSpeakAudio()) return;
   const audio = getAudioContext();
   if (!audio || audio.state !== "running") return;
@@ -2368,13 +2503,13 @@ function playRelayClack(targetMasterLevel: number): void {
 
   const clickBp = audio.createBiquadFilter();
   clickBp.type = "bandpass";
-  clickBp.frequency.setValueAtTime(1600, t0);
-  clickBp.Q.setValueAtTime(3.0, t0);
+  clickBp.frequency.setValueAtTime(isClose ? 1350 : 1750, t0);
+  clickBp.Q.setValueAtTime(3.2, t0);
 
   const clickGain = audio.createGain();
   clickGain.gain.setValueAtTime(0.0001, t0);
-  clickGain.gain.linearRampToValueAtTime(0.095, t0 + 0.002);
-  clickGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.014);
+  clickGain.gain.linearRampToValueAtTime(isClose ? 0.065 : 0.085, t0 + 0.0015);
+  clickGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.009);
 
   noiseSrc.connect(clickBp);
   clickBp.connect(clickGain);
@@ -2382,19 +2517,19 @@ function playRelayClack(targetMasterLevel: number): void {
 
   const thumpOsc = audio.createOscillator();
   thumpOsc.type = "triangle";
-  thumpOsc.frequency.setValueAtTime(210, t0);
-  thumpOsc.frequency.exponentialRampToValueAtTime(85, t0 + 0.018);
+  thumpOsc.frequency.setValueAtTime(isClose ? 175 : 220, t0);
+  thumpOsc.frequency.exponentialRampToValueAtTime(75, t0 + 0.01);
 
   const thumpGain = audio.createGain();
   thumpGain.gain.setValueAtTime(0.0001, t0);
-  thumpGain.gain.linearRampToValueAtTime(0.08, t0 + 0.003);
-  thumpGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.022);
+  thumpGain.gain.linearRampToValueAtTime(isClose ? 0.055 : 0.075, t0 + 0.002);
+  thumpGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.011);
 
   thumpOsc.connect(thumpGain);
   thumpGain.connect(chain.masterGain);
 
-  const stopAt = t0 + 0.026;
-  noiseSrc.start(t0, Math.random() * 0.8, 0.024);
+  const stopAt = t0 + 0.014;
+  noiseSrc.start(t0, Math.random() * 0.8, 0.012);
   thumpOsc.start(t0);
   thumpOsc.stop(stopAt);
   thumpOsc.onended = () => {
@@ -2404,6 +2539,562 @@ function playRelayClack(targetMasterLevel: number): void {
     thumpOsc.disconnect();
     thumpGain.disconnect();
   };
+}
+
+export function playLockedPanelClunk(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, computeTargetMasterGain(undefined, "warning"));
+  const t0 = audio.currentTime;
+
+  // 1. Heavy cast-iron padlock stop thump
+  const thumpOsc = audio.createOscillator();
+  thumpOsc.type = "triangle";
+  thumpOsc.frequency.setValueAtTime(145, t0);
+  thumpOsc.frequency.exponentialRampToValueAtTime(48, t0 + 0.075);
+
+  const thumpGain = audio.createGain();
+  thumpGain.gain.setValueAtTime(0.0001, t0);
+  thumpGain.gain.linearRampToValueAtTime(0.22, t0 + 0.004);
+  thumpGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.085);
+
+  thumpOsc.connect(thumpGain);
+  thumpGain.connect(audio.destination);
+
+  // 2. Metallic padlock pin-snap transient
+  const snapSrc = audio.createBufferSource();
+  snapSrc.buffer = chain.noiseBuffer;
+
+  const snapBp = audio.createBiquadFilter();
+  snapBp.type = "bandpass";
+  snapBp.frequency.setValueAtTime(1900, t0);
+  snapBp.Q.setValueAtTime(3.2, t0);
+
+  const snapGain = audio.createGain();
+  snapGain.gain.setValueAtTime(0.0001, t0);
+  snapGain.gain.linearRampToValueAtTime(0.15, t0 + 0.002);
+  snapGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.028);
+
+  snapSrc.connect(snapBp);
+  snapBp.connect(snapGain);
+  snapGain.connect(audio.destination);
+
+  // 3. Magnetic interlock solenoid buzz
+  const buzzOsc = audio.createOscillator();
+  buzzOsc.type = "sawtooth";
+  buzzOsc.frequency.setValueAtTime(100, t0);
+
+  const buzzBp = audio.createBiquadFilter();
+  buzzBp.type = "bandpass";
+  buzzBp.frequency.setValueAtTime(240, t0);
+  buzzBp.Q.setValueAtTime(2.4, t0);
+
+  const buzzGain = audio.createGain();
+  buzzGain.gain.setValueAtTime(0.0001, t0);
+  buzzGain.gain.linearRampToValueAtTime(0.08, t0 + 0.008);
+  buzzGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.095);
+
+  buzzOsc.connect(buzzBp);
+  buzzBp.connect(buzzGain);
+  buzzGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.105;
+  thumpOsc.start(t0);
+  snapSrc.start(t0, Math.random() * 0.7, 0.032);
+  buzzOsc.start(t0);
+  thumpOsc.stop(stopAt);
+  buzzOsc.stop(stopAt);
+  buzzOsc.onended = () => {
+    thumpOsc.disconnect();
+    thumpGain.disconnect();
+    snapSrc.disconnect();
+    snapBp.disconnect();
+    snapGain.disconnect();
+    buzzOsc.disconnect();
+    buzzBp.disconnect();
+    buzzGain.disconnect();
+  };
+}
+
+export function playKomradGrabServoCharge(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+  const dur = 0.55;
+
+  const driveOsc = audio.createOscillator();
+  driveOsc.type = "sawtooth";
+  driveOsc.frequency.setValueAtTime(105, t0);
+  driveOsc.frequency.exponentialRampToValueAtTime(265, t0 + dur * 0.72);
+  driveOsc.frequency.linearRampToValueAtTime(220, t0 + dur);
+
+  const subOsc = audio.createOscillator();
+  subOsc.type = "triangle";
+  subOsc.frequency.setValueAtTime(54, t0);
+  subOsc.frequency.linearRampToValueAtTime(112, t0 + dur);
+
+  const servoLp = audio.createBiquadFilter();
+  servoLp.type = "lowpass";
+  servoLp.frequency.setValueAtTime(520, t0);
+  servoLp.Q.setValueAtTime(2.2, t0);
+
+  const servoGain = audio.createGain();
+  servoGain.gain.setValueAtTime(0.0001, t0);
+  servoGain.gain.linearRampToValueAtTime(0.16, t0 + 0.04);
+  servoGain.gain.setValueAtTime(0.14, t0 + dur - 0.1);
+  servoGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+  const gearNoise = audio.createBufferSource();
+  gearNoise.buffer = chain.noiseBuffer;
+
+  const gearBp = audio.createBiquadFilter();
+  gearBp.type = "bandpass";
+  gearBp.frequency.setValueAtTime(760, t0);
+  gearBp.frequency.linearRampToValueAtTime(1240, t0 + dur * 0.8);
+  gearBp.Q.setValueAtTime(3.0, t0);
+
+  const gearGain = audio.createGain();
+  gearGain.gain.setValueAtTime(0.0001, t0);
+  gearGain.gain.linearRampToValueAtTime(0.08, t0 + 0.05);
+  gearGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+  driveOsc.connect(servoLp);
+  subOsc.connect(servoLp);
+  servoLp.connect(servoGain);
+  servoGain.connect(audio.destination);
+
+  gearNoise.connect(gearBp);
+  gearBp.connect(gearGain);
+  gearGain.connect(audio.destination);
+
+  const stopAt = t0 + dur + 0.015;
+  driveOsc.start(t0);
+  subOsc.start(t0);
+  gearNoise.start(t0, Math.random() * 0.4, dur + 0.01);
+  driveOsc.stop(stopAt);
+  subOsc.stop(stopAt);
+  driveOsc.onended = () => {
+    driveOsc.disconnect();
+    subOsc.disconnect();
+    servoLp.disconnect();
+    servoGain.disconnect();
+    gearNoise.disconnect();
+    gearBp.disconnect();
+    gearGain.disconnect();
+  };
+}
+
+export function playKomradCollarClampClang(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  const thumpOsc = audio.createOscillator();
+  thumpOsc.type = "triangle";
+  thumpOsc.frequency.setValueAtTime(185, t0);
+  thumpOsc.frequency.exponentialRampToValueAtTime(44, t0 + 0.14);
+
+  const thumpGain = audio.createGain();
+  thumpGain.gain.setValueAtTime(0.0001, t0);
+  thumpGain.gain.linearRampToValueAtTime(0.32, t0 + 0.005);
+  thumpGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+
+  thumpOsc.connect(thumpGain);
+  thumpGain.connect(audio.destination);
+
+  const ringA = audio.createOscillator();
+  ringA.type = "square";
+  ringA.frequency.setValueAtTime(790, t0);
+
+  const ringB = audio.createOscillator();
+  ringB.type = "triangle";
+  ringB.frequency.setValueAtTime(1580, t0);
+
+  const ringBp = audio.createBiquadFilter();
+  ringBp.type = "bandpass";
+  ringBp.frequency.setValueAtTime(1120, t0);
+  ringBp.Q.setValueAtTime(4.2, t0);
+
+  const ringGain = audio.createGain();
+  ringGain.gain.setValueAtTime(0.0001, t0);
+  ringGain.gain.linearRampToValueAtTime(0.18, t0 + 0.003);
+  ringGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.24);
+
+  ringA.connect(ringBp);
+  ringB.connect(ringBp);
+  ringBp.connect(ringGain);
+  ringGain.connect(audio.destination);
+
+  const snapSrc = audio.createBufferSource();
+  snapSrc.buffer = chain.noiseBuffer;
+
+  const snapBp = audio.createBiquadFilter();
+  snapBp.type = "bandpass";
+  snapBp.frequency.setValueAtTime(2400, t0);
+  snapBp.Q.setValueAtTime(2.4, t0);
+
+  const snapGain = audio.createGain();
+  snapGain.gain.setValueAtTime(0.0001, t0);
+  snapGain.gain.linearRampToValueAtTime(0.26, t0 + 0.002);
+  snapGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.055);
+
+  snapSrc.connect(snapBp);
+  snapBp.connect(snapGain);
+  snapGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.26;
+  thumpOsc.start(t0);
+  ringA.start(t0);
+  ringB.start(t0);
+  snapSrc.start(t0, Math.random() * 0.5, 0.06);
+  thumpOsc.stop(stopAt);
+  ringA.stop(stopAt);
+  ringB.stop(stopAt);
+  ringA.onended = () => {
+    thumpOsc.disconnect();
+    thumpGain.disconnect();
+    ringA.disconnect();
+    ringB.disconnect();
+    ringBp.disconnect();
+    ringGain.disconnect();
+    snapSrc.disconnect();
+    snapBp.disconnect();
+    snapGain.disconnect();
+  };
+}
+
+export function playKomradPneumaticDropHiss(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+  const dur = 0.32;
+
+  const hissSrc = audio.createBufferSource();
+  hissSrc.buffer = chain.noiseBuffer;
+
+  const hissBp = audio.createBiquadFilter();
+  hissBp.type = "bandpass";
+  hissBp.frequency.setValueAtTime(2900, t0);
+  hissBp.frequency.exponentialRampToValueAtTime(900, t0 + dur);
+  hissBp.Q.setValueAtTime(1.6, t0);
+
+  const hissGain = audio.createGain();
+  hissGain.gain.setValueAtTime(0.0001, t0);
+  hissGain.gain.linearRampToValueAtTime(0.22, t0 + 0.015);
+  hissGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+  hissSrc.connect(hissBp);
+  hissBp.connect(hissGain);
+  hissGain.connect(audio.destination);
+
+  const valveOsc = audio.createOscillator();
+  valveOsc.type = "triangle";
+  valveOsc.frequency.setValueAtTime(640, t0);
+  valveOsc.frequency.exponentialRampToValueAtTime(180, t0 + 0.045);
+
+  const valveGain = audio.createGain();
+  valveGain.gain.setValueAtTime(0.0001, t0);
+  valveGain.gain.linearRampToValueAtTime(0.12, t0 + 0.003);
+  valveGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+
+  valveOsc.connect(valveGain);
+  valveGain.connect(audio.destination);
+
+  hissSrc.start(t0, Math.random() * 0.4, dur + 0.02);
+  valveOsc.start(t0);
+  valveOsc.stop(t0 + dur + 0.03);
+  valveOsc.onended = () => {
+    hissSrc.disconnect();
+    hissBp.disconnect();
+    hissGain.disconnect();
+    valveOsc.disconnect();
+    valveGain.disconnect();
+  };
+}
+
+export function playChairLeatheretteThud(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  const thudOsc = audio.createOscillator();
+  thudOsc.type = "sine";
+  thudOsc.frequency.setValueAtTime(98, t0);
+  thudOsc.frequency.exponentialRampToValueAtTime(30, t0 + 0.16);
+
+  const thudGain = audio.createGain();
+  thudGain.gain.setValueAtTime(0.0001, t0);
+  thudGain.gain.linearRampToValueAtTime(0.38, t0 + 0.008);
+  thudGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+
+  thudOsc.connect(thudGain);
+  thudGain.connect(audio.destination);
+
+  const leatherSrc = audio.createBufferSource();
+  leatherSrc.buffer = chain.noiseBuffer;
+
+  const leatherLp = audio.createBiquadFilter();
+  leatherLp.type = "lowpass";
+  leatherLp.frequency.setValueAtTime(280, t0);
+  leatherLp.Q.setValueAtTime(1.1, t0);
+
+  const leatherGain = audio.createGain();
+  leatherGain.gain.setValueAtTime(0.0001, t0);
+  leatherGain.gain.linearRampToValueAtTime(0.24, t0 + 0.006);
+  leatherGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+
+  leatherSrc.connect(leatherLp);
+  leatherLp.connect(leatherGain);
+  leatherGain.connect(audio.destination);
+
+  const springOsc = audio.createOscillator();
+  springOsc.type = "sawtooth";
+  springOsc.frequency.setValueAtTime(285, t0 + 0.03);
+  springOsc.frequency.linearRampToValueAtTime(235, t0 + 0.22);
+
+  const springBp = audio.createBiquadFilter();
+  springBp.type = "bandpass";
+  springBp.frequency.setValueAtTime(540, t0);
+  springBp.Q.setValueAtTime(4.5, t0);
+
+  const springGain = audio.createGain();
+  springGain.gain.setValueAtTime(0.0001, t0);
+  springGain.gain.setValueAtTime(0.0001, t0 + 0.03);
+  springGain.gain.linearRampToValueAtTime(0.045, t0 + 0.06);
+  springGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.24);
+
+  springOsc.connect(springBp);
+  springBp.connect(springGain);
+  springGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.25;
+  thudOsc.start(t0);
+  leatherSrc.start(t0, Math.random() * 0.5, 0.16);
+  springOsc.start(t0);
+  thudOsc.stop(stopAt);
+  springOsc.stop(stopAt);
+  springOsc.onended = () => {
+    thudOsc.disconnect();
+    thumpCleanup();
+  };
+  function thumpCleanup() {
+    thudGain.disconnect();
+    leatherSrc.disconnect();
+    leatherLp.disconnect();
+    leatherGain.disconnect();
+    springOsc.disconnect();
+    springBp.disconnect();
+    springGain.disconnect();
+  }
+}
+
+export function playLiquidationBreakerBlackout(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  // 1. Heavy substation contactor slam (THUNK)
+  const slamOsc = audio.createOscillator();
+  slamOsc.type = "triangle";
+  slamOsc.frequency.setValueAtTime(118, t0);
+  slamOsc.frequency.exponentialRampToValueAtTime(26, t0 + 0.16);
+
+  const slamGain = audio.createGain();
+  slamGain.gain.setValueAtTime(0.0001, t0);
+  slamGain.gain.linearRampToValueAtTime(0.42, t0 + 0.004);
+  slamGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+
+  slamOsc.connect(slamGain);
+  slamGain.connect(audio.destination);
+
+  // 2. High-voltage arc crackle burst (BUZZ)
+  const arcSrc = audio.createBufferSource();
+  arcSrc.buffer = chain.noiseBuffer;
+
+  const arcBp = audio.createBiquadFilter();
+  arcBp.type = "bandpass";
+  arcBp.frequency.setValueAtTime(1750, t0);
+  arcBp.frequency.exponentialRampToValueAtTime(340, t0 + 0.34);
+  arcBp.Q.setValueAtTime(1.8, t0);
+
+  const arcGain = audio.createGain();
+  arcGain.gain.setValueAtTime(0.0001, t0);
+  arcGain.gain.linearRampToValueAtTime(0.32, t0 + 0.004);
+  arcGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.36);
+
+  arcSrc.connect(arcBp);
+  arcBp.connect(arcGain);
+  arcGain.connect(audio.destination);
+
+  // 3. 50Hz / 100Hz mains transformer power-down droop
+  const humA = audio.createOscillator();
+  const humB = audio.createOscillator();
+  humA.type = "sawtooth";
+  humB.type = "triangle";
+  humA.frequency.setValueAtTime(100, t0);
+  humA.frequency.exponentialRampToValueAtTime(28, t0 + 0.62);
+  humB.frequency.setValueAtTime(50, t0);
+  humB.frequency.exponentialRampToValueAtTime(18, t0 + 0.62);
+
+  const humLp = audio.createBiquadFilter();
+  humLp.type = "lowpass";
+  humLp.frequency.setValueAtTime(320, t0);
+
+  const humGain = audio.createGain();
+  humGain.gain.setValueAtTime(0.0001, t0);
+  humGain.gain.linearRampToValueAtTime(0.2, t0 + 0.02);
+  humGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.64);
+
+  humA.connect(humLp);
+  humB.connect(humLp);
+  humLp.connect(humGain);
+  humGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.66;
+  slamOsc.start(t0);
+  arcSrc.start(t0, Math.random() * 0.4, 0.38);
+  humA.start(t0);
+  humB.start(t0);
+  slamOsc.stop(stopAt);
+  humA.stop(stopAt);
+  humB.stop(stopAt);
+  humA.onended = () => {
+    slamOsc.disconnect();
+    slamGain.disconnect();
+    arcSrc.disconnect();
+    arcBp.disconnect();
+    arcGain.disconnect();
+    humA.disconnect();
+    humB.disconnect();
+    humLp.disconnect();
+    humGain.disconnect();
+  };
+}
+
+export function playKgbLiquidationStampThud(): void {
+  const s = useGameStore.getState();
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
+  }
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  const bodyOsc = audio.createOscillator();
+  bodyOsc.type = "sine";
+  bodyOsc.frequency.setValueAtTime(125, t0);
+  bodyOsc.frequency.exponentialRampToValueAtTime(34, t0 + 0.14);
+
+  const bodyGain = audio.createGain();
+  bodyGain.gain.setValueAtTime(0.0001, t0);
+  bodyGain.gain.linearRampToValueAtTime(0.42, t0 + 0.004);
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+
+  bodyOsc.connect(bodyGain);
+  bodyGain.connect(audio.destination);
+
+  const slapSrc = audio.createBufferSource();
+  slapSrc.buffer = chain.noiseBuffer;
+
+  const slapBp = audio.createBiquadFilter();
+  slapBp.type = "bandpass";
+  slapBp.frequency.setValueAtTime(920, t0);
+  slapBp.Q.setValueAtTime(1.5, t0);
+
+  const slapGain = audio.createGain();
+  slapGain.gain.setValueAtTime(0.0001, t0);
+  slapGain.gain.linearRampToValueAtTime(0.28, t0 + 0.002);
+  slapGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.08);
+
+  slapSrc.connect(slapBp);
+  slapBp.connect(slapGain);
+  slapGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.2;
+  bodyOsc.start(t0);
+  slapSrc.start(t0, Math.random() * 0.4, 0.09);
+  bodyOsc.stop(stopAt);
+  bodyOsc.onended = () => {
+    bodyOsc.disconnect();
+    bodyGain.disconnect();
+    slapSrc.disconnect();
+    slapBp.disconnect();
+    slapGain.disconnect();
+  };
+}
+
+export function triggerPreVolkovPanelLockFeedback(): boolean {
+  if (!isPreVolkovPanelLocked()) {
+    return false;
+  }
+  const s = useGameStore.getState();
+  if (s.siberiaGameOverActive || isKomradGrabActive()) {
+    return true;
+  }
+  const wasGrabActive = isKomradGrabActive();
+  reportPreVolkovLockedPanelAttempt();
+  if (!wasGrabActive && isKomradLiquidating()) {
+    silenceAllLegacyGlobalBgm();
+    playLiquidationBreakerBlackout();
+    playKomradGrabServoCharge();
+  } else if (!wasGrabActive && isKomradGrabActive()) {
+    playLockedPanelClunk();
+    playKomradGrabServoCharge();
+  } else {
+    playLockedPanelClunk();
+  }
+  return true;
 }
 
 function startOpenPaCarrierBed(
@@ -2481,7 +3172,7 @@ function scheduleFormantWord(
   if (syllables.length === 0) return 0.14;
 
   const rate = getBasePlaybackRate(mood);
-  const basePitch = mood === "critical" ? 136 : mood === "warning" ? 132 : 128;
+  const basePitch = mood === "critical" ? 108 : mood === "warning" ? 105 : 102;
   const interSylGap = 0.004;
   let cursor = when;
   let prevF: [number, number, number] = [...NEUTRAL_FORMANTS];
@@ -2490,8 +3181,7 @@ function scheduleFormantWord(
     const syl = syllables[si];
     const isFinal = si === syllables.length - 1;
     const isStressed = stressed || syl.stressed;
-    const pitchMod = isStressed ? 1.03 : isFinal && syllables.length > 1 ? 0.97 : 1.0;
-    const f0 = basePitch * pitchMod;
+    const f0 = basePitch;
     const dur = Math.max(
       0.055,
       (syl.durSec / rate) * (isStressed && si === 0 ? 1.06 : 1.0),
@@ -2760,8 +3450,10 @@ function scheduleFormantWord(
   return Math.max(0.11, cursor - interSylGap - when);
 }
 
+const SERVO_PITCH_STEPS = [0, -0.01, 0.006, -0.008] as const;
+
 function getBasePlaybackRate(mood: KomradMood): number {
-  return mood === "critical" ? 1.12 : mood === "warning" ? 1.08 : 1.04;
+  return mood === "critical" ? 0.9 : mood === "warning" ? 0.89 : 0.88;
 }
 
 function normalizeTextForClipMatch(text: string): string {
@@ -2927,6 +3619,7 @@ function beginVoxClipUtterance(
   voxUtteranceEndAudioSec = when + playDur;
   voxActiveMood = mood;
   voxSpeakingAudioActive = true;
+  voxHardDeadlineMs = nowPerfMs() + playDur * 1000 + 2500;
   visualTypingActive = false;
   markKomradTransmissionStart();
 }
@@ -3033,12 +3726,28 @@ function beginVoxUtterance(
     firstWord,
   );
   voxQueueCursor = 0;
+  voxClauseIndex = 0;
   voxCursorAudioSec = audio.currentTime + 0.045;
   voxUtteranceEndAudioSec = voxCursorAudioSec;
   voxActiveMood = mood;
   voxTimeline = [];
   voxTimelineIdx = 0;
   voxSpeakingAudioActive = voxQueue.length > 0;
+  const baseRate = getBasePlaybackRate(mood);
+  let estimatedSec = 0;
+  for (let qi = 0; qi < voxQueue.length; qi++) {
+    const q = voxQueue[qi];
+    if (q.kind === "word") {
+      estimatedSec += q.entry.dur / baseRate;
+    } else if (q.kind === "pause") {
+      estimatedSec += q.durSec;
+    } else {
+      estimatedSec += 0.42 / baseRate;
+    }
+  }
+  voxHardDeadlineMs = voxSpeakingAudioActive
+    ? nowPerfMs() + Math.max(5000, estimatedSec * 1000 + 3500)
+    : 0;
   visualTypingActive = false;
   if (voxSpeakingAudioActive) {
     markKomradTransmissionStart();
@@ -3061,7 +3770,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
   const drive = mood === "critical" ? 1.42 : mood === "warning" ? 1.22 : 1.05;
   chain.driveGain.gain.setTargetAtTime(drive, audio.currentTime, 0.015);
 
-  // Fast, brisk baritone playback rate (1.04x normal / 1.08x warning / 1.12x critical)
+  // Cold baritone playback rate (0.88x normal / 0.89x warning / 0.90x critical) + robotic servo-step monotone
   const rate = getBasePlaybackRate(mood);
   const uttGain = activeUtteranceGain;
   const nodesSet = activeUtteranceNodes;
@@ -3075,6 +3784,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
     voxQueueCursor += 1;
 
     if (item.kind === "pause") {
+      voxClauseIndex += 1;
       const pStart = voxCursorAudioSec;
       const pEnd = pStart + item.durSec;
       voxTimeline.push({
@@ -3095,7 +3805,10 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
     if (item.kind === "word") {
       const buf = voxBuffers.get(item.entry.pack);
       if (buf) {
-        const effectiveDur = item.entry.dur / rate;
+        const servoOffset =
+          SERVO_PITCH_STEPS[voxClauseIndex % SERVO_PITCH_STEPS.length];
+        const wordRate = Math.max(0.865, Math.min(0.905, rate + servoOffset));
+        const effectiveDur = item.entry.dur / wordRate;
         const when = voxCursorAudioSec;
         const fadeIn = Math.min(0.005, effectiveDur * 0.15);
         const fadeOut = Math.min(0.024, effectiveDur * 0.25);
@@ -3103,7 +3816,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
 
         const src = audio.createBufferSource();
         src.buffer = buf;
-        src.playbackRate.setValueAtTime(rate, when);
+        src.playbackRate.setValueAtTime(wordRate, when);
 
         const wordGain = audio.createGain();
         wordGain.gain.setValueAtTime(0.0001, when);
@@ -3118,7 +3831,7 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
         wordGain.connect(uttGain);
 
         nodesSet.add(src);
-        src.start(when, item.entry.start, item.entry.dur);
+        src.start(when, item.entry.start, effectiveDur + 0.005);
         src.onended = () => {
           nodesSet.delete(src);
           src.disconnect();
@@ -3183,6 +3896,10 @@ function pumpVoxLookahead(audio: AudioContext, chain: VoiceAudioChain): void {
     voxUtteranceEndAudioSec = Math.max(voxUtteranceEndAudioSec, when + fDur);
     voxCursorAudioSec = nextCursor;
   }
+  voxHardDeadlineMs = Math.max(
+    voxHardDeadlineMs,
+    nowPerfMs() + Math.max(0, voxUtteranceEndAudioSec - audio.currentTime) * 1000 + 2500,
+  );
 }
 
 function updateAnalyserLipSync(
@@ -3278,6 +3995,7 @@ export function playTurretServoWhir(slewRadians: number): void {
     s.isMusicMuted ||
     s.diagFeedActive ||
     s.phase !== "playing" ||
+    s.lobbyMenuPhase !== "entered_control_room" ||
     (s.isBlackout && !s.isGodMode)
   ) {
     return;
@@ -3362,6 +4080,10 @@ export function computeKomradLiveMood(
     s.powerAllocation.defense +
     s.powerAllocation.facility;
 
+  const preVolkovLocked = isPreVolkovPanelLocked(s);
+  const preVolkovStrikes = preVolkovLocked ? getPreVolkovStrikeCount() : 0;
+  const grabActive = isKomradGrabActive();
+
   const liveCritical =
     s.coreMeltdown ||
     s.steamExplosion ||
@@ -3374,7 +4096,10 @@ export function computeKomradLiveMood(
     s.az5Active ||
     spentCount >= 3 ||
     s.treasonStrikes >= 2 ||
-    totalAllocatedPower > s.maxSafePower;
+    totalAllocatedPower > s.maxSafePower ||
+    preVolkovStrikes >= 3 ||
+    grabActive ||
+    s.siberiaGameOverActive;
 
   const liveWarning =
     !liveCritical &&
@@ -3385,6 +4110,7 @@ export function computeKomradLiveMood(
       s.xenon > 38 ||
       Math.abs(s.drumWaterLevel) > 130 ||
       s.treasonStrikes >= 1 ||
+      (preVolkovStrikes >= 1 && preVolkovStrikes < 3) ||
       anySubFailing);
 
   let mood: KomradMood = liveCritical
@@ -3524,7 +4250,13 @@ export function stepKomradSpeech(
     voxLoadStartedElapsedSec = -1;
   }
 
-  if (s.phase === "playing" && !s.isMusicMuted && audio && audioRunning) {
+  if (
+    s.phase === "playing" &&
+    s.lobbyMenuPhase !== "menu_locked" &&
+    !s.isMusicMuted &&
+    audio &&
+    audioRunning
+  ) {
     ensureVoiceChain(audio, targetMasterLevel);
     ensureVoxPreloaded(audio);
   }
@@ -3537,7 +4269,7 @@ export function stepKomradSpeech(
     voxLoadState === "failed" ||
     (voxLoadStartedElapsedSec >= 0 && elapsedSec - voxLoadStartedElapsedSec >= 2.2);
 
-  if (!s.isShiftControlReady) {
+  if (!s.isShiftControlReady || s.lobbyMenuPhase !== "entered_control_room") {
     if (voxSpeakingAudioActive || visualTypingActive) {
       visualTypingActive = false;
       markKomradTransmissionEnd();
@@ -3570,7 +4302,12 @@ export function stepKomradSpeech(
       elapsedSec + MONOLOGUE_MIN_GAP_SEC + Math.random() * MONOLOGUE_EXTRA_GAP_SEC;
   }
 
-  if (s.phase === "playing" && !isBlackout && !s.komradOpeningDispatched) {
+  if (
+    s.phase === "playing" &&
+    !isBlackout &&
+    !s.komradOpeningDispatched &&
+    !s.diagFeedActive
+  ) {
     openingSettleElapsedSec += dt;
     if (openingSettleElapsedSec >= KOMRAD_OPENING_SETTLE_DELAY_SEC) {
       useGameStore.getState().launchKomradOpeningDispatch();
@@ -3613,6 +4350,15 @@ export function stepKomradSpeech(
       charCursor = latestMsg.text.length;
       markKomradTransmissionEnd();
     }
+    if (visualTypingActive) {
+      visualTypingActive = false;
+      charCursor = latestMsg.text.length;
+      markKomradTransmissionEnd();
+    }
+    if (s.diagFeedActive && pendingVoxMsg && pendingVoxMsgPriority < 3) {
+      pendingVoxMsg = null;
+      pendingVoxMsgPriority = 0;
+    }
     if (subtitleSnapshot.clause !== null || visualSubtitleActive) {
       clearKomradSubtitleNow();
     }
@@ -3642,6 +4388,16 @@ export function stepKomradSpeech(
       charCursor = Math.max(charCursor, activeUtteranceTextLen);
       finishActiveUtterance(elapsedSec);
     }
+  } else if (
+    voxSpeakingAudioActive &&
+    !audioRunning &&
+    voxHardDeadlineMs > 0 &&
+    nowPerfMs() >= voxHardDeadlineMs
+  ) {
+    cancelActiveVoxUtterance(0.02);
+    charCursor = Math.max(charCursor, activeUtteranceTextLen);
+    markKomradTransmissionEnd();
+    clearKomradSubtitleNow();
   }
 
   // Handle newly arriving messages from the store: drop-don't-queue during speech or silence cooldown
@@ -3726,7 +4482,7 @@ export function stepKomradSpeech(
       if (!radioActive && !s.diagFeedActive) {
         beginVisualSubtitle(latestMsg, msgMood);
       }
-    } else if (latestMsg.text.length > 0) {
+    } else if (!s.diagFeedActive && latestMsg.text.length > 0) {
       charCursor = 0;
       charAccumSec = 0;
       vocalState.msgStartSec = elapsedSec;
@@ -3737,7 +4493,7 @@ export function stepKomradSpeech(
         beginVisualSubtitle(latestMsg, msgMood);
       }
     } else {
-      charCursor = 0;
+      charCursor = s.diagFeedActive ? latestMsg.text.length : 0;
       vocalState.activeMsgId = latestMsg.id;
       if (visualTypingActive) {
         visualTypingActive = false;
@@ -4007,6 +4763,14 @@ export function stepKomradSpeech(
     totalLen === 0 ? 0 : Math.max(1, Math.min(totalLen, charCursor));
   vocalState.isTalking = false;
   return vocalState;
+}
+
+export function cancelKomradSpeechForReset(): void {
+  cancelActiveVoxUtterance(0.02);
+  pendingVoxMsg = null;
+  pendingVoxMsgPriority = 0;
+  visualTypingActive = false;
+  clearKomradSubtitleNow();
 }
 
 export function getKomradVocalState(): KomradVocalState {

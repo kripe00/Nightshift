@@ -196,27 +196,13 @@ export const KOMRAD_CONTROL_TARGETS: Readonly<
   // =========================================================================
   // UNIT A — PUMPS, SUBSTATION SECTORS, BORON & AZ-5 SCRAM
   // =========================================================================
-  pumpABearingCool: {
-    id: "pumpABearingCool",
-    station: "UNIT A",
-    label: "PUMP A BEARING COOL WHEEL",
-    worldPos: [-3.445, 1.257, -1.664],
-    approachNormal: [0.226, 0.488, 0.843],
-    standoffGantryPos: [-3.28, 1.62, -0.96],
-    gripType: "wheel",
-    minValue: 0,
-    maxValue: 100,
-    wristSpinTurns: 1.8,
-    readValue: () => useGameStore.getState().oilCoolerValve,
-    writeValue: (v) => useGameStore.getState().setOilCoolerValve(v),
-  },
   pumpAFlow: {
     id: "pumpAFlow",
     station: "UNIT A",
     label: "PUMP A THROTTLE LEVER",
-    worldPos: [-3.285, 1.288, -1.65],
+    worldPos: [-3.364, 1.299, -1.624],
     approachNormal: [0.226, 0.488, 0.843],
-    standoffGantryPos: [-3.12, 1.62, -0.95],
+    standoffGantryPos: [-3.2, 1.62, -0.92],
     gripType: "lever",
     minValue: 0,
     maxValue: 100,
@@ -224,27 +210,13 @@ export const KOMRAD_CONTROL_TARGETS: Readonly<
     readValue: () => useGameStore.getState().pumpThrottle[0] ?? 0,
     writeValue: (v) => useGameStore.getState().setPumpThrottle(0, v),
   },
-  pumpBBearingCool: {
-    id: "pumpBBearingCool",
-    station: "UNIT A",
-    label: "PUMP B BEARING COOL WHEEL",
-    worldPos: [-3.006, 1.257, -1.782],
-    approachNormal: [0.226, 0.488, 0.843],
-    standoffGantryPos: [-2.84, 1.62, -1.08],
-    gripType: "wheel",
-    minValue: 0,
-    maxValue: 100,
-    wristSpinTurns: 1.8,
-    readValue: () => useGameStore.getState().oilCoolerValve,
-    writeValue: (v) => useGameStore.getState().setOilCoolerValve(v),
-  },
   pumpBFlow: {
     id: "pumpBFlow",
     station: "UNIT A",
     label: "PUMP B THROTTLE LEVER",
-    worldPos: [-2.845, 1.288, -1.768],
+    worldPos: [-2.924, 1.299, -1.742],
     approachNormal: [0.226, 0.488, 0.843],
-    standoffGantryPos: [-2.68, 1.62, -1.06],
+    standoffGantryPos: [-2.76, 1.62, -1.04],
     gripType: "lever",
     minValue: 0,
     maxValue: 100,
@@ -378,7 +350,7 @@ export const KOMRAD_CONTROL_TARGETS: Readonly<
     id: "az5Cover",
     station: "UNIT A",
     label: "AZ-5 SAFETY COVER LATCH",
-    worldPos: [-2.503, 1.264, -1.927],
+    worldPos: [-2.503, 1.155, -1.86],
     approachNormal: [0.226, 0.488, 0.843],
     standoffGantryPos: [-2.34, 1.62, -1.2],
     gripType: "lever",
@@ -520,8 +492,10 @@ export const KOMRAD_CONTROL_TARGETS: Readonly<
       const s = useGameStore.getState();
       if (v >= 0.5) {
         s.lockAllContainmentSeals();
-      } else if (s.mcpActive[3]) {
-        s.toggleMcpPump(3, false);
+      } else {
+        s.toggleSealSwitch(0, false);
+        s.toggleSealSwitch(1, false);
+        s.toggleSealSwitch(2, false);
       }
     },
   },
@@ -622,20 +596,6 @@ export const KOMRAD_CONTROL_TARGETS: Readonly<
         s.toggleAuxLoopB(v >= 0.5);
       }
     },
-  },
-  batteryOutputValve: {
-    id: "batteryOutputValve",
-    station: "UNIT C",
-    label: "BATTERY DISPATCH RELAY (0-100%)",
-    worldPos: [-4.876, 1.031, 1.42],
-    approachNormal: [0.919, 0.395, 0],
-    standoffGantryPos: [-4.14, 1.56, 1.42],
-    gripType: "knob",
-    minValue: 0,
-    maxValue: 100,
-    wristSpinTurns: 1.4,
-    readValue: () => useGameStore.getState().batteryOutputValve * 100,
-    writeValue: (v) => useGameStore.getState().setBatteryOutputValve(v),
   },
 
   // =========================================================================
@@ -1231,7 +1191,7 @@ export function stepKomradArmController(
       }
 
       if (p >= 1) {
-        if (spec.id === "az5") {
+        if (spec.id === "az5" || spec.id === "az5Cover") {
           visualOverrideMap.delete("az5Cover");
         }
         _armFrameState.phase = "release_and_retract";
@@ -1254,7 +1214,7 @@ export function stepKomradArmController(
         visualOverrideMap.delete("rodRefuelLever");
         visualOverrideMap.delete("emergSealLock");
         visualOverrideMap.delete("bubblerDrain");
-        if (spec.id === "az5") {
+        if (spec.id === "az5" || spec.id === "az5Cover") {
           visualOverrideMap.delete("az5Cover");
         }
       }

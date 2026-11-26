@@ -34,6 +34,7 @@ export type DiagnosticAlarmId =
   | 'grid'
   | 'order'
 export type GamePhase = 'boot' | 'playing' | 'victory' | 'meltdown' | 'gulag'
+export type LobbyMenuPhase = 'menu_locked' | 'door_opening' | 'entered_control_room'
 export type CameraStation =
   | 'overview'
   | 'reactor'
@@ -166,9 +167,102 @@ export interface ActivePost84PowerOrder {
   sectorMaxMW?: Partial<Record<SectorNodeId, number>>
 }
 
+export interface Post84SavedOrderSpec {
+  templateId: string
+  orderState: 'pending' | 'active' | 'completed'
+  holdDurationSec: number
+  holdProgressSec: number
+  rewardRub: number
+  quotaPoints: number
+  objectiveSummary: string
+  arrivalVox: string
+}
+
+export interface Post84SavedMessage {
+  id: string
+  sender: string
+  orgTag: string
+  subject: string
+  timestamp: string
+  bodyLines: string[]
+  status: 'unread' | 'read'
+  order?: Post84SavedOrderSpec
+  trainingDirective?: {
+    state: 'pending' | 'accepted' | 'skipped'
+  }
+}
+
+export interface Post84InboxSnapshot {
+  mailMessages: Post84SavedMessage[]
+  selectedMailId: string
+  mailScrollOffset: number
+  mailEarnedRub: number
+  mailOrdersCompleted: number
+  lastStatusNotice: string
+  orderDeck: string[]
+  orderSequence: number
+  lastOrderTemplateId?: string
+  orderSpawnCountdownSec: number | null
+  tutorialCompletedSeen: boolean
+}
+
+export interface SavedGameStatePayload extends Partial<ReactorState> {
+  shiftNumber: number
+  shiftTimeMinutes: number
+  treasonStrikes: number
+  lastDecisionFeedback: string | null
+  activeMandate: OperationalMandate | null
+  activePost84Order?: ActivePost84PowerOrder | null
+  rubles?: number
+  quotaCompleted?: number
+  post84InboxSnapshot?: Post84InboxSnapshot | null
+  preOrderSectorTargets?: Record<SectorNodeId, number> | null
+  tutorialPhase?: TutorialPhase
+  tutorialStep?: TutorialStep
+  tutorialHintsHidden?: boolean
+  dismissedCrisisIds?: CrisisCoachId[]
+  coreTemp: number
+  pressureBar: number
+  radiationLevel: number
+  powerAllocation: Record<SystemType, number>
+  redlineInstability: number
+  isBlackout: boolean
+  pumpsActive: [boolean, boolean]
+  pumpThrottle: [number, number]
+  pumpAHeat: number
+  pumpBHeat: number
+  lubeOilPressure: number
+  oilCoolerValve: number
+  boronTankLevel: number
+  boronDampingTimer?: number
+  boronCooldown?: number
+  graphiteTemp: number
+  nitrogenLoopValve: number
+  heliumPressure: number
+  bubblerLevel: number
+  sealToggles: [boolean, boolean, boolean]
+  containmentSealLocked: boolean
+  gridHz: number
+  excitationTrim: number
+  ventilationActive: boolean
+  kgbLineActive: boolean
+  auxLoopBActive?: boolean
+  controlRodLevel?: number
+  coolantFlow?: number
+  fuelBurnupTimer?: number
+  az5Active?: boolean
+  az5Timer?: number
+  az5Cooldown?: number
+  az5Available?: boolean
+  radioOn?: boolean
+  radioVolume?: number
+  vodkaDroughtTimer?: number
+}
+
 export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspecting'> {
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
+  lobbyMenuPhase: LobbyMenuPhase
   isShiftControlReady: boolean
   komradOpeningDispatched: boolean
   activeStation: CameraStation
@@ -180,9 +274,12 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   isGodMode: boolean // F2 Debug menu toggle (pauses meltdown/strikes for Komrad Oleg)
   isMusicMuted: boolean
   treasonStrikes: number // 0 to 3 (3 = Gulag Game Over)
+  rubles: number
+  quotaCompleted: number
   lastDecisionFeedback: string | null
   activeMandate: OperationalMandate | null
   activePost84Order: ActivePost84PowerOrder | null
+  post84InboxSnapshot: Post84InboxSnapshot | null
   tutorialPhase: TutorialPhase
   tutorialPrompt: TutorialPrompt
   tutorialHintsHidden: boolean
@@ -272,6 +369,7 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   komradSubtitle: KomradSubtitleState | null
 
   // Shared Actions
+  setLobbyMenuPhase: (phase: LobbyMenuPhase) => void
   setShiftControlReady: (ready: boolean) => void
   launchKomradOpeningDispatch: () => void
   setActiveStation: (station: CameraStation) => void
@@ -279,7 +377,8 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   toggleSeatedAtDesk: () => void
   setCanSitAtDesk: (canSit: boolean) => void
   startShift: () => void
-  resetShift: () => void
+  resetShift: (targetLobbyPhase?: LobbyMenuPhase) => void
+  restoreSavedShift: (savedGame: Partial<SavedGameStatePayload>) => void
   skipTutorial: () => void
   acceptVolkovTrainingDirective: () => void
   advanceTutorialStep: () => void
@@ -320,6 +419,10 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   setSectorPower: (sector: SectorNodeId, targetMW: number) => void
   shiftSectorPower: (sector: SectorNodeId, deltaMW: number) => void
   setActivePost84Order: (order: ActivePost84PowerOrder | null) => void
+  addRubles: (delta: number) => void
+  spendRubles: (amount: number) => void
+  addQuotaCompleted: (delta?: number) => void
+  setPost84InboxSnapshot: (snapshot: Post84InboxSnapshot | null) => void
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => void
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => void
   setOilCoolerValve: (valvePct: number) => void

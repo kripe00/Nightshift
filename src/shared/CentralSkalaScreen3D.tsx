@@ -10,6 +10,7 @@ import { useDeskStore } from "../modules/inspector/useDeskStore";
 import { playSwitchClank } from "../modules/reactor/audioSynth";
 import type { TutorialPhase } from "../simulation/rbmkPhysics";
 import { NOOP_RAYCAST } from "./ExteriorDioramas3D";
+import { controlRoomPowerState } from "./ControlRoomScene";
 import { CONSOLE_WORLD_TARGETS, CRISIS_COACH_CARDS } from "./komradTutorialVox";
 import { onKremlinFontReady } from "./kremlinFontReady";
 import type { CrisisCoachId } from "./types";
@@ -178,7 +179,7 @@ function getVolkovStepInfo(
       return {
         step: 4,
         highlight: "UNIT_B",
-        tag: `STEP 5/6: SET FEEDWATER ~50% (VENT IF >75 BAR) [UNIT B] — FW ${fw}% | ${bar} BAR`,
+        tag: `STEP 5/6: SET FEEDWATER ~50% (BUBBLER DRAIN IF >75 BAR) [UNIT B] — FW ${fw}% | ${bar} BAR`,
       };
     }
     case "STEP_7_VOID_DRILL": {
@@ -376,7 +377,7 @@ function buildSkalaTutorialViewSpec(
         title: "STEAM DRUM WATER & PRESSURE",
         where: "UNIT B — RIGHT WING CONSOLE  [KEY 3]",
         doThis:
-          "Turn FEEDWATER VALVE UP (~50%) to return Drum Level toward 0 mm. Hold STEAM VENT if > 75 BAR.",
+          "Turn FEEDWATER VALVE UP (~50%) to return Drum Level toward 0 mm. Pull BUBBLER DRAIN lever if > 75 BAR.",
         why: "Boiling empties your water tank: too little water melts the core; > 75 BAR overpressurizes pipes.",
         pct: Math.min(100, Math.round((Math.min(50, fw) / 50) * 100)),
         liveReadout: `FEEDWATER: ${fw}% -> 50%   |   DRUM: ${mm > 0 ? `+${mm}` : mm} MM   |   ${bar} BAR`,
@@ -935,6 +936,14 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
     const now = clock.getElapsedTime();
     const state = useGameStore.getState();
     const sim = simRef.current;
+
+    if (crtMatRef.current) {
+      const skalaPower =
+        state.lobbyMenuPhase !== "entered_control_room"
+          ? 0.14
+          : THREE.MathUtils.lerp(0.14, 1.0, controlRoomPowerState.zone3);
+      crtMatRef.current.color.setRGB(skalaPower, skalaPower, skalaPower);
+    }
 
     // -------------------------------------------------------------------------
     // EASTER EGG VIDEO OVERRIDE (`sys/skala84_diag.mp4` / Shift+A+Z+5)
@@ -2663,6 +2672,7 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
       >
         <meshBasicMaterial
           ref={crtMatRef}
+          color="#242424"
           map={crtTexture}
           toneMapped={false}
           fog={false}

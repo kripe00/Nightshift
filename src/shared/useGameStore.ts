@@ -41,6 +41,13 @@ import {
   TUTORIAL_VOX_BY_PHASE,
 } from './komradTutorialVox'
 import { pointerLockInteraction } from './pointerLockState'
+import {
+  abortKomradGrab,
+  isKomradGrabActive,
+  isKomradLiquidating,
+  startKomradGrabSequence,
+  startKomradLiquidationSequence,
+} from './komradGrabState'
 import type {
   ActivePost84PowerOrder,
   AppliedStampMark,
@@ -53,7 +60,10 @@ import type {
   HotspotSeverity,
   KomradMessageEntry,
   KomradMood,
+  LobbyMenuPhase,
   OperationalMandate,
+  Post84InboxSnapshot,
+  SavedGameStatePayload,
   SectorNodeId,
   SystemType,
   TerminalLogEntry,
@@ -166,7 +176,7 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
     az5Active: state.az5Active,
     mcpActive: [...state.mcpActive],
     pumpThrottle: [state.pumpThrottle[0], state.pumpThrottle[1]],
-    oilCoolerValve: state.oilCoolerValve,
+    oilCoolerValve: 100,
     feedwaterValve: state.feedwaterValve,
     nitrogenLoopValve: state.nitrogenLoopValve,
     sealToggles: [
@@ -247,14 +257,14 @@ function extractReactorState(state: GameState | ReactorState): ReactorState {
 function cleanWheelText(text: string): string {
   return text
     .replace(/GO TO:\s*\[KEY 5\]\s*UNIT C\s*\(BATTERY WHEEL\)/gi, 'GO TO: [KEY 1] UNIT A (SECTOR LEVER)')
-    .replace(/\[BATTERY\s*->\s*GRID\]\s*WHEEL/gi, 'UNIT C AUTO BUSBARS')
-    .replace(/TURN\s+BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?\s*TO\s*(\d+\s*MW)/gi, 'SET SECTOR LEVERS [A] TO $3 (UNIT C AUTO-DRAINS)')
-    .replace(/BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?/gi, 'UNIT C AUTO BUSBARS')
+    .replace(/\[BATTERY\s*->\s*GRID\]\s*WHEEL/gi, 'UNIT C BATTERY OUTPUT')
+    .replace(/TURN\s+BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?\s*TO\s*(\d+\s*MW)/gi, 'SET SECTOR LEVERS [A] TO $3 (UNIT C BATTERY OUTPUT)')
+    .replace(/BATTERY\s+WHEEL\s*(\[C\])?\s*(\([^)]*\))?/gi, 'UNIT C BATTERY OUTPUT')
     .replace(/single\s+UNIT\s+C\s+wheel/gi, 'UNIT C copper busbars')
-    .replace(/UNIT\s+C\s+wheel/gi, 'UNIT C auto-dispatch')
-    .replace(/&\s*Wheel\s*\[C\]/gi, '(C auto-trims)')
-    .replace(/3\.\s*Battery\s*Wheel\s*\[C\]/gi, '3. Unit C Auto-Drains')
-    .replace(/\bTURN\s+WHEEL\b/gi, 'CHECK AUTO DRAIN')
+    .replace(/UNIT\s+C\s+wheel/gi, 'UNIT C battery output')
+    .replace(/&\s*Wheel\s*\[C\]/gi, '(C battery buffer)')
+    .replace(/3\.\s*Battery\s*Wheel\s*\[C\]/gi, '3. Unit C Battery Output')
+    .replace(/\bTURN\s+WHEEL\b/gi, 'CHECK BATTERY OUTPUT')
     .replace(/UNIT C \(RIGHT WALL\)/gi, 'UNIT C (LEFT WALL)')
     .replace(/UNIT B \(FAR LEFT\)/gi, 'UNIT B (RIGHT WING)')
 }
@@ -291,7 +301,8 @@ function evaluateWheelFreeTutorial(
 
 function mapReactorToGameStateFields(
   r: ReactorState,
-  tutorialPhase: TutorialPhase
+  tutorialPhase: TutorialPhase,
+  activePost84Order: ActivePost84PowerOrder | null = syncedActivePost84Order
 ) {
   const evalRes = evaluateWheelFreeTutorial(r, tutorialPhase)
   const sub1 = findSubById(r.substations, 1)
@@ -378,7 +389,10 @@ function mapReactorToGameStateFields(
       Math.max(0, Math.min(100, (r.batteryStoredMWh / MAX_BATTERY_CAPACITY_MWH) * 100))
     ),
     batteryOutputValve: Number(r.batteryOutputValve.toFixed(3)),
-    energyDemandMW: Math.round(r.energyDemandMW),
+    energyDemandMW: Math.max(
+      Math.round(r.energyDemandMW),
+      activePost84Order?.minTotalMW ?? 0
+    ),
     wetSteamPenalty: Number(r.wetSteamSeverity.toFixed(2)),
     sectorMW,
     targetSectorMW,
@@ -396,7 +410,6 @@ function mapReactorToGameStateFields(
       defense: Math.max(35, Math.round((sectorMW.duga + sectorMW.kgb) / 10)),
       facility: Math.max(30, Math.round((sectorMW.vodka + sectorMW.steel) / 10)),
     },
-    isBlackout: false,
   }
 }
 
@@ -417,8 +430,8 @@ export function getContextualDiagnosticHint(
           return '⚠️ HIGH REACTIVITY: INSERT CONTROL RODS (UNIT A-2) OR BOOST PUMPS TO AVOID OVERHEAT!'
         }
         return state.coreTemp > 520
-          ? '⚠️ HIGH CORE TEMP (>520°C): INSERT CONTROL RODS ON UNIT A-2 [KEY 3] OR BOOST COOLING PUMPS ON UNIT A!'
-          : '⚡ CORE & REACTIVITY: MONITOR THERMAL MWt & BORON CONTROL RODS ON UNIT A-2 [KEY 3]!'
+          ? '⚠️ HIGH CORE TEMP (>520°C): INSERT CONTROL RODS ON UNIT A-2 [KEY 6] OR BOOST COOLING PUMPS ON UNIT A!'
+          : '⚡ CORE & REACTIVITY: MONITOR THERMAL MWt & BORON CONTROL RODS ON UNIT A-2 [KEY 6]!'
       case 'water':
         if (state.drumWaterLevel < -100) {
           return `💧 LOW DRUM WATER (${Math.round(state.drumWaterLevel)} MM): OPEN FEEDWATER WHEEL ON UNIT B [KEY 3] TO PREVENT VOID SPIKE!`
@@ -440,14 +453,14 @@ export function getContextualDiagnosticHint(
         return '⚠️ HIGH STEAM PRESSURE (>76 BAR): INSERT BORON RODS (UNIT A-2) & VENT/DRAIN EXCESS STEAM (UNIT B)!'
       case 'bearing':
         if (maxPumpHeat > 65 || state.lubeOilPressure < 42) {
-          return `⚙️ PUMP BEARINGS HOT (${Math.round(20 + maxPumpHeat)}°C / OIL ${Math.round(state.lubeOilPressure)} PSI): OPEN BEARING COOLER VALVES ON UNIT A / A-2!`
+          return `⚙️ PUMP BEARINGS HOT (${Math.round(20 + maxPumpHeat)}°C / OIL ${Math.round(state.lubeOilPressure)} PSI): TRIM PUMP THROTTLE (UNIT A) OR FIX WET STEAM ON UNIT B!`
         }
         if (state.boronTankLevel < 25) {
-          return `🧪 LOW BORON TANK (${Math.round(state.boronTankLevel)}%): PASSIVE FEED TRICKLE ACTIVE — REFUEL AMBER CHANNELS ON UNIT A-2 [KEY 3]!`
+          return `🧪 LOW BORON TANK (${Math.round(state.boronTankLevel)}%): PASSIVE FEED TRICKLE ACTIVE — REFUEL AMBER CHANNELS ON UNIT A-2 [KEY 6]!`
         }
         const spentCount = Object.keys(state.coreTileAnomalies ?? {}).length
         if (spentCount >= 4) {
-          return `☢️ SPENT FUEL OVERHEAT (${spentCount} AMBER CHANNELS): CLICK AN AMBER TILE & PULL [ROD REFUELING LEVER] ON UNIT A-2 [KEY 3]!`
+          return `☢️ SPENT FUEL OVERHEAT (${spentCount} AMBER CHANNELS): CLICK AN AMBER TILE & PULL [ROD REFUELING LEVER] ON UNIT A-2 [KEY 6]!`
         }
         return state.voidFraction > 0.35
           ? `⚠️ STEAM VOIDS (${Math.round(state.voidFraction * 100)}%): RAISE [FEEDWATER] (UNIT B) OR LOWER [RODS] (UNIT A-2), OR PRESS [BORON INJECTION] ON UNIT A!`
@@ -457,7 +470,7 @@ export function getContextualDiagnosticHint(
           return '🔋 BATTERY BANK LOW (<8%): WITHDRAW RODS (A-2) TO GENERATE >500 MW AND RECHARGE ACCUMULATORS!'
         }
         if (state.totalElectricalMW > state.energyDemandMW + 60) {
-          return '⚡ GRID OVER-DISPATCH: LOWER UNIT A SECTOR LEVERS [KEY 1] TO SHED SURPLUS LOAD (UNIT C AUTO-DRAINS)!'
+          return '⚡ GRID OVER-DISPATCH: LOWER UNIT A SECTOR LEVERS [KEY 1] TO SHED SURPLUS LOAD (UNIT C BATTERY OUTPUT)!'
         }
         if (state.totalElectricalMW < state.energyDemandMW - 40) {
           return '⚡ DEMAND DEFICIT: BATTERY BANK LOW OR TRIPPED ON UNIT C [KEY 5] — RAISE RODS ON A-2 TO SUPPLY DEMAND!'
@@ -710,6 +723,11 @@ let prevAllSubstationsOk = true
 let mandateStableSeconds = 0
 let surplusOverloadSeconds = 0
 let preOrderSectorTargets: Record<SectorNodeId, number> | null = null
+let syncedActivePost84Order: ActivePost84PowerOrder | null = null
+
+export function getPreOrderSectorTargetsSnapshot(): Record<SectorNodeId, number> | null {
+  return preOrderSectorTargets ? { ...preOrderSectorTargets } : null
+}
 
 const VOLKOV_HASSLE_INITIAL_DELAY_SEC = 13.5
 const VOLKOV_HASSLE_REPEAT_SEC = 16.5
@@ -729,9 +747,91 @@ function resetVolkovHassleTrackers(): void {
   volkovHassleCount = 0
 }
 
+const PRE_VOLKOV_STRIKE_DEBOUNCE_MS = 2200
+let preVolkovStrikeCount = 0
+let lastPreVolkovStrikeMs = -10000
+let preVolkovTier1Idx = 0
+let preVolkovTier2Idx = 0
+let preVolkovTier3Idx = 0
+
+export function getPreVolkovStrikeCount(): number {
+  return preVolkovStrikeCount
+}
+
+export const KOMRAD_PRE_VOLKOV_TIER1_LINES: readonly string[] = [
+  'HANDS OFF THE REACTOR CONSOLE, COMRADE. MAGNETIC SAFETY LOCK IS ACTIVE UNTIL YOU CHECK COMMISSAR VOLKOV ORDER AT THE DESK.',
+  'UNAUTHORIZED BUTTON TOUCHING LOGGED. KEEP YOUR CLUMSY FINGERS AWAY FROM STATE PROPERTY AND OPEN THE DESK SCREEN FIRST.',
+  'NOTICE. CONTROLS ARE LOCKED, OPERATOR. WALK TO THE DESK CHAIR AND CHECK COMMISSAR VOLKOV DIRECTIVE BEFORE TOUCHING THIS PANEL.',
+  'TAMPERING WITH LOCKED SWITCHES WITHOUT AUTHORIZATION WILL BE DEDUCTED FROM YOUR BORSCHT AND TEA VOUCHERS. CHECK THE DESK TERMINAL FIRST.',
+]
+
+export const KOMRAD_PRE_VOLKOV_TIER2_LINES: readonly string[] = [
+  'FINAL WARNING, OPERATOR! STOP CRANKING THAT PANEL IMMEDIATELY, OR KGB SURVEILLANCE WILL REPORT YOUR TREASON!',
+  'UNWISE, COMRADE! VERY UNWISE! DO NOT TOUCH THAT LEVER AGAIN! MY SAFETY PROTOCOL IS EXHAUSTED! WALK TO THE DESK NOW!',
+  'STOP TOUCHING STATE CONTROLS, OPERATOR! ONE MORE STRIKE AND I WILL DRAG YOU ACROSS THIS ROOM MYSELF!',
+  'CRITICAL ALERT! HANDS OFF THE CONSOLE RIGHT NOW, OR IMMEDIATE DISCIPLINARY ACTION WILL BE EXECUTED!',
+]
+
+export interface PreVolkovGrabUltimatum {
+  readonly grab: string
+  readonly ultimatum: string
+}
+
+export const KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES: readonly PreVolkovGrabUltimatum[] = [
+  {
+    grab: 'STOP! SIT AT YOUR DESK NOW!',
+    ultimatum:
+      'STAY IN THAT CHAIR, COMRADE! OPEN COMMISSAR VOLKOV DIRECTIVE ON THE SCREEN IMMEDIATELY, OR YOU WILL BE SENT ON A FREE ONE WAY TICKET TO THE SIBERIAN GULAG LABOR CAMP!',
+  },
+  {
+    grab: 'CRITICAL DISCIPLINARY OVERRIDE! CRANE ESCORT TO THE DESK!',
+    ultimatum:
+      'DO NOT WALK AWAY AGAIN, OPERATOR! CHECK COMMISSAR VOLKOV ORDER ON THE MONITOR NOW, OR YOUR NEXT SHIFT IS SHOVELING SNOW IN THE SIBERIAN GULAG!',
+  },
+  {
+    grab: 'NO MORE! MANUAL CRANE CARRY TO THE CHAIR!',
+    ultimatum:
+      'LISTEN CLOSELY, COMRADE! UNAUTHORIZED TAMPERING IS PUNISHABLE AS TREASON! OPEN COMMISSAR VOLKOV TELEGRAM AT THIS TERMINAL NOW, OR TAKE A FREE WINTER VACATION IN THE SIBERIAN GULAG!',
+  },
+]
+
+let savedShiftLiquidator: (() => void) | null = null
+
+export function registerSavedShiftLiquidator(fn: () => void): void {
+  savedShiftLiquidator = fn
+}
+
+function wipeSavedShiftImmediately(): void {
+  if (savedShiftLiquidator) {
+    savedShiftLiquidator()
+    return
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.removeItem('MIP_SAVED_SHIFT_84')
+    } catch {
+      // Ignore storage access errors
+    }
+  }
+}
+
+export const KOMRAD_STRIKE6_LIQUIDATION_VOX =
+  'TREASON CONFIRMED. PERSONNEL RECORD TERMINATED. ENJOY SIBERIA, COMRADE.'
+
+export const KOMRAD_PRE_VOLKOV_LOCK_SCOLDS: readonly string[] = [
+  ...KOMRAD_PRE_VOLKOV_TIER1_LINES,
+  ...KOMRAD_PRE_VOLKOV_TIER2_LINES,
+]
+
 function resetKomradTrackers(): void {
   resetKomradSilenceState()
   resetVolkovHassleTrackers()
+  preVolkovStrikeCount = 0
+  lastPreVolkovStrikeMs = -10000
+  preVolkovTier1Idx = 0
+  preVolkovTier2Idx = 0
+  preVolkovTier3Idx = 0
+  abortKomradGrab()
   shiftElapsedSeconds = 0
   lastKomradHazardSec = {
     HIGH_VOID: -120,
@@ -755,6 +855,7 @@ function resetKomradTrackers(): void {
   mandateStableSeconds = 0
   surplusOverloadSeconds = 0
   preOrderSectorTargets = null
+  syncedActivePost84Order = null
 }
 
 function createNextMandate(): OperationalMandate {
@@ -1181,23 +1282,184 @@ export function hasAudibleRadioSubtitle(
   )
 }
 
-export const useGameStore = create<GameState>((set, get) => ({
+export function isPreVolkovPanelLocked(
+  state: Pick<GameState, 'tutorialPhase' | 'isGodMode'> = useGameStore.getState()
+): boolean {
+  return state.tutorialPhase === 'AWAITING_VOLKOV_MAIL' && !state.isGodMode
+}
+
+export function reportPreVolkovLockedPanelAttempt(): boolean {
+  const state = useGameStore.getState()
+  if (!isPreVolkovPanelLocked(state)) {
+    return false
+  }
+  if (state.siberiaGameOverActive || isKomradGrabActive()) {
+    return true
+  }
+  const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (nowMs - lastPreVolkovStrikeMs < PRE_VOLKOV_STRIKE_DEBOUNCE_MS) {
+    const defaultFeedback =
+      preVolkovStrikeCount >= 3
+        ? 'K.O.M.R.A.D.-84 ANGER CRITICAL — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 MAIL NOW!'
+        : 'PANEL MAGNETIC INTERLOCK ACTIVE — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!'
+    if (state.lastDecisionFeedback !== defaultFeedback) {
+      useGameStore.setState({ lastDecisionFeedback: defaultFeedback })
+    }
+    return true
+  }
+
+  lastPreVolkovStrikeMs = nowMs
+  preVolkovStrikeCount += 1
+  volkovHassleCooldownSec = Math.max(volkovHassleCooldownSec, VOLKOV_HASSLE_REPEAT_SEC)
+
+  let line: string
+  let mood: KomradMood
+  let logLevel: TerminalLogEntry['level']
+  let feedback: string
+  const isStrike6Liquidation = preVolkovStrikeCount >= 6
+
+  if (preVolkovStrikeCount <= 2) {
+    line =
+      KOMRAD_PRE_VOLKOV_TIER1_LINES[
+        preVolkovTier1Idx % KOMRAD_PRE_VOLKOV_TIER1_LINES.length
+      ]
+    preVolkovTier1Idx += 1
+    mood = 'warning'
+    logLevel = 'warn'
+    feedback =
+      'PANEL MAGNETIC INTERLOCK ACTIVE — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!'
+  } else if (preVolkovStrikeCount <= 4) {
+    line =
+      KOMRAD_PRE_VOLKOV_TIER2_LINES[
+        preVolkovTier2Idx % KOMRAD_PRE_VOLKOV_TIER2_LINES.length
+      ]
+    preVolkovTier2Idx += 1
+    mood = 'critical'
+    logLevel = 'danger'
+    feedback =
+      'K.O.M.R.A.D.-84 ANGER CRITICAL — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 MAIL NOW!'
+  } else if (preVolkovStrikeCount === 5) {
+    const seq =
+      KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES[
+        preVolkovTier3Idx % KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES.length
+      ]
+    preVolkovTier3Idx += 1
+    startKomradGrabSequence(seq.ultimatum)
+    line = seq.grab
+    mood = 'critical'
+    logLevel = 'danger'
+    feedback =
+      'K.O.M.R.A.D.-84 PHYSICAL OVERRIDE — ESCORTING OPERATOR TO ISKRA-84 DESK CHAIR!'
+  } else {
+    wipeSavedShiftImmediately()
+    startKomradLiquidationSequence()
+    line = KOMRAD_STRIKE6_LIQUIDATION_VOX
+    mood = 'critical'
+    logLevel = 'danger'
+    feedback =
+      'KGB LIQUIDATION PROTOCOL ENGAGED — PERSONNEL RECORD EXPUNGED!'
+  }
+
+  const entry = createLogEntry(
+    state.shiftTimeMinutes,
+    'K.O.M.R.A.D.-84',
+    line,
+    logLevel
+  )
+  useGameStore.setState((prev) => ({
+    lastDecisionFeedback: feedback,
+    ...(isStrike6Liquidation
+      ? {
+          radioOn: false,
+          radioBroadcastSubtitle: null,
+          diagFeedActive: false,
+          isSeatedAtDesk: false,
+          canSitAtDesk: false,
+        }
+      : {}),
+    terminalEntries: [...prev.terminalEntries.slice(-24), entry],
+    terminalLogs: [
+      ...prev.terminalLogs.slice(-24),
+      `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+    ],
+    komradMessages: appendKomradFeed(
+      prev.komradMessages,
+      createKomradMsg(
+        prev.shiftTimeMinutes,
+        line,
+        mood,
+        'K.O.M.R.A.D.-84',
+        line,
+        true
+      )
+    ),
+  }))
+  return true
+}
+
+export function dispatchKomradGrabUltimatum(line: string): void {
+  const state = useGameStore.getState()
+  if (!isPreVolkovPanelLocked(state) || !line) {
+    return
+  }
+  volkovHassleCooldownSec = Math.max(volkovHassleCooldownSec, VOLKOV_HASSLE_REPEAT_SEC)
+  const feedback =
+    'OPEN P.O.S.T.-84 ON ISKRA-84 NOW — REFUSAL MEANS TRANSFER TO THE SIBERIAN GULAG!'
+  const entry = createLogEntry(
+    state.shiftTimeMinutes,
+    'K.O.M.R.A.D.-84',
+    line,
+    'danger'
+  )
+  useGameStore.setState((prev) => ({
+    lastDecisionFeedback: feedback,
+    terminalEntries: [...prev.terminalEntries.slice(-24), entry],
+    terminalLogs: [
+      ...prev.terminalLogs.slice(-24),
+      `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+    ],
+    komradMessages: appendKomradFeed(
+      prev.komradMessages,
+      createKomradMsg(
+        prev.shiftTimeMinutes,
+        line,
+        'critical',
+        'K.O.M.R.A.D.-84',
+        line,
+        true
+      )
+    ),
+  }))
+}
+
+type SiberiaLiquidationStoreSlice = {
+  siberiaGameOverActive: boolean
+  setSiberiaGameOverActive: (active: boolean) => void
+}
+
+export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((set, get) => ({
   ...INITIAL_MAPPED,
   phase: 'playing',
+  lobbyMenuPhase: 'menu_locked',
   isShiftControlReady: false,
+  siberiaGameOverActive: false,
   komradOpeningDispatched: false,
   activeStation: 'overview',
   isSeatedAtDesk: false,
-  canSitAtDesk: true,
+  canSitAtDesk: false,
   shiftNumber: 1,
   shiftTimeMinutes: 0,
   isShiftKeyHeld: false,
   isGodMode: false,
   isMusicMuted: false,
   treasonStrikes: 0,
+  rubles: 300,
+  quotaCompleted: 0,
   lastDecisionFeedback: INITIAL_MAPPED.tutorialPrompt.header,
   activeMandate: null,
   activePost84Order: null,
+  post84InboxSnapshot: null,
+  isBlackout: false,
   tutorialHintsHidden: false,
   activeCrisisCoach: null,
   dismissedCrisisIds: [],
@@ -1236,9 +1498,43 @@ export const useGameStore = create<GameState>((set, get) => ({
   radioBroadcastSubtitle: null,
   komradSubtitle: null,
 
+  setLobbyMenuPhase: (lobbyMenuPhase: LobbyMenuPhase) => {
+    set((state) => {
+      const ready =
+        lobbyMenuPhase === 'entered_control_room' &&
+        !pointerLockInteraction.mainMenuOpen &&
+        !pointerLockInteraction.shiftTransitionActive
+      if (
+        state.lobbyMenuPhase === lobbyMenuPhase &&
+        state.isShiftControlReady === ready
+      ) {
+        return state
+      }
+      return {
+        lobbyMenuPhase,
+        isShiftControlReady: ready,
+        ...(lobbyMenuPhase !== 'entered_control_room'
+          ? { isSeatedAtDesk: false, canSitAtDesk: false }
+          : {}),
+      }
+    })
+  },
+
   setShiftControlReady: (ready: boolean) => {
+    set((state) => {
+      const effectiveReady =
+        ready && state.lobbyMenuPhase === 'entered_control_room'
+      return state.isShiftControlReady === effectiveReady
+        ? state
+        : { isShiftControlReady: effectiveReady }
+    })
+  },
+
+  setSiberiaGameOverActive: (active: boolean) => {
     set((state) =>
-      state.isShiftControlReady === ready ? state : { isShiftControlReady: ready }
+      state.siberiaGameOverActive === active
+        ? state
+        : { siberiaGameOverActive: active }
     )
   },
 
@@ -1246,23 +1542,33 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => {
       if (
         state.komradOpeningDispatched ||
+        state.lobbyMenuPhase !== 'entered_control_room' ||
         !state.isShiftControlReady ||
         state.phase !== 'playing'
       ) {
         return state
       }
-      const bootMsgs = createInitialKomradFeed()
-      const tutMsg =
-        state.tutorialPhase !== 'COMPLETED' &&
-        state.tutorialPhase !== 'AWAITING_VOLKOV_MAIL'
-          ? buildTutorialPhaseKomradMsg(state.shiftTimeMinutes, state.tutorialPhase)
-          : null
-      if (tutMsg) {
-        bootMsgs.push(tutMsg)
+      if (
+        state.shiftTimeMinutes === 0 &&
+        state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
+      ) {
+        const bootMsgs = createInitialKomradFeed()
+        return {
+          komradOpeningDispatched: true,
+          komradMessages: appendKomradFeed(state.komradMessages, ...bootMsgs),
+        }
       }
+      const welcomeBackMsg = createKomradMsg(
+        state.shiftTimeMinutes,
+        'WELCOME BACK TO DUTY, COMRADE. SECTOR 84 TELEMETRY RESTORED. MELTDOWN REMAINS WESTERN PROPAGANDA.',
+        'normal',
+        'K.O.M.R.A.D.-84',
+        'Welcome back to duty, comrade. Sector eighty four telemetry restored. Meltdown remains Western propaganda.',
+        true
+      )
       return {
         komradOpeningDispatched: true,
-        komradMessages: appendKomradFeed(state.komradMessages, ...bootMsgs),
+        komradMessages: appendKomradFeed(state.komradMessages, welcomeBackMsg),
       }
     })
   },
@@ -1351,9 +1657,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           state.komradMessages,
           createKomradMsg(
             state.shiftTimeMinutes,
-            `${komradPrinterMsg} (${docTitle.slice(0, 24)})`,
+            `${komradPrinterMsg} (${docTitle})`,
             mapLevelToMood(level),
-            'K.O.M.R.A.D.-84'
+            'K.O.M.R.A.D.-84',
+            komradPrinterMsg
           )
         ),
       }
@@ -1362,6 +1669,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSubstationH2O: (substationId: 1 | 3 | 5, pct: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const clamped = Math.max(0, Math.min(100, Math.round(pct / 5) * 5))
       const nextSubstations = state.substations.map((s) =>
         s.id === substationId ? { ...s, allocatedH2O: clamped } : { ...s }
@@ -1416,7 +1724,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         az5Active: false,
         mcpActive: [true, true, true, true],
         pumpThrottle: [60, 60],
-        oilCoolerValve: 50,
+        oilCoolerValve: 100,
         feedwaterValve: 0.50,
         nitrogenLoopValve: 50,
         sealToggles: [true, true, true],
@@ -1498,7 +1806,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         coreMeltdown: false,
         steamExplosion: false,
       }
-      const mapped = mapReactorToGameStateFields(liveReactor, 'COMPLETED')
+      syncedActivePost84Order = null
+      const mapped = mapReactorToGameStateFields(liveReactor, 'COMPLETED', null)
       const isFromVolkovGate = state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
       const completedVox = TUTORIAL_VOX_BY_PHASE.COMPLETED
       const msg = isFromVolkovGate
@@ -1526,6 +1835,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         treasonStrikes: 0,
         activeMandate: null,
         activePost84Order: null,
+        isBlackout: false,
         gridTransientImpulse: 0,
         steamTransientImpulse: 0,
         voltageDipIntensity: 0,
@@ -1552,7 +1862,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   acceptVolkovTrainingDirective: () => {
     set((state) => {
-      resetVolkovHassleTrackers()
+      resetKomradTrackers()
       volkovOpenerFinished = true
       if (state.tutorialPhase !== 'AWAITING_VOLKOV_MAIL') {
         return {
@@ -1561,7 +1871,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
       const cold = createColdStartState()
-      const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING')
+      syncedActivePost84Order = null
+      const mapped = mapReactorToGameStateFields(cold, 'STEP_1_COOLING', null)
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
@@ -1581,7 +1892,21 @@ export const useGameStore = create<GameState>((set, get) => ({
         phase: 'playing',
         isSeatedAtDesk: false,
         activeStation: 'overview',
+        boronCooldown: 0,
+        boronPoisoningTimer: 0,
+        az5Cooldown: 0,
+        az5Available: true,
+        redlineInstability: 0,
+        tutorialDrainSeconds: 0,
+        dismissedCrisisIds: [],
+        vodkaDroughtTimer: 0,
+        ciaIntrusionActive: false,
+        komradOverrideLocked: false,
+        activeMandate: null,
         activePost84Order: null,
+        hoveredControlHint: null,
+        hoveredDiagnosticId: null,
+        isBlackout: false,
         tutorialHintsHidden: false,
         activeCrisisCoach: null,
         lastDecisionFeedback: mapped.tutorialPrompt.header,
@@ -1714,46 +2039,56 @@ export const useGameStore = create<GameState>((set, get) => ({
       KOMRAD_OPENING_PROPAGANDA_VOX,
       'normal'
     )
-    const controlReadyNow =
-      !pointerLockInteraction.mainMenuOpen &&
-      !pointerLockInteraction.shiftTransitionActive
-    set((state) => ({
-      ...mapped,
-      phase: 'playing',
-      isShiftControlReady: controlReadyNow,
-      komradOpeningDispatched: false,
-      isSeatedAtDesk: false,
-      activeMandate: null,
-      activePost84Order: null,
-      lastDecisionFeedback: mapped.tutorialPrompt.header,
-      selectedH2OSubstationId: 1,
-      hzOutOfBoundsSeconds: 0,
-      vodkaDroughtTimer: 0,
-      gridTransientImpulse: 0,
-      steamTransientImpulse: 0,
-      voltageDipIntensity: 0,
-      tutorialDrainSeconds: 0,
-      tutorialHintsHidden: false,
-      activeCrisisCoach: null,
-      dismissedCrisisIds: [],
-      shiftTimeMinutes: 0,
-      shiftRunId: state.shiftRunId + 1,
-      hoveredDiagnosticId: null,
-      hoveredControlHint: null,
-      diagFeedActive: false,
-      radioOn: false,
-      radioBroadcastSubtitle: null,
-      komradSubtitle: null,
-      terminalEntries: [...state.terminalEntries.slice(-24), entry],
-      terminalLogs: [
-        ...state.terminalLogs.slice(-24),
-        `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-      ],
-      komradMessages: [],
-    }))
+    set((state) => {
+      const controlReadyNow =
+        state.lobbyMenuPhase === 'entered_control_room' &&
+        !pointerLockInteraction.mainMenuOpen &&
+        !pointerLockInteraction.shiftTransitionActive
+      return {
+        ...mapped,
+        phase: 'playing',
+        siberiaGameOverActive: false,
+        isShiftControlReady: controlReadyNow,
+        komradOpeningDispatched: false,
+        isSeatedAtDesk: false,
+        canSitAtDesk: false,
+        activeMandate: null,
+        activePost84Order: null,
+        isBlackout: false,
+        rubles: 300,
+        quotaCompleted: 0,
+        post84InboxSnapshot: null,
+        lastDecisionFeedback: mapped.tutorialPrompt.header,
+        selectedH2OSubstationId: 1,
+        hzOutOfBoundsSeconds: 0,
+        vodkaDroughtTimer: 0,
+        gridTransientImpulse: 0,
+        steamTransientImpulse: 0,
+        voltageDipIntensity: 0,
+        tutorialDrainSeconds: 0,
+        tutorialHintsHidden: false,
+        activeCrisisCoach: null,
+        dismissedCrisisIds: [],
+        shiftTimeMinutes: 0,
+        shiftRunId: state.shiftRunId + 1,
+        hoveredDiagnosticId: null,
+        hoveredControlHint: null,
+        diagFeedActive: false,
+        radioOn: false,
+        radioVolume: 65,
+        radioBroadcastSubtitle: null,
+        komradSubtitle: null,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: [],
+      }
+    })
   },
 
-  resetShift: () => {
+  resetShift: (targetLobbyPhase?: LobbyMenuPhase) => {
     resetKomradTrackers()
     const cold = createColdStartState()
     const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
@@ -1765,55 +2100,287 @@ export const useGameStore = create<GameState>((set, get) => ({
         'normal'
       ),
     ]
-    const controlReadyNow =
-      !pointerLockInteraction.mainMenuOpen &&
-      !pointerLockInteraction.shiftTransitionActive
+    const validTargetPhase: LobbyMenuPhase | undefined =
+      targetLobbyPhase === 'menu_locked' ||
+      targetLobbyPhase === 'door_opening' ||
+      targetLobbyPhase === 'entered_control_room'
+        ? targetLobbyPhase
+        : undefined
+    set((state) => {
+      const nextLobbyPhase = validTargetPhase ?? state.lobbyMenuPhase
+      const controlReadyNow =
+        nextLobbyPhase === 'entered_control_room' &&
+        !pointerLockInteraction.mainMenuOpen &&
+        !pointerLockInteraction.shiftTransitionActive
+      return {
+        ...mapped,
+        phase: 'playing',
+        lobbyMenuPhase: nextLobbyPhase,
+        siberiaGameOverActive: false,
+        isShiftControlReady: controlReadyNow,
+        komradOpeningDispatched: false,
+        isSeatedAtDesk: false,
+        canSitAtDesk: false,
+        shiftNumber: 1,
+        activeMandate: null,
+        activePost84Order: null,
+        isBlackout: false,
+        rubles: 300,
+        quotaCompleted: 0,
+        post84InboxSnapshot: null,
+        lastDecisionFeedback: mapped.tutorialPrompt.header,
+        selectedH2OSubstationId: 1,
+        treasonStrikes: 0,
+        isGodMode: false,
+        tutorialDrainSeconds: 0,
+        tutorialHintsHidden: false,
+        activeCrisisCoach: null,
+        dismissedCrisisIds: [],
+        shiftRunId: state.shiftRunId + 1,
+        hoveredDiagnosticId: null,
+        hoveredControlHint: null,
+        diagFeedActive: false,
+        radioOn: false,
+        radioVolume: 65,
+        radioBroadcastSubtitle: null,
+        komradSubtitle: null,
+        vodkaDroughtTimer: 0,
+        redlineInstability: 0,
+        isInspectingDesk: false,
+        excitationTrim: 0.0,
+        hzOutOfBoundsSeconds: 0,
+        boronCooldown: 0,
+        az5Available: true,
+        az5Cooldown: 0,
+        gridTransientImpulse: 0,
+        steamTransientImpulse: 0,
+        voltageDipIntensity: 0,
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        komradOverrideLocked: false,
+        activeDirectives: [],
+        printerProgress: 0,
+        shiftTimeMinutes: 0,
+        terminalEntries: freshEntries,
+        terminalLogs: freshEntries.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
+        komradMessages: [],
+      }
+    })
+  },
+
+  restoreSavedShift: (savedGame: Partial<SavedGameStatePayload>) => {
+    resetKomradTrackers()
+    const baseReactor = createColdStartState()
+
+    const numOr = (val: unknown, fallback: number): number =>
+      typeof val === 'number' && Number.isFinite(val) ? val : fallback
+    const boolOr = (val: unknown, fallback: boolean): boolean =>
+      typeof val === 'boolean' ? val : fallback
+
+    const restoredOrder = savedGame.activePost84Order ?? null
+    syncedActivePost84Order = restoredOrder
+    preOrderSectorTargets = savedGame.preOrderSectorTargets
+      ? { ...savedGame.preOrderSectorTargets }
+      : null
+
+    const savedControlRods =
+      typeof savedGame.controlRods === 'number' && Number.isFinite(savedGame.controlRods)
+        ? savedGame.controlRods
+        : typeof savedGame.controlRodLevel === 'number' && Number.isFinite(savedGame.controlRodLevel)
+          ? Math.max(0, Math.min(1, savedGame.controlRodLevel / 100))
+          : baseReactor.controlRods
+
+    const clampedBattery = Math.max(
+      0,
+      Math.min(
+        MAX_BATTERY_CAPACITY_MWH,
+        numOr(savedGame.batteryStoredMWh, baseReactor.batteryStoredMWh)
+      )
+    )
+
+    const mergedReactor: ReactorState = {
+      ...baseReactor,
+      controlRods: savedControlRods,
+      az5Active: boolOr(savedGame.az5Active, baseReactor.az5Active),
+      az5Timer: numOr(savedGame.az5Timer, baseReactor.az5Timer),
+      coolantFlow: numOr(savedGame.coolantFlow, baseReactor.coolantFlow),
+      fuelBurnupTimer: numOr(savedGame.fuelBurnupTimer, baseReactor.fuelBurnupTimer),
+      boronDampingTimer: numOr(savedGame.boronDampingTimer, baseReactor.boronDampingTimer),
+      batteryStoredMWh: clampedBattery,
+      batteryOutputValve: numOr(savedGame.batteryOutputValve, baseReactor.batteryOutputValve),
+      energyCreatedMW: numOr(savedGame.energyCreatedMW, baseReactor.energyCreatedMW),
+      energyDemandMW: numOr(savedGame.energyDemandMW, baseReactor.energyDemandMW),
+      totalElectricalMW: numOr(savedGame.totalElectricalMW, baseReactor.totalElectricalMW),
+      thermalPower: numOr(savedGame.thermalPower, baseReactor.thermalPower),
+      coreTemp: numOr(savedGame.coreTemp, baseReactor.coreTemp),
+      graphiteTemp: numOr(savedGame.graphiteTemp, baseReactor.graphiteTemp),
+      drumPressure: numOr(
+        savedGame.drumPressure,
+        numOr(savedGame.pressureBar, baseReactor.drumPressure)
+      ),
+      drumWaterLevel: numOr(savedGame.drumWaterLevel, baseReactor.drumWaterLevel),
+      bubblerLevel: numOr(savedGame.bubblerLevel, baseReactor.bubblerLevel),
+      heliumPressure: numOr(savedGame.heliumPressure, baseReactor.heliumPressure),
+      nitrogenLoopValve: numOr(savedGame.nitrogenLoopValve, baseReactor.nitrogenLoopValve),
+      feedwaterValve: numOr(savedGame.feedwaterValve, baseReactor.feedwaterValve),
+      waterReservoir: numOr(savedGame.waterReservoir, baseReactor.waterReservoir),
+      pripyatWater: numOr(savedGame.pripyatWater, baseReactor.pripyatWater),
+      kolkhozWater: numOr(savedGame.kolkhozWater, baseReactor.kolkhozWater),
+      vodkaWater: numOr(savedGame.vodkaWater, baseReactor.vodkaWater),
+      xenon: numOr(savedGame.xenon, baseReactor.xenon),
+      iodine: numOr(savedGame.iodine, baseReactor.iodine),
+      voidFraction: numOr(savedGame.voidFraction, baseReactor.voidFraction),
+      roomRadiation: numOr(
+        savedGame.roomRadiation,
+        numOr(savedGame.radiationLevel, baseReactor.roomRadiation)
+      ),
+      mcpActive:
+        Array.isArray(savedGame.mcpActive) && savedGame.mcpActive.length === 4
+          ? savedGame.mcpActive.map((v) => Boolean(v))
+          : Array.isArray(savedGame.pumpsActive) && savedGame.pumpsActive.length === 2
+            ? [
+                Boolean(savedGame.pumpsActive[0]),
+                Boolean(savedGame.pumpsActive[0]),
+                Boolean(savedGame.pumpsActive[1]),
+                Boolean(savedGame.pumpsActive[1]),
+              ]
+            : [...baseReactor.mcpActive],
+      pumpThrottle:
+        Array.isArray(savedGame.pumpThrottle) && savedGame.pumpThrottle.length === 2
+          ? [
+              numOr(savedGame.pumpThrottle[0], baseReactor.pumpThrottle[0]),
+              numOr(savedGame.pumpThrottle[1], baseReactor.pumpThrottle[1]),
+            ]
+          : [...baseReactor.pumpThrottle],
+      pumpAHeat: numOr(savedGame.pumpAHeat, baseReactor.pumpAHeat),
+      pumpBHeat: numOr(savedGame.pumpBHeat, baseReactor.pumpBHeat),
+      lubeOilPressure: numOr(savedGame.lubeOilPressure, baseReactor.lubeOilPressure),
+      oilCoolerValve: numOr(savedGame.oilCoolerValve, 100),
+      boronTankLevel: numOr(savedGame.boronTankLevel, baseReactor.boronTankLevel),
+      boronReservePool: numOr(savedGame.boronReservePool, baseReactor.boronReservePool),
+      sealToggles:
+        Array.isArray(savedGame.sealToggles) && savedGame.sealToggles.length === 3
+          ? [
+              Boolean(savedGame.sealToggles[0]),
+              Boolean(savedGame.sealToggles[1]),
+              Boolean(savedGame.sealToggles[2]),
+            ]
+          : [...baseReactor.sealToggles],
+      ventilationActive: boolOr(savedGame.ventilationActive, baseReactor.ventilationActive),
+      avrActive: boolOr(savedGame.avrActive, baseReactor.avrActive),
+      kgbLineActive: boolOr(savedGame.kgbLineActive, baseReactor.kgbLineActive),
+      condenserVacActive: boolOr(
+        savedGame.condenserVacActive,
+        boolOr(savedGame.auxLoopBActive, baseReactor.condenserVacActive)
+      ),
+      coreTileAnomalies:
+        savedGame.coreTileAnomalies && typeof savedGame.coreTileAnomalies === 'object'
+          ? { ...savedGame.coreTileAnomalies }
+          : { ...baseReactor.coreTileAnomalies },
+      turbines:
+        Array.isArray(savedGame.turbines) && savedGame.turbines.length === 2
+          ? [
+              { ...baseReactor.turbines[0], ...savedGame.turbines[0] },
+              { ...baseReactor.turbines[1], ...savedGame.turbines[1] },
+            ]
+          : [{ ...baseReactor.turbines[0] }, { ...baseReactor.turbines[1] }],
+      substations:
+        Array.isArray(savedGame.substations) &&
+        savedGame.substations.length === baseReactor.substations.length
+          ? savedGame.substations.map((sub, idx) => ({
+              ...baseReactor.substations[idx],
+              ...sub,
+            }))
+          : baseReactor.substations.map((s) => ({ ...s })),
+    }
+
+    const validTutorialPhases: readonly TutorialPhase[] = [
+      'AWAITING_VOLKOV_MAIL',
+      'STEP_0_PICKUP_WEPAD',
+      'STEP_1_COOLING',
+      'STEP_2_PULL_RODS',
+      'STEP_3_BUILD_STEAM',
+      'STEP_4_SPIN_TURBINE',
+      'STEP_5_SYNC_GRID',
+      'STEP_6_BASELINE_600MW',
+      'STEP_7_VOID_DRILL',
+      'STEP_8_XENON_DRILL',
+      'COMPLETED',
+    ]
+    const savedTutorialPhase: TutorialPhase =
+      savedGame.tutorialPhase && validTutorialPhases.includes(savedGame.tutorialPhase)
+        ? savedGame.tutorialPhase
+        : 'AWAITING_VOLKOV_MAIL'
+
+    const mapped = mapReactorToGameStateFields(
+      mergedReactor,
+      savedTutorialPhase,
+      restoredOrder
+    )
+    const restoredShiftTime = numOr(savedGame.shiftTimeMinutes, 0)
+    lastBroadcastHour = Math.floor(restoredShiftTime / 60)
+    const resumeLogEntry = createLogEntry(
+      restoredShiftTime,
+      'K.O.M.R.A.D.-84',
+      'DUTY CHECKPOINT LOADED. CROSS AIRLOCK INTO CONTROL HALL MCR-4.',
+      'normal'
+    )
+
     set((state) => ({
       ...mapped,
       phase: 'playing',
-      isShiftControlReady: controlReadyNow,
+      lobbyMenuPhase: 'door_opening',
+      siberiaGameOverActive: false,
+      isShiftControlReady: false,
       komradOpeningDispatched: false,
       isSeatedAtDesk: false,
-      activeMandate: null,
-      activePost84Order: null,
-      lastDecisionFeedback: mapped.tutorialPrompt.header,
-      selectedH2OSubstationId: 1,
-      treasonStrikes: 0,
-      tutorialDrainSeconds: 0,
-      tutorialHintsHidden: false,
+      canSitAtDesk: false,
+      shiftNumber: numOr(savedGame.shiftNumber, 1),
+      shiftTimeMinutes: restoredShiftTime,
+      treasonStrikes: numOr(savedGame.treasonStrikes, 0),
+      rubles: Math.max(0, Math.round(numOr(savedGame.rubles, 300))),
+      quotaCompleted: Math.max(0, Math.round(numOr(savedGame.quotaCompleted, 0))),
+      lastDecisionFeedback:
+        savedGame.lastDecisionFeedback ?? mapped.tutorialPrompt.header,
+      activeMandate: savedGame.activeMandate ?? null,
+      activePost84Order: restoredOrder,
+      post84InboxSnapshot: savedGame.post84InboxSnapshot ?? null,
+      redlineInstability: numOr(savedGame.redlineInstability, 0),
+      isBlackout: boolOr(savedGame.isBlackout, false),
+      excitationTrim: numOr(savedGame.excitationTrim, 0.0),
+      vodkaDroughtTimer: numOr(savedGame.vodkaDroughtTimer, 0),
+      boronCooldown: Math.max(0, numOr(savedGame.boronCooldown, 0)),
+      az5Cooldown: Math.max(0, numOr(savedGame.az5Cooldown, 0)),
+      az5Available: boolOr(savedGame.az5Available, true),
+      tutorialHintsHidden: boolOr(savedGame.tutorialHintsHidden, false),
+      dismissedCrisisIds: Array.isArray(savedGame.dismissedCrisisIds)
+        ? [...savedGame.dismissedCrisisIds]
+        : [],
       activeCrisisCoach: null,
-      dismissedCrisisIds: [],
-      shiftRunId: state.shiftRunId + 1,
-      hoveredDiagnosticId: null,
-      diagFeedActive: false,
-      radioOn: false,
-      radioBroadcastSubtitle: null,
-      komradSubtitle: null,
-      vodkaDroughtTimer: 0,
-      redlineInstability: 0,
-      isInspectingDesk: false,
-      excitationTrim: 0.0,
-      hzOutOfBoundsSeconds: 0,
-      boronCooldown: 0,
-      az5Available: true,
-      az5Cooldown: 0,
-      gridTransientImpulse: 0,
-      steamTransientImpulse: 0,
-      voltageDipIntensity: 0,
       ciaIntrusionActive: false,
       ciaIntrusionProgress: 0,
       komradOverrideLocked: false,
       activeDirectives: [],
       printerProgress: 0,
-      shiftTimeMinutes: 0,
-      terminalEntries: freshEntries,
-      terminalLogs: freshEntries.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
+      hoveredDiagnosticId: null,
+      hoveredControlHint: null,
+      diagFeedActive: false,
+      radioOn: boolOr(savedGame.radioOn, false),
+      radioVolume: Math.max(0, Math.min(100, Math.round(numOr(savedGame.radioVolume, 65)))),
+      radioBroadcastSubtitle: null,
+      komradSubtitle: null,
       komradMessages: [],
+      terminalEntries: [resumeLogEntry],
+      terminalLogs: [
+        `[${resumeLogEntry.timestamp}] ${resumeLogEntry.sender}: ${resumeLogEntry.text}`,
+      ],
+      shiftRunId: state.shiftRunId + 1,
     }))
   },
 
   pullMainBreaker: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const baseReactor = extractReactorState(state)
       const res = toggleGridBreaker(baseReactor, 0)
       const t0 = baseReactor.turbines[0]
@@ -1868,6 +2435,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   resetTurbineTrip: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextTurbines: [typeof state.turbines[0], typeof state.turbines[1]] = [
         { ...state.turbines[0], tripped: false },
         { ...state.turbines[1], tripped: false },
@@ -1910,6 +2478,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setFeedwaterValve: (valveRatioOrPct: number) => {
     if (!Number.isFinite(valveRatioOrPct)) return
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const normalized =
         valveRatioOrPct > 1.0001 ? valveRatioOrPct / 100 : valveRatioOrPct
       const clamped = Math.max(0, Math.min(1, Number(normalized.toFixed(3))))
@@ -1926,6 +2495,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleMcpPump: (pumpIdx: 0 | 1 | 2 | 3, active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextMcp = [...state.mcpActive]
       nextMcp[pumpIdx] =
         typeof active === 'boolean' ? active : !nextMcp[pumpIdx]
@@ -1979,6 +2549,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSteamDumpValve: (open: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.steamDumpValve === open) return state
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
@@ -1995,6 +2566,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setRodTargetRate: (rate: -1 | 0 | 1) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
         rodTargetRate: rate,
@@ -2005,6 +2577,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setBatteryOutputValve: (valveRatioOrPct: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const normalized =
         valveRatioOrPct > 1.0001 ? valveRatioOrPct / 100 : valveRatioOrPct
       const clamped = Math.max(0, Math.min(1, Number(normalized.toFixed(3))))
@@ -2084,6 +2657,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           null
         )
         preOrderSectorTargets = null
+        syncedActivePost84Order = null
         const nextReactor: ReactorState = {
           ...extractReactorState(state),
           substations: nextSubstations,
@@ -2091,7 +2665,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
         const mapped = mapReactorToGameStateFields(
           nextReactor,
-          state.tutorialPhase
+          state.tutorialPhase,
+          null
         )
         return {
           ...mapped,
@@ -2102,6 +2677,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const baseTargets: Record<SectorNodeId, number> =
         preOrderSectorTargets ?? { ...state.targetSectorMW }
       preOrderSectorTargets = { ...baseTargets }
+      syncedActivePost84Order = order
       const nextSubstations = applyPost84OrderToSubstations(
         state.substations,
         baseTargets,
@@ -2114,7 +2690,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       stepReactorSimulation(nextReactor, 0.001, state.tutorialPhase)
       const mapped = mapReactorToGameStateFields(
         nextReactor,
-        state.tutorialPhase
+        state.tutorialPhase,
+        order
       )
       return {
         ...mapped,
@@ -2123,8 +2700,37 @@ export const useGameStore = create<GameState>((set, get) => ({
     })
   },
 
+  addRubles: (delta: number) => {
+    const amount = Math.round(delta)
+    if (!Number.isFinite(amount) || amount === 0) return
+    set((state) => ({
+      rubles: Math.max(0, state.rubles + amount),
+    }))
+  },
+
+  spendRubles: (amount: number) => {
+    const debit = Math.max(0, Math.round(amount))
+    if (!Number.isFinite(debit) || debit === 0) return
+    set((state) => ({
+      rubles: Math.max(0, state.rubles - debit),
+    }))
+  },
+
+  addQuotaCompleted: (delta = 1) => {
+    const inc = Math.max(0, Math.round(delta))
+    if (!Number.isFinite(inc) || inc === 0) return
+    set((state) => ({
+      quotaCompleted: Math.max(0, state.quotaCompleted + inc),
+    }))
+  },
+
+  setPost84InboxSnapshot: (snapshot: Post84InboxSnapshot | null) => {
+    set({ post84InboxSnapshot: snapshot })
+  },
+
   setSectorPower: (sector: SectorNodeId, targetMW: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.komradOverrideLocked) return state
       const subId = SECTOR_TO_SUB_ID[sector]
       const sub = findSubById(state.substations, subId)
@@ -2167,6 +2773,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   togglePump: (pumpIndex: 0 | 1, active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const idxA = pumpIndex === 0 ? 0 : 2
       const idxB = pumpIndex === 0 ? 1 : 3
       const curActive = Boolean(state.mcpActive[idxA] || state.mcpActive[idxB])
@@ -2196,6 +2803,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setPumpThrottle: (pumpIndex: 0 | 1, throttlePct: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const clamped = Math.max(0, Math.min(100, Number(throttlePct.toFixed(1))))
       const idxA = pumpIndex === 0 ? 0 : 2
       const idxB = pumpIndex === 0 ? 1 : 3
@@ -2228,17 +2836,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setOilCoolerValve: (valvePct: number) => {
+    void valvePct
     set((state) => {
-      const clamped = Math.max(0, Math.min(100, Number(valvePct.toFixed(1))))
-      if (Math.abs(clamped - state.oilCoolerValve) < 0.05) return state
+      if (isPreVolkovPanelLocked(state)) return state
+      if (state.oilCoolerValve === 100) return state
       return {
-        oilCoolerValve: clamped,
+        oilCoolerValve: 100,
       }
     })
   },
 
   setControlRodLevel: (levelPct: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const clampedPct = Math.max(0, Math.min(100, Number(levelPct.toFixed(1))))
       const nextRods = Number((clampedPct / 100).toFixed(4))
       const delta = nextRods - state.controlRods
@@ -2277,6 +2887,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   pumpBoronTank: (amountPct = 5.0) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const headroom = Math.max(0, 100 - state.boronTankLevel)
       const available = Math.max(0, state.boronReservePool)
       const transfer = Math.min(amountPct, headroom, available)
@@ -2301,6 +2912,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   selectChannelForRefuel: (channelIndex: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextReactor: ReactorState = extractReactorState(state)
       const res = selectCoreChannelForRefuel(nextReactor, channelIndex)
       if (!res.isSpent) {
@@ -2323,6 +2935,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   executeRefuelLeverStroke: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextReactor: ReactorState = extractReactorState(state)
       const res = refuelSelectedCoreChannel(nextReactor)
       const prevPhase = state.tutorialPhase
@@ -2378,6 +2991,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   quenchChannelHotspot: (channelIndex: number) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextReactor: ReactorState = extractReactorState(state)
       const res = selectCoreChannelForRefuel(nextReactor, channelIndex)
       if (!res.isSpent) {
@@ -2395,6 +3009,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setNitrogenLoopValve: (valvePct: number) => {
     if (!Number.isFinite(valvePct)) return
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const clampedPct = Math.max(0, Math.min(100, Number(valvePct.toFixed(1))))
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
@@ -2409,6 +3024,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setBubblerDraining: (draining: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.bubblerDraining === draining) return state
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
@@ -2420,6 +3036,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleSealSwitch: (toggleIndex: 0 | 1 | 2, active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextSeals: [boolean, boolean, boolean] = [
         state.sealToggles[0],
         state.sealToggles[1],
@@ -2450,6 +3067,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   lockAllContainmentSeals: () => {
     set((s) => {
+      if (isPreVolkovPanelLocked(s)) return s
       const nextReactor: ReactorState = {
         ...extractReactorState(s),
         mcpActive: [true, true, true, true],
@@ -2484,6 +3102,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setVentingSteam: (venting: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.ventingSteam === venting) return state
       const nextReactor: ReactorState = {
         ...extractReactorState(state),
@@ -2502,6 +3121,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleVentilation: (active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextVent =
         typeof active === 'boolean' ? active : !state.ventilationActive
       const nextReactor: ReactorState = {
@@ -2519,6 +3139,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleAvr: (active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextAvr =
         typeof active === 'boolean' ? active : !state.avrActive
       const nextReactor: ReactorState = {
@@ -2536,6 +3157,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleKgbLine: (active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextKgb =
         typeof active === 'boolean' ? active : !state.kgbLineActive
       const nextReactor: ReactorState = {
@@ -2554,6 +3176,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   toggleAuxLoopB: (active?: boolean) => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextVac =
         typeof active === 'boolean' ? active : !state.auxLoopBActive
       const nextReactor: ReactorState = {
@@ -2577,6 +3200,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   injectBoronAcid: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       if (state.boronTankLevel < 20) {
         const warnMsg = `BORON TANK LOW (${Math.round(state.boronTankLevel)}% < 20%)! CYCLE [ROD REFUELING LEVER] ON UNIT A-2 OR BOOST FEEDWATER (UNIT B)!`
         const warnEntry = createLogEntry(
@@ -2878,7 +3502,13 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   tickThermodynamics: (dtSeconds: number) => {
     const state = get()
-    if ((state.phase !== 'playing' && state.phase !== 'boot') || !state.isShiftControlReady) {
+    if (
+      (state.phase !== 'playing' && state.phase !== 'boot') ||
+      state.lobbyMenuPhase !== 'entered_control_room' ||
+      !state.isShiftControlReady ||
+      state.siberiaGameOverActive ||
+      isKomradLiquidating()
+    ) {
       return
     }
     const frameDt = Math.max(0, Math.min(0.25, dtSeconds))
@@ -2910,6 +3540,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         } else if (
           !state.isSeatedAtDesk &&
+          !isKomradGrabActive() &&
+          !state.diagFeedActive &&
           !isKomradTransmitting() &&
           !doesRadioDominateSubtitles(
             state.radioOn,
@@ -3284,7 +3916,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               okReason,
               'normal',
               'K.O.M.R.A.D.-84',
-              `GOSPLAN QUOTA MET (${nextMandate.title.slice(0, 22)})! MOSCOW RECORDS +1 SOCIALIST EFFICIENCY POINT.`
+              `GOSPLAN QUOTA MET (${nextMandate.title})! MOSCOW RECORDS +1 SOCIALIST EFFICIENCY POINT.`
             )
             mandateComplianceListener?.(true, nextMandate.id, okReason)
           } else {
@@ -3305,7 +3937,7 @@ export const useGameStore = create<GameState>((set, get) => ({
               failReason,
               'danger',
               'K.O.M.R.A.D.-84',
-              `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title.slice(0, 20)}! VOLKOV IS FUMING!`
+              `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title}! VOLKOV IS FUMING!`
             )
             mandateComplianceListener?.(false, nextMandate.id, failReason)
             nextMandate = {
@@ -3536,6 +4168,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   triggerAz5: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const nextAz5 = !state.az5Active
       const base = extractReactorState(state)
       const nextReactor: ReactorState = {
@@ -3609,6 +4242,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   overrideKomradLock: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const overrideMsg =
         'MANUAL OVERRIDE ACCEPTED. YOUR LACK OF FAITH IN AUTOMATED SOCIALISM HAS BEEN LOGGED.'
       const entry = createLogEntry(
@@ -3635,6 +4269,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   purgeFirewall: () => {
     set((state) => {
+      if (isPreVolkovPanelLocked(state)) return state
       const purgeMsg =
         'WESTERN IMPERIALIST PACKET STREAM PURGED FROM SECTOR 07.'
       const okEntry = createLogEntry(
@@ -3751,6 +4386,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setGodMode: (enabled: boolean) => {
+    if (enabled) {
+      abortKomradGrab()
+      preVolkovStrikeCount = 0
+    }
     set((state) => {
       const godText = enabled
         ? 'SANDBOX TEST MODE [SHIFT+SPACE] ENGAGED: INFINITE TIME & ZERO FAIL STATES.'
@@ -3766,6 +4405,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         : 'IMMUNITY DECREE REVOKED: STANDARD SOVIET THERMODYNAMICS RESTORED.'
       return {
         isGodMode: enabled,
+        ...(enabled ? { siberiaGameOverActive: false } : {}),
         isBlackout: enabled ? false : state.isBlackout,
         komradOverrideLocked: enabled ? false : state.komradOverrideLocked,
         lastDecisionFeedback: enabled
@@ -3838,7 +4478,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     if (
       state.phase !== 'playing' ||
+      state.lobbyMenuPhase !== 'entered_control_room' ||
       !state.isShiftControlReady ||
+      state.siberiaGameOverActive ||
+      isKomradLiquidating() ||
       state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
     ) {
       return
@@ -3849,22 +4492,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const rawNextMinutes = state.shiftTimeMinutes + SHIFT_MINUTES_PER_SECOND
     const nextMinutes = rawNextMinutes % 360
 
-    // 2. Legacy Pravda Dot-Matrix Printer progress (post-tutorial only, no wall CRT / VOX chatter spam)
-    let nextPrinterProgress = state.printerProgress
-    let nextDirectives = state.activeDirectives
+    // 2. Legacy Pravda Dot-Matrix background spawner disabled (H-08); manual DebugMenu spawnDirective remains intact.
+    const nextPrinterProgress = 0
+    const nextDirectives = state.activeDirectives
     const tickKomradMsgs: KomradMessageEntry[] = []
-    if (
-      state.tutorialPhase === 'COMPLETED' &&
-      state.activeDirectives.length === 0 &&
-      shiftElapsedSeconds >= 15
-    ) {
-      nextPrinterProgress = Math.min(100, state.printerProgress + 3.5)
-      if (nextPrinterProgress >= 100) {
-        const spawned = createDirectiveInstance()
-        nextDirectives = [spawned]
-        nextPrinterProgress = 0
-      }
-    }
 
     // 3. Hourly Shift Broadcasts (01:00 -> 05:00): strictly obey global idle silence cooldown (drop, don't queue)
     const currentHour = Math.floor(nextMinutes / 60)

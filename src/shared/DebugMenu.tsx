@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { updatePointerLockInteraction } from './pointerLockState'
+import {
+  pointerLockInteraction,
+  updatePointerLockInteraction,
+} from './pointerLockState'
 import { useGameStore } from './useGameStore'
 
 export const DebugMenu: React.FC = () => {
@@ -21,6 +24,7 @@ export const DebugMenu: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
+        if (pointerLockInteraction.mainMenuOpen) return
         e.preventDefault()
         setIsOpen((prev) => !prev)
       }
@@ -127,7 +131,7 @@ export const DebugMenu: React.FC = () => {
 
         <button
           type="button"
-          onClick={resetShift}
+          onClick={() => resetShift()}
           className="w-full border-2 border-[#090b09] bg-[#3b2820] px-3 py-1 text-center shadow-[2px_2px_0_#090b09] hover:bg-[#52372c]"
         >
           REWRITE HISTORY TO SHIFT 1 (00:00)

@@ -17,10 +17,6 @@ import {
   playLeverRatchet,
   playSwitchClank,
 } from "../modules/reactor/audioSynth";
-import {
-  startSoundtrack,
-  updateSoundtrackState,
-} from "../modules/reactor/soundtrackPlayer";
 import { useCameraLookStore } from "./CameraController";
 import { NOOP_RAYCAST } from "./ExteriorDioramas3D";
 import {
@@ -38,7 +34,8 @@ import {
   getHammeredIronTextures,
 } from "./proceduralMaterials";
 import type { SectorNodeId } from "./types";
-import { useGameStore } from "./useGameStore";
+import { triggerPreVolkovPanelLockFeedback } from "./komradVoiceSynth";
+import { isPreVolkovPanelLocked, useGameStore } from "./useGameStore";
 
 function createCrispPanelTexture(
   width: number,
@@ -243,39 +240,27 @@ function getRibbedGlassCellTexture(): THREE.CanvasTexture {
   return cachedRibbedGlassTex;
 }
 
-function captureCanvasPointer(e: ThreeEvent<PointerEvent>): void {
-  (e.target as Element | null)?.setPointerCapture?.(e.pointerId);
-  const domElem = e.nativeEvent.target as Element | null;
-  domElem?.setPointerCapture?.(e.pointerId);
-}
-
-function releaseCanvasPointer(e: ThreeEvent<PointerEvent>): void {
-  const r3fTarget = e.target as Element | null;
-  if (r3fTarget?.hasPointerCapture?.(e.pointerId)) {
-    r3fTarget.releasePointerCapture(e.pointerId);
-  }
-  const domElem = e.nativeEvent.target as Element | null;
-  if (domElem?.hasPointerCapture?.(e.pointerId)) {
-    domElem.releasePointerCapture(e.pointerId);
-  }
-}
-
 /**
- * Effortless Rotary Handwheel Drag + Click-to-Step (+25%) Fallback:
- * - Dragging just 40px up/right or down/left (OR rotating around the wheel hub) smoothly sweeps 0% -> 100%!
+ * Pointer-Lock & Free-Cursor Safe Rotary Handwheel Drag + Click-to-Step (+25%) Fallback:
+ * - Maps vertical pointer movement (`-ev.movementY` under Pointer Lock, `-delta clientY` otherwise)
+ *   linearly into `[minVal, maxVal]` with zero polar `atan2` sign inversion or `useFrame` jitter.
  * - Clicking without dragging (`< 6px` movement) automatically steps the valve by +25% (or wraps 100% -> 0% if already at max).
  */
 function startSmoothWheelSwivelDrag(
   e: ThreeEvent<PointerEvent>,
-  wheelObject: THREE.Object3D | null,
+  _wheelObject: THREE.Object3D | null,
   initialValue: number,
   minVal: number,
   maxVal: number,
   onChange: (nextVal: number) => void,
   onActiveChange?: (isActive: boolean) => void,
-): void {
-  if (useCameraLookStore.getState().isFreeLookMode) return;
+): () => void {
+  if (useCameraLookStore.getState().isFreeLookMode) return () => {};
   e.stopPropagation();
+  if (isPreVolkovPanelLocked()) {
+    triggerPreVolkovPanelLockFeedback();
+    return () => {};
+  }
   onActiveChange?.(true);
 
   const r3fTarget = e.target as unknown as {
@@ -284,77 +269,31 @@ function startSmoothWheelSwivelDrag(
   };
   r3fTarget?.setPointerCapture?.(e.pointerId);
 
-  const domElem =
-    (e.nativeEvent.target as HTMLElement | null) ??
-    document.querySelector("canvas");
-  const rect = domElem?.getBoundingClientRect();
-  let centerX = e.nativeEvent.clientX;
-  let centerY = e.nativeEvent.clientY;
-  if (wheelObject && rect && rect.width > 0 && rect.height > 0) {
-    const worldPos = new THREE.Vector3();
-    wheelObject.getWorldPosition(worldPos);
-    worldPos.project(e.camera);
-    centerX = rect.left + (worldPos.x * 0.5 + 0.5) * rect.width;
-    centerY = rect.top + (-worldPos.y * 0.5 + 0.5) * rect.height;
-  }
-
-  const startX = e.nativeEvent.clientX;
-  const startY = e.nativeEvent.clientY;
-  let prevClientX = startX;
-  let prevClientY = startY;
-  let currentVal = initialValue;
+  let prevClientY = e.nativeEvent.clientY;
+  let currentVal = THREE.MathUtils.clamp(initialValue, minVal, maxVal);
   let totalMoveDist = 0;
-  const initR = Math.hypot(startX - centerX, startY - centerY);
-  let hasValidAngle = initR >= 6;
-  let prevAngle = hasValidAngle
-    ? Math.atan2(startY - centerY, startX - centerX)
-    : 0;
-  const range = maxVal - minVal;
+  const range = Math.max(1e-4, maxVal - minVal);
+  const sensitivity = range / 140;
   let lastSoundStep = Math.floor(((currentVal - minVal) / range) * 16);
+  let finished = false;
 
   const handleMove = (ev: PointerEvent) => {
-    totalMoveDist = Math.max(
-      totalMoveDist,
-      Math.hypot(ev.clientX - startX, ev.clientY - startY),
-    );
-
-    const dx = ev.clientX - prevClientX;
-    const dy = ev.clientY - prevClientY;
-    prevClientX = ev.clientX;
+    if (finished) return;
+    const isLocked = document.pointerLockElement !== null;
+    const rawDy = isLocked ? ev.movementY : ev.clientY - prevClientY;
     prevClientY = ev.clientY;
 
-    const moveLen = Math.hypot(dx, dy);
-    if (moveLen < 0.25) return;
+    if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+    const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
+    totalMoveDist += Math.abs(dy);
 
-    const rx = ev.clientX - centerX;
-    const ry = ev.clientY - centerY;
-    const r = Math.hypot(rx, ry);
-    const curAngle = r >= 6 ? Math.atan2(ry, rx) : prevAngle;
-
-    let deltaRatio = (dx - dy) / 135;
-    if (r >= 24 && hasValidAngle) {
-      let dTheta = curAngle - prevAngle;
-      while (dTheta > Math.PI) dTheta -= Math.PI * 2;
-      while (dTheta < -Math.PI) dTheta += Math.PI * 2;
-      const tangentialLen = Math.abs(dTheta) * r;
-      if (tangentialLen > moveLen * 0.65) {
-        deltaRatio = dTheta / (Math.PI * 1.25);
-      }
-    }
-
-    if (r >= 6) {
-      hasValidAngle = true;
-      prevAngle = curAngle;
-    }
-
-    currentVal = THREE.MathUtils.clamp(
-      currentVal + deltaRatio * range,
+    const nextVal = THREE.MathUtils.clamp(
+      currentVal - dy * sensitivity,
       minVal,
       maxVal,
     );
-    if (wheelObject) {
-      wheelObject.rotation.z -= deltaRatio * Math.PI * 1.6;
-    }
+    if (Math.abs(nextVal - currentVal) < 1e-4) return;
+    currentVal = nextVal;
     onChange(currentVal);
 
     const soundStep = Math.floor(((currentVal - minVal) / range) * 16);
@@ -364,12 +303,17 @@ function startSmoothWheelSwivelDrag(
     }
   };
 
-  const handleUp = () => {
+  const cleanup = (fromRelease: boolean) => {
+    if (finished) return;
+    finished = true;
     onActiveChange?.(false);
     r3fTarget?.releasePointerCapture?.(e.pointerId);
     window.removeEventListener("pointermove", handleMove);
     window.removeEventListener("pointerup", handleUp);
-    window.removeEventListener("pointercancel", handleUp);
+    window.removeEventListener("pointercancel", handleBlur);
+    window.removeEventListener("blur", handleBlur);
+
+    if (!fromRelease) return;
 
     // Click-to-Step (+25%) fallback if the player clicked without dragging (< 6px movement)
     if (totalMoveDist < 6) {
@@ -390,9 +334,103 @@ function startSmoothWheelSwivelDrag(
     playSwitchClank(false);
   };
 
+  const handleUp = () => cleanup(true);
+  const handleBlur = () => cleanup(false);
+
+  window.addEventListener("pointermove", handleMove);
+  window.addEventListener("pointerup", handleUp);
+  window.addEventListener("pointercancel", handleBlur);
+  window.addEventListener("blur", handleBlur);
+
+  return () => cleanup(false);
+}
+
+/**
+ * Strictly Vertical Linear Lever Drag (Pointer-Lock & Free-Cursor Safe):
+ * - Maps ONLY vertical mouse movement (`-ev.movementY` under Pointer Lock, `-delta clientY` otherwise)
+ *   linearly into clamped `[minVal, maxVal]` without any `atan2` polar math or 3D rotation mutation.
+ * - Pushing mouse UP (`dy < 0`) raises value toward `maxVal`; pulling DOWN (`dy > 0`) lowers toward `minVal`.
+ */
+function startLinearVerticalLeverDrag(
+  e: ThreeEvent<PointerEvent>,
+  initialValue: number,
+  minVal: number,
+  maxVal: number,
+  onChange: (nextVal: number) => void,
+  onActiveChange?: (isActive: boolean) => void,
+  dragSpanPx = 150,
+): () => void {
+  if (useCameraLookStore.getState().isFreeLookMode) return () => {};
+  e.stopPropagation();
+  if (isPreVolkovPanelLocked()) {
+    triggerPreVolkovPanelLockFeedback();
+    return () => {};
+  }
+  onActiveChange?.(true);
+
+  const r3fTarget = e.target as unknown as {
+    setPointerCapture?: (id: number) => void;
+    releasePointerCapture?: (id: number) => void;
+  };
+  r3fTarget?.setPointerCapture?.(e.pointerId);
+
+  let prevClientY = e.nativeEvent.clientY;
+  let currentVal = THREE.MathUtils.clamp(initialValue, minVal, maxVal);
+  const range = Math.max(1e-4, maxVal - minVal);
+  const sensitivity = range / Math.max(40, dragSpanPx);
+  let lastDetentBucket = Math.round(((currentVal - minVal) / range) * 20);
+  let finished = false;
+
+  playSwitchClank(true);
+
+  const handleMove = (ev: PointerEvent) => {
+    if (finished) return;
+    const isLocked = document.pointerLockElement !== null;
+    const rawDy = isLocked ? ev.movementY : ev.clientY - prevClientY;
+    prevClientY = ev.clientY;
+
+    if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+    const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
+
+    const nextVal = THREE.MathUtils.clamp(
+      currentVal - dy * sensitivity,
+      minVal,
+      maxVal,
+    );
+    if (Math.abs(nextVal - currentVal) < 1e-4) return;
+    currentVal = nextVal;
+    onChange(currentVal);
+
+    const bucket = Math.round(((currentVal - minVal) / range) * 20);
+    if (bucket !== lastDetentBucket) {
+      lastDetentBucket = bucket;
+      playDetentClick((Math.abs(bucket) % 5) + 1);
+    }
+  };
+
+  const cleanup = (playReleaseClank: boolean) => {
+    if (finished) return;
+    finished = true;
+    onActiveChange?.(false);
+    r3fTarget?.releasePointerCapture?.(e.pointerId);
+    window.removeEventListener("pointermove", handleMove);
+    window.removeEventListener("pointerup", handleUp);
+    window.removeEventListener("pointercancel", handleUp);
+    window.removeEventListener("blur", handleBlur);
+    if (playReleaseClank) {
+      playSwitchClank(false);
+    }
+  };
+
+  const handleUp = () => cleanup(true);
+  const handleBlur = () => cleanup(false);
+
   window.addEventListener("pointermove", handleMove);
   window.addEventListener("pointerup", handleUp);
   window.addEventListener("pointercancel", handleUp);
+  window.addEventListener("blur", handleBlur);
+
+  return () => cleanup(false);
 }
 
 const BOLT_ANGLES_8 = [
@@ -1081,6 +1119,45 @@ function getSharedKsp4Textures(): readonly [THREE.CanvasTexture, THREE.CanvasTex
   return sharedKsp4TexturesCache;
 }
 
+const SECTOR_NODE_KEYS: readonly SectorNodeId[] = [
+  "pripyat",
+  "duga",
+  "kolkhoz",
+  "kgb",
+  "vodka",
+  "steel",
+];
+const M381_TARGETS_SCRATCH = new Float32Array(8);
+
+function normRange(v: number, lo: number, hi: number): number {
+  return THREE.MathUtils.clamp((v - lo) / (hi - lo), 0, 1);
+}
+
+function countOwnKeys(obj: object): number {
+  let count = 0;
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function setCabinetBeaconState(
+  beaconRefs: [THREE.MeshStandardMaterial | null, THREE.MeshStandardMaterial | null],
+  col: THREE.Color,
+  emissiveCol: THREE.Color,
+  intensity: number,
+): void {
+  for (let b = 0; b < 2; b++) {
+    const bMat = beaconRefs[b];
+    if (!bMat) continue;
+    bMat.color.copy(col);
+    bMat.emissive.copy(emissiveCol);
+    bMat.emissiveIntensity = intensity;
+  }
+}
+
 const SECTOR_TO_SUBSTATION_ID: Readonly<Record<SectorNodeId, number>> = {
   pripyat: 1,
   duga: 2,
@@ -1198,40 +1275,57 @@ export const SovietModularSteelCabinet3D: React.FC<
             (unitCode === "B" || unitCode === "A" || unitCode === "A2")));
 
       // 2. Continuous 0.0 -> 1.0 Stress Score + Culprit Tag Per Console
-      const norm = (v: number, lo: number, hi: number): number =>
-        THREE.MathUtils.clamp((v - lo) / (hi - lo), 0, 1);
-
       let rawSeverity = 0;
       let culpritTag = "SYSTEM NOMINAL";
-      const consider = (score: number, tag: string) => {
-        if (score > rawSeverity) {
-          rawSeverity = score;
-          culpritTag = tag;
-        }
-      };
 
       const isOperating =
         s.thermalPower > 220 || s.tutorialPhase === "COMPLETED";
 
       if (unitCode === "B") {
-        consider(norm(Math.abs(s.drumWaterLevel), 60, 260), "DRUM LEVEL");
+        const lvlScore = normRange(Math.abs(s.drumWaterLevel), 60, 260);
+        if (lvlScore > rawSeverity) {
+          rawSeverity = lvlScore;
+          culpritTag = "DRUM LEVEL";
+        }
         const steamScore = Math.max(
-          norm(s.drumPressure, 72, 86),
-          isOperating ? norm(62 - s.drumPressure, 0, 32) : 0,
+          normRange(s.drumPressure, 72, 86),
+          isOperating ? normRange(62 - s.drumPressure, 0, 32) : 0,
         );
-        consider(steamScore, "STEAM BAR");
-        consider(norm(s.bubblerLevel, 65, 92), "BUBBLER FULL");
-        consider(norm(s.graphiteTemp, 500, 650), "GRAPHITE HOT");
-        if (
-          isOperating &&
-          (s.sealToggles.some((on) => !on) ||
-            !s.containmentSealLocked ||
-            s.mcpActive.filter(Boolean).length < 2)
-        ) {
-          consider(0.65, "PUMPS / SEALS");
+        if (steamScore > rawSeverity) {
+          rawSeverity = steamScore;
+          culpritTag = "STEAM BAR";
+        }
+        const bubScore = normRange(s.bubblerLevel, 65, 92);
+        if (bubScore > rawSeverity) {
+          rawSeverity = bubScore;
+          culpritTag = "BUBBLER FULL";
+        }
+        const gphScore = normRange(s.graphiteTemp, 500, 650);
+        if (gphScore > rawSeverity) {
+          rawSeverity = gphScore;
+          culpritTag = "GRAPHITE HOT";
+        }
+        if (isOperating) {
+          let sealMissing = !s.containmentSealLocked;
+          if (!sealMissing) {
+            for (let i = 0; i < 3; i++) {
+              if (!s.sealToggles[i]) {
+                sealMissing = true;
+                break;
+              }
+            }
+          }
+          let activeMcp = 0;
+          for (let i = 0; i < 4; i++) {
+            if (s.mcpActive[i]) activeMcp += 1;
+          }
+          if ((sealMissing || activeMcp < 2) && 0.65 > rawSeverity) {
+            rawSeverity = 0.65;
+            culpritTag = "PUMPS / SEALS";
+          }
         }
       } else if (unitCode === "A2") {
-        const spentCount = Object.keys(s.channelHotspots).length;
+        const spentCount = countOwnKeys(s.channelHotspots);
         const spentScore =
           spentCount >= 4
             ? 1.0
@@ -1242,20 +1336,39 @@ export const SovietModularSteelCabinet3D: React.FC<
                 : spentCount === 1
                   ? 0.38
                   : 0;
-        consider(spentScore, "REFUEL CORE");
-        consider(norm(s.voidFraction * 100, 18, 52), "VOID SURGE");
-        consider(norm(s.xenon, 20, 55) * 0.85, "XENON PIT");
-        consider(norm(s.thermalPower, 3200, 3750), "HIGH MW");
-        if (s.az5Active) {
-          consider(1.0, "AZ-5 SCRAM");
+        if (spentScore > rawSeverity) {
+          rawSeverity = spentScore;
+          culpritTag = "REFUEL CORE";
+        }
+        const voidScore = normRange(s.voidFraction * 100, 18, 52);
+        if (voidScore > rawSeverity) {
+          rawSeverity = voidScore;
+          culpritTag = "VOID SURGE";
+        }
+        const xenScore = normRange(s.xenon, 20, 55) * 0.85;
+        if (xenScore > rawSeverity) {
+          rawSeverity = xenScore;
+          culpritTag = "XENON PIT";
+        }
+        const mwScore = normRange(s.thermalPower, 3200, 3750);
+        if (mwScore > rawSeverity) {
+          rawSeverity = mwScore;
+          culpritTag = "HIGH MW";
+        }
+        if (s.az5Active && 1.0 > rawSeverity) {
+          rawSeverity = 1.0;
+          culpritTag = "AZ-5 SCRAM";
         }
       } else if (unitCode === "A") {
-        consider(norm(s.coreTemp, 480, 720), "CORE TEMP");
+        const tempScore = normRange(s.coreTemp, 480, 720);
+        if (tempScore > rawSeverity) {
+          rawSeverity = tempScore;
+          culpritTag = "CORE TEMP";
+        }
         if (s.tutorialPhase === "COMPLETED") {
-          const sectorKeys = Object.keys(s.sectorMW) as SectorNodeId[];
           let unmatched = 0;
-          for (let k = 0; k < sectorKeys.length; k++) {
-            const key = sectorKeys[k];
+          for (let k = 0; k < SECTOR_NODE_KEYS.length; k++) {
+            const key = SECTOR_NODE_KEYS[k];
             if (
               !getSectorQuotaStatus(
                 s.substations,
@@ -1274,16 +1387,24 @@ export const SovietModularSteelCabinet3D: React.FC<
               remSec < 12
                 ? 1.0
                 : remSec < 30
-                  ? Math.max(baseQuota, 0.78 + norm(30 - remSec, 0, 18) * 0.22)
+                  ? Math.max(baseQuota, 0.78 + normRange(30 - remSec, 0, 18) * 0.22)
                   : baseQuota;
-            consider(quotaScore, "SECTOR QUOTA");
+            if (quotaScore > rawSeverity) {
+              rawSeverity = quotaScore;
+              culpritTag = "SECTOR QUOTA";
+            }
           }
         }
-        consider(norm(s.roomRadiation, 0.8, 6.0), "RADIATION");
-        consider(
-          norm(Math.max(s.pumpAHeat, s.pumpBHeat), 55, 88) * 0.9,
-          "PUMP BEARING",
-        );
+        const radScore = normRange(s.roomRadiation, 0.8, 6.0);
+        if (radScore > rawSeverity) {
+          rawSeverity = radScore;
+          culpritTag = "RADIATION";
+        }
+        const brgScore = normRange(Math.max(s.pumpAHeat, s.pumpBHeat), 55, 88) * 0.9;
+        if (brgScore > rawSeverity) {
+          rawSeverity = brgScore;
+          culpritTag = "PUMP BEARING";
+        }
       } else if (unitCode === "C") {
         const bat = s.batteryStoredPct;
         const batScore =
@@ -1296,7 +1417,10 @@ export const SovietModularSteelCabinet3D: React.FC<
                 : bat > 10
                   ? THREE.MathUtils.lerp(1.0, 0.75, (bat - 10) / 10)
                   : 1.0;
-        consider(batScore, "LOW BATTERY");
+        if (batScore > rawSeverity) {
+          rawSeverity = batScore;
+          culpritTag = "LOW BATTERY";
+        }
         const drainMW = Math.max(0, s.totalElectricalMW - s.energyCreatedMW);
         const drainScore =
           drainMW <= 0
@@ -1306,26 +1430,42 @@ export const SovietModularSteelCabinet3D: React.FC<
               : drainMW < 300
                 ? 0.65 + ((drainMW - 150) / 150) * 0.25
                 : 0.9;
-        consider(drainScore, "BAT DRAINING");
-        if (s.tutorialPhase === "COMPLETED") {
-          consider(
-            norm(Math.abs(s.totalElectricalMW - s.energyDemandMW), 25, 110),
-            "GRID DEFICIT",
-          );
+        if (drainScore > rawSeverity) {
+          rawSeverity = drainScore;
+          culpritTag = "BAT DRAINING";
         }
-        if (s.isBlackout) {
-          consider(1.0, "BUS BLACKOUT");
+        if (s.tutorialPhase === "COMPLETED") {
+          const gridScore = normRange(
+            Math.abs(s.totalElectricalMW - s.energyDemandMW),
+            25,
+            110,
+          );
+          if (gridScore > rawSeverity) {
+            rawSeverity = gridScore;
+            culpritTag = "GRID DEFICIT";
+          }
+        }
+        if (s.isBlackout && 1.0 > rawSeverity) {
+          rawSeverity = 1.0;
+          culpritTag = "BUS BLACKOUT";
         }
       } else {
-        if (s.turbines[0]?.tripped) {
-          consider(1.0, "TURBINE TRIP");
+        if (s.turbines[0]?.tripped && 1.0 > rawSeverity) {
+          rawSeverity = 1.0;
+          culpritTag = "TURBINE TRIP";
         }
-        consider(norm(s.drumPressure, 72, 86), "STEAM BAR");
-        if (s.steamDumpValve) {
-          consider(0.55, "STEAM DUMP");
+        const barScore = normRange(s.drumPressure, 72, 86);
+        if (barScore > rawSeverity) {
+          rawSeverity = barScore;
+          culpritTag = "STEAM BAR";
         }
-        if (s.isBlackout) {
-          consider(1.0, "BUS BLACKOUT");
+        if (s.steamDumpValve && 0.55 > rawSeverity) {
+          rawSeverity = 0.55;
+          culpritTag = "STEAM DUMP";
+        }
+        if (s.isBlackout && 1.0 > rawSeverity) {
+          rawSeverity = 1.0;
+          culpritTag = "BUS BLACKOUT";
         }
       }
 
@@ -1339,20 +1479,6 @@ export const SovietModularSteelCabinet3D: React.FC<
       const severity = smoothSeverityRef.current;
 
       // 3. Drive 10-Segment Progressive Canopy Bar, Center Window & Roof Beacon
-      const setBeaconState = (
-        col: THREE.Color,
-        emissiveCol: THREE.Color,
-        intensity: number,
-      ) => {
-        for (let b = 0; b < 2; b++) {
-          const bMat = beaconMatRefs.current[b];
-          if (!bMat) continue;
-          bMat.color.copy(col);
-          bMat.emissive.copy(emissiveCol);
-          bMat.emissiveIntensity = intensity;
-        }
-      };
-
       let bannerMode: CanopyBannerMode = "tier0";
       let bannerText = "SYSTEM NOMINAL";
 
@@ -1371,7 +1497,12 @@ export const SovietModularSteelCabinet3D: React.FC<
           mat.emissive.copy(CANOPY_SCRATCH_COL);
           mat.emissiveIntensity = tutEmissive;
         }
-        setBeaconState(CANOPY_SCRATCH_COL, CANOPY_SCRATCH_COL, tutEmissive);
+        setCabinetBeaconState(
+          beaconMatRefs.current,
+          CANOPY_SCRATCH_COL,
+          CANOPY_SCRATCH_COL,
+          tutEmissive,
+        );
 
         bannerMode = "tutorial";
         bannerText = "★ STARTUP HERE ★";
@@ -1391,7 +1522,12 @@ export const SovietModularSteelCabinet3D: React.FC<
           mat.emissive.copy(CANOPY_COL_DARK_EM);
           mat.emissiveIntensity = 0.04;
         }
-        setBeaconState(CANOPY_COL_DARK, CANOPY_COL_DARK_EM, 0.04);
+        setCabinetBeaconState(
+          beaconMatRefs.current,
+          CANOPY_COL_DARK,
+          CANOPY_COL_DARK_EM,
+          0.04,
+        );
 
         bannerMode = "blackout";
         bannerText = "BUS BLACKOUT";
@@ -1418,7 +1554,12 @@ export const SovietModularSteelCabinet3D: React.FC<
               mat.emissiveIntensity = 0.04;
             }
           }
-          setBeaconState(CANOPY_COL_GREEN_DIM, CANOPY_COL_GREEN, 0.42);
+          setCabinetBeaconState(
+            beaconMatRefs.current,
+            CANOPY_COL_GREEN_DIM,
+            CANOPY_COL_GREEN,
+            0.42,
+          );
           if (centerWindowMatRef.current) {
             centerWindowMatRef.current.emissive.copy(CANOPY_COL_WHITE);
             centerWindowMatRef.current.emissiveIntensity = 0.72;
@@ -1459,7 +1600,8 @@ export const SovietModularSteelCabinet3D: React.FC<
             CANOPY_COL_YELLOW,
             t1,
           );
-          setBeaconState(
+          setCabinetBeaconState(
+            beaconMatRefs.current,
             CANOPY_SCRATCH_COL,
             CANOPY_SCRATCH_COL,
             0.55 + 0.6 * pulse08,
@@ -1504,7 +1646,8 @@ export const SovietModularSteelCabinet3D: React.FC<
             CANOPY_COL_AMBER,
             t2,
           );
-          setBeaconState(
+          setCabinetBeaconState(
+            beaconMatRefs.current,
             CANOPY_SCRATCH_COL,
             CANOPY_SCRATCH_COL,
             0.65 + 0.95 * pulse15,
@@ -1549,7 +1692,8 @@ export const SovietModularSteelCabinet3D: React.FC<
             CANOPY_COL_REDORANGE,
             0.5 + 0.5 * t3,
           );
-          setBeaconState(
+          setCabinetBeaconState(
+            beaconMatRefs.current,
             CANOPY_SCRATCH_COL,
             CANOPY_SCRATCH_COL,
             0.6 + 1.45 * pulse25,
@@ -1573,7 +1717,8 @@ export const SovietModularSteelCabinet3D: React.FC<
             mat.emissive.copy(CANOPY_COL_CRIMSON);
             mat.emissiveIntensity = emissiveInt;
           }
-          setBeaconState(
+          setCabinetBeaconState(
+            beaconMatRefs.current,
             strobeOn ? CANOPY_COL_CRIMSON : CANOPY_COL_CRIMSON_DIM,
             CANOPY_COL_CRIMSON,
             strobeOn ? 2.6 : 0.3,
@@ -1679,51 +1824,51 @@ export const SovietModularSteelCabinet3D: React.FC<
       }
 
       // Spring-damper inertia + high-frequency mechanical vibration on the 8 M381 horizontal strip meters
-      const dt = 0.016;
-      const transientSeverity = Math.max(
-        Math.abs(s.gridTransientImpulse) * 1.4,
-        Math.abs(s.steamTransientImpulse) / 10,
-        Math.abs(s.gridHz - 50) * 1.1,
-      );
-      const targets = [
-        THREE.MathUtils.clamp(s.pressureBar / 80, 0.05, 0.95),
-        THREE.MathUtils.clamp((s.coreTemp - 200) / 700, 0.05, 0.95),
-        THREE.MathUtils.clamp(s.coolantFlow / 1.15, 0.05, 0.95),
-        THREE.MathUtils.clamp((s.gridHz - 47.5) / 5.0, 0.05, 0.95),
-        THREE.MathUtils.clamp(s.totalElectricalMW / 900, 0.05, 0.95),
-        THREE.MathUtils.clamp((s.graphiteTemp - 100) / 600, 0.05, 0.95),
-        THREE.MathUtils.clamp(s.heliumPressure / 80, 0.05, 0.95),
-        THREE.MathUtils.clamp(s.bubblerLevel / 100, 0.05, 0.95),
-      ];
-      const maxSpanX = (width > 1.8 ? 0.22 : 0.165) - 0.032;
-      for (let m = 0; m < 8; m++) {
-        const needle = m381NeedleRefs.current[m];
-        if (!needle) continue;
-        const tgt = s.isBlackout ? 0.04 : targets[m];
-        const cur = m381PosRefs.current[m];
-        let vel = m381VelRefs.current[m];
-        const isOutNominal = cur > 0.72 || cur < 0.2 || transientSeverity > 0.12;
-        if (!isOutNominal && Math.abs(tgt - cur) < 0.0015 && Math.abs(vel) < 0.005) {
-          m381PosRefs.current[m] = tgt;
-          m381VelRefs.current[m] = 0;
-          needle.position.x = (tgt - 0.5) * maxSpanX;
-          continue;
-        }
-        const accel = (tgt - cur) * 175.0 - vel * 12.5;
-        vel += accel * dt;
-        const nextPos = THREE.MathUtils.clamp(cur + vel * dt, 0.03, 0.97);
-        m381PosRefs.current[m] = nextPos;
-        m381VelRefs.current[m] = vel;
+      if (!hideStripMeters) {
+        const dt = 0.016;
+        const transientSeverity = Math.max(
+          Math.abs(s.gridTransientImpulse) * 1.4,
+          Math.abs(s.steamTransientImpulse) / 10,
+          Math.abs(s.gridHz - 50) * 1.1,
+        );
+        M381_TARGETS_SCRATCH[0] = THREE.MathUtils.clamp(s.pressureBar / 80, 0.05, 0.95);
+        M381_TARGETS_SCRATCH[1] = THREE.MathUtils.clamp((s.coreTemp - 200) / 700, 0.05, 0.95);
+        M381_TARGETS_SCRATCH[2] = THREE.MathUtils.clamp(s.coolantFlow / 1.15, 0.05, 0.95);
+        M381_TARGETS_SCRATCH[3] = THREE.MathUtils.clamp((s.gridHz - 47.5) / 5.0, 0.05, 0.95);
+        M381_TARGETS_SCRATCH[4] = THREE.MathUtils.clamp(s.totalElectricalMW / 900, 0.05, 0.95);
+        M381_TARGETS_SCRATCH[5] = THREE.MathUtils.clamp((s.graphiteTemp - 100) / 600, 0.05, 0.95);
+        M381_TARGETS_SCRATCH[6] = THREE.MathUtils.clamp(s.heliumPressure / 80, 0.05, 0.95);
+        M381_TARGETS_SCRATCH[7] = THREE.MathUtils.clamp(s.bubblerLevel / 100, 0.05, 0.95);
+        const maxSpanX = (width > 1.8 ? 0.22 : 0.165) - 0.032;
+        for (let m = 0; m < 8; m++) {
+          const needle = m381NeedleRefs.current[m];
+          if (!needle) continue;
+          const tgt = s.isBlackout ? 0.04 : M381_TARGETS_SCRATCH[m];
+          const cur = m381PosRefs.current[m];
+          let vel = m381VelRefs.current[m];
+          const isOutNominal = cur > 0.72 || cur < 0.2 || transientSeverity > 0.12;
+          if (!isOutNominal && Math.abs(tgt - cur) < 0.0015 && Math.abs(vel) < 0.005) {
+            m381PosRefs.current[m] = tgt;
+            m381VelRefs.current[m] = 0;
+            needle.position.x = (tgt - 0.5) * maxSpanX;
+            continue;
+          }
+          const accel = (tgt - cur) * 175.0 - vel * 12.5;
+          vel += accel * dt;
+          const nextPos = THREE.MathUtils.clamp(cur + vel * dt, 0.03, 0.97);
+          m381PosRefs.current[m] = nextPos;
+          m381VelRefs.current[m] = vel;
 
-        const nextOutNominal =
-          nextPos > 0.72 || nextPos < 0.2 || transientSeverity > 0.12;
-        const vib = nextOutNominal
-          ? (Math.sin(t * 138.0 + m * 1.9) * 0.65 +
-              Math.cos(t * 176.0 + m * 2.7) * 0.35) *
-            0.014 *
-            Math.max(0.35, Math.min(1.5, transientSeverity))
-          : 0;
-        needle.position.x = (nextPos - 0.5 + vib) * maxSpanX;
+          const nextOutNominal =
+            nextPos > 0.72 || nextPos < 0.2 || transientSeverity > 0.12;
+          const vib = nextOutNominal
+            ? (Math.sin(t * 138.0 + m * 1.9) * 0.65 +
+                Math.cos(t * 176.0 + m * 2.7) * 0.35) *
+              0.014 *
+              Math.max(0.35, Math.min(1.5, transientSeverity))
+            : 0;
+          needle.position.x = (nextPos - 0.5 + vib) * maxSpanX;
+        }
       }
     });
 
@@ -3195,8 +3340,8 @@ export const SovietBacklitIndicatorBlock3D: React.FC<
 
     if (acknowledged) {
       // Steady bright amber while dragging/adjusting (operator ack)
-      mat.color.set("#ffbb22");
-      mat.emissive.set("#ffb000");
+      mat.color.setHex(0xffbb22);
+      mat.emissive.setHex(0xffb000);
       mat.emissiveIntensity = 1.75;
       return;
     }
@@ -3204,8 +3349,8 @@ export const SovietBacklitIndicatorBlock3D: React.FC<
     if (level === "critical") {
       // 3.5 Hz urgent red strobe
       const critFlash = Math.sin(t * Math.PI * 2 * 3.5) > 0;
-      mat.color.set(critFlash ? "#ff332a" : "#441010");
-      mat.emissive.set("#ff2a2a");
+      mat.color.setHex(critFlash ? 0xff332a : 0x441010);
+      mat.emissive.setHex(0xff2a2a);
       mat.emissiveIntensity = critFlash ? 2.25 : 0.25;
       return;
     }
@@ -3213,30 +3358,30 @@ export const SovietBacklitIndicatorBlock3D: React.FC<
     if (level === "warn") {
       // 1.5 Hz pulsing amber
       const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
-      mat.color.set("#ffaa00");
-      mat.emissive.set("#ffb000");
+      mat.color.setHex(0xffaa00);
+      mat.emissive.setHex(0xffb000);
       mat.emissiveIntensity = 0.6 + warnPulse * 1.4;
       return;
     }
 
     if (state.isBlackout) {
-      mat.color.set("#18201c");
-      mat.emissive.set("#18201c");
+      mat.color.setHex(0x18201c);
+      mat.emissive.setHex(0x18201c);
       mat.emissiveIntensity = 0.04;
       return;
     }
 
     if (level === "active") {
       // Steady bright Soviet phosphor green when engaged (e.g., AUTO RODS)
-      mat.color.set("#33ff66");
-      mat.emissive.set("#28d858");
+      mat.color.setHex(0x33ff66);
+      mat.emissive.setHex(0x28d858);
       mat.emissiveIntensity = 1.45;
       return;
     }
 
     // Normal dim sage/white glow
-    mat.color.set("#d8e6de");
-    mat.emissive.set("#b8d8c4");
+    mat.color.setHex(0xd8e6de);
+    mat.emissive.setHex(0xb8d8c4);
     mat.emissiveIntensity = 0.28;
   });
 
@@ -3635,26 +3780,26 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
         const customLvl = getAlertLevel ? getAlertLevel(state) : null;
         if (customLvl === "critical" || state.turbines[0]?.tripped) {
           const critFlash = Math.sin(t * Math.PI * 2 * 3.5) > 0;
-          warningLampRef.current.color.set("#ff2a2a");
-          warningLampRef.current.emissive.set("#ff2a2a");
+          warningLampRef.current.color.setHex(0xff2a2a);
+          warningLampRef.current.emissive.setHex(0xff2a2a);
           warningLampRef.current.emissiveIntensity = critFlash ? 2.35 : 0.28;
         } else if (customLvl === "warn") {
           const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
-          warningLampRef.current.color.set("#ffb000");
-          warningLampRef.current.emissive.set("#ffb000");
+          warningLampRef.current.color.setHex(0xffb000);
+          warningLampRef.current.emissive.setHex(0xffb000);
           warningLampRef.current.emissiveIntensity = 0.65 + warnPulse * 1.45;
         } else {
           const inSync =
             Math.abs(rawVal) <= 25 &&
             Math.abs((state.turbines[0]?.rpm ?? 0) - 3000) <= 60;
           if (inSync || state.turbines[0]?.gridConnected) {
-            warningLampRef.current.color.set("#33ff66");
-            warningLampRef.current.emissive.set("#33ff66");
+            warningLampRef.current.color.setHex(0x33ff66);
+            warningLampRef.current.emissive.setHex(0x33ff66);
             warningLampRef.current.emissiveIntensity = 1.1;
           } else {
             const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
-            warningLampRef.current.color.set("#ffb000");
-            warningLampRef.current.emissive.set("#ffb000");
+            warningLampRef.current.color.setHex(0xffb000);
+            warningLampRef.current.emissive.setHex(0xffb000);
             warningLampRef.current.emissiveIntensity = 0.65 + warnPulse * 1.35;
           }
         }
@@ -3766,18 +3911,18 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
       if (isDanger) {
         // 3.5 Hz fast urgent strobe for Critical
         const critFlash = Math.sin(t * Math.PI * 2 * 3.5) > 0;
-        warningLampRef.current.color.set("#ff2a2a");
-        warningLampRef.current.emissive.set("#ff2a2a");
+        warningLampRef.current.color.setHex(0xff2a2a);
+        warningLampRef.current.emissive.setHex(0xff2a2a);
         warningLampRef.current.emissiveIntensity = critFlash ? 2.35 : 0.28;
       } else if (isWarn) {
         // 1.5 Hz pulsing amber for Warning
         const warnPulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.5);
-        warningLampRef.current.color.set("#ffb000");
-        warningLampRef.current.emissive.set("#ffb000");
+        warningLampRef.current.color.setHex(0xffb000);
+        warningLampRef.current.emissive.setHex(0xffb000);
         warningLampRef.current.emissiveIntensity = 0.65 + warnPulse * 1.45;
       } else {
-        warningLampRef.current.color.set("#33ff66");
-        warningLampRef.current.emissive.set("#33ff66");
+        warningLampRef.current.color.setHex(0x33ff66);
+        warningLampRef.current.emissive.setHex(0x33ff66);
         warningLampRef.current.emissiveIntensity = 0.78;
       }
     }
@@ -3964,6 +4109,124 @@ export const HighDetailManometer3D: React.FC<HighDetailManometer3DProps> = ({
   );
 };
 
+const PUMP_LEVER_TRAVEL_HALF_M = 0.062;
+const PUMP_LEVER_MAX_PITCH_RAD = THREE.MathUtils.degToRad(26);
+
+function paintPumpThrottleScalePlate(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  side: "left" | "right",
+): void {
+  ctx.fillStyle = "#101613";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#b8a46b";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, w - 4, h - 4);
+
+  // Highlight nominal 50-85% operating band along inner slot edge
+  const bandYTop = 64;
+  const bandYBot = 140;
+  const bandX = side === "left" ? w - 16 : 6;
+  ctx.fillStyle = "rgba(51, 255, 102, 0.28)";
+  ctx.fillRect(bandX, bandYTop, 10, bandYBot - bandYTop);
+  ctx.fillStyle = "#33ff66";
+  ctx.fillRect(side === "left" ? w - 8 : 6, bandYTop, 2, bandYBot - bandYTop);
+
+  const ticks = [
+    { label: "100%", y: 32, major: true, color: "#33ff66" },
+    { label: "", y: 59, major: false, color: "#b8a46b" },
+    { label: "75%", y: 86, major: true, color: "#e6dec3" },
+    { label: "", y: 113, major: false, color: "#b8a46b" },
+    { label: "50%", y: 140, major: true, color: "#33ff66" },
+    { label: "", y: 167, major: false, color: "#b8a46b" },
+    { label: "25%", y: 194, major: true, color: "#ffb000" },
+    { label: "", y: 221, major: false, color: "#b8a46b" },
+    { label: "0%", y: 248, major: true, color: "#ff5555" },
+  ];
+
+  for (const tick of ticks) {
+    const tickW = tick.major ? 22 : 12;
+    const tickH = tick.major ? 4 : 2;
+    const tickX = side === "left" ? w - 6 - tickW : 6;
+    ctx.fillStyle = tick.color;
+    ctx.fillRect(tickX, tick.y - Math.floor(tickH / 2), tickW, tickH);
+
+    if (side === "left" && tick.label) {
+      ctx.font = 'bold 30px "VT323", monospace';
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = tick.color;
+      ctx.fillText(tick.label, w - 34, tick.y + 1);
+    }
+  }
+
+  if (side === "right") {
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.font = 'bold 26px "VT323", monospace';
+    ctx.fillStyle = "#33ff66";
+    ctx.fillText("▲ MAX", 34, 32);
+
+    ctx.fillStyle = "#8ce6a8";
+    ctx.font = 'bold 24px "VT323", monospace';
+    ctx.fillText("NOMINAL", 34, 92);
+    ctx.fillStyle = "#33ff66";
+    ctx.fillText("50-85%", 34, 118);
+
+    ctx.font = 'bold 26px "VT323", monospace';
+    ctx.fillStyle = "#ff5555";
+    ctx.fillText("▼ STOP", 34, 248);
+  }
+}
+
+function paintPumpFlowBargraph(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  flowPct: number,
+  isBlackout: boolean,
+): void {
+  const clampedPct = isBlackout ? 0 : THREE.MathUtils.clamp(Math.round(flowPct), 0, 100);
+  const statusColor = isBlackout
+    ? "#773030"
+    : clampedPct >= 50
+      ? "#33ff66"
+      : clampedPct > 0
+        ? "#ffb000"
+        : "#ff5555";
+  const borderColor = isBlackout
+    ? "#551a1a"
+    : clampedPct >= 50
+      ? "#33ff66"
+      : clampedPct > 0
+        ? "#b8a46b"
+        : "#ff2a2a";
+
+  ctx.fillStyle = "#101613";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, w - 4, h - 4);
+  drawFittedPlaqueText(
+    ctx,
+    isBlackout ? "PUMP FLOW: 0% (OFF)" : `PUMP FLOW: ${clampedPct}%`,
+    w / 2,
+    35,
+    w - 12,
+    '900 30px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
+    statusColor,
+    "#000000",
+    3.2,
+    "2px",
+  );
+  ctx.fillStyle = "#080c0a";
+  ctx.fillRect(14, 48, w - 28, 24);
+  ctx.strokeStyle = "#364940";
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(14, 48, w - 28, 24);
+}
+
 interface SculptedPumpValveAssembly3DProps {
   position: [number, number, number];
   scale?: number;
@@ -3975,24 +4238,25 @@ interface SculptedPumpValveAssembly3DProps {
 const SculptedPumpValveAssembly3D: React.FC<
   SculptedPumpValveAssembly3DProps
 > = ({ position, scale = 1, pumpIndex, label, subLabel }) => {
-  const wheelRef = useRef<THREE.Group>(null);
   const leverArmRef = useRef<THREE.Group>(null);
   const lampMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const heatScaleMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const heatBarMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const heatBarMeshRef = useRef<THREE.Mesh>(null);
+  const flowScaleMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const flowBarMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const flowBarMeshRef = useRef<THREE.Mesh>(null);
   const lastPumpOnRef = useRef<string | null>(null);
   const pumpDraggingRef = useRef(false);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  const lastDrawnFlowSigRef = useRef<string>("");
+  const lastFlowDrawRef = useRef<number>(-1);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
   useEffect(() => {
-    const coolId = pumpIndex === 0 ? "pumpABearingCool" : "pumpBBearingCool";
     const flowId = pumpIndex === 0 ? "pumpAFlow" : "pumpBFlow";
-    registerKomradControlObject(coolId, wheelRef.current);
-    registerKomradControlObject(flowId, leverArmRef.current, [0, 0, 0.118]);
+    registerKomradControlObject(flowId, leverArmRef.current, [0, 0, 0.13]);
     return () => {
-      registerKomradControlObject(coolId, null);
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
       registerKomradControlObject(flowId, null);
     };
   }, [pumpIndex]);
@@ -4001,153 +4265,129 @@ const SculptedPumpValveAssembly3D: React.FC<
     () =>
       makePlaqueTex(label, subLabel ?? "FLOW VALVE", {
         width: 384,
-        height: 140,
-        titleSize: 48,
-        subSize: 36,
+        height: 112,
+        titleSize: 44,
+        subSize: 30,
       }),
     [label, subLabel],
   );
 
-  const wheelSubLabelTex = useMemo(
-    () =>
-      makePlaqueTex("BEARING COOL", "WHEEL: COOL %", {
-        width: 240,
-        height: 76,
-        titleSize: 28,
-        subSize: 21,
-      }),
-    [],
-  );
-
   const leverSubLabelTex = useMemo(
     () =>
-      makePlaqueTex("PUMP THROTTLE", "LEVER: FLOW %", {
-        width: 240,
-        height: 76,
-        titleSize: 27,
-        subSize: 21,
+      makePlaqueTex("THROTTLE: FLOW %", "", {
+        width: 360,
+        height: 48,
+        titleSize: 24,
+        titleColor: "#ffe066",
       }),
     [],
   );
 
-  const lastBearingDegRef = useRef<number>(-1);
-  const lastHeatDrawRef = useRef<number>(-1);
-  const heatScaleTex = useMemo(() => {
+  const leftScalePlateTex = useMemo(
+    () =>
+      createCrispPanelTexture(144, 280, (ctx, w, h) =>
+        paintPumpThrottleScalePlate(ctx, w, h, "left"),
+      ),
+    [],
+  );
+
+  const rightScalePlateTex = useMemo(
+    () =>
+      createCrispPanelTexture(144, 280, (ctx, w, h) =>
+        paintPumpThrottleScalePlate(ctx, w, h, "right"),
+      ),
+    [],
+  );
+
+  const flowScaleTex = useMemo(() => {
     return createCrispPanelTexture(360, 84, (ctx, w, h) => {
-      ctx.fillStyle = "#101613";
-      ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = "#b8a46b";
-      ctx.lineWidth = 4;
-      ctx.strokeRect(2, 2, w - 4, h - 4);
-      drawFittedPlaqueText(
+      const s = useGameStore.getState();
+      paintPumpFlowBargraph(
         ctx,
-        "BEARING: 20°C",
-        w / 2,
-        35,
-        w - 12,
-        '900 30px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
-        "#ffe066",
-        "#000000",
-        3.2,
-        "2px",
+        w,
+        h,
+        s.pumpThrottle[pumpIndex] ?? 0,
+        s.isBlackout,
       );
-      ctx.strokeStyle = "#364940";
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(14, 48, w - 28, 24);
     });
-  }, []);
+  }, [pumpIndex]);
 
   useFrame(({ clock }) => {
     const state = useGameStore.getState();
-    const throttle = state.isBlackout ? 0 : state.pumpThrottle[pumpIndex];
+    const throttle = state.isBlackout ? 0 : (state.pumpThrottle[pumpIndex] ?? 0);
+    const flowPct = Math.round(throttle);
     const isPumpOn = state.pumpsActive[pumpIndex] && !state.isBlackout;
-    const bearingHeat = pumpIndex === 0 ? state.pumpAHeat : state.pumpBHeat;
-    const bearingDegC = Math.round(20 + bearingHeat);
 
     const now = clock.getElapsedTime();
+    const flowSig = `${flowPct}|${state.isBlackout}`;
     if (
       !state.diagFeedActive &&
-      (lastHeatDrawRef.current < 0 || now - lastHeatDrawRef.current >= 0.08)
+      (lastFlowDrawRef.current < 0 || now - lastFlowDrawRef.current >= 0.06)
     ) {
-      lastHeatDrawRef.current = now;
-      if (bearingDegC !== lastBearingDegRef.current) {
-        lastBearingDegRef.current = bearingDegC;
-        const tex = heatScaleMatRef.current?.map as
+      lastFlowDrawRef.current = now;
+      if (flowSig !== lastDrawnFlowSigRef.current) {
+        lastDrawnFlowSigRef.current = flowSig;
+        const tex = flowScaleMatRef.current?.map as
           | THREE.CanvasTexture
           | undefined;
         const canvas = tex?.image as HTMLCanvasElement | undefined;
         const ctx = canvas?.getContext("2d");
         if (tex && canvas && ctx) {
-          const w = canvas.width;
-          const h = canvas.height;
-          ctx.fillStyle = "#101613";
-          ctx.fillRect(0, 0, w, h);
-          ctx.strokeStyle = bearingHeat >= 80 ? "#ff2a2a" : "#b8a46b";
-          ctx.lineWidth = 4;
-          ctx.strokeRect(2, 2, w - 4, h - 4);
-          drawFittedPlaqueText(
+          paintPumpFlowBargraph(
             ctx,
-            `BEARING: ${bearingDegC}°C`,
-            w / 2,
-            35,
-            w - 12,
-            '900 30px "Segoe UI Black", "Arial Black", "Consolas", sans-serif',
-            bearingHeat >= 80 ? "#ff5555" : "#ffe066",
-            "#000000",
-            3.2,
-            "2px",
+            canvas.width,
+            canvas.height,
+            flowPct,
+            state.isBlackout,
           );
-          ctx.strokeStyle = "#364940";
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(14, 48, w - 28, 24);
           tex.needsUpdate = true;
         }
       }
     }
 
-    // Continuous smooth rotational angle on the 6-spoke cast-iron BEARING COOLING valve wheel
-    if (wheelRef.current) {
-      const coolingPct = state.isBlackout ? 0 : state.oilCoolerValve;
-      const targetWheelRot = -(coolingPct / 100) * Math.PI * 1.8;
-      const cavitationJitter =
-        !state.isBlackout &&
-        isPumpOn &&
-        (throttle > 88 || bearingHeat >= 75 || state.wetSteamPenalty > 0.15)
-          ? Math.sin(clock.getElapsedTime() * 44 + pumpIndex * 2) * 0.035
-          : 0;
-      wheelRef.current.rotation.z = THREE.MathUtils.lerp(
-        wheelRef.current.rotation.z,
-        targetWheelRot + cavitationJitter,
-        0.45,
-      );
-    }
-
+    // 100% deterministic 3D pose driven solely from clamped [0..1] flow value (rotation.y & rotation.z locked to 0)
     if (leverArmRef.current) {
-      const ratio = 1 - throttle / 100;
-      const targetAngleX = -0.52 + ratio * 0.96;
-      leverArmRef.current.rotation.x = THREE.MathUtils.lerp(
-        leverArmRef.current.rotation.x,
-        targetAngleX,
-        0.4,
+      const flowNorm = THREE.MathUtils.clamp(throttle / 100, 0, 1);
+      const targetPosY = THREE.MathUtils.lerp(
+        -PUMP_LEVER_TRAVEL_HALF_M,
+        PUMP_LEVER_TRAVEL_HALF_M,
+        flowNorm,
       );
+      const targetAngleX = THREE.MathUtils.lerp(
+        PUMP_LEVER_MAX_PITCH_RAD,
+        -PUMP_LEVER_MAX_PITCH_RAD,
+        flowNorm,
+      );
+      leverArmRef.current.position.x = 0;
+      leverArmRef.current.position.y = THREE.MathUtils.clamp(
+        THREE.MathUtils.lerp(leverArmRef.current.position.y, targetPosY, 0.38),
+        -PUMP_LEVER_TRAVEL_HALF_M,
+        PUMP_LEVER_TRAVEL_HALF_M,
+      );
+      leverArmRef.current.position.z = 0.022;
+      leverArmRef.current.rotation.x = THREE.MathUtils.clamp(
+        THREE.MathUtils.lerp(leverArmRef.current.rotation.x, targetAngleX, 0.38),
+        -PUMP_LEVER_MAX_PITCH_RAD,
+        PUMP_LEVER_MAX_PITCH_RAD,
+      );
+      leverArmRef.current.rotation.y = 0;
+      leverArmRef.current.rotation.z = 0;
     }
 
-    // Update Horizontal Bearing Heat Bar cleanly below the wheel & switch (+35% wider & taller)
-    if (heatBarMeshRef.current && heatBarMatRef.current) {
-      const hRatio = THREE.MathUtils.clamp(bearingHeat / 100, 0.04, 1);
-      heatBarMeshRef.current.scale.x = hRatio;
-      heatBarMeshRef.current.position.x = -0.156 + hRatio * 0.156;
-      const heatColor =
-        bearingHeat >= 80
-          ? "#ff2a2a"
-          : bearingHeat >= 55
-            ? "#ffb000"
-            : "#33ff66";
-      heatBarMatRef.current.color.set(heatColor);
-      heatBarMatRef.current.emissive.set(heatColor);
-      heatBarMatRef.current.emissiveIntensity =
-        bearingHeat >= 80
-          ? 1.5 + Math.sin(clock.getElapsedTime() * 16) * 0.6
+    // Live Horizontal PUMP FLOW Bargraph Readout
+    const fRatio = THREE.MathUtils.clamp(throttle / 100, 0, 1);
+    if (flowBarMeshRef.current && flowBarMatRef.current) {
+      flowBarMeshRef.current.visible = fRatio > 0.005;
+      const safeScale = Math.max(0.01, fRatio);
+      flowBarMeshRef.current.scale.x = safeScale;
+      flowBarMeshRef.current.position.x = -0.162 + safeScale * 0.162;
+      const flowHex =
+        flowPct >= 50 ? 0x33ff66 : flowPct > 0 ? 0xffb000 : 0xff2a2a;
+      flowBarMatRef.current.color.setHex(flowHex);
+      flowBarMatRef.current.emissive.setHex(flowHex);
+      flowBarMatRef.current.emissiveIntensity =
+        flowPct === 0
+          ? 1.35 + Math.sin(clock.getElapsedTime() * 12) * 0.45
           : 0.95;
     }
 
@@ -4166,52 +4406,35 @@ const SculptedPumpValveAssembly3D: React.FC<
     if (highlightPumpTut && lampMatRef.current) {
       lastPumpOnRef.current = null;
       const pulse = 0.5 + 0.5 * Math.sin(clock.getElapsedTime() * 6.0);
-      lampMatRef.current.color.set(pulse > 0.5 ? "#33ff66" : "#ffb000");
-      lampMatRef.current.emissive.set(pulse > 0.5 ? "#33ff66" : "#ffb000");
+      const tutHex = pulse > 0.5 ? 0x33ff66 : 0xffb000;
+      lampMatRef.current.color.setHex(tutHex);
+      lampMatRef.current.emissive.setHex(tutHex);
       lampMatRef.current.emissiveIntensity = 1.6 + pulse * 1.4;
     } else if (lampMatRef.current && lampSig !== lastPumpOnRef.current) {
       lastPumpOnRef.current = lampSig;
       if (isPumpOn) {
-        lampMatRef.current.color.set("#33ff66");
-        lampMatRef.current.emissive.set("#33ff66");
+        lampMatRef.current.color.setHex(0x33ff66);
+        lampMatRef.current.emissive.setHex(0x33ff66);
         lampMatRef.current.emissiveIntensity = 1.5;
       } else if (isColdStandby) {
-        lampMatRef.current.color.set("#6e5218");
-        lampMatRef.current.emissive.set("#6e5218");
+        lampMatRef.current.color.setHex(0x6e5218);
+        lampMatRef.current.emissive.setHex(0x6e5218);
         lampMatRef.current.emissiveIntensity = 0.35;
       } else {
-        lampMatRef.current.color.set("#ff2a2a");
-        lampMatRef.current.emissive.set("#ff2a2a");
+        lampMatRef.current.color.setHex(0xff2a2a);
+        lampMatRef.current.emissive.setHex(0xff2a2a);
         lampMatRef.current.emissiveIntensity = 0.8;
       }
     }
   });
 
-  const handleWheelPointerDown = (e: ThreeEvent<PointerEvent>) => {
-    const coolId = pumpIndex === 0 ? "pumpABearingCool" : "pumpBBearingCool";
-    const curCooling = useGameStore.getState().oilCoolerValve;
-    startSmoothWheelSwivelDrag(
-      e,
-      wheelRef.current,
-      curCooling,
-      0,
-      100,
-      (nextVal) => {
-        useGameStore.getState().setOilCoolerValve(nextVal);
-      },
-      (active) => {
-        pumpDraggingRef.current = active;
-        notifyPlayerControlInteraction(coolId, active);
-      },
-    );
-  };
-
   const handleLeverPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    dragCleanupRef.current?.();
+    dragCleanupRef.current = null;
     const flowId = pumpIndex === 0 ? "pumpAFlow" : "pumpBFlow";
-    const curThrottle = useGameStore.getState().pumpThrottle[pumpIndex];
-    startSmoothWheelSwivelDrag(
+    const curThrottle = useGameStore.getState().pumpThrottle[pumpIndex] ?? 0;
+    dragCleanupRef.current = startLinearVerticalLeverDrag(
       e,
-      leverArmRef.current,
       curThrottle,
       0,
       100,
@@ -4221,7 +4444,11 @@ const SculptedPumpValveAssembly3D: React.FC<
       (active) => {
         pumpDraggingRef.current = active;
         notifyPlayerControlInteraction(flowId, active);
+        if (!active) {
+          dragCleanupRef.current = null;
+        }
       },
+      150,
     );
   };
 
@@ -4231,20 +4458,16 @@ const SculptedPumpValveAssembly3D: React.FC<
       scale={scale}
       onPointerOver={(e) => {
         e.stopPropagation();
-        const st = useGameStore.getState();
-        st.setHoveredDiagnosticId(st.coreTemp > 520 ? "core" : "bearing");
+        useGameStore.getState().setHoveredDiagnosticId("core");
       }}
       onPointerOut={() => {
         const st = useGameStore.getState();
-        if (
-          st.hoveredDiagnosticId === "core" ||
-          st.hoveredDiagnosticId === "bearing"
-        ) {
+        if (st.hoveredDiagnosticId === "core") {
           st.setHoveredDiagnosticId(null);
         }
       }}
     >
-      {/* Bolted Dark Cast-Iron Mounting Backplate so Promoted Pump Modules Sit Flush on Vertical Riser */}
+      {/* Bolted Dark Cast-Iron Mounting Backplate Flush Against Vertical Riser */}
       <mesh position={[0, 0.015, 0.018]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[0.405, 0.465, 0.016]} />
         <meshStandardMaterial
@@ -4261,9 +4484,10 @@ const SculptedPumpValveAssembly3D: React.FC<
         <boxGeometry args={[0.42, 0.48, 0.012]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {/* Raised Engraved Brass & Iron Nameplate (+35% taller 3D geometry) */}
-      <mesh position={[0, 0.184, 0.032]} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[0.398, 0.128, 0.012]} />
+
+      {/* Raised Engraved Brass & Iron Nameplate */}
+      <mesh position={[0, 0.2, 0.032]} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[0.398, 0.094, 0.012]} />
         <meshStandardMaterial
           color="#8c7a4b"
           metalness={0.85}
@@ -4272,8 +4496,8 @@ const SculptedPumpValveAssembly3D: React.FC<
           bumpScale={0.005}
         />
       </mesh>
-      <mesh position={[0, 0.184, 0.041]} raycast={NOOP_RAYCAST}>
-        <planeGeometry args={[0.382, 0.114]} />
+      <mesh position={[0, 0.2, 0.041]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[0.382, 0.082]} />
         <meshStandardMaterial
           map={nameplateTex}
           emissive="#ffffff"
@@ -4286,14 +4510,15 @@ const SculptedPumpValveAssembly3D: React.FC<
         />
       </mesh>
 
-      {/* Caged Soviet Jewel Lamp, Backlit Indicator Block & Horizontal Bearing Heat Bar Below Wheel (+35% wider & taller: `BEARING: XX°C`) */}
+      {/* Caged Soviet Jewel Lamp & Backlit Status Block */}
       <CagedSovietJewelLamp3D
-        position={[-0.125, 0.096, 0.038]}
+        position={[-0.132, 0.125, 0.038]}
         lampMatRef={lampMatRef}
-        scale={0.84}
+        scale={0.78}
       />
       <SovietBacklitIndicatorBlock3D
-        position={[0.048, 0.096, 0.038]}
+        position={[0.044, 0.125, 0.038]}
+        scale={0.94}
         label={pumpIndex === 0 ? "PUMP A" : "PUMP B"}
         getAlertState={(s) => {
           const bHeat = pumpIndex === 0 ? s.pumpAHeat : s.pumpBHeat;
@@ -4315,222 +4540,67 @@ const SculptedPumpValveAssembly3D: React.FC<
         }}
       />
 
-      {/* Dedicated Sub-Label Plaques for Left Rotary Wheel (BEARING COOL) & Right Knife Lever (PUMP THROTTLE) */}
-      <group position={[-0.082, -0.112, 0.042]}>
+      {/* Left & Right Brass Graduation Scale Plates (0% STOP -> 100% MAX, 50-85% NOMINAL) */}
+      <group position={[-0.131, -0.004, 0.039]}>
         <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.156, 0.044, 0.008]} />
-          <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
-        </mesh>
-        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.148, 0.038]} />
+          <boxGeometry args={[0.11, 0.204, 0.008]} />
           <meshStandardMaterial
-            map={wheelSubLabelTex}
-            emissive="#ffffff"
-            emissiveMap={wheelSubLabelTex}
-            emissiveIntensity={0.38}
-            roughness={0.55}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-      </group>
-      <group position={[0.092, -0.112, 0.042]}>
-        <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.156, 0.044, 0.008]} />
-          <meshStandardMaterial color="#8c7a4b" metalness={0.85} roughness={0.28} />
-        </mesh>
-        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.148, 0.038]} />
-          <meshStandardMaterial
-            map={leverSubLabelTex}
-            emissive="#ffffff"
-            emissiveMap={leverSubLabelTex}
-            emissiveIntensity={0.38}
-            roughness={0.55}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-      </group>
-      <group position={[0.005, -0.176, 0.038]}>
-        <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.362, 0.07, 0.016]} />
-          <meshStandardMaterial
-            color="#101513"
-            roughness={0.5}
-            metalness={0.7}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.005}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.0105]} raycast={NOOP_RAYCAST}>
-          <planeGeometry args={[0.346, 0.062]} />
-          <meshStandardMaterial
-            ref={heatScaleMatRef}
-            map={heatScaleTex}
-            emissive="#ffffff"
-            emissiveMap={heatScaleTex}
-            emissiveIntensity={0.45}
-            roughness={0.75}
-            polygonOffset
-            polygonOffsetFactor={-2}
-            polygonOffsetUnits={-2}
-          />
-        </mesh>
-        <mesh ref={heatBarMeshRef} position={[0, -0.013, 0.0155]} raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.312, 0.016, 0.008]} />
-          <meshStandardMaterial
-            ref={heatBarMatRef}
-            color="#33ff66"
-            emissive="#33ff66"
-            emissiveIntensity={1.15}
-          />
-        </mesh>
-      </group>
-
-      {/* Heavy Bolted Cast-Iron Valve Manifold & Enlarged 6-Spoke Handwheel (BEARING COOLING VALVE) */}
-      <group
-        position={[-0.076, -0.012, 0.038]}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          useGameStore
-            .getState()
-            .setHoveredControlHint(
-              "BEARING COOLING WHEEL: Scroll/Drag to open bearing cooling water flow (keep >=50% to keep bearings ~38°C)!",
-            );
-        }}
-        onPointerOut={(e) => {
-          e.stopPropagation();
-          useGameStore.getState().setHoveredControlHint(null);
-        }}
-        onWheel={(e) => {
-          if (useCameraLookStore.getState().isFreeLookMode) return;
-          e.stopPropagation();
-          e.nativeEvent?.stopImmediatePropagation?.();
-          const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
-          const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 2 : 8);
-          const s = useGameStore.getState();
-          const nextCooling = THREE.MathUtils.clamp(
-            Math.round(s.oilCoolerValve + step),
-            0,
-            100,
-          );
-          if (nextCooling !== Math.round(s.oilCoolerValve)) {
-            playDetentClick((Math.abs(nextCooling) % 5) + 1);
-            s.setOilCoolerValve(nextCooling);
-          }
-        }}
-        onPointerDown={handleWheelPointerDown}
-      >
-        {/* Pipe Manifold Flange & Brushed-Brass Degree Scale Plate */}
-        <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-          <cylinderGeometry args={[0.068, 0.076, 0.032, 12]} />
-          <meshStandardMaterial
-            color="#18211b"
-            roughness={0.45}
-            metalness={0.68}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.008}
-          />
-        </mesh>
-        <mesh position={[0, 0, 0.018]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-          <cylinderGeometry args={[0.056, 0.058, 0.008, 16]} />
-          <meshStandardMaterial
-            color="#b8a46b"
+            color="#8c7a4b"
             metalness={0.85}
             roughness={0.28}
             bumpMap={brassTex.bumpMap}
-            bumpScale={0.005}
+            bumpScale={0.004}
           />
         </mesh>
-        {/* Valve Stem Stuffing Box */}
-        <mesh position={[0, 0, 0.035]} rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-          <cylinderGeometry args={[0.022, 0.028, 0.068, 10]} />
+        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.102, 0.194]} />
           <meshStandardMaterial
-            color="#364940"
-            roughness={0.45}
-            metalness={0.7}
-            bumpMap={ironTex.bumpMap}
-            bumpScale={0.006}
+            map={leftScalePlateTex}
+            emissive="#ffffff"
+            emissiveMap={leftScalePlateTex}
+            emissiveIntensity={0.38}
+            roughness={0.55}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
           />
         </mesh>
-
-        {/* Enlarged 6-Spoke Cast-Iron Handwheel with Tight Non-Overlapping Hit Target */}
-        <group
-          ref={wheelRef}
-          position={[0, 0, 0.068]}
-          onPointerDown={handleWheelPointerDown}
-        >
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.105, 0.105, 0.11, 16]} />
-            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-          </mesh>
-          {/* Outer Rim Torus — Chipped Deep Oxidized Crimson / Olive-Drab Cast-Iron Enamel */}
-          <mesh raycast={NOOP_RAYCAST}>
-            <torusGeometry args={[0.074, 0.013, 10, 20]} />
-            <meshStandardMaterial
-              color={pumpIndex === 0 ? "#6e1a14" : "#2f3a2e"}
-              roughness={0.44}
-              metalness={0.52}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.008}
-              roughnessMap={ironTex.roughnessMap}
-            />
-          </mesh>
-          {/* 3 Intersecting Diameter Bars = 6 Spokes */}
-          {[0, Math.PI / 3, (2 * Math.PI) / 3].map((ang, sIdx) => (
-            <mesh key={sIdx} rotation={[0, 0, ang]} raycast={NOOP_RAYCAST}>
-              <cylinderGeometry args={[0.0068, 0.0068, 0.144, 8]} />
-              <meshStandardMaterial
-                color="#2b3036"
-                roughness={0.42}
-                metalness={0.68}
-                bumpMap={ironTex.bumpMap}
-                bumpScale={0.006}
-                roughnessMap={ironTex.roughnessMap}
-              />
-            </mesh>
-          ))}
-          {/* Central Machined Steel & Brass Retention Cap */}
-          <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
-            <cylinderGeometry args={[0.019, 0.021, 0.022, 8]} />
-            <meshStandardMaterial
-              color="#8a929a"
-              metalness={0.85}
-              roughness={0.32}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.005}
-            />
-          </mesh>
-          {/* Protruding Dark Phenolic Bakelite Crank-Handle Peg on Rim */}
-          <mesh
-            position={[0.062, 0.02, 0.018]}
-            rotation={[Math.PI / 2, 0, 0]}
-            raycast={NOOP_RAYCAST}
-          >
-            <cylinderGeometry args={[0.008, 0.0095, 0.036, 10]} />
-            <meshStandardMaterial
-              color="#1c1817"
-              metalness={0.15}
-              roughness={0.32}
-              bumpMap={ironTex.bumpMap}
-              bumpScale={0.004}
-            />
-          </mesh>
-        </group>
+      </group>
+      <group position={[0.131, -0.004, 0.039]}>
+        <mesh raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.11, 0.204, 0.008]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            metalness={0.85}
+            roughness={0.28}
+            bumpMap={brassTex.bumpMap}
+            bumpScale={0.004}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.102, 0.194]} />
+          <meshStandardMaterial
+            map={rightScalePlateTex}
+            emissive="#ffffff"
+            emissiveMap={rightScalePlateTex}
+            emissiveIntensity={0.38}
+            roughness={0.55}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
       </group>
 
-      {/* Dual-Blade Copper Knife-Switch Throw Lever with Dark Phenolic Bakelite Crossbar & Steel Ferrules (PUMP THROTTLE LEVER) */}
+      {/* Centered Scaled-Up Soviet T-Handle Throttle Lever (PUMP THROTTLE LEVER) */}
       <group
-        position={[0.092, -0.012, 0.036]}
+        position={[0, -0.004, 0.034]}
         onPointerOver={(e) => {
           e.stopPropagation();
           useGameStore
             .getState()
             .setHoveredControlHint(
-              `PUMP THROTTLE LEVER (${pumpIndex === 0 ? "MCP 1-2" : "MCP 3-4"}): Drag/Scroll to adjust pump flow % (50-85% = Nominal, 0% = Stop)!`,
+              `PUMP THROTTLE LEVER (${pumpIndex === 0 ? "MCP 1-2" : "MCP 3-4"}): Drag Up/Down or Scroll (±2% | Shift ±1%) to adjust pump flow % (50–85% = Nominal, 0% = Stop)!`,
             );
         }}
         onPointerOut={(e) => {
@@ -4541,8 +4611,12 @@ const SculptedPumpValveAssembly3D: React.FC<
           if (useCameraLookStore.getState().isFreeLookMode) return;
           e.stopPropagation();
           e.nativeEvent?.stopImmediatePropagation?.();
+          if (isPreVolkovPanelLocked()) {
+            triggerPreVolkovPanelLockFeedback();
+            return;
+          }
           const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
-          const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 2 : 8);
+          const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 1 : 2);
           const s = useGameStore.getState();
           const curThrottle = s.pumpThrottle[pumpIndex] ?? 75;
           const nextThrottle = THREE.MathUtils.clamp(
@@ -4557,13 +4631,14 @@ const SculptedPumpValveAssembly3D: React.FC<
         }}
         onPointerDown={handleLeverPointerDown}
       >
-        {/* Single clean invisible hitbox for Pump Throttle Knife Lever */}
-        <mesh position={[0, 0, 0.07]}>
-          <boxGeometry args={[0.12, 0.24, 0.16]} />
+        {/* Scaled-up invisible hitbox covering the full centered throttle slot & T-handle */}
+        <mesh position={[0, 0, 0.088]}>
+          <boxGeometry args={[0.25, 0.24, 0.21]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
+        {/* Heavy Cast-Iron Slotted Quadrant Box */}
         <mesh raycast={NOOP_RAYCAST}>
-          <boxGeometry args={[0.088, 0.22, 0.038]} />
+          <boxGeometry args={[0.146, 0.206, 0.044]} />
           <meshStandardMaterial
             color="#181c1a"
             roughness={0.46}
@@ -4573,11 +4648,65 @@ const SculptedPumpValveAssembly3D: React.FC<
             roughnessMap={ironTex.roughnessMap}
           />
         </mesh>
-        {/* Top & Bottom Copper Contact Jaws */}
+        {/* Deep Machined Vertical Travel Slot */}
+        <mesh position={[0, 0, 0.019]} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.044, 0.168, 0.012]} />
+          <meshStandardMaterial color="#070a09" roughness={0.9} />
+        </mesh>
+        {/* Twin Beveled Brushed-Steel Guide Rails */}
+        {[-0.03, 0.03].map((rx, rIdx) => (
+          <mesh key={rIdx} position={[rx, 0, 0.023]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.014, 0.178, 0.01]} />
+            <meshStandardMaterial
+              color="#8a929a"
+              metalness={0.86}
+              roughness={0.3}
+              bumpMap={ironTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+        ))}
+        {/* Top & Bottom Brass End-Stop Bumpers */}
+        {[-0.088, 0.088].map((by, bIdx) => (
+          <mesh key={bIdx} position={[0, by, 0.024]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.076, 0.014, 0.012]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.85}
+              roughness={0.28}
+              bumpMap={brassTex.bumpMap}
+              bumpScale={0.004}
+            />
+          </mesh>
+        ))}
+        {/* 4 Corner Brass Hex Bolts */}
+        {(
+          [
+            [-0.058, 0.088],
+            [0.058, 0.088],
+            [-0.058, -0.088],
+            [0.058, -0.088],
+          ] as const
+        ).map(([bx, by], hIdx) => (
+          <mesh
+            key={hIdx}
+            position={[bx, by, 0.024]}
+            rotation={[Math.PI / 2, 0, 0]}
+            raycast={NOOP_RAYCAST}
+          >
+            <cylinderGeometry args={[0.007, 0.007, 0.01, 6]} />
+            <meshStandardMaterial
+              color="#b8a46b"
+              metalness={0.88}
+              roughness={0.26}
+            />
+          </mesh>
+        ))}
+        {/* Top & Bottom Heavy Copper Contact Jaws */}
         {[-0.068, 0.068].map((cy, cIdx) => (
-          <group key={cIdx} position={[0, cy, 0.024]}>
-            <mesh position={[-0.022, 0, 0]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.008, 0.028, 0.022]} />
+          <group key={cIdx} position={[0, cy, 0.026]}>
+            <mesh position={[-0.034, 0, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.011, 0.03, 0.024]} />
               <meshStandardMaterial
                 color="#b8733e"
                 metalness={0.88}
@@ -4586,8 +4715,8 @@ const SculptedPumpValveAssembly3D: React.FC<
                 bumpScale={0.004}
               />
             </mesh>
-            <mesh position={[0.022, 0, 0]} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.008, 0.028, 0.022]} />
+            <mesh position={[0.034, 0, 0]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[0.011, 0.03, 0.024]} />
               <meshStandardMaterial
                 color="#b8733e"
                 metalness={0.88}
@@ -4599,16 +4728,17 @@ const SculptedPumpValveAssembly3D: React.FC<
           </group>
         ))}
 
+        {/* Animated Lever Carriage & Chunky Soviet T-Handle */}
         <group ref={leverArmRef} position={[0, 0, 0.022]}>
-          {/* Twin Copper Knife Blades */}
-          {[-0.022, 0.022].map((lx, lIdx) => (
+          {/* Twin Heavy Forged Copper Throttle Arms */}
+          {[-0.034, 0.034].map((lx, lIdx) => (
             <mesh
               key={lIdx}
-              position={[lx, 0, 0.058]}
+              position={[lx, 0, 0.064]}
               rotation={[Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
             >
-              <boxGeometry args={[0.007, 0.115, 0.016]} />
+              <boxGeometry args={[0.012, 0.128, 0.024]} />
               <meshStandardMaterial
                 color="#b8733e"
                 roughness={0.26}
@@ -4616,13 +4746,13 @@ const SculptedPumpValveAssembly3D: React.FC<
               />
             </mesh>
           ))}
-          {/* Lathe-Turned Dark Phenolic Bakelite Crossbar Grip */}
+          {/* Heavy Lathe-Turned Dark Phenolic Bakelite T-Bar Crossbar Grip */}
           <mesh
-            position={[0, 0, 0.118]}
+            position={[0, 0, 0.13]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.02, 0.02, 0.108, 14]} />
+            <cylinderGeometry args={[0.029, 0.029, 0.184, 16]} />
             <meshStandardMaterial
               color="#1c1817"
               roughness={0.32}
@@ -4632,14 +4762,14 @@ const SculptedPumpValveAssembly3D: React.FC<
             />
           </mesh>
           {/* Brushed Steel End-Ferrules */}
-          {[-0.048, 0.048].map((fx, fIdx) => (
+          {[-0.084, 0.084].map((fx, fIdx) => (
             <mesh
               key={fIdx}
-              position={[fx, 0, 0.118]}
+              position={[fx, 0, 0.13]}
               rotation={[0, 0, Math.PI / 2]}
               raycast={NOOP_RAYCAST}
             >
-              <cylinderGeometry args={[0.0215, 0.0215, 0.014, 12]} />
+              <cylinderGeometry args={[0.0315, 0.0315, 0.02, 14]} />
               <meshStandardMaterial
                 color="#8a929a"
                 metalness={0.85}
@@ -4649,20 +4779,86 @@ const SculptedPumpValveAssembly3D: React.FC<
               />
             </mesh>
           ))}
-          {/* Single Thin Recessed Enamel Indicator Ring */}
+          {/* Oxidized Crimson Enamel Center Index Collar */}
           <mesh
-            position={[0, 0, 0.118]}
+            position={[0, 0, 0.13]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
           >
-            <cylinderGeometry args={[0.021, 0.021, 0.008, 12]} />
+            <cylinderGeometry args={[0.0305, 0.0305, 0.014, 14]} />
             <meshStandardMaterial
-              color="#6e1a14"
+              color="#7c1d16"
               roughness={0.38}
               metalness={0.25}
             />
           </mesh>
         </group>
+      </group>
+
+      {/* Centered THROTTLE: FLOW % Sub-Label Plaque */}
+      <group position={[0, -0.125, 0.042]}>
+        <mesh raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.368, 0.03, 0.008]} />
+          <meshStandardMaterial
+            color="#8c7a4b"
+            metalness={0.85}
+            roughness={0.28}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.0065]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.356, 0.025]} />
+          <meshStandardMaterial
+            map={leverSubLabelTex}
+            emissive="#ffffff"
+            emissiveMap={leverSubLabelTex}
+            emissiveIntensity={0.38}
+            roughness={0.55}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
+      </group>
+
+      {/* Live PUMP FLOW: XXX% Bargraph & Digital Status Plate */}
+      <group position={[0, -0.178, 0.038]}>
+        <mesh raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[0.376, 0.068, 0.016]} />
+          <meshStandardMaterial
+            color="#101513"
+            roughness={0.5}
+            metalness={0.7}
+            bumpMap={ironTex.bumpMap}
+            bumpScale={0.005}
+          />
+        </mesh>
+        <mesh position={[0, 0, 0.0105]} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[0.36, 0.06]} />
+          <meshStandardMaterial
+            ref={flowScaleMatRef}
+            map={flowScaleTex}
+            emissive="#ffffff"
+            emissiveMap={flowScaleTex}
+            emissiveIntensity={0.45}
+            roughness={0.75}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
+        <mesh
+          ref={flowBarMeshRef}
+          position={[0, -0.013, 0.0155]}
+          raycast={NOOP_RAYCAST}
+        >
+          <boxGeometry args={[0.324, 0.016, 0.008]} />
+          <meshStandardMaterial
+            ref={flowBarMatRef}
+            color="#33ff66"
+            emissive="#33ff66"
+            emissiveIntensity={1.15}
+          />
+        </mesh>
       </group>
     </group>
   );
@@ -4704,9 +4900,11 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   const leverGroupRef = useRef<THREE.Group>(null);
   const btnCapMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
   const btnGroupRefs = useRef<Array<THREE.Group | null>>([]);
-  const lastBlockStateRef = useRef("");
+  const lastBlockStateRef = useRef(-1);
   const lastReadoutSigRef = useRef("");
   const lastReadoutDrawRef = useRef(-1);
+  const accentColorObj = useMemo(() => new THREE.Color(accentColor), [accentColor]);
+  const ledColorObj = useMemo(() => new THREE.Color(ledColor), [ledColor]);
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
@@ -4725,13 +4923,19 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
 
   const dragRef = useRef<{
     active: boolean;
-    startClientY: number;
     startMW: number;
   }>({
     active: false,
-    startClientY: 0,
     startMW: 0,
   });
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
+    };
+  }, []);
 
   const ribbedGlassTex = useMemo(() => getRibbedGlassCellTexture(), []);
 
@@ -4835,33 +5039,42 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
     if (handleRingMatRef.current) {
       if (highlightTut) {
         const pulse = 0.5 + 0.5 * Math.sin(clock.getElapsedTime() * 6.0);
-        handleRingMatRef.current.color.set(
-          pulse > 0.5 ? "#33ff66" : "#ffb000",
-        );
-        handleRingMatRef.current.emissive.set(
-          pulse > 0.5 ? "#33ff66" : "#ffb000",
-        );
+        const colHex = pulse > 0.5 ? 0x33ff66 : 0xffb000;
+        handleRingMatRef.current.color.setHex(colHex);
+        handleRingMatRef.current.emissive.setHex(colHex);
         handleRingMatRef.current.emissiveIntensity = 1.4 + pulse * 1.2;
       } else {
-        handleRingMatRef.current.color.set(accentColor);
-        handleRingMatRef.current.emissive.set("#000000");
+        handleRingMatRef.current.color.copy(accentColorObj);
+        handleRingMatRef.current.emissive.setHex(0x000000);
         handleRingMatRef.current.emissiveIntensity = 0;
       }
     }
     // Map 0..maxSectorMW across 10 physical 3D ribbed phosphor glass cell segments
     const activeBlocks = Math.round((currentMW / maxSectorMW) * 10);
-    const sig = `${activeBlocks}`;
 
-    if (sig !== lastBlockStateRef.current) {
-      lastBlockStateRef.current = sig;
+    if (activeBlocks !== lastBlockStateRef.current) {
+      lastBlockStateRef.current = activeBlocks;
       for (let i = 0; i < 10; i++) {
         const mat = blockMatRefs.current[i];
         if (!mat) continue;
         const isLit = i < activeBlocks;
-        const colorHex = i >= 9 ? "#28b862" : i >= 7 ? "#ffb000" : ledColor;
-        mat.color.set(isLit ? colorHex : "#141916");
-        mat.emissive.set(isLit ? colorHex : "#000000");
-        mat.emissiveIntensity = isLit ? 1.15 : 0;
+        if (!isLit) {
+          mat.color.setHex(0x141916);
+          mat.emissive.setHex(0x000000);
+          mat.emissiveIntensity = 0;
+        } else if (i >= 9) {
+          mat.color.setHex(0x28b862);
+          mat.emissive.setHex(0x28b862);
+          mat.emissiveIntensity = 1.15;
+        } else if (i >= 7) {
+          mat.color.setHex(0xffb000);
+          mat.emissive.setHex(0xffb000);
+          mat.emissiveIntensity = 1.15;
+        } else {
+          mat.color.copy(ledColorObj);
+          mat.emissive.copy(ledColorObj);
+          mat.emissiveIntensity = 1.15;
+        }
       }
     }
 
@@ -4952,41 +5165,59 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     const state = useGameStore.getState();
     if (state.komradOverrideLocked) {
       playLeverRatchet(0.45);
       return;
     }
-    const startClientX = e.nativeEvent.clientX;
-    const startClientY = e.nativeEvent.clientY;
+    dragCleanupRef.current?.();
+
     const startMW = state.sectorMW[sector];
+    let prevClientY = e.nativeEvent.clientY;
+    let accumMW = startMW;
     let totalMovement = 0;
+    let finished = false;
+
+    const r3fTarget = e.target as unknown as {
+      setPointerCapture?: (id: number) => void;
+      releasePointerCapture?: (id: number) => void;
+    };
+    r3fTarget?.setPointerCapture?.(e.pointerId);
 
     dragRef.current = {
       active: true,
-      startClientY,
       startMW,
     };
     notifyPlayerControlInteraction(komradSectorId, true);
     playSwitchClank(true);
 
     const onWindowMove = (ev: PointerEvent) => {
-      if (!dragRef.current.active) return;
+      if (finished || !dragRef.current.active) return;
       const s = useGameStore.getState();
       if (s.komradOverrideLocked) {
-        dragRef.current.active = false;
-        notifyPlayerControlInteraction(komradSectorId, false);
+        cleanup(false);
         return;
       }
-      totalMovement = Math.max(
-        totalMovement,
-        Math.hypot(ev.clientX - startClientX, ev.clientY - startClientY),
+      const rawDy =
+        document.pointerLockElement !== null
+          ? ev.movementY
+          : ev.clientY - prevClientY;
+      prevClientY = ev.clientY;
+      if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+
+      const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
+      totalMovement += Math.abs(dy);
+      accumMW = THREE.MathUtils.clamp(
+        accumMW - (dy / 110) * maxSectorMW,
+        0,
+        maxSectorMW,
       );
-      const deltaY = dragRef.current.startClientY - ev.clientY;
-      const rawTargetMW =
-        dragRef.current.startMW + (deltaY / 110) * maxSectorMW;
       const snappedMW = THREE.MathUtils.clamp(
-        Math.round(rawTargetMW / 25) * 25,
+        Math.round(accumMW / 25) * 25,
         0,
         maxSectorMW,
       );
@@ -4998,14 +5229,18 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
       }
     };
 
-    const onWindowUp = () => {
-      if (!dragRef.current.active) return;
+    const cleanup = (fromRelease: boolean) => {
+      if (finished) return;
+      finished = true;
+      dragCleanupRef.current = null;
       dragRef.current.active = false;
       notifyPlayerControlInteraction(komradSectorId, false);
+      r3fTarget?.releasePointerCapture?.(e.pointerId);
       window.removeEventListener("pointermove", onWindowMove);
       window.removeEventListener("pointerup", onWindowUp);
-      window.removeEventListener("pointercancel", onWindowUp);
-      if (totalMovement < 6) {
+      window.removeEventListener("pointercancel", onWindowCancel);
+      window.removeEventListener("blur", onWindowCancel);
+      if (fromRelease && totalMovement < 6) {
         const s = useGameStore.getState();
         const cur = s.sectorMW[sector];
         const nextMW = cur >= maxSectorMW ? 0 : cur + 25;
@@ -5016,15 +5251,24 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
       playSwitchClank(false);
     };
 
+    const onWindowUp = () => cleanup(true);
+    const onWindowCancel = () => cleanup(false);
+
+    dragCleanupRef.current = () => cleanup(false);
     window.addEventListener("pointermove", onWindowMove);
     window.addEventListener("pointerup", onWindowUp);
-    window.addEventListener("pointercancel", onWindowUp);
+    window.addEventListener("pointercancel", onWindowCancel);
+    window.addEventListener("blur", onWindowCancel);
   };
 
   const handleWheel = (e: ThreeEvent<WheelEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
     e.nativeEvent?.stopImmediatePropagation?.();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     const s = useGameStore.getState();
     const stepMW = e.deltaY < 0 ? 25 : -25;
     const nextMW = Math.max(0, Math.min(250, s.sectorMW[sector] + stepMW));
@@ -5422,6 +5666,10 @@ const IndustrialPowerColumn3D: React.FC<IndustrialPowerColumn3DProps> = ({
           }}
           onClick={(e) => {
             e.stopPropagation();
+            if (isPreVolkovPanelLocked()) {
+              triggerPreVolkovPanelLockFeedback();
+              return;
+            }
             const s = useGameStore.getState();
             if (s.komradOverrideLocked) {
               playLeverRatchet(0.4);
@@ -5480,9 +5728,17 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
   const boronDepressRef = useRef(0);
 
   useEffect(() => {
-    registerKomradControlObject("boron", boronPlungerMeshRef.current);
+    registerKomradControlObject("boron", boronPlungerMeshRef.current, [
+      0,
+      0,
+      0.017,
+    ]);
     registerKomradControlObject("az5", az5BtnGroupRef.current, [0, 0, 0.026]);
-    registerKomradControlObject("az5Cover", az5CoverGroupRef.current);
+    registerKomradControlObject("az5Cover", az5CoverGroupRef.current, [
+      0,
+      -0.206,
+      0.078,
+    ]);
     return () => {
       registerKomradControlObject("boron", null);
       registerKomradControlObject("az5", null);
@@ -5653,17 +5909,26 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
     });
   }, []);
 
+  const geigerAccumRef = useRef(0);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Shift" && !e.repeat) {
+        const s = useGameStore.getState();
+        if (s.phase !== "playing" || s.lobbyMenuPhase === "menu_locked") return;
         playSwitchClank(true);
-        useGameStore.getState().setShiftKeyHeld(true);
+        s.setShiftKeyHeld(true);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === "Shift") {
-        playSwitchClank(false);
-        useGameStore.getState().setShiftKeyHeld(false);
+        const s = useGameStore.getState();
+        if (s.isShiftKeyHeld) {
+          if (s.phase === "playing" && s.lobbyMenuPhase !== "menu_locked") {
+            playSwitchClank(false);
+          }
+          s.setShiftKeyHeld(false);
+        }
       }
     };
     const handleBlur = () => {
@@ -5680,35 +5945,24 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
     };
   }, []);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const s = useGameStore.getState();
-      if (s.phase !== "playing") return;
-      const isRedline =
-        (s.tutorialPhase === "COMPLETED" &&
-          (s.coreTemp >= 580 ||
-            s.drumPressure >= 80 ||
-            s.voidFraction >= 0.45 ||
-            s.redlineInstability >= 50)) ||
-        s.coreTemp >= 700 ||
-        s.drumPressure >= 88;
-      updateSoundtrackState(isRedline, s.isMusicMuted);
-
-      const radExcess = Math.max(0, s.roomRadiation - 0.45);
-      const clickProb =
-        radExcess <= 0
-          ? 0
-          : Math.min(0.95, 0.04 + (radExcess / 11.5) * 0.88);
-      if (clickProb > 0 && Math.random() < clickProb) {
-        playGeigerClick();
-      }
-    }, 280);
-    return () => window.clearInterval(timer);
-  }, []);
-
   useFrame(({ clock }, delta) => {
     const state = useGameStore.getState();
     state.tickThermodynamics(delta);
+
+    if (state.phase === "playing" && state.lobbyMenuPhase !== "menu_locked") {
+      geigerAccumRef.current += Math.min(0.1, delta);
+      if (geigerAccumRef.current >= 0.28) {
+        geigerAccumRef.current = 0;
+        const radExcess = Math.max(0, state.roomRadiation - 0.45);
+        const clickProb =
+          radExcess <= 0
+            ? 0
+            : Math.min(0.95, 0.04 + (radExcess / 11.5) * 0.88);
+        if (clickProb > 0 && Math.random() < clickProb) {
+          playGeigerClick();
+        }
+      }
+    }
 
     if (az5CoverGroupRef.current) {
       const coverOverride = getKomradControlVisualOverride("az5Cover");
@@ -5742,8 +5996,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
       const ready = !state.az5Active;
       if (boronLampMatRef.current.userData.lastReady !== ready) {
         boronLampMatRef.current.userData.lastReady = ready;
-        boronLampMatRef.current.color.set(ready ? "#33ff66" : "#ff2a2a");
-        boronLampMatRef.current.emissive.set(ready ? "#33ff66" : "#ff2a2a");
+        const readyHex = ready ? 0x33ff66 : 0xff2a2a;
+        boronLampMatRef.current.color.setHex(readyHex);
+        boronLampMatRef.current.emissive.setHex(readyHex);
         boronLampMatRef.current.emissiveIntensity = ready ? 1.4 : 1.8;
       }
     }
@@ -5764,9 +6019,9 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
         if (!mat) continue;
         const isLit = i < activeTotalBlocks;
         const isHighBlock = i >= 16;
-        const hex = isHighBlock ? "#28b862" : i >= 12 ? "#d98218" : "#28b862";
-        mat.color.set(isLit ? hex : "#141916");
-        mat.emissive.set(isLit ? hex : "#000000");
+        const litHex = isHighBlock ? 0x28b862 : i >= 12 ? 0xd98218 : 0x28b862;
+        mat.color.setHex(isLit ? litHex : 0x141916);
+        mat.emissive.setHex(isLit ? litHex : 0x000000);
         mat.emissiveIntensity = isLit ? 1.15 : 0;
       }
     }
@@ -6161,6 +6416,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             position={[0, 0, 0.048]}
             onClick={(e) => {
               e.stopPropagation();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               notifyPlayerControlInteraction("az5", true);
               notifyPlayerControlInteraction("az5", false);
               if (!az5CoverOpen) {
@@ -6234,6 +6493,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             position={[0, 0.105, 0.034]}
             onClick={(e) => {
               e.stopPropagation();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               notifyPlayerControlInteraction("az5Cover", true);
               notifyPlayerControlInteraction("az5Cover", false);
               setAz5CoverOpen((prev) => {
@@ -6281,6 +6544,10 @@ export const HighDetailReactorPanel3D: React.FC = React.memo(() => {
             onPointerDown={(e) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               notifyPlayerControlInteraction("boron", true);
               notifyPlayerControlInteraction("boron", false);
               const s = useGameStore.getState();
@@ -6507,6 +6774,14 @@ export const HighDetailKnifeBreaker3D: React.FC<
   const sparkMeshRef = useRef<THREE.Mesh>(null);
   const sparkMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const sparkFlashRef = useRef(0);
+  const breakerDragCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      breakerDragCleanupRef.current?.();
+      breakerDragCleanupRef.current = null;
+    };
+  }, []);
 
   useFrame((_, delta) => {
     if (sparkFlashRef.current > 0) {
@@ -6522,32 +6797,6 @@ export const HighDetailKnifeBreaker3D: React.FC<
       }
     }
   });
-
-  const handleBreakerUp = (e: ThreeEvent<PointerEvent>) => {
-    if (!breakerDragRef.current.active) return;
-    e.stopPropagation();
-    const finalProg = breakerDragRef.current.progress;
-    const dy = Math.abs(e.nativeEvent.clientY - breakerDragRef.current.startY);
-    breakerDragRef.current.active = false;
-    releaseCanvasPointer(e);
-    const s = useGameStore.getState();
-    const isClickAction = dy < 12;
-    if (!isClickAction && finalProg < 0.45) {
-      playLeverRatchet(0.5);
-      return;
-    }
-    playKnifeSwitchSlam(true);
-    sparkFlashRef.current = 1.0;
-    startSoundtrack();
-    updateSoundtrackState(false, s.isMusicMuted);
-    if (s.phase === "boot") {
-      s.startShift();
-    } else if (s.phase !== "playing") {
-      s.resetShift();
-    } else {
-      s.pullMainBreaker();
-    }
-  };
 
   return (
     <group position={[0.56, 0, 0.02]}>
@@ -6569,14 +6818,16 @@ export const HighDetailKnifeBreaker3D: React.FC<
           if (useCameraLookStore.getState().isFreeLookMode) return;
           e.stopPropagation();
           e.nativeEvent?.stopImmediatePropagation?.();
+          if (isPreVolkovPanelLocked()) {
+            triggerPreVolkovPanelLockFeedback();
+            return;
+          }
           const s = useGameStore.getState();
           const wantClose = e.deltaY < 0;
           const isClosed = Boolean(s.turbines[0]?.gridConnected);
           if (s.phase === "boot" && wantClose) {
             playKnifeSwitchSlam(true);
             sparkFlashRef.current = 1.0;
-            startSoundtrack();
-            updateSoundtrackState(false, s.isMusicMuted);
             s.startShift();
           } else if (s.phase === "playing" && wantClose !== isClosed) {
             playKnifeSwitchSlam(true);
@@ -6587,32 +6838,84 @@ export const HighDetailKnifeBreaker3D: React.FC<
         onPointerDown={(e) => {
           if (useCameraLookStore.getState().isFreeLookMode) return;
           e.stopPropagation();
+          if (isPreVolkovPanelLocked()) {
+            triggerPreVolkovPanelLockFeedback();
+            return;
+          }
+          breakerDragCleanupRef.current?.();
           const s = useGameStore.getState();
+          let prevClientY = e.nativeEvent.clientY;
+          let totalDy = 0;
+          let finished = false;
+          const r3fTarget = e.target as unknown as {
+            setPointerCapture?: (id: number) => void;
+            releasePointerCapture?: (id: number) => void;
+          };
+          r3fTarget?.setPointerCapture?.(e.pointerId);
+
           breakerDragRef.current = {
             active: true,
-            startY: e.nativeEvent.clientY,
+            startY: prevClientY,
             progress:
               s.phase === "playing" && Boolean(s.turbines[0]?.gridConnected)
                 ? 1
                 : 0,
           };
-          captureCanvasPointer(e);
+
+          const handleMove = (ev: PointerEvent) => {
+            if (finished || !breakerDragRef.current.active) return;
+            const rawDy =
+              document.pointerLockElement !== null
+                ? ev.movementY
+                : ev.clientY - prevClientY;
+            prevClientY = ev.clientY;
+            if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+            totalDy += Math.abs(THREE.MathUtils.clamp(rawDy, -140, 140));
+            breakerDragRef.current.progress = THREE.MathUtils.clamp(
+              totalDy / 65,
+              0,
+              1,
+            );
+          };
+
+          const cleanup = (fromRelease: boolean) => {
+            if (finished) return;
+            finished = true;
+            breakerDragCleanupRef.current = null;
+            const finalProg = breakerDragRef.current.progress;
+            breakerDragRef.current.active = false;
+            r3fTarget?.releasePointerCapture?.(e.pointerId);
+            window.removeEventListener("pointermove", handleMove);
+            window.removeEventListener("pointerup", handleUp);
+            window.removeEventListener("pointercancel", handleCancel);
+            window.removeEventListener("blur", handleCancel);
+            if (!fromRelease) return;
+            const latest = useGameStore.getState();
+            const isClickAction = totalDy < 12;
+            if (!isClickAction && finalProg < 0.45) {
+              playLeverRatchet(0.5);
+              return;
+            }
+            playKnifeSwitchSlam(true);
+            sparkFlashRef.current = 1.0;
+            if (latest.phase === "boot") {
+              latest.startShift();
+            } else if (latest.phase !== "playing") {
+              latest.resetShift();
+            } else {
+              latest.pullMainBreaker();
+            }
+          };
+
+          const handleUp = () => cleanup(true);
+          const handleCancel = () => cleanup(false);
+
+          breakerDragCleanupRef.current = () => cleanup(false);
+          window.addEventListener("pointermove", handleMove);
+          window.addEventListener("pointerup", handleUp);
+          window.addEventListener("pointercancel", handleCancel);
+          window.addEventListener("blur", handleCancel);
         }}
-        onPointerMove={(e) => {
-          if (!breakerDragRef.current.active) return;
-          e.stopPropagation();
-          // Dragging physically upward or downward across the arc
-          const dy = Math.abs(
-            e.nativeEvent.clientY - breakerDragRef.current.startY,
-          );
-          breakerDragRef.current.progress = THREE.MathUtils.clamp(
-            dy / 65,
-            0,
-            1,
-          );
-        }}
-        onPointerUp={handleBreakerUp}
-        onLostPointerCapture={handleBreakerUp}
       >
         <boxGeometry args={[0.52, 0.56, 0.25]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
@@ -6940,6 +7243,23 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
   const oilWheelDraggingRef = useRef(false);
   const coreRodDraggingRef = useRef(false);
   const gasWheelDraggingRef = useRef(false);
+  const wheelDragCleanupRef = useRef<(() => void) | null>(null);
+  const coreDragCleanupRef = useRef<(() => void) | null>(null);
+  const refuelDragCleanupRef = useRef<(() => void) | null>(null);
+  const drainDragCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      wheelDragCleanupRef.current?.();
+      wheelDragCleanupRef.current = null;
+      coreDragCleanupRef.current?.();
+      coreDragCleanupRef.current = null;
+      refuelDragCleanupRef.current?.();
+      refuelDragCleanupRef.current = null;
+      drainDragCleanupRef.current?.();
+      drainDragCleanupRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     applySovietPBRToHierarchy(groupRef.current);
@@ -7311,9 +7631,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
     if (oilLampMatRef.current) {
       const ok = !s.isBlackout && s.controlRods <= 0.9 && !s.az5Active;
-      const col = ok ? "#33ff66" : "#ff2a2a";
-      oilLampMatRef.current.color.set(col);
-      oilLampMatRef.current.emissive.set(s.isBlackout ? "#000000" : col);
+      const colHex = ok ? 0x33ff66 : 0xff2a2a;
+      oilLampMatRef.current.color.setHex(colHex);
+      oilLampMatRef.current.emissive.setHex(s.isBlackout ? 0x000000 : colHex);
       oilLampMatRef.current.emissiveIntensity = s.isBlackout ? 0 : 1.35;
     }
     if (gasLampMatRef.current) {
@@ -7324,18 +7644,18 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         s.feedwaterValve < 0.45;
       if (highlightGasTut) {
         const pulse = 0.5 + 0.5 * Math.sin(t * 6.0);
-        const col = pulse > 0.5 ? "#33ff66" : "#ffb000";
-        gasLampMatRef.current.color.set(col);
-        gasLampMatRef.current.emissive.set(col);
+        const colHex = pulse > 0.5 ? 0x33ff66 : 0xffb000;
+        gasLampMatRef.current.color.setHex(colHex);
+        gasLampMatRef.current.emissive.setHex(colHex);
         gasLampMatRef.current.emissiveIntensity = 1.6 + pulse * 1.4;
       } else {
         const ok =
           !s.isBlackout &&
           s.drumWaterLevel >= -250 &&
           s.drumWaterLevel <= 250;
-        const col = ok ? "#33ff66" : "#ff2a2a";
-        gasLampMatRef.current.color.set(col);
-        gasLampMatRef.current.emissive.set(s.isBlackout ? "#000000" : col);
+        const colHex = ok ? 0x33ff66 : 0xff2a2a;
+        gasLampMatRef.current.color.setHex(colHex);
+        gasLampMatRef.current.emissive.setHex(s.isBlackout ? 0x000000 : colHex);
         gasLampMatRef.current.emissiveIntensity = s.isBlackout ? 0 : 1.35;
       }
     }
@@ -7346,9 +7666,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       const mat = oilBarMatRefs.current[i];
       if (!mat) continue;
       const isLit = !s.isBlackout && i < activeOilSegs;
-      const col = i >= 4 ? "#d98218" : "#28b862";
-      mat.color.set(isLit ? col : "#141916");
-      mat.emissive.set(isLit ? col : "#000000");
+      const colHex = i >= 4 ? 0xd98218 : 0x28b862;
+      mat.color.setHex(isLit ? colHex : 0x141916);
+      mat.emissive.setHex(isLit ? colHex : 0x000000);
       mat.emissiveIntensity = isLit ? 1.15 : 0;
     }
 
@@ -7358,9 +7678,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       const mat = gasBarMatRefs.current[i];
       if (!mat) continue;
       const isLit = !s.isBlackout && i < activeGasSegs;
-      const col = i >= 8 ? "#d98218" : "#28b862";
-      mat.color.set(isLit ? col : "#141916");
-      mat.emissive.set(isLit ? col : "#000000");
+      const colHex = i >= 8 ? 0xd98218 : 0x28b862;
+      mat.color.setHex(isLit ? colHex : 0x141916);
+      mat.emissive.setHex(isLit ? colHex : 0x000000);
       mat.emissiveIntensity = isLit ? 1.15 : 0;
     }
 
@@ -7388,58 +7708,58 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
 
         if (lensMat) {
           if (s.isBlackout) {
-            lensMat.color.set("#121a16");
-            lensMat.emissive.set("#000000");
+            lensMat.color.setHex(0x121a16);
+            lensMat.emissive.setHex(0x000000);
             lensMat.emissiveIntensity = 0;
           } else if (isSelected) {
             const pulse = 1.65 + Math.sin(t * 12) * 0.55;
-            lensMat.color.set("#ffe680");
-            lensMat.emissive.set("#ffcc22");
+            lensMat.color.setHex(0xffe680);
+            lensMat.emissive.setHex(0xffcc22);
             lensMat.emissiveIntensity = pulse;
           } else if (isSpent) {
             const pulse = 1.15 + Math.sin(t * 7 + i) * 0.55;
-            lensMat.color.set("#ff9900");
-            lensMat.emissive.set("#ffb000");
+            lensMat.color.setHex(0xff9900);
+            lensMat.emissive.setHex(0xffb000);
             lensMat.emissiveIntensity = pulse;
           } else if (isRodWithdrawn) {
             if (isHighReactivity) {
-              lensMat.color.set("#d98218");
-              lensMat.emissive.set("#ffb000");
+              lensMat.color.setHex(0xd98218);
+              lensMat.emissive.setHex(0xffb000);
               lensMat.emissiveIntensity = 1.05;
             } else {
-              lensMat.color.set("#227846");
-              lensMat.emissive.set("#33ff66");
+              lensMat.color.setHex(0x227846);
+              lensMat.emissive.setHex(0x33ff66);
               lensMat.emissiveIntensity = 0.95;
             }
           } else {
-            lensMat.color.set("#4a1412");
-            lensMat.emissive.set("#991818");
+            lensMat.color.setHex(0x4a1412);
+            lensMat.emissive.setHex(0x991818);
             lensMat.emissiveIntensity = 0.38;
           }
         }
 
         if (rimMat) {
           if (s.isBlackout) {
-            rimMat.color.set("#1c2220");
-            rimMat.emissive.set("#000000");
+            rimMat.color.setHex(0x1c2220);
+            rimMat.emissive.setHex(0x000000);
             rimMat.emissiveIntensity = 0;
           } else if (isSelected) {
             const pulse = 1.9 + Math.sin(t * 10) * 0.45;
-            rimMat.color.set("#fff394");
-            rimMat.emissive.set("#ffd833");
+            rimMat.color.setHex(0xfff394);
+            rimMat.emissive.setHex(0xffd833);
             rimMat.emissiveIntensity = isHovered ? 2.4 : pulse;
           } else if (isSpent) {
             const pulse = 1.45 + Math.sin(t * 7 + i) * 0.45;
-            rimMat.color.set(isHovered ? "#ffe299" : "#ff5500");
-            rimMat.emissive.set(isHovered ? "#ffffff" : "#ff7a00");
+            rimMat.color.setHex(isHovered ? 0xffe299 : 0xff5500);
+            rimMat.emissive.setHex(isHovered ? 0xffffff : 0xff7a00);
             rimMat.emissiveIntensity = isHovered ? 2.2 : pulse;
           } else if (isHovered) {
-            rimMat.color.set("#9effd6");
-            rimMat.emissive.set("#44ffaa");
+            rimMat.color.setHex(0x9effd6);
+            rimMat.emissive.setHex(0x44ffaa);
             rimMat.emissiveIntensity = 1.25;
           } else {
-            rimMat.color.set("#30393e");
-            rimMat.emissive.set("#000000");
+            rimMat.color.setHex(0x30393e);
+            rimMat.emissive.setHex(0x000000);
             rimMat.emissiveIntensity = 0;
           }
         }
@@ -7494,29 +7814,29 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       }
       if (isRefuelDragging) {
         const dragSegs = Math.round(leverDragRatio * 10);
-        const dragCol = leverDragRatio >= 0.82 ? "#33ff66" : "#ffb000";
+        const dragColHex = leverDragRatio >= 0.82 ? 0x33ff66 : 0xffb000;
         for (let i = 0; i < 10; i++) {
           const mat = boronBarMatRefs.current[i];
           if (!mat) continue;
           const isLit = !s.isBlackout && i < dragSegs;
-          mat.color.set(isLit ? dragCol : "#141916");
-          mat.emissive.set(isLit ? dragCol : "#000000");
+          mat.color.setHex(isLit ? dragColHex : 0x141916);
+          mat.emissive.setHex(isLit ? dragColHex : 0x000000);
           mat.emissiveIntensity = isLit ? 1.35 : 0;
         }
       } else {
         const healthySegs = Math.max(0, 10 - activeHotspots * 2);
+        const colHex =
+          activeHotspots >= 4
+            ? 0xc92a1d
+            : activeHotspots >= 1
+              ? 0xd98218
+              : 0x28b862;
         for (let i = 0; i < 10; i++) {
           const mat = boronBarMatRefs.current[i];
           if (!mat) continue;
           const isLit = !s.isBlackout && i < healthySegs;
-          const col =
-            activeHotspots >= 4
-              ? "#c92a1d"
-              : activeHotspots >= 1
-                ? "#d98218"
-                : "#28b862";
-          mat.color.set(isLit ? col : "#141916");
-          mat.emissive.set(isLit ? col : "#000000");
+          mat.color.setHex(isLit ? colHex : 0x141916);
+          mat.emissive.setHex(isLit ? colHex : 0x000000);
           mat.emissiveIntensity = isLit ? 1.15 : 0;
         }
       }
@@ -7649,15 +7969,15 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         if (!jMat) continue;
         const isOk =
           Boolean(s.mcpActive[i]) && (i >= 3 || Boolean(s.sealToggles[i]));
-        const col = s.isBlackout
-          ? "#18221d"
+        const colHex = s.isBlackout
+          ? 0x18221d
           : isOk
-            ? "#33ff66"
+            ? 0x33ff66
             : isColdStandby
-              ? "#6e5218"
-              : "#ff2a2a";
-        jMat.color.set(col);
-        jMat.emissive.set(s.isBlackout ? "#000000" : col);
+              ? 0x6e5218
+              : 0xff2a2a;
+        jMat.color.setHex(colHex);
+        jMat.emissive.setHex(s.isBlackout ? 0x000000 : colHex);
         jMat.emissiveIntensity = s.isBlackout
           ? 0
           : isOk
@@ -7723,13 +8043,13 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
       if (drainRingMatRef.current) {
         if (highlightDrainTut) {
           const pulse = 0.5 + 0.5 * Math.sin(t * 6.0);
-          const col = pulse > 0.5 ? "#33ff66" : "#ffb000";
-          drainRingMatRef.current.color.set(col);
-          drainRingMatRef.current.emissive.set(col);
+          const colHex = pulse > 0.5 ? 0x33ff66 : 0xffb000;
+          drainRingMatRef.current.color.setHex(colHex);
+          drainRingMatRef.current.emissive.setHex(colHex);
           drainRingMatRef.current.emissiveIntensity = 1.4 + pulse * 1.2;
         } else {
-          drainRingMatRef.current.color.set("#d98218");
-          drainRingMatRef.current.emissive.set("#000000");
+          drainRingMatRef.current.color.setHex(0xd98218);
+          drainRingMatRef.current.emissive.setHex(0x000000);
           drainRingMatRef.current.emissiveIntensity = 0;
         }
       }
@@ -7740,20 +8060,20 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
         sightGlassWaterMeshRef.current.position.y = -0.115 + ratio * 0.115;
         if (highlightDrainTut) {
           const pulse = 0.5 + 0.5 * Math.sin(t * 6.0);
-          const wCol = pulse > 0.5 ? "#33ff66" : "#ffb000";
-          sightGlassWaterMatRef.current.color.set(wCol);
-          sightGlassWaterMatRef.current.emissive.set(wCol);
+          const wColHex = pulse > 0.5 ? 0x33ff66 : 0xffb000;
+          sightGlassWaterMatRef.current.color.setHex(wColHex);
+          sightGlassWaterMatRef.current.emissive.setHex(wColHex);
           sightGlassWaterMatRef.current.emissiveIntensity = 1.4 + pulse * 0.9;
         } else {
-          const wCol =
+          const wColHex =
             s.bubblerLevel >= 88
-              ? "#ff2a2a"
+              ? 0xff2a2a
               : s.bubblerLevel >= 72
-                ? "#ffb000"
-                : "#28d8ff";
-          sightGlassWaterMatRef.current.color.set(wCol);
-          sightGlassWaterMatRef.current.emissive.set(
-            s.isBlackout ? "#000000" : wCol,
+                ? 0xffb000
+                : 0x28d8ff;
+          sightGlassWaterMatRef.current.color.setHex(wColHex);
+          sightGlassWaterMatRef.current.emissive.setHex(
+            s.isBlackout ? 0x000000 : wColHex,
           );
           sightGlassWaterMatRef.current.emissiveIntensity = s.isBlackout
             ? 0
@@ -8287,47 +8607,72 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             onPointerDown={(e) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
+              coreDragCleanupRef.current?.();
               coreRodDraggingRef.current = true;
               const s = useGameStore.getState();
               const activeKeys = Object.keys(s.channelHotspots).map(Number);
-              const startY = e.nativeEvent.clientY;
-              const startRod = s.controlRodLevel;
-              let moved = false;
-              let lastDetent = Math.round(startRod / 5);
+              let prevClientY = e.nativeEvent.clientY;
+              let accumRod = s.controlRodLevel;
+              let totalMove = 0;
+              let lastDetent = Math.round(accumRod / 5);
+              let finished = false;
+
+              const r3fTarget = e.target as unknown as {
+                setPointerCapture?: (id: number) => void;
+                releasePointerCapture?: (id: number) => void;
+              };
+              r3fTarget?.setPointerCapture?.(e.pointerId);
 
               const handleMove = (ev: PointerEvent) => {
-                const dy = startY - ev.clientY;
-                if (Math.abs(dy) >= 5) {
-                  moved = true;
-                  const nextRod = THREE.MathUtils.clamp(
-                    startRod + (dy / 90) * 100,
+                if (finished) return;
+                const rawDy =
+                  document.pointerLockElement !== null
+                    ? ev.movementY
+                    : ev.clientY - prevClientY;
+                prevClientY = ev.clientY;
+                if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+                const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
+                totalMove += Math.abs(dy);
+                if (totalMove >= 5) {
+                  accumRod = THREE.MathUtils.clamp(
+                    accumRod - (dy / 90) * 100,
                     0,
                     100,
                   );
-                  const curDetent = Math.round(nextRod / 5);
+                  const curDetent = Math.round(accumRod / 5);
                   if (curDetent !== lastDetent) {
                     lastDetent = curDetent;
                     playDetentClick((Math.abs(curDetent) % 5) + 1);
                   }
-                  useGameStore.getState().setControlRodLevel(nextRod);
+                  useGameStore.getState().setControlRodLevel(accumRod);
                 }
               };
 
-              const handleUp = () => {
+              const cleanup = (fromRelease: boolean) => {
+                if (finished) return;
+                finished = true;
+                coreDragCleanupRef.current = null;
                 coreRodDraggingRef.current = false;
+                r3fTarget?.releasePointerCapture?.(e.pointerId);
                 window.removeEventListener("pointermove", handleMove);
                 window.removeEventListener("pointerup", handleUp);
-                window.removeEventListener("pointercancel", handleUp);
-                if (!moved && activeKeys.length > 0) {
+                window.removeEventListener("pointercancel", handleCancel);
+                window.removeEventListener("blur", handleCancel);
+                if (fromRelease && totalMove < 5 && activeKeys.length > 0) {
                   playSwitchClank(true);
                   playDetentClick(3);
                   useGameStore.getState().selectChannelForRefuel(activeKeys[0]);
                 }
               };
 
+              const handleUp = () => cleanup(true);
+              const handleCancel = () => cleanup(false);
+
+              coreDragCleanupRef.current = () => cleanup(false);
               window.addEventListener("pointermove", handleMove);
               window.addEventListener("pointerup", handleUp);
-              window.addEventListener("pointercancel", handleUp);
+              window.addEventListener("pointercancel", handleCancel);
+              window.addEventListener("blur", handleCancel);
             }}
           >
             {/* Heavy Recessed Octagonal Cast-Iron Reactor Pit Flange (dark gunmetal #222629) */}
@@ -8456,48 +8801,77 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   onPointerDown={(e) => {
                     if (useCameraLookStore.getState().isFreeLookMode) return;
                     e.stopPropagation();
+                    if (isPreVolkovPanelLocked()) {
+                      triggerPreVolkovPanelLockFeedback();
+                      return;
+                    }
+                    coreDragCleanupRef.current?.();
                     notifyPlayerControlInteraction("coreChannelTile", true);
                     const s = useGameStore.getState();
-                    const startY = e.nativeEvent.clientY;
-                    const startRod = s.controlRodLevel;
-                    let moved = false;
-                    let lastDetent = Math.round(startRod / 5);
+                    let prevClientY = e.nativeEvent.clientY;
+                    let accumRod = s.controlRodLevel;
+                    let totalMove = 0;
+                    let lastDetent = Math.round(accumRod / 5);
+                    let finished = false;
+
+                    const r3fTarget = e.target as unknown as {
+                      setPointerCapture?: (id: number) => void;
+                      releasePointerCapture?: (id: number) => void;
+                    };
+                    r3fTarget?.setPointerCapture?.(e.pointerId);
 
                     const handleMove = (ev: PointerEvent) => {
-                      const dy = startY - ev.clientY;
-                      if (Math.abs(dy) >= 5) {
-                        moved = true;
+                      if (finished) return;
+                      const rawDy =
+                        document.pointerLockElement !== null
+                          ? ev.movementY
+                          : ev.clientY - prevClientY;
+                      prevClientY = ev.clientY;
+                      if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+                      const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
+                      totalMove += Math.abs(dy);
+                      if (totalMove >= 5) {
                         notifyPlayerControlInteraction("controlRodDrive", true);
-                        const nextRod = THREE.MathUtils.clamp(
-                          startRod + (dy / 90) * 100,
+                        accumRod = THREE.MathUtils.clamp(
+                          accumRod - (dy / 90) * 100,
                           0,
                           100,
                         );
-                        const curDetent = Math.round(nextRod / 5);
+                        const curDetent = Math.round(accumRod / 5);
                         if (curDetent !== lastDetent) {
                           lastDetent = curDetent;
                           playDetentClick((Math.abs(curDetent) % 5) + 1);
                         }
-                        useGameStore.getState().setControlRodLevel(nextRod);
+                        useGameStore.getState().setControlRodLevel(accumRod);
                       }
                     };
 
-                    const handleUp = () => {
+                    const cleanup = (fromRelease: boolean) => {
+                      if (finished) return;
+                      finished = true;
+                      coreDragCleanupRef.current = null;
                       notifyPlayerControlInteraction("coreChannelTile", false);
                       notifyPlayerControlInteraction("controlRodDrive", false);
+                      r3fTarget?.releasePointerCapture?.(e.pointerId);
                       window.removeEventListener("pointermove", handleMove);
                       window.removeEventListener("pointerup", handleUp);
-                      window.removeEventListener("pointercancel", handleUp);
-                      if (!moved) {
+                      window.removeEventListener("pointercancel", handleCancel);
+                      window.removeEventListener("blur", handleCancel);
+                      if (fromRelease && totalMove < 5) {
                         playSwitchClank(true);
                         playDetentClick((tIdx % 5) + 2);
                         useGameStore.getState().selectChannelForRefuel(tIdx);
                       }
                     };
 
+                    const handleUp = () => cleanup(true);
+                    const handleCancel = () => cleanup(false);
+
+                    coreDragCleanupRef.current = () => cleanup(false);
                     window.addEventListener("pointermove", handleMove);
                     window.addEventListener("pointerup", handleUp);
-                    window.addEventListener("pointercancel", handleUp);
+                    window.addEventListener("pointercancel", handleCancel);
+                    window.addEventListener("blur", handleCancel);
                   }}
                 >
                   {/* Non-overlapping per-tile hitbox (0.044 < 0.048 pitch -> crisp gap prevents neighbor misclicks) */}
@@ -8649,6 +9023,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 const isShift = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
                 const stepPct = isShift ? 1 : 5;
                 const deltaPct = e.deltaY < 0 ? stepPct : -stepPct;
@@ -8665,8 +9043,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerOut={() => {
                 useGameStore.getState().setHoveredControlHint(null);
               }}
-              onPointerDown={(e) =>
-                startSmoothWheelSwivelDrag(
+              onPointerDown={(e) => {
+                wheelDragCleanupRef.current?.();
+                wheelDragCleanupRef.current = startSmoothWheelSwivelDrag(
                   e,
                   oilWheelRef.current,
                   useGameStore.getState().controlRods * 100,
@@ -8677,8 +9056,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     oilWheelDraggingRef.current = act;
                     notifyPlayerControlInteraction("controlRodDrive", act);
                   },
-                )
-              }
+                );
+              }}
             >
               {/* Wide Scroll/Drag Hit Collider matching enlarged handwheel */}
               <mesh position={[0, 0, 0.05]} rotation={[Math.PI / 2, 0, 0]}>
@@ -8907,19 +9286,43 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
+                refuelDragCleanupRef.current?.();
                 notifyPlayerControlInteraction("rodRefuelLever", true);
                 refuelStrokeFiredRef.current = false;
+                let prevClientY = e.nativeEvent.clientY;
+                let finished = false;
+
+                const r3fTarget = e.target as unknown as {
+                  setPointerCapture?: (id: number) => void;
+                  releasePointerCapture?: (id: number) => void;
+                };
+                r3fTarget?.setPointerCapture?.(e.pointerId);
+
                 pistonDragRef.current = {
                   active: true,
-                  startY: e.nativeEvent.clientY,
+                  startY: prevClientY,
                   startPos: 0,
                   currentPos: 0,
                   lastHalfStroke: 0,
                 };
                 const handleMove = (ev: PointerEvent) => {
-                  if (!pistonDragRef.current.active) return;
-                  const dy = ev.clientY - pistonDragRef.current.startY;
-                  const nextPos = THREE.MathUtils.clamp(dy / 115, 0, 1);
+                  if (finished || !pistonDragRef.current.active) return;
+                  const rawDy =
+                    document.pointerLockElement !== null
+                      ? ev.movementY
+                      : ev.clientY - prevClientY;
+                  prevClientY = ev.clientY;
+                  if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+                  const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
+                  const nextPos = THREE.MathUtils.clamp(
+                    pistonDragRef.current.currentPos + dy / 115,
+                    0,
+                    1,
+                  );
                   pistonDragRef.current.currentPos = nextPos;
 
                   const stepIdx = Math.round(nextPos * 10);
@@ -8934,11 +9337,15 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     useGameStore.getState().executeRefuelLeverStroke();
                   }
                 };
-                const handleUp = () => {
+                const cleanup = (fromRelease: boolean) => {
+                  if (finished) return;
+                  finished = true;
+                  refuelDragCleanupRef.current = null;
                   pistonDragRef.current.active = false;
                   pistonDragRef.current.currentPos = 0;
                   notifyPlayerControlInteraction("rodRefuelLever", false);
-                  if (!refuelStrokeFiredRef.current) {
+                  r3fTarget?.releasePointerCapture?.(e.pointerId);
+                  if (fromRelease && !refuelStrokeFiredRef.current) {
                     playSwitchClank(false);
                     const s = useGameStore.getState();
                     if (Object.keys(s.channelHotspots).length > 0) {
@@ -8953,11 +9360,17 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   refuelStrokeFiredRef.current = false;
                   window.removeEventListener("pointermove", handleMove);
                   window.removeEventListener("pointerup", handleUp);
-                  window.removeEventListener("pointercancel", handleUp);
+                  window.removeEventListener("pointercancel", handleCancel);
+                  window.removeEventListener("blur", handleCancel);
                 };
+                const handleUp = () => cleanup(true);
+                const handleCancel = () => cleanup(false);
+
+                refuelDragCleanupRef.current = () => cleanup(false);
                 window.addEventListener("pointermove", handleMove);
                 window.addEventListener("pointerup", handleUp);
-                window.addEventListener("pointercancel", handleUp);
+                window.addEventListener("pointercancel", handleCancel);
+                window.addEventListener("blur", handleCancel);
               }}
             >
               {/* Wide Non-Overlapping Invisible Hitbox for Rod Refueling Quadrant & Lever */}
@@ -9263,6 +9676,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 const fine = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
                 const step = (e.deltaY < 0 ? 1 : -1) * (fine ? 1 : 5);
                 const s = useGameStore.getState();
@@ -9273,8 +9690,9 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   s.setNitrogenLoopValve(nextPct);
                 }
               }}
-              onPointerDown={(e) =>
-                startSmoothWheelSwivelDrag(
+              onPointerDown={(e) => {
+                wheelDragCleanupRef.current?.();
+                wheelDragCleanupRef.current = startSmoothWheelSwivelDrag(
                   e,
                   gasWheelRef.current,
                   useGameStore.getState().feedwaterValve * 100,
@@ -9285,8 +9703,8 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     gasWheelDraggingRef.current = act;
                     notifyPlayerControlInteraction("feedwaterValve", act);
                   },
-                )
-              }
+                );
+              }}
             >
               {/* Stationary Tight Hit Collider matching physical handwheel without occluding indicator above */}
               <mesh position={[0, 0, 0.048]} rotation={[Math.PI / 2, 0, 0]}>
@@ -9531,6 +9949,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                   if (useCameraLookStore.getState().isFreeLookMode) return;
                   e.stopPropagation();
                   e.nativeEvent?.stopImmediatePropagation?.();
+                  if (isPreVolkovPanelLocked()) {
+                    triggerPreVolkovPanelLockFeedback();
+                    return;
+                  }
                   const wantOn = e.deltaY < 0;
                   const s = useGameStore.getState();
                   if (s.sealToggles[tIdx] !== wantOn) {
@@ -9541,6 +9963,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 onClick={(e) => {
                   if (useCameraLookStore.getState().isFreeLookMode) return;
                   e.stopPropagation();
+                  if (isPreVolkovPanelLocked()) {
+                    triggerPreVolkovPanelLockFeedback();
+                    return;
+                  }
                   notifyPlayerControlInteraction(`mcpSealToggle${tIdx}`, true);
                   notifyPlayerControlInteraction(`mcpSealToggle${tIdx}`, false);
                   playSwitchClank(true);
@@ -9626,6 +10052,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 const wantOn = e.deltaY < 0;
                 const s = useGameStore.getState();
                 if (wantOn) {
@@ -9641,6 +10071,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
                 notifyPlayerControlInteraction("emergSealLock", true);
                 notifyPlayerControlInteraction("emergSealLock", false);
                 emergSealDepressRef.current = 1.0;
@@ -9745,7 +10179,7 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                 useGameStore
                   .getState()
                   .setHoveredControlHint(
-                    "BUBBLER / DRUM DRAIN LEVER: Click, Drag Down, or Scroll Up = DRAIN DRUM WATER (mm) & BUBBLER / RELIEVE >72 BAR",
+                    "BUBBLER / DRUM DRAIN LEVER: Click, Drag Down, or Scroll Down = DRAIN DRUM WATER (mm) & BUBBLER / RELIEVE >72 BAR",
                   );
               }}
               onPointerOut={(e) => {
@@ -9754,9 +10188,14 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               }}
               onWheel={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
+                if (e.deltaY === 0) return;
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
-                const wantOpen = e.deltaY < 0;
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
+                const wantOpen = e.deltaY > 0;
                 const s = useGameStore.getState();
                 if (s.bubblerDraining !== wantOpen) {
                   s.setBubblerDraining(wantOpen);
@@ -9768,29 +10207,50 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               onPointerDown={(e) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
+                drainDragCleanupRef.current?.();
                 notifyPlayerControlInteraction("bubblerDrain", true);
                 const wasOpen = useGameStore.getState().bubblerDraining;
-                const startY = e.nativeEvent.clientY;
+                let prevClientY = e.nativeEvent.clientY;
+                let totalMove = 0;
                 let dragged = false;
+                let finished = false;
+
+                const r3fTarget = e.target as unknown as {
+                  setPointerCapture?: (id: number) => void;
+                  releasePointerCapture?: (id: number) => void;
+                };
+                r3fTarget?.setPointerCapture?.(e.pointerId);
+
                 drainDragRef.current = {
                   active: true,
-                  startY,
+                  startY: prevClientY,
                   progress: wasOpen ? 1.0 : 0.0,
                   lastHissTime: 0,
                 };
                 const handleMove = (ev: PointerEvent) => {
-                  if (!drainDragRef.current.active) return;
-                  const dy = ev.clientY - startY;
-                  if (Math.abs(dy) >= 14) {
+                  if (finished || !drainDragRef.current.active) return;
+                  const rawDy =
+                    document.pointerLockElement !== null
+                      ? ev.movementY
+                      : ev.clientY - prevClientY;
+                  prevClientY = ev.clientY;
+                  if (!Number.isFinite(rawDy) || Math.abs(rawDy) < 0.01) return;
+                  const dy = THREE.MathUtils.clamp(rawDy, -140, 140);
+                  totalMove += Math.abs(dy);
+                  if (totalMove >= 10) {
                     dragged = true;
                   }
-                  if (!dragged) return;
                   const prog = THREE.MathUtils.clamp(
-                    (wasOpen ? 1.0 : 0.0) + dy / 65,
+                    drainDragRef.current.progress + dy / 65,
                     0,
                     1.0,
                   );
                   drainDragRef.current.progress = prog;
+                  if (!dragged) return;
                   const wantOpen = prog >= 0.5;
                   const s = useGameStore.getState();
                   if (s.bubblerDraining !== wantOpen) {
@@ -9799,10 +10259,13 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     if (wantOpen) playSteamVentHiss(0.6);
                   }
                 };
-                const handleUp = () => {
+                const cleanup = (fromRelease: boolean) => {
+                  if (finished) return;
+                  finished = true;
+                  drainDragCleanupRef.current = null;
                   drainDragRef.current.active = false;
                   const s = useGameStore.getState();
-                  if (!dragged) {
+                  if (fromRelease && !dragged) {
                     const nextOpen = !wasOpen;
                     s.setBubblerDraining(nextOpen);
                     drainDragRef.current.progress = nextOpen ? 1.0 : 0.0;
@@ -9813,13 +10276,20 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
                     playSwitchClank(false);
                   }
                   notifyPlayerControlInteraction("bubblerDrain", false);
+                  r3fTarget?.releasePointerCapture?.(e.pointerId);
                   window.removeEventListener("pointermove", handleMove);
                   window.removeEventListener("pointerup", handleUp);
-                  window.removeEventListener("pointercancel", handleUp);
+                  window.removeEventListener("pointercancel", handleCancel);
+                  window.removeEventListener("blur", handleCancel);
                 };
+                const handleUp = () => cleanup(true);
+                const handleCancel = () => cleanup(false);
+
+                drainDragCleanupRef.current = () => cleanup(false);
                 window.addEventListener("pointermove", handleMove);
                 window.addEventListener("pointerup", handleUp);
-                window.addEventListener("pointercancel", handleUp);
+                window.addEventListener("pointercancel", handleCancel);
+                window.addEventListener("blur", handleCancel);
               }}
             >
               {/* Single Invisible Hitbox for Bubbler Drain Quadrant & Lever */}
@@ -10546,9 +11016,9 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
         : overridePulseRef.current > 0
           ? 1.6
           : 0.42;
-      const col = s.komradOverrideLocked ? "#ff7700" : "#d98a18";
-      overrideLampMatRef.current.color.set(col);
-      overrideLampMatRef.current.emissive.set(col);
+      const colHex = s.komradOverrideLocked ? 0xff7700 : 0xd98a18;
+      overrideLampMatRef.current.color.setHex(colHex);
+      overrideLampMatRef.current.emissive.setHex(colHex);
       overrideLampMatRef.current.emissiveIntensity = pulse;
     }
 
@@ -10572,8 +11042,8 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
     }
     if (purgeReadyLedMatRef.current) {
       const readyOn = !s.ciaIntrusionActive && !s.isBlackout;
-      purgeReadyLedMatRef.current.color.set(readyOn ? "#28d858" : "#14261a");
-      purgeReadyLedMatRef.current.emissive.set(readyOn ? "#28d858" : "#000000");
+      purgeReadyLedMatRef.current.color.setHex(readyOn ? 0x28d858 : 0x14261a);
+      purgeReadyLedMatRef.current.emissive.setHex(readyOn ? 0x28d858 : 0x000000);
       purgeReadyLedMatRef.current.emissiveIntensity = readyOn ? 1.25 : 0.05;
     }
     if (purgeAlertLedMatRef.current) {
@@ -10582,10 +11052,10 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
         : purgePressAnimRef.current > 0
           ? 1.2
           : 0.06;
-      purgeAlertLedMatRef.current.color.set(
-        s.ciaIntrusionActive ? "#ff2a2a" : "#3a1212",
+      purgeAlertLedMatRef.current.color.setHex(
+        s.ciaIntrusionActive ? 0xff2a2a : 0x3a1212,
       );
-      purgeAlertLedMatRef.current.emissive.set("#ff2a2a");
+      purgeAlertLedMatRef.current.emissive.setHex(0xff2a2a);
       purgeAlertLedMatRef.current.emissiveIntensity = alertBlink;
     }
 
@@ -10613,8 +11083,8 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
           : s.isBlackout
             ? 0.05
             : 0.65 + Math.sin(t * 3.2) * 0.15;
-      bulletinLampMatRef.current.color.set("#28d858");
-      bulletinLampMatRef.current.emissive.set("#28d858");
+      bulletinLampMatRef.current.color.setHex(0x28d858);
+      bulletinLampMatRef.current.emissive.setHex(0x28d858);
       bulletinLampMatRef.current.emissiveIntensity = lampGlow;
     }
 
@@ -10636,6 +11106,10 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
   const triggerOverrideStation = (e: ThreeEvent<MouseEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     overridePulseRef.current = 1.0;
     playSwitchClank(true);
     useGameStore.getState().overrideKomradLock();
@@ -10644,6 +11118,10 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
   const triggerPurgeStation = (e: ThreeEvent<MouseEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     purgePressAnimRef.current = 1.0;
     playSwitchClank(true);
     useGameStore.getState().purgeFirewall();

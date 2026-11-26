@@ -245,43 +245,43 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
     return (
       <group>
         {/* Outer Heavy Dark-Steel Blast Casing Anchored to Wall Cutout */}
-        <mesh position={[0, hh + 0.04, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, hh + 0.04, 0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[width + 0.18, 0.1, 0.24]} />
           <meshBasicMaterial color="#18201d" fog={false} />
         </mesh>
-        <mesh position={[0, -hh - 0.06, 0.05]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, -hh - 0.06, 0.05]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[width + 0.2, 0.16, 0.3]} />
           <meshBasicMaterial color="#1e2824" fog={false} />
         </mesh>
-        <mesh position={[-hw - 0.04, 0, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[-hw - 0.04, 0, 0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.1, height + 0.08, 0.24]} />
           <meshBasicMaterial color="#18201d" fog={false} />
         </mesh>
-        <mesh position={[hw + 0.04, 0, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[hw + 0.04, 0, 0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.1, height + 0.08, 0.24]} />
           <meshBasicMaterial color="#18201d" fog={false} />
         </mesh>
 
         {/* 6° Inward-Tilted Soviet Olive-Steel Inner Blast Mullions */}
         <group rotation={[0.105, 0, 0]}>
-          <mesh position={[0, hh - 0.02, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, hh - 0.02, 0.04]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[width + 0.02, 0.07, 0.14]} />
             <meshBasicMaterial color="#2b3832" fog={false} />
           </mesh>
-          <mesh position={[0, -hh + 0.02, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, -hh + 0.02, 0.04]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[width + 0.02, 0.07, 0.14]} />
             <meshBasicMaterial color="#2b3832" fog={false} />
           </mesh>
-          <mesh position={[-hw + 0.02, 0, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[-hw + 0.02, 0, 0.04]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.07, height, 0.14]} />
             <meshBasicMaterial color="#2b3832" fog={false} />
           </mesh>
-          <mesh position={[hw - 0.02, 0, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[hw - 0.02, 0, 0.04]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.07, height, 0.14]} />
             <meshBasicMaterial color="#2b3832" fog={false} />
           </mesh>
           {/* Off-Center Vertical Blast Divider Mullion */}
-          <mesh position={[dividerX, 0, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[dividerX, 0, 0.04]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.075, height - 0.04, 0.14]} />
             <meshBasicMaterial color="#232e29" fog={false} />
           </mesh>
@@ -291,7 +291,6 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
               key={`blast-bolt-${idx}`}
               position={[bx, -hh + 0.02, 0.115]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[0.026, 0.026]} />
               <meshBasicMaterial color="#9e874e" fog={false} />
@@ -300,7 +299,7 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
         </group>
 
         {/* Narrow Green-Tinted Perimeter Edge Grime Strips (Hugged Tight to Mullions so Center Glass is Clear) */}
-        <mesh position={[0, hh - 0.045, 0.01]} renderOrder={5} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, hh - 0.045, 0.01]} renderOrder={5} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[width - 0.08, 0.042]} />
           <meshBasicMaterial
             map={grimeEdgeTex}
@@ -314,7 +313,6 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           rotation={[0, 0, Math.PI]}
           renderOrder={5}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <planeGeometry args={[width - 0.08, 0.042]} />
           <meshBasicMaterial
@@ -329,7 +327,6 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           rotation={[0, 0, Math.PI / 2]}
           renderOrder={5}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <planeGeometry args={[height - 0.08, 0.042]} />
           <meshBasicMaterial
@@ -344,7 +341,6 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           rotation={[0, 0, -Math.PI / 2]}
           renderOrder={5}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <planeGeometry args={[height - 0.08, 0.042]} />
           <meshBasicMaterial
@@ -357,11 +353,11 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
 
         {/* Bolted Brass Window Sill Decree Plaque (0.02m proud of z=0.20 vertical sill apron, zero tilt clipping) */}
         <group position={[0.25, -hh - 0.06, 0.212]} rotation={[0, 0, 0]}>
-          <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[1.38, 0.13, 0.016]} />
             <meshBasicMaterial color="#8c7a4b" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.011]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.011]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[1.34, 0.115]} />
             <meshBasicMaterial
               map={plaqueTex}
@@ -375,7 +371,7 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
 
         {/* Rolled-Up Dark Headrail Bar Tucked High Inside Top Right Mullion (Pane 100% Clear) */}
         <group position={[hw - 0.66, hh - 0.042, 0.05]}>
-          <mesh rotation={[0, 0, -0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh rotation={[0, 0, -0.02]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[1.16, 0.028, 0.036]} />
             <meshBasicMaterial color="#2b342f" fog={false} />
           </mesh>
@@ -383,19 +379,19 @@ const SovietBlastWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
 
         {/* Tiny Wooden Window Squeegee Hanging on a Brass Peg Beside Right Blast Bolts */}
         <group position={[hw + 0.01, -0.18, 0.14]} rotation={[0, 0, 0.14]}>
-          <mesh position={[0, 0.11, -0.01]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0.11, -0.01]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.02, 0.02]} />
             <meshBasicMaterial color="#b8a46b" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.016, 0.21, 0.016]} />
             <meshBasicMaterial color="#6e4a2e" fog={false} />
           </mesh>
-          <mesh position={[0, 0.1, 0.006]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0.1, 0.006]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.19, 0.024, 0.016]} />
             <meshBasicMaterial color="#a8945c" fog={false} />
           </mesh>
-          <mesh position={[0, 0.114, 0.011]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0.114, 0.011]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.196, 0.012]} />
             <meshBasicMaterial color="#141414" fog={false} />
           </mesh>
@@ -506,53 +502,53 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
     return (
       <group>
         {/* Outer Heavy Charcoal-Slate Industrial Window Casing */}
-        <mesh position={[0, hh + 0.04, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, hh + 0.04, 0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[width + 0.18, 0.1, 0.24]} />
           <meshBasicMaterial color="#192126" fog={false} />
         </mesh>
-        <mesh position={[0, -hh - 0.048, 0.05]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, -hh - 0.048, 0.05]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[width + 0.2, 0.136, 0.22]} />
           <meshBasicMaterial color="#202a30" fog={false} />
         </mesh>
-        <mesh position={[-hw - 0.04, 0, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[-hw - 0.04, 0, 0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.1, height + 0.08, 0.24]} />
           <meshBasicMaterial color="#192126" fog={false} />
         </mesh>
-        <mesh position={[hw + 0.04, 0, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[hw + 0.04, 0, 0.02]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.1, height + 0.08, 0.24]} />
           <meshBasicMaterial color="#192126" fog={false} />
         </mesh>
 
         {/* Inner Steel Frame, 2 Vertical Mullions (3-Wide), Upper Transom & Bolted Gusset Plates */}
-        <mesh position={[0, hh - 0.02, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, hh - 0.02, 0.04]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[width + 0.02, 0.065, 0.13]} />
           <meshBasicMaterial color="#2b373f" fog={false} />
         </mesh>
-        <mesh position={[0, -hh + 0.02, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, -hh + 0.02, 0.04]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[width + 0.02, 0.065, 0.13]} />
           <meshBasicMaterial color="#2b373f" fog={false} />
         </mesh>
-        <mesh position={[-hw + 0.02, 0, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[-hw + 0.02, 0, 0.04]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.065, height, 0.13]} />
           <meshBasicMaterial color="#2b373f" fog={false} />
         </mesh>
-        <mesh position={[hw - 0.02, 0, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[hw - 0.02, 0, 0.04]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.065, height, 0.13]} />
           <meshBasicMaterial color="#2b373f" fog={false} />
         </mesh>
-        <mesh position={[0, transomY, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, transomY, 0.04]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[width - 0.04, 0.048, 0.12]} />
           <meshBasicMaterial color="#2b373f" fog={false} />
         </mesh>
 
         {mullionXs.map((mx, idx) => (
           <group key={`gallery-mullion-${idx}`}>
-            <mesh position={[mx, 0, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[mx, 0, 0.04]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.056, height - 0.04, 0.13]} />
               <meshBasicMaterial color="#253037" fog={false} />
             </mesh>
             {/* Bolted Steel Gusset Plate at Mullion-Transom Intersection */}
-            <mesh position={[mx, transomY, 0.095]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[mx, transomY, 0.095]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.13, 0.13, 0.018]} />
               <meshBasicMaterial color="#394750" fog={false} />
             </mesh>
@@ -566,14 +562,13 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
                 key={`gusset-bolt-${idx}-${bIdx}`}
                 position={[mx + bx, transomY + by, 0.106]}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[0.014, 0.014]} />
                 <meshBasicMaterial color="#a89258" fog={false} />
               </mesh>
             ))}
             {/* Bottom Mullion Gusset Shoe */}
-            <mesh position={[mx, -hh + 0.05, 0.095]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[mx, -hh + 0.05, 0.095]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.12, 0.08, 0.018]} />
               <meshBasicMaterial color="#394750" fog={false} />
             </mesh>
@@ -581,7 +576,7 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
         ))}
 
         {/* Subtle Corner Frost & Condensation Strips Along Narrow Bottom & Upper Pane Corners */}
-        <mesh position={[0, -hh + 0.065, 0.02]} renderOrder={5} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, -hh + 0.065, 0.02]} renderOrder={5} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[width - 0.08, 0.11]} />
           <meshBasicMaterial
             map={frostEdgeTex}
@@ -596,7 +591,6 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           rotation={[0, 0, Math.PI]}
           renderOrder={5}
           raycast={NOOP_RAYCAST}
-          frustumCulled={false}
         >
           <planeGeometry args={[width - 0.08, 0.08]} />
           <meshBasicMaterial
@@ -610,11 +604,11 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
 
         {/* Mullion-Mounted Soviet Frost Thermometer & Dosimeter Box (KGS-84) */}
         <group position={[mullionXs[0], -0.08, 0.12]}>
-          <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.125, 0.27, 0.045]} />
             <meshBasicMaterial color="#2b3a34" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.036]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.036]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[0.11, 0.245]} />
             <meshBasicMaterial
               map={thermometerTex}
@@ -624,7 +618,7 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
               fog={false}
             />
           </mesh>
-          <mesh position={[-0.035, -0.49, -0.005]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[-0.035, -0.49, -0.005]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.007, 0.007, 0.72, 6]} />
             <meshBasicMaterial color="#3b4a44" fog={false} />
           </mesh>
@@ -637,7 +631,6 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
             position={[0, -hh - 0.085, 0.105]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.009, 0.009, width + 0.08, 6]} />
             <meshBasicMaterial color="#3b4a44" fog={false} />
@@ -645,7 +638,6 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
           <mesh
             position={[mullionXs[0], -hh - 0.085, 0.115]}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <boxGeometry args={[0.06, 0.055, 0.035]} />
             <meshBasicMaterial color="#26332e" fog={false} />
@@ -656,7 +648,6 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
             position={[0, -hh - 0.145, 0.145]}
             rotation={[0, 0, Math.PI / 2]}
             raycast={NOOP_RAYCAST}
-            frustumCulled={false}
           >
             <cylinderGeometry args={[0.026, 0.026, width + 0.16, 8]} />
             <meshBasicMaterial color="#2a3832" fog={false} />
@@ -668,7 +659,6 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
               key={`rad-bracket-${idx}`}
               position={[bx, -hh - 0.145, 0.115]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.032, 0.075, 0.075]} />
               <meshBasicMaterial color="#192126" fog={false} />
@@ -681,7 +671,6 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
               key={`rad-fin-${idx}`}
               position={[fx, -hh - 0.145, 0.145]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[0.012, 0.095, 0.088]} />
               <meshBasicMaterial color={idx % 2 === 0 ? "#23312b" : "#33453d"} fog={false} />
@@ -694,20 +683,19 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
               position={[0, 0, -0.025]}
               rotation={[Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <cylinderGeometry args={[0.012, 0.014, 0.05, 6]} />
               <meshBasicMaterial color="#222b2f" fog={false} />
             </mesh>
-            <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh rotation={[Math.PI / 2, 0, 0]} raycast={NOOP_RAYCAST}>
               <cylinderGeometry args={[0.044, 0.044, 0.014, 10, 1, true]} />
               <meshBasicMaterial color="#ff2a2a" side={THREE.DoubleSide} fog={false} />
             </mesh>
-            <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.084, 0.012, 0.012]} />
               <meshBasicMaterial color="#b81e1e" fog={false} />
             </mesh>
-            <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh raycast={NOOP_RAYCAST}>
               <boxGeometry args={[0.012, 0.084, 0.012]} />
               <meshBasicMaterial color="#b81e1e" fog={false} />
             </mesh>
@@ -716,11 +704,11 @@ const IndustrialGalleryWindowFrame3D: React.FC<SovietBlastWindowFrameProps> =
 
         {/* Bolted Brass Gallery Sill Decree Plaque (0.02m proud of z=0.16 vertical sill apron, zero tilt clipping) */}
         <group position={[0, -hh - 0.048, 0.172]} rotation={[0, 0, 0]}>
-          <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh raycast={NOOP_RAYCAST}>
             <boxGeometry args={[1.38, 0.13, 0.016]} />
             <meshBasicMaterial color="#8c7a4b" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.011]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.011]} raycast={NOOP_RAYCAST}>
             <planeGeometry args={[1.34, 0.115]} />
             <meshBasicMaterial
               map={plaqueTex}
@@ -1322,7 +1310,7 @@ const UnifiedExteriorWorld3D: React.FC = React.memo(() => {
   return (
     <group>
       {/* Single Seamless Curved Night-Sky Cylinder Around Control Room (Radius 54m, >40° Margin Both Ends) */}
-      <mesh position={[0, 7.0, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+      <mesh position={[0, 7.0, 0]} raycast={NOOP_RAYCAST}>
         <cylinderGeometry
           args={[54.0, 54.0, 43.0, 72, 1, true, -Math.PI * 0.65, Math.PI * 1.8]}
         />
@@ -1334,7 +1322,6 @@ const UnifiedExteriorWorld3D: React.FC = React.memo(() => {
         position={[0, 28.45, 0]}
         rotation={[Math.PI / 2, 0, 0]}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <circleGeometry args={[54.4, 48]} />
         <meshBasicMaterial color="#050a14" fog={false} />
@@ -1345,14 +1332,13 @@ const UnifiedExteriorWorld3D: React.FC = React.memo(() => {
         position={[0, -13.6, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <circleGeometry args={[54.6, 64]} />
         <meshBasicMaterial color="#070d15" fog={false} />
       </mesh>
 
       {/* Single Unified Continuous Displaced Terrain Mesh */}
-      <mesh geometry={terrainGeo} raycast={NOOP_RAYCAST} frustumCulled={false}>
+      <mesh geometry={terrainGeo} raycast={NOOP_RAYCAST}>
         <meshBasicMaterial map={snowDetailTex} vertexColors fog={false} />
       </mesh>
 
@@ -1629,18 +1615,18 @@ const Win1SteelDripAndPipeLedge3D: React.FC = React.memo(() => {
     <group>
       {/* Narrow 0.15m weathered steel drip-ledge tilted downward below window sill */}
       <group position={[0, -0.98, -0.075]} rotation={[-0.42, 0, 0]}>
-        <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh raycast={NOOP_RAYCAST}>
           <boxGeometry args={[4.04, 0.018, 0.15]} />
           <meshBasicMaterial color="#1e2933" fog={false} />
         </mesh>
-        <mesh position={[0, 0.011, -0.055]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, 0.011, -0.055]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[4.04, 0.008, 0.036]} />
           <meshBasicMaterial color="#2d3f4f" fog={false} />
         </mesh>
       </group>
 
       {/* Sheer flush exterior concrete/steel bunker wall dropping down to meet unified terrain at (6.08, 4.58) */}
-      <mesh position={[-0.16, -7.0, -0.08]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+      <mesh position={[-0.16, -7.0, -0.08]} raycast={NOOP_RAYCAST}>
         <planeGeometry args={[9.08, 12.1]} />
         <meshBasicMaterial color="#0b131c" fog={false} />
       </mesh>
@@ -1650,18 +1636,17 @@ const Win1SteelDripAndPipeLedge3D: React.FC = React.memo(() => {
         position={[0, -1.36, -0.17]}
         rotation={[0, 0, Math.PI / 2]}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <cylinderGeometry args={[0.042, 0.042, 6.6, 8]} />
         <meshBasicMaterial color="#4d6070" fog={false} />
       </mesh>
       {collarXs.map((cx, idx) => (
         <group key={`win1-pipe-collar-${idx}`} position={[cx, -1.36, -0.17]}>
-          <mesh rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh rotation={[0, 0, Math.PI / 2]} raycast={NOOP_RAYCAST}>
             <cylinderGeometry args={[0.052, 0.052, 0.07, 8]} />
             <meshBasicMaterial color="#ffb000" fog={false} />
           </mesh>
-          <mesh position={[0, 0, 0.06]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[0, 0, 0.06]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.045, 0.095, 0.085]} />
             <meshBasicMaterial color="#1c262e" fog={false} />
           </mesh>
@@ -1669,21 +1654,21 @@ const Win1SteelDripAndPipeLedge3D: React.FC = React.memo(() => {
       ))}
 
       {/* Low, tucked-down tubular steel grab-rail (worldY = 0.76m / 0.67m < 0.85m, 0.22m from wall) */}
-      <mesh position={[0, -1.19, -0.22]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+      <mesh position={[0, -1.19, -0.22]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[5.4, 0.024, 0.024]} />
         <meshBasicMaterial color="#344654" fog={false} />
       </mesh>
-      <mesh position={[0, -1.28, -0.22]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+      <mesh position={[0, -1.28, -0.22]} raycast={NOOP_RAYCAST}>
         <boxGeometry args={[5.4, 0.018, 0.018]} />
         <meshBasicMaterial color="#273642" fog={false} />
       </mesh>
       {stanchionXs.map((px, idx) => (
         <group key={`win1-rail-stanchion-${idx}`}>
-          <mesh position={[px, -1.29, -0.22]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[px, -1.29, -0.22]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.024, 0.21, 0.024]} />
             <meshBasicMaterial color="#2a3946" fog={false} />
           </mesh>
-          <mesh position={[px, -1.38, -0.15]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+          <mesh position={[px, -1.38, -0.15]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.026, 0.026, 0.14]} />
             <meshBasicMaterial color="#1e2a34" fog={false} />
           </mesh>
@@ -1692,19 +1677,19 @@ const Win1SteelDripAndPipeLedge3D: React.FC = React.memo(() => {
 
       {/* Tiny caged ruby indicator bulb on tucked rail at worldY = 0.80m (< 0.85m) */}
       <group position={[1.56, -1.19, -0.22]}>
-        <mesh position={[0, 0.022, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, 0.022, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.008, 0.008, 0.044, 6]} />
           <meshBasicMaterial color="#1c262e" fog={false} />
         </mesh>
-        <mesh position={[0, 0.052, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, 0.052, 0]} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.013, 0.015, 0.032, 8]} />
           <meshBasicMaterial color="#d92424" toneMapped={false} fog={false} />
         </mesh>
-        <mesh position={[0, 0.052, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, 0.052, 0]} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.032, 0.038, 0.003]} />
           <meshBasicMaterial color="#182128" fog={false} />
         </mesh>
-        <mesh position={[0, 0.052, 0.018]} renderOrder={2} raycast={NOOP_RAYCAST} frustumCulled={false}>
+        <mesh position={[0, 0.052, 0.018]} renderOrder={2} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.08, 0.08]} />
           <meshBasicMaterial
             color="#ff3b2a"
@@ -1732,14 +1717,13 @@ const MinimalSteelDripLip3D: React.FC = React.memo(() => {
         position={[0, -0.975, -0.06]}
         rotation={[-0.75, 0, 0]}
         raycast={NOOP_RAYCAST}
-        frustumCulled={false}
       >
         <boxGeometry args={[3.84, 0.014, 0.11]} />
         <meshBasicMaterial color="#182026" fog={false} />
       </mesh>
-      {/* Flush Dark Exterior Bunker Wall Ending Exactly at +X Outer Corner (6.08, 4.58) */}
-      <mesh position={[3.46, -7.0, -0.08]} raycast={NOOP_RAYCAST} frustumCulled={false}>
-        <planeGeometry args={[12.08, 12.1]} />
+      {/* Flush Dark Exterior Bunker Wall Under Window 2 Ending at Lobby Corner (worldX = +1.58..+6.08) */}
+      <mesh position={[-0.33, -7.0, -0.08]} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[4.5, 12.1]} />
         <meshBasicMaterial color="#080e15" fog={false} />
       </mesh>
     </group>
@@ -3425,7 +3409,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[-8.1, Y(-10.78), -9.6]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[40.8, 7.6]} />
               <meshBasicMaterial
@@ -3437,7 +3420,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             </mesh>
 
             {/* 1. Upper Deaerator & Auxiliary Gallery (z = -1.8..-4.8, roof y = -5.5m) */}
-            <mesh position={[-10.25, Y(-8.2), -3.3]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-10.25, Y(-8.2), -3.3]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[29.5, 5.4, 3.0]} />
               <meshBasicMaterial map={concreteWallTex} fog={false} />
             </mesh>
@@ -3445,17 +3428,16 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[-10.25, Y(-5.49), -3.3]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[29.3, 2.9]} />
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
             </mesh>
-            <mesh position={[-10.25, Y(-5.44), -1.84]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-10.25, Y(-5.44), -1.84]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[29.5, 0.12, 0.1]} />
               <meshBasicMaterial color="#1d2e40" fog={false} />
             </mesh>
             {/* Raised Deaerator Machinery Penthouse (+Z wall faces camera, top strictly below worldY = -4.5m) */}
-            <mesh position={[-7.5, Y(-5.12), -3.8]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-7.5, Y(-5.12), -3.8]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[14.0, 0.76, 1.3]} />
               <meshBasicMaterial map={concreteWallTex} fog={false} />
             </mesh>
@@ -3463,14 +3445,13 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[-7.5, Y(-4.73), -3.8]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[13.8, 1.2]} />
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
             </mesh>
 
             {/* 2. Main Stepped-Down RBMK Turbine Hall (z = -4.7..-8.9, roof y = -7.2m) */}
-            <mesh position={[-12.25, Y(-9.05), -6.8]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-12.25, Y(-9.05), -6.8]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[31.5, 3.7, 4.2]} />
               <meshBasicMaterial map={concreteWallTex} fog={false} />
             </mesh>
@@ -3478,7 +3459,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[-12.25, Y(-7.19), -6.8]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[31.3, 4.1]} />
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
@@ -3488,14 +3468,13 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 key={`turb-rib-${idx}`}
                 position={[rx, Y(-7.11), -6.8]}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <boxGeometry args={[0.24, 0.18, 4.1]} />
                 <meshBasicMaterial color="#1d2e40" fog={false} />
               </mesh>
             ))}
             {/* Turbine Hall Clerestory Monitor */}
-            <mesh position={[-11.5, Y(-6.65), -6.7]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-11.5, Y(-6.65), -6.7]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[21.0, 1.1, 1.4]} />
               <meshBasicMaterial map={concreteWallTex} fog={false} />
             </mesh>
@@ -3503,14 +3482,13 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[-11.5, Y(-6.09), -6.7]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[20.8, 1.3]} />
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
             </mesh>
 
             {/* 3. Lower Auxiliary Pump House Wing & Condenser Bay (roof y = -8.0m) */}
-            <mesh position={[-31.0, Y(-9.45), -6.8]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-31.0, Y(-9.45), -6.8]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[6.0, 2.9, 4.0]} />
               <meshBasicMaterial map={concreteWallTex} fog={false} />
             </mesh>
@@ -3518,12 +3496,11 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[-31.0, Y(-7.99), -6.8]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[5.9, 3.9]} />
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
             </mesh>
-            <mesh position={[-21.0, Y(-9.45), -9.15]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-21.0, Y(-9.45), -9.15]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[14.0, 2.9, 0.9]} />
               <meshBasicMaterial map={concreteWallTex} fog={false} />
             </mesh>
@@ -3531,14 +3508,13 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[-21.0, Y(-7.99), -9.15]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[13.8, 0.84]} />
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
             </mesh>
 
             {/* 4. Adjacent Unit 3 RBMK Reactor Block & Biological Shield Cap (y = -6.3m / -4.75m) */}
-            <mesh position={[6.2, Y(-8.6), -7.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[6.2, Y(-8.6), -7.2]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[5.4, 4.6, 4.0]} />
               <meshBasicMaterial map={concreteWallTex} fog={false} />
             </mesh>
@@ -3546,12 +3522,11 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[6.2, Y(-6.29), -7.2]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[5.3, 3.9]} />
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
             </mesh>
-            <mesh position={[6.2, Y(-5.525), -7.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[6.2, Y(-5.525), -7.2]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[3.8, 1.55, 2.8]} />
               <meshBasicMaterial map={concreteWallTex} fog={false} />
             </mesh>
@@ -3559,7 +3534,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               position={[6.2, Y(-4.74), -7.2]}
               rotation={[-Math.PI / 2, 0, 0]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <planeGeometry args={[3.7, 2.7]} />
               <meshBasicMaterial map={tarGravelRoofTex} fog={false} />
@@ -3567,7 +3541,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
 
             {/* 5. Tall Red-and-White Lattice VT-2 Ventilation Stack (+6.2, -7.5, y = -4.75m up to +5.40m) */}
             <group position={[6.2, Y(-4.75), -7.5]}>
-              <mesh position={[0, 5.075, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 5.075, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.24, 0.44, 10.15, 12, 1, true]} />
                 <meshBasicMaterial map={stackTex} fog={false} />
               </mesh>
@@ -3582,13 +3556,12 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   key={`vt2-leg-${idx}`}
                   position={[lx, 3.7, lz]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <boxGeometry args={[0.05, 7.4, 0.05]} />
                   <meshBasicMaterial color="#213140" fog={false} />
                 </mesh>
               ))}
-              <mesh position={[0, 3.7, 0.44]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 3.7, 0.44]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.92, 7.4]} />
                 <meshBasicMaterial
                   map={vt2LatticeTex}
@@ -3601,7 +3574,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 position={[-0.44, 3.7, 0]}
                 rotation={[0, Math.PI / 2, 0]}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[0.92, 7.4]} />
                 <meshBasicMaterial
@@ -3616,7 +3588,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   key={`vt2-ring-${idx}`}
                   position={[0, py, 0]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <boxGeometry args={[1.15, 0.1, 1.15]} />
                   <meshBasicMaterial color="#1a2632" fog={false} />
@@ -3631,7 +3602,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 position={[-9.5, Y(-5.32), pz]}
                 rotation={[0, 0, Math.PI / 2]}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <cylinderGeometry args={[0.09, 0.09, 27.0, 8]} />
                 <meshBasicMaterial color={idx === 0 ? "#7d92a6" : "#5e7387"} fog={false} />
@@ -3639,15 +3609,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             ))}
             {deaeratorLoopsX.map((lx, idx) => (
               <group key={`deaer-loop-${idx}`} position={[lx, Y(-5.32), -2.25]}>
-                <mesh position={[-0.45, 0, 0.22]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[-0.45, 0, 0.22]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.14, 0.14, 0.48]} />
                   <meshBasicMaterial color="#7d92a6" fog={false} />
                 </mesh>
-                <mesh position={[0.45, 0, 0.22]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0.45, 0, 0.22]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.14, 0.14, 0.48]} />
                   <meshBasicMaterial color="#7d92a6" fog={false} />
                 </mesh>
-                <mesh position={[0, 0, 0.42]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, 0, 0.42]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[1.04, 0.14, 0.14]} />
                   <meshBasicMaterial color="#91a8bd" fog={false} />
                 </mesh>
@@ -3660,7 +3630,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 position={[-11.5, Y(-7.02), pz]}
                 rotation={[0, 0, Math.PI / 2]}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <cylinderGeometry args={[0.11, 0.11, 29.0, 8]} />
                 <meshBasicMaterial color={idx === 0 ? "#7d92a6" : "#5e7387"} fog={false} />
@@ -3668,15 +3637,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             ))}
             {turbineLoopsX.map((lx, idx) => (
               <group key={`turb-loop-${idx}`} position={[lx, Y(-7.02), -7.95]}>
-                <mesh position={[-0.55, 0, -0.25]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[-0.55, 0, -0.25]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.16, 0.16, 0.56]} />
                   <meshBasicMaterial color="#7d92a6" fog={false} />
                 </mesh>
-                <mesh position={[0.55, 0, -0.25]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0.55, 0, -0.25]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.16, 0.16, 0.56]} />
                   <meshBasicMaterial color="#7d92a6" fog={false} />
                 </mesh>
-                <mesh position={[0, 0, -0.48]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, 0, -0.48]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[1.26, 0.16, 0.16]} />
                   <meshBasicMaterial color="#91a8bd" fog={false} />
                 </mesh>
@@ -3684,11 +3653,11 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             ))}
 
             {/* Lit Steel Rooftop Catwalks */}
-            <mesh position={[-10.2, Y(-5.46), -2.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-10.2, Y(-5.46), -2.02]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[28.5, 0.04, 0.36]} />
               <meshBasicMaterial color="#263a4d" fog={false} />
             </mesh>
-            <mesh position={[-12.0, Y(-7.16), -4.92]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-12.0, Y(-7.16), -4.92]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[30.0, 0.04, 0.38]} />
               <meshBasicMaterial color="#263a4d" fog={false} />
             </mesh>
@@ -3756,7 +3725,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             {/* Upgraded Cherenkov Ionized Roof Vent Beam & Roofscape Glow */}
             <group name="cherenkov-roof-glow" ref={cherenkovRef} visible={false}>
               {/* Primary Unit 3 Biological Shield Roof Column */}
-              <mesh position={[6.2, Y(-0.2), -7.2]} renderOrder={4} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[6.2, Y(-0.2), -7.2]} renderOrder={4} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[2.6, 9.6]} />
                 <meshBasicMaterial
                   ref={cherenkovCoreMatRef}
@@ -3769,7 +3738,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[6.2, Y(0.6), -7.1]} renderOrder={3} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[6.2, Y(0.6), -7.1]} renderOrder={3} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[6.4, 11.4]} />
                 <meshBasicMaterial
                   ref={cherenkovHaloMatRef}
@@ -3788,7 +3757,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 rotation={[-Math.PI / 2, 0, 0]}
                 renderOrder={2}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[14.0, 8.0]} />
                 <meshBasicMaterial
@@ -3805,11 +3773,11 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             </group>
 
             {/* 7. 500kV High-Voltage Switchyard (8 Heavy Transformers, 48 Bushings, 6 Gantries, 4 Pylons, Wires) */}
-            <mesh position={[-5.5, Y(-10.22), -12.52]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-5.5, Y(-10.22), -12.52]} raycast={NOOP_RAYCAST}>
               <planeGeometry args={[34.0, 1.16]} />
               <meshBasicMaterial map={chainLinkTex} alphaTest={0.5} fog={false} />
             </mesh>
-            <mesh position={[-5.5, Y(-9.62), -12.52]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-5.5, Y(-9.62), -12.52]} raycast={NOOP_RAYCAST}>
               <planeGeometry args={[34.0, 0.04]} />
               <meshBasicMaterial color="#2f403b" fog={false} />
             </mesh>
@@ -3844,15 +3812,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             {/* 6 Steel 500kV Gantry Portals */}
             {gantryXs.map((gx, idx) => (
               <group key={`gantry-${idx}`} position={[gx, Y(-10.8), -11.3]}>
-                <mesh position={[-1.05, 1.55, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[-1.05, 1.55, 0]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.14, 3.1, 0.14]} />
                   <meshBasicMaterial color="#233342" fog={false} />
                 </mesh>
-                <mesh position={[1.05, 1.55, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[1.05, 1.55, 0]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.14, 3.1, 0.14]} />
                   <meshBasicMaterial color="#233342" fog={false} />
                 </mesh>
-                <mesh position={[0, 3.05, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, 3.05, 0]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[2.55, 0.16, 0.16]} />
                   <meshBasicMaterial color="#2c4052" fog={false} />
                 </mesh>
@@ -3865,7 +3833,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 key={`pylon-500kv-${idx}`}
                 position={[px, Y(-7.6), -14.1]}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[2.45, 6.4]} />
                 <meshBasicMaterial
@@ -3877,7 +3844,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             ))}
 
             {/* 3D Sagging 500kV Overhead Transmission Lines */}
-            <mesh geometry={switchyardWiresGeo} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh geometry={switchyardWiresGeo} raycast={NOOP_RAYCAST}>
               <meshBasicMaterial
                 color="#1c2a38"
                 side={THREE.DoubleSide}
@@ -3934,7 +3901,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             <mesh
               geometry={perimeterRoadRibbonGeo}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <meshBasicMaterial
                 map={perimeterRoadTex}
@@ -3945,11 +3911,11 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             </mesh>
             {/* Concrete Perimeter Road Hillside Tunnel Portal Into Corner Ridge */}
             <group position={[13.9, Y(win1GroundY(13.9, -13.3) + 0.45), -13.3]}>
-              <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.9, 1.15, 1.85]} />
                 <meshBasicMaterial color="#182430" fog={false} />
               </mesh>
-              <mesh position={[-0.46, -0.1, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-0.46, -0.1, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.04, 0.78, 1.32]} />
                 <meshBasicMaterial color="#05080d" fog={false} />
               </mesh>
@@ -3957,15 +3923,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
 
             {/* Security Checkpoint Booth & Striped Boom Gate */}
             <group position={[3.2, Y(-10.75), -12.7]}>
-              <mesh position={[0, 0.55, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 0.55, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[1.15, 1.1, 0.85]} />
                 <meshBasicMaterial color="#1b2630" fog={false} />
               </mesh>
-              <mesh position={[0, 0.68, 0.44]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 0.68, 0.44]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.65, 0.34]} />
                 <meshBasicMaterial color="#ffd478" toneMapped={false} fog={false} />
               </mesh>
-              <mesh position={[-0.75, 0.32, -0.42]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-0.75, 0.32, -0.42]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[1.4, 0.07, 0.07]} />
                 <meshBasicMaterial color="#ff2a2a" fog={false} />
               </mesh>
@@ -3973,15 +3939,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
 
             {/* Floodlit "GLORY TO PEACEFUL ATOM!" Roadside Propaganda Billboard */}
             <group position={[-0.2, Y(-9.45), -12.65]} rotation={[-0.22, -0.14, 0]}>
-              <mesh position={[-1.4, -0.82, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-1.4, -0.82, 0]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.12, 1.2]} />
                 <meshBasicMaterial color="#151d24" fog={false} />
               </mesh>
-              <mesh position={[1.4, -0.82, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[1.4, -0.82, 0]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.12, 1.2]} />
                 <meshBasicMaterial color="#151d24" fog={false} />
               </mesh>
-              <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[3.6, 0.96]} />
                 <meshBasicMaterial map={billboardTex} toneMapped={false} fog={false} />
               </mesh>
@@ -4031,7 +3997,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             <mesh
               geometry={coolingCanalRibbonGeo}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <meshBasicMaterial
                 map={coolingPondTex}
@@ -4042,7 +4007,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               />
             </mesh>
             {/* Concrete Warm-Water Outfall Weir & Corner Ridge Intake Headwall */}
-            <mesh position={[-17.2, Y(-10.1), -15.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-17.2, Y(-10.1), -15.2]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[2.4, 0.85, 0.8]} />
               <meshBasicMaterial color="#1c2c3b" fog={false} />
             </mesh>
@@ -4053,7 +4018,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 coolingCanalCenterZ(13.8),
               ]}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <boxGeometry args={[1.1, 0.95, 2.8]} />
               <meshBasicMaterial color="#1a2937" fog={false} />
@@ -4084,7 +4048,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 <mesh
                   position={[tc.x, Y(-10.22), tc.z]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <cylinderGeometry args={[4.45, 4.6, 0.62, 24]} />
                   <meshBasicMaterial color="#182634" fog={false} />
@@ -4094,7 +4057,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   position={[tc.x, Y(-9.9), tc.z]}
                   rotation={[-Math.PI / 2, 0, 0]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <circleGeometry args={[4.28, 24]} />
                   <meshBasicMaterial color="#15283a" fog={false} />
@@ -4104,7 +4066,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   geometry={coolingTowerGeo}
                   position={[tc.x, Y(-10.5), tc.z]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <meshBasicMaterial
                     map={coolingTowerTex}
@@ -4117,7 +4078,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   position={[tc.x, Y(0.78), tc.z]}
                   rotation={[-Math.PI / 2, 0, 0]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <circleGeometry args={[2.68, 24]} />
                   <meshBasicMaterial color="#0b1520" fog={false} />
@@ -4127,7 +4087,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   rotation={[-Math.PI / 2, 0, 0]}
                   renderOrder={1}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <circleGeometry args={[2.45, 24]} />
                   <meshBasicMaterial
@@ -4162,7 +4121,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 position={[idx < 8 ? -9.6 : -0.6, Y(1.2), -18.0]}
                 renderOrder={4}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[2.2, 1.5]} />
                 <meshBasicMaterial
@@ -4184,11 +4142,11 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 position={seg.mid}
                 quaternion={seg.quat}
               >
-                <mesh position={[-0.12, 0.04, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[-0.12, 0.04, 0]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.22, 0.22, seg.len + 0.08]} />
                   <meshBasicMaterial color="#758899" fog={false} />
                 </mesh>
-                <mesh position={[0.14, -0.02, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0.14, -0.02, 0]} raycast={NOOP_RAYCAST}>
                   <boxGeometry args={[0.15, 0.15, seg.len + 0.08]} />
                   <meshBasicMaterial color="#586b7d" fog={false} />
                 </mesh>
@@ -4248,7 +4206,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 position={[anc.x, anc.y + 0.25, anc.z]}
                 renderOrder={4}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[0.85, 0.65]} />
                 <meshBasicMaterial
@@ -4265,15 +4222,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             ))}
 
             {/* Industrial Freight Rail Spur & Viaduct Ending Into Corner Hillside Tunnel Portal (z = -24.2) */}
-            <mesh position={[-7.2, Y(-7.38), -24.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-7.2, Y(-7.38), -24.2]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[49.6, 0.26, 0.72]} />
               <meshBasicMaterial color="#253442" fog={false} />
             </mesh>
-            <mesh position={[-7.2, Y(-7.22), -24.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-7.2, Y(-7.22), -24.2]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[49.6, 0.06, 0.34]} />
               <meshBasicMaterial color="#121b24" fog={false} />
             </mesh>
-            <mesh position={[-7.2, Y(-8.82), -24.12]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[-7.2, Y(-8.82), -24.12]} raycast={NOOP_RAYCAST}>
               <planeGeometry args={[49.6, 2.65]} />
               <meshBasicMaterial
                 map={viaductArchesTex}
@@ -4283,15 +4240,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             </mesh>
             {/* Concrete Freight Rail Tunnel Portal Embedded in Corner Ridge */}
             <group position={[17.5, Y(-6.95), -24.2]}>
-              <mesh position={[0.4, 0.12, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0.4, 0.12, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[1.4, 1.35, 1.35]} />
                 <meshBasicMaterial color="#192531" fog={false} />
               </mesh>
-              <mesh position={[-0.31, -0.02, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-0.31, -0.02, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.04, 0.88, 0.82]} />
                 <meshBasicMaterial color="#05080d" fog={false} />
               </mesh>
-              <mesh position={[-0.25, -0.15, 0.62]} rotation={[0, 0.35, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-0.25, -0.15, 0.62]} rotation={[0, 0.35, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.85, 1.1, 0.2]} />
                 <meshBasicMaterial color="#141e28" fog={false} />
               </mesh>
@@ -4317,15 +4274,14 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   geometry={fourFaceGeo}
                   scale={[1.55, 0.48, 0.42]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <meshBasicMaterial color="#1e362c" fog={false} />
                 </mesh>
-                <mesh position={[0.25, -0.02, 0.22]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0.25, -0.02, 0.22]} raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[1.45, 0.1]} />
                   <meshBasicMaterial color="#c82b23" fog={false} />
                 </mesh>
-                <mesh position={[0.42, 0.1, 0.22]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0.42, 0.1, 0.22]} raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[0.38, 0.16]} />
                   <meshBasicMaterial
                     ref={spiritTrainCabMatRef}
@@ -4334,7 +4290,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                     fog={false}
                   />
                 </mesh>
-                <mesh position={[1.8, -0.05, 0.1]} renderOrder={2} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[1.8, -0.05, 0.1]} renderOrder={2} raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[2.2, 0.56]} />
                   <meshBasicMaterial
                     ref={spiritTrainBeamMatRef}
@@ -4358,7 +4314,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   }}
                   position={[cx, 0, 0]}
                 >
-                  <mesh position={[0, -0.17, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh position={[0, -0.17, 0]} raycast={NOOP_RAYCAST}>
                     <boxGeometry args={[1.28, 0.1, 0.38]} />
                     <meshBasicMaterial color="#161f28" fog={false} />
                   </mesh>
@@ -4366,16 +4322,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                     position={[0, 0.05, 0]}
                     rotation={[0, 0, Math.PI / 2]}
                     raycast={NOOP_RAYCAST}
-                    frustumCulled={false}
                   >
                     <cylinderGeometry args={[0.2, 0.2, 1.2, 10]} />
                     <meshBasicMaterial color="#586a7a" fog={false} />
                   </mesh>
-                  <mesh position={[0, 0.06, 0.21]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh position={[0, 0.06, 0.21]} raycast={NOOP_RAYCAST}>
                     <planeGeometry args={[1.08, 0.22]} />
                     <meshBasicMaterial map={spiritTankerLabelTex} fog={false} />
                   </mesh>
-                  <mesh position={[0, -0.13, 0.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh position={[0, -0.13, 0.2]} raycast={NOOP_RAYCAST}>
                     <planeGeometry args={[0.82, 0.06]} />
                     <meshBasicMaterial
                       ref={(mat) => {
@@ -4387,7 +4342,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                     />
                   </mesh>
                   {idx === 0 && (
-                    <mesh position={[-0.65, 0.04, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                    <mesh position={[-0.65, 0.04, 0.04]} raycast={NOOP_RAYCAST}>
                       <planeGeometry args={[0.1, 0.1]} />
                       <meshBasicMaterial color="#ff2a2a" toneMapped={false} fog={false} />
                     </mesh>
@@ -4405,7 +4360,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               rotation={[0, Math.PI / 2, 0]}
               renderOrder={1}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <cylinderGeometry args={[50.0, 50.0, 18.0, 32, 1, true, 0.72, 1.24]} />
               <meshBasicMaterial
@@ -4451,15 +4405,15 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
               const wtBase = Y(win1GroundY(wx, -34.8));
               return (
                 <group key={`ridge-water-tower-${idx}`} position={[wx, wtBase, -34.8]}>
-                  <mesh position={[0, 1.35, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh position={[0, 1.35, 0]} raycast={NOOP_RAYCAST}>
                     <cylinderGeometry args={[0.26, 0.44, 2.7, 6]} />
                     <meshBasicMaterial color="#18232e" fog={false} />
                   </mesh>
-                  <mesh position={[0, 3.05, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh position={[0, 3.05, 0]} raycast={NOOP_RAYCAST}>
                     <cylinderGeometry args={[0.78, 0.65, 0.9, 10]} />
                     <meshBasicMaterial color="#21303d" fog={false} />
                   </mesh>
-                  <mesh position={[0, 3.65, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh position={[0, 3.65, 0]} raycast={NOOP_RAYCAST}>
                     <coneGeometry args={[0.84, 0.45, 10]} />
                     <meshBasicMaterial color="#15202b" fog={false} />
                   </mesh>
@@ -4476,7 +4430,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   key={`ridge-aux-stack-${idx}`}
                   position={[sx, stackBase + h * 0.5, -35.6]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <cylinderGeometry args={[0.14, 0.24, h, 8, 1, true]} />
                   <meshBasicMaterial map={stackTex} fog={false} />
@@ -4487,7 +4440,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
             {/* SPRAWLING STATE VODKA DISTILLERY COMPLEX "KRISTALL-84" (x = +1.5..+16.0, z = -34.2) */}
             <group position={[0, distilleryBaseY, 0]}>
               {/* 3-Wing Red-Brick & Concrete Distillery Halls */}
-              <mesh position={[5.6, 1.3, -34.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[5.6, 1.3, -34.2]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[4.6, 2.6, 2.0]} />
                 <meshBasicMaterial
                   ref={(mat) => {
@@ -4497,7 +4450,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[9.4, 1.6, -34.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[9.4, 1.6, -34.2]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[5.4, 3.2, 2.3]} />
                 <meshBasicMaterial
                   ref={(mat) => {
@@ -4508,7 +4461,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[13.7, 1.25, -34.2]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[13.7, 1.25, -34.2]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[4.2, 2.5, 2.0]} />
                 <meshBasicMaterial
                   ref={(mat) => {
@@ -4526,14 +4479,13 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   key={`vodka-sawtooth-${idx}`}
                   position={[sx, idx < 4 ? 2.86 : 2.76, -34.1]}
                 >
-                  <mesh rotation={[0, 0, 0.28]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh rotation={[0, 0, 0.28]} raycast={NOOP_RAYCAST}>
                     <boxGeometry args={[0.85, 0.55, 1.65]} />
                     <meshBasicMaterial color="#1d2128" fog={false} />
                   </mesh>
                   <mesh
                     position={[0.18, 0.04, 0.84]}
                     raycast={NOOP_RAYCAST}
-                    frustumCulled={false}
                   >
                     <planeGeometry args={[0.72, 0.36]} />
                     <meshBasicMaterial
@@ -4554,13 +4506,12 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   key={`vodka-silo-${idx}`}
                   position={[sx, 1.45, -33.5]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <cylinderGeometry args={[0.31, 0.31, 2.9, 10]} />
                   <meshBasicMaterial color={idx % 2 === 0 ? "#4a3c3c" : "#3d3131"} fog={false} />
                 </mesh>
               ))}
-              <mesh position={[3.32, 3.08, -33.5]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[3.32, 3.08, -33.5]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[3.9, 0.42, 0.68]} />
                 <meshBasicMaterial color="#2a2224" fog={false} />
               </mesh>
@@ -4574,7 +4525,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 { x: 11.0, h: 4.1 },
               ].map((col, idx) => (
                 <group key={`rect-col-${idx}`} position={[col.x, 0, -33.95]}>
-                  <mesh position={[0, col.h * 0.5, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh position={[0, col.h * 0.5, 0]} raycast={NOOP_RAYCAST}>
                     <cylinderGeometry args={[0.36, 0.42, col.h, 12]} />
                     <meshBasicMaterial
                       ref={(mat) => {
@@ -4589,7 +4540,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                       key={`rect-ring-${idx}-${rIdx}`}
                       position={[0, col.h * f, 0]}
                       raycast={NOOP_RAYCAST}
-                      frustumCulled={false}
                     >
                       <cylinderGeometry args={[0.52, 0.52, 0.1, 12]} />
                       <meshBasicMaterial color="#1f181a" fog={false} />
@@ -4608,7 +4558,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   key={`vodka-stack-${idx}`}
                   position={[st.x, st.h * 0.5, -35.1]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <cylinderGeometry args={[0.2, 0.34, st.h, 10, 1, true]} />
                   <meshBasicMaterial map={stackTex} fog={false} />
@@ -4617,7 +4566,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
 
               {/* Monumental Rooftop Neon Sign: VODKA PLANT "KRISTALL-84" */}
               <group position={[8.8, 4.35, -33.25]}>
-                <mesh position={[0, -0.95, -0.06]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, -0.95, -0.06]} raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[11.2, 0.62]} />
                   <meshBasicMaterial
                     map={vodkaTrussTex}
@@ -4630,13 +4579,12 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                     key={`vodka-truss-leg-${idx}`}
                     position={[lx, -0.75, -0.05]}
                     raycast={NOOP_RAYCAST}
-                    frustumCulled={false}
                   >
                     <boxGeometry args={[0.14, 1.4, 0.14]} />
                     <meshBasicMaterial color="#191e26" fog={false} />
                   </mesh>
                 ))}
-                <mesh position={[0, 0, -0.02]} renderOrder={1} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, 0, -0.02]} renderOrder={1} raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[12.2, 2.55]} />
                   <meshBasicMaterial
                     ref={vodkaSignHaloMatRef}
@@ -4648,7 +4596,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                     fog={false}
                   />
                 </mesh>
-                <mesh position={[0, 0, 0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, 0, 0.04]} raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[11.2, 1.85]} />
                   <meshBasicMaterial
                     ref={vodkaSignMatRef}
@@ -4661,11 +4609,11 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
 
               {/* Monumental Slowly Rotating 3D Red Soviet Star Crowning Central Rectification Tower */}
               <group position={[8.8, 5.95, -33.95]}>
-                <mesh position={[0, -0.25, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, -0.25, 0]} raycast={NOOP_RAYCAST}>
                   <cylinderGeometry args={[0.09, 0.16, 0.9, 8]} />
                   <meshBasicMaterial color="#2b2024" fog={false} />
                 </mesh>
-                <mesh position={[0, 0.5, -0.08]} renderOrder={1} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, 0.5, -0.08]} renderOrder={1} raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[2.75, 2.75]} />
                   <meshBasicMaterial
                     ref={starHaloMatRef}
@@ -4680,7 +4628,7 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                   />
                 </mesh>
                 <group ref={starGroupRef} position={[0, 0.5, 0]}>
-                  <mesh geometry={sovietStarGeo} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh geometry={sovietStarGeo} raycast={NOOP_RAYCAST}>
                     <meshBasicMaterial
                       ref={starMatOuterRef}
                       color="#ff2a2a"
@@ -4692,7 +4640,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                     geometry={sovietStarGeo}
                     scale={[0.56, 0.56, 1.18]}
                     raycast={NOOP_RAYCAST}
-                    frustumCulled={false}
                   >
                     <meshBasicMaterial
                       ref={starMatInnerRef}
@@ -4715,7 +4662,6 @@ const RbmkAndVodkaDiorama3D: React.FC = React.memo(() => {
                 position={[8.8, Y(6.5), -35.1]}
                 renderOrder={3}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[1.3, 0.9]} />
                 <meshBasicMaterial
@@ -6103,7 +6049,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
             <mesh
               geometry={highwayRibbonGeo}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <meshBasicMaterial
                 map={highwayRibbonTex}
@@ -6205,18 +6150,18 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 position={[pole.x, pole.baseY + pole.h * 0.5, pole.z]}
                 rotation={[0, 0, pole.tilt]}
               >
-                <mesh raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[0.08, pole.h]} />
                   <meshBasicMaterial color="#181410" fog={false} />
                 </mesh>
-                <mesh position={[0, pole.h * 0.38, 0.01]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                <mesh position={[0, pole.h * 0.38, 0.01]} raycast={NOOP_RAYCAST}>
                   <planeGeometry args={[0.56, 0.055]} />
                   <meshBasicMaterial color="#211b15" fog={false} />
                 </mesh>
               </group>
             ))}
 
-            <mesh geometry={powerWiresGeo} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh geometry={powerWiresGeo} raycast={NOOP_RAYCAST}>
               <meshBasicMaterial
                 color="#19232d"
                 side={THREE.DoubleSide}
@@ -6227,15 +6172,15 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
 
           {/* MID-VALLEY RAILWAY VIADUCT (18.5m out): Arched Viaduct Tucked Into Corner Forest Tunnel */}
           <group>
-            <mesh position={[19.1, Y(-1.8), -18.5]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[19.1, Y(-1.8), -18.5]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[61.8, 0.22, 0.58]} />
               <meshBasicMaterial color="#253340" fog={false} />
             </mesh>
-            <mesh position={[19.1, Y(-1.67), -18.5]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[19.1, Y(-1.67), -18.5]} raycast={NOOP_RAYCAST}>
               <boxGeometry args={[61.8, 0.04, 0.28]} />
               <meshBasicMaterial color="#111820" fog={false} />
             </mesh>
-            <mesh position={[19.1, Y(-3.14), -18.42]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+            <mesh position={[19.1, Y(-3.14), -18.42]} raycast={NOOP_RAYCAST}>
               <planeGeometry args={[61.8, 2.55]} />
               <meshBasicMaterial
                 map={viaductArchesTex}
@@ -6245,15 +6190,15 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
             </mesh>
             {/* Concrete Railway Tunnel Portal Embedded Into +X / +Z Forested Hillside Bluff */}
             <group position={[-11.35, Y(-1.38), -18.5]}>
-              <mesh position={[-0.55, 0.1, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-0.55, 0.1, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[1.65, 1.35, 1.35]} />
                 <meshBasicMaterial color="#192531" fog={false} />
               </mesh>
-              <mesh position={[0.3, -0.02, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0.3, -0.02, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.04, 0.86, 0.82]} />
                 <meshBasicMaterial color="#05080d" fog={false} />
               </mesh>
-              <mesh position={[0.25, -0.18, 0.56]} rotation={[0, -0.38, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0.25, -0.18, 0.56]} rotation={[0, -0.38, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.9, 1.15, 0.2]} />
                 <meshBasicMaterial color="#141e28" fog={false} />
               </mesh>
@@ -6272,11 +6217,10 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                     geometry={fourFaceGeo}
                     scale={[1.04, 0.24, 0.24]}
                     raycast={NOOP_RAYCAST}
-                    frustumCulled={false}
                   >
                     <meshBasicMaterial color="#121922" fog={false} />
                   </mesh>
-                  <mesh position={[0, 0.02, 0.13]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                  <mesh position={[0, 0.02, 0.13]} raycast={NOOP_RAYCAST}>
                     <planeGeometry args={[0.82, 0.085]} />
                     <meshBasicMaterial
                       ref={(mat) => {
@@ -6288,7 +6232,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                     />
                   </mesh>
                   {idx === 5 && (
-                    <mesh position={[0.53, 0.02, 0.02]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+                    <mesh position={[0.53, 0.02, 0.02]} raycast={NOOP_RAYCAST}>
                       <planeGeometry args={[0.07, 0.07]} />
                       <meshBasicMaterial color="#ff2a2a" toneMapped={false} fog={false} />
                     </mesh>
@@ -6300,7 +6244,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 position={[4.45, -0.02, 0.08]}
                 renderOrder={2}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[1.95, 0.42]} />
                 <meshBasicMaterial
@@ -6325,7 +6268,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
               rotation={[0, Math.PI, 0]}
               renderOrder={1}
               raycast={NOOP_RAYCAST}
-              frustumCulled={false}
             >
               <cylinderGeometry args={[50.0, 50.0, 18.0, 32, 1, true, -0.66, 1.46]} />
               <meshBasicMaterial
@@ -6415,7 +6357,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 position={[0.0, Y(win2GroundY(0.0, gz) + 0.3), gz]}
                 renderOrder={2}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[52.0, 0.68]} />
                 <meshBasicMaterial
@@ -6439,7 +6380,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 position={[0, 1.8, 0]}
                 rotation={[0, 0.35, 0]}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[1.35, 3.6]} />
                 <meshBasicMaterial
@@ -6453,7 +6393,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 position={[0, 1.8, 0]}
                 rotation={[0, -Math.PI / 2 + 0.35, 0]}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[1.35, 3.6]} />
                 <meshBasicMaterial
@@ -6463,15 +6402,15 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[0, 5.4, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 5.4, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.1, 0.22, 3.6, 8]} />
                 <meshBasicMaterial color="#131e2b" fog={false} />
               </mesh>
-              <mesh position={[0, 4.05, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 4.05, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.42, 0.34, 0.42, 8]} />
                 <meshBasicMaterial color="#101a26" fog={false} />
               </mesh>
-              <mesh position={[0, 4.05, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 4.05, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.435, 0.435, 0.09, 8]} />
                 <meshBasicMaterial
                   ref={(mat) => {
@@ -6482,11 +6421,11 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[0, 5.6, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 5.6, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.28, 0.24, 0.26, 8]} />
                 <meshBasicMaterial color="#121c28" fog={false} />
               </mesh>
-              <mesh position={[0, 5.6, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 5.6, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.295, 0.295, 0.06, 8]} />
                 <meshBasicMaterial
                   ref={(mat) => {
@@ -6497,7 +6436,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[0, 8.1, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 8.1, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.025, 0.085, 1.8, 6]} />
                 <meshBasicMaterial map={stackTex} fog={false} />
               </mesh>
@@ -6505,19 +6444,19 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
 
             {/* Municipal Palace Spire */}
             <group position={[4.45, cityLayout.palaceGroundY, -34.9]}>
-              <mesh position={[0, 0.425, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 0.425, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[2.0, 0.85, 1.1]} />
                 <meshBasicMaterial color="#111b28" fog={false} />
               </mesh>
-              <mesh position={[0, 1.55, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 1.55, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.92, 1.4, 0.85]} />
                 <meshBasicMaterial color="#152130" fog={false} />
               </mesh>
-              <mesh position={[0, 2.46, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 2.46, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.52, 0.42, 0.52]} />
                 <meshBasicMaterial color="#182636" fog={false} />
               </mesh>
-              <mesh position={[0, 2.46, 0.27]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 2.46, 0.27]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.18, 0.18]} />
                 <meshBasicMaterial
                   ref={palaceClockMatRef}
@@ -6529,7 +6468,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[0, 3.4, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 3.4, 0]} raycast={NOOP_RAYCAST}>
                 <coneGeometry args={[0.14, 1.48, 6]} />
                 <meshBasicMaterial color="#1b2938" fog={false} />
               </mesh>
@@ -6537,46 +6476,46 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
 
             {/* 2 Skeletal Tower Construction Cranes */}
             <group position={[-9.8, cityLayout.crane1GroundY, -34.3]}>
-              <mesh position={[0, 1.6, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 1.6, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.14, 3.2, 0.14]} />
                 <meshBasicMaterial color="#182330" fog={false} />
               </mesh>
-              <mesh position={[0.7, 3.16, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0.7, 3.16, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[2.8, 0.11, 0.11]} />
                 <meshBasicMaterial color="#1f2d3d" fog={false} />
               </mesh>
-              <mesh position={[-0.6, 3.14, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-0.6, 3.14, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.32, 0.18, 0.18]} />
                 <meshBasicMaterial color="#101822" fog={false} />
               </mesh>
-              <mesh position={[0, 3.42, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 3.42, 0]} raycast={NOOP_RAYCAST}>
                 <coneGeometry args={[0.09, 0.42, 4]} />
                 <meshBasicMaterial color="#1f2d3d" fog={false} />
               </mesh>
-              <mesh position={[1.55, 2.75, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[1.55, 2.75, 0]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.025, 0.8]} />
                 <meshBasicMaterial color="#27384a" fog={false} />
               </mesh>
             </group>
 
             <group position={[11.6, cityLayout.crane2GroundY, -35.5]}>
-              <mesh position={[0, 1.425, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 1.425, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.14, 2.85, 0.14]} />
                 <meshBasicMaterial color="#182330" fog={false} />
               </mesh>
-              <mesh position={[-0.65, 2.82, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-0.65, 2.82, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[2.6, 0.11, 0.11]} />
                 <meshBasicMaterial color="#1f2d3d" fog={false} />
               </mesh>
-              <mesh position={[0.55, 2.8, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0.55, 2.8, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[0.3, 0.17, 0.17]} />
                 <meshBasicMaterial color="#101822" fog={false} />
               </mesh>
-              <mesh position={[0, 3.06, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 3.06, 0]} raycast={NOOP_RAYCAST}>
                 <coneGeometry args={[0.09, 0.42, 4]} />
                 <meshBasicMaterial color="#1f2d3d" fog={false} />
               </mesh>
-              <mesh position={[-1.4, 2.4, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-1.4, 2.4, 0]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[0.025, 0.78]} />
                 <meshBasicMaterial color="#27384a" fog={false} />
               </mesh>
@@ -6584,15 +6523,15 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
 
             {/* Outskirts District Heating Plant (TETs) With 3 Tall Striped Smokestacks + West Boiler Stack */}
             <group position={[20.8, cityLayout.heatGroundY, -35.8]}>
-              <mesh position={[0, 0.68, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 0.68, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[3.6, 1.36, 1.25]} />
                 <meshBasicMaterial color="#101822" fog={false} />
               </mesh>
-              <mesh position={[-1.4, 0.42, 0.15]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[-1.4, 0.42, 0.15]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[1.8, 0.84, 1.1]} />
                 <meshBasicMaterial color="#141e2b" fog={false} />
               </mesh>
-              <mesh position={[0, 0.56, 0.64]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 0.56, 0.64]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[2.9, 0.12]} />
                 <meshBasicMaterial
                   ref={heatPlantGlowMatRef}
@@ -6613,7 +6552,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   key={`heat-stack-${idx}`}
                   position={[st.dx, st.h * 0.5, 0]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <cylinderGeometry args={[0.085, 0.145, st.h, 8, 1, true]} />
                   <meshBasicMaterial map={stackTex} fog={false} />
@@ -6622,11 +6560,11 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
             </group>
 
             <group position={[-21.8, cityLayout.westBoilerY, -36.2]}>
-              <mesh position={[0, 0.55, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 0.55, 0]} raycast={NOOP_RAYCAST}>
                 <boxGeometry args={[2.4, 1.1, 1.1]} />
                 <meshBasicMaterial color="#101822" fog={false} />
               </mesh>
-              <mesh position={[0, 1.75, 0]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 1.75, 0]} raycast={NOOP_RAYCAST}>
                 <cylinderGeometry args={[0.08, 0.13, 3.5, 8, 1, true]} />
                 <meshBasicMaterial map={stackTex} fog={false} />
               </mesh>
@@ -6642,7 +6580,6 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                 position={[20.8, cityLayout.heatGroundY + 4.5, -35.8]}
                 renderOrder={3}
                 raycast={NOOP_RAYCAST}
-                frustumCulled={false}
               >
                 <planeGeometry args={[1.0, 0.7]} />
                 <meshBasicMaterial
@@ -6660,7 +6597,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
 
             {/* Proportional Rooftop Propaganda Neon Sign Landmark (Always 100% Lit) */}
             <group position={[0.55, cityLayout.anchorRoofY, -34.55]}>
-              <mesh position={[0, 0.28, -0.04]} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 0.28, -0.04]} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[5.6, 0.56]} />
                 <meshBasicMaterial
                   map={rooftopTrussTex}
@@ -6674,13 +6611,12 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   position={[sx, 0.42, -0.14]}
                   rotation={[0.28, 0, 0]}
                   raycast={NOOP_RAYCAST}
-                  frustumCulled={false}
                 >
                   <boxGeometry args={[0.07, 0.85, 0.07]} />
                   <meshBasicMaterial color="#161f29" fog={false} />
                 </mesh>
               ))}
-              <mesh position={[0, 1.05, 0.0]} renderOrder={1} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 1.05, 0.0]} renderOrder={1} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[5.95, 1.3]} />
                 <meshBasicMaterial
                   color="#ff1e1e"
@@ -6691,7 +6627,7 @@ const WorkerCityDiorama3D: React.FC = React.memo(() => {
                   fog={false}
                 />
               </mesh>
-              <mesh position={[0, 1.05, 0.04]} renderOrder={2} raycast={NOOP_RAYCAST} frustumCulled={false}>
+              <mesh position={[0, 1.05, 0.04]} renderOrder={2} raycast={NOOP_RAYCAST}>
                 <planeGeometry args={[5.6, 1.05]} />
                 <meshBasicMaterial
                   map={happyBannerTex}

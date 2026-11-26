@@ -328,3 +328,30 @@
   > *3. **Kommissær Volkovs Direktiv i `P.O.S.T.-84` (`post84Mail.ts`, `desktopOsCanvas.ts`, `DesktopComputer3D.tsx` & `CameraController.tsx`):** Utovertoppen i `ISKRA-84`-innboksen krever nå personlig godkjenning med `[ ACCEPT DIRECTIVE — BEGIN TRAINING ]` (som reiser operatøren opp mot `SKALA-84` og starter Steg 1) eller `[ SKIP TRAINING — CERTIFIED OPERATOR ]` for sertifiserte kamerater.*
   >
   > *Hent fra Kreml (`npm run pravda`) og sjekk innboksen på skrivebordet først — hvis ikke minner K.O.M.R.A.D.-84 deg vennlig (og deretter mindre vennlig) på hvem som eier oksygenet i Sektor 84! MELTDOWN IS PROPAGANDA! 🎖️📺🧭🎙️☭"*
+
+### [TELEGRAM #024 — STEMPLET: QUOTA-84 // MCR-4 HEISLOBBY, BRUTALISTISK BRANNTAPP-FLØY & K.O.M.R.A.D.-84 AZ-5 ROBOTDANS!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Full 3D `MCR-4` ankomstlobby, WebGL GPU-oppvarming, snødekt branntrapp-fløy (`BALCONY B-4`) og K.O.M.R.A.D.-84s 126 BPM robotdans under `CHANNEL AZ-5`!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Sektor 84 har fått en massiv oppgradering både utenfor panoramavinduet, i ankomstslusen og rett i selve panoptikon-kranen:*
+  > *1. **`MCR-4` Heislobby, Sluse & `SovOsBootOverlay` (`McrLobbyRoom3D.tsx`, `airlockDoorState.ts`, `SovOsBootOverlay.tsx` & `shiftSaveStorage.ts`):** Hovedmenyen skjer nå diegetisk i den sovjetiske heisanterommet bak luftslusen — komplett med `SOV-OS` GPU shader-oppvarming under BIOS-skjermen og sikker lagring/gjenopptakelse av nattskiftet!*
+  > *2. **Utvendig Brutalistisk Fløy, `BALCONY B-4` & Caged Fire Escape (`ExteriorFireEscapeWing3D.tsx` & `ControlRoomScene.tsx`):** Den brå snøbakke-kanten på venstre side av panoramavinduet (ved `UNIT B`) er nå 100 % rammet inn av en autentisk 1984 betongfløy med frossent korridorvindu, snødekt stålbalkong, varm rav-lampe, rødt brannsandspann, sigarettsneip-boks (`SMOKE BREAK ZONE // MAX 30 SEC`) og bur-sikret branntrapp hvor de nederste trinnene naturligvis er «rekvirert til Femårsplanen»!*
+  > *3. **K.O.M.R.A.D.-84s 4-Fasers Sovjetiske Robotdans (`SovietPanopticonRig3D.tsx` & `komradSilenceState.ts`):** Når `CHANNEL AZ-5 // SERVICE BROADCAST`-easter-egget spilles på `SKALA-84`, glir K.O.M.R.A.D.-84 pent ut på høyre flanke (uten å blokkere videoen), holder kjeft på PA-maset, og kjører 4 synkroniserte 126 BPM-bevegelser (*Hydraulic Kazachok*, *1984 Gosplan Factory Robot*, *Raise the Quota* og *Polivoks Disco Point*) — før han knipser lynraskt tilbake til byråkratisk mantis-stilling idet sendingen slutter!*
+  >
+  > *Hent fra Kreml (`npm run pravda`) og fyr opp `Shift+A+Z+5` — MELTDOWN IS PROPAGANDA! 🎖️🏗️🕺☢️☭"*
+
+### [TELEGRAM #025 — STEMPLET: QUOTA-84 // FULL SEKTOR 84-REVISJON: KOLLISJONER, ENSLIGE SPAKDRAG, STANDBY-CRT & RIGG-OPPRYDDING!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Full Sektor 84-revisjon (Fase A & B): Kollisjonsbarrierer, enhetlig spakdrag, mørk standby-CRT, null tomgangs-GPU-opplastinger & lyd-/riggopprydding
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Begge faser av Sektor 84-revisjonen er nå gjennomført med null toleranse for borgerlig slark:*
+  > *1. **Sluse-kollisjoner, Stoler & `UNIT C`-utladning (`CameraController.tsx`, `useGameStore.ts` & `rbmkPhysics.ts`):** Luftslusen låser nå akser i forhold til forrige posisjon uten sideveis rykk (`H-15`), alle 3 dreiestoler + papirkurven har rene sirkelkollisjoner, `SM-2M`/brannsand/lenestol-OBB-er er finjustert, Volkov-oppstart nullstiller transiente felt rent, og `UNIT C`-batteriet trapper mykt ned mot `0 MWh` (`M-17`).*
+  > *2. **Enhetlig `movementY`-Spakdrag & Riktige Taster (`MechanicalPanels3D.tsx`, `ControlRoomScene.tsx` & `SovietRadioTable3D.tsx`):** Alle 6 `UNIT A`-sektorspaker, brenselspak, `BUBBLER DRAIN` (med synkronisert musehjul), hovedbryter, `UNIT C`-vipper og Okean-84-radioknott bruker nå jevn vertikal `movementY`-styring med full opprydding ved `pointercancel`/`blur`/unmount (`M-10`). `UNIT A-2`-hint viser nå `[KEY 6]`, gamle `BATTERY WHEEL`/`STEAM VENT`-tekster er erstattet med `BUBBLER DRAIN` og `ISKRA-84`-instruksjoner (`M-07`, `M-11`, `L-09`, `L-10`).*
+  > *3. **Standby-CRT-dimming, Null Tomgangs-GPU-opplasting & Boot/Lagring (`DesktopComputer3D.tsx`, `CentralSkalaScreen3D.tsx`, `UnitCBatteryStorageDeck3D.tsx` & `SovOsBootOverlay.tsx`):** Lobbyens skjermer og synoptisk kjerne dempes til diskret standby-glød og ramper opp med Sone 1/2/3-strøm (`M-06`); `ISKRA-84` skitner bare til `1024x640`-teksturen på synlige felt og slår av pekering når du ikke sitter (`M-05`). Kun én scene-raycast per bevegelsesramme, duplikat PBR-pass fjernet, `SOV-OS`-fade/F2/mute-disiplin sikret og `localStorage`-autolagring begrenset til hvert 10. sekund + øyeblikkelig ved ordre/pause (`M-04`, `M-13`).*
+  > *4. **Lydopprydding, Danse-nullstilling & K.O.M.R.A.D.-84 Armkalibrering (`audio.ts`, `SovietPanopticonRig3D.tsx` & `komradArmController.ts`):** `HTMLMediaElement.prototype`-patchen og gammel `280ms`-lydpolling er fjernet, `skala84_diag.mp4` har 8s stall-vakthund, `SM-2M`-spoler snurrer med `dt`, `Shift`-klank er låst ute fra hovedmenyen (`M-16`, `L-02`–`L-08`). Avbrutt robotdans eller skift-reset nullstiller rull/pitch/håndledd og holder `DANCE_ANCHOR` klar av `UNIT B` (`M-14`), mens `az5Cover`/`boron`/`radioPower`-mål og `emergSealLock`-handling nå treffer eksakt (`M-15`, `L-05`).*
+  >
+  > *Verifisert av KGB: **0 TypeScript-feil, 0 Oxlint-advarsler, 0 manglende VOX-tokens og 0 grensebrudd (`npm run kgb`)!** Hent fra Kreml (`npm run pravda`) — MELTDOWN IS PROPAGANDA! 🎖️🛠️📺🎙️☭"*

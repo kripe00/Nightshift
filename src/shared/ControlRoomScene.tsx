@@ -5,17 +5,34 @@ import * as THREE from "three";
 import * as InspectorModule from "../modules/inspector";
 import { updateTurbinePitchHum } from "../modules/inspector/audio";
 import {
+  getAudioContext,
   playLeverRatchet,
   playSwitchClank,
 } from "../modules/reactor/audioSynth";
-import { TerminalStation3D } from "../modules/terminal";
 import { BuckshotDitherPass } from "./BuckshotDitherPass";
 import { CameraController, useCameraLookStore } from "./CameraController";
 import { CentralSkalaScreen3D } from "./CentralSkalaScreen3D";
 import { ExteriorDioramas3D, NOOP_RAYCAST } from "./ExteriorDioramas3D";
+import { ExteriorFireEscapeWing3D } from "./ExteriorFireEscapeWing3D";
+import { McrLobbyRoom3D } from "./McrLobbyRoom3D";
+import {
+  AIRLOCK_CLOSE_RADIUS,
+  AIRLOCK_DOOR_CENTER_X,
+  AIRLOCK_DOOR_CENTER_Z,
+  AIRLOCK_ENTRY_THRESHOLD_Z,
+  AIRLOCK_MENU_UNLOCK_DELAY_SEC,
+  AIRLOCK_OPEN_RADIUS,
+  airlockDoorState,
+  playAirlockEndStop,
+  playAirlockPneumaticSlide,
+  playAirlockWheelSpin,
+} from "./airlockDoorState";
+import { isKomradLiquidating } from "./komradGrabState";
+import { playerCameraPose } from "./pointerLockState";
 import {
   getKomradVowelBand,
   stepKomradSpeech,
+  triggerPreVolkovPanelLockFeedback,
   type KomradVowelKey,
 } from "./komradVoiceSynth";
 import {
@@ -53,7 +70,7 @@ import {
   registerKremlinCanvasRedraw,
 } from "./kremlinFontReady";
 import type { KomradMessageEntry, KomradMood } from "./types";
-import { useGameStore } from "./useGameStore";
+import { isPreVolkovPanelLocked, useGameStore } from "./useGameStore";
 
 const ExternalInspectorDesk3D = Reflect.get(
   InspectorModule,
@@ -106,6 +123,144 @@ const SCENE_COLOR_TUBE_BLACKOUT = new THREE.Color("#1a1816");
 const SCENE_COLOR_TUBE_NORM = new THREE.Color("#fff1d6");
 const SCENE_COLOR_TUBE_DIM_BLACKOUT = new THREE.Color("#14100d");
 const SCENE_COLOR_TUBE_DIM = new THREE.Color("#e2a24c");
+const SCENE_COLOR_TUBE_OFF = new THREE.Color("#242926");
+const SCENE_COLOR_TUBE_LIT_ALBEDO = new THREE.Color("#fff6e5");
+const SCENE_COLOR_SCONCE_OFF = new THREE.Color("#1c201e");
+const SCENE_COLOR_BULB_OFF = new THREE.Color("#1a1d1b");
+const SCENE_COLOR_BULB_NORM = new THREE.Color("#ffcf75");
+const SCENE_COLOR_CRT_STANDBY_TINT = new THREE.Color("#324a3a");
+const SCENE_COLOR_WHITE = new THREE.Color("#ffffff");
+
+const MIN_STANDBY_LIGHT_INTENSITY = 0.0002;
+
+export const controlRoomPowerState = { // oxlint-disable-line react/only-export-components
+  active: false,
+  elapsed: 0,
+  zone1: 0, // t = 0.00s (Entry / Desk Side, z = +1.80)
+  zone2: 0, // t = 0.35s (Central Gantry & K.O.M.R.A.D.-84, z = -0.85)
+  zone3: 0, // t = 0.70s (Front Reactor Wall UNIT A / A-2 / SKALA-84, z = -2.85)
+  stage1Fired: false,
+  stage2Fired: false,
+  stage3Fired: false,
+};
+
+function computeFluorescentStarterCurve(localElapsed: number): number {
+  if (localElapsed < 0) return 0;
+  if (localElapsed < 0.045) return 0.92;
+  if (localElapsed < 0.085) return 0.18;
+  if (localElapsed < 0.135) return 0.86;
+  if (localElapsed < 0.165) return 0.34;
+  if (localElapsed < 0.25) {
+    const u = (localElapsed - 0.165) / 0.085;
+    return 0.62 + 0.38 * (u * u * (3 - 2 * u));
+  }
+  return 1;
+}
+
+function playControlRoomContactorClunk(stage: 0 | 1 | 2): void {
+  if (useGameStore.getState().isMusicMuted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    void ctx.resume().catch(() => {});
+  }
+
+  const now = ctx.currentTime;
+
+  // 1. Heavy cabinet solenoid thump
+  const thumpOsc = ctx.createOscillator();
+  const thumpGain = ctx.createGain();
+  thumpOsc.type = stage === 2 ? "sine" : "triangle";
+  thumpOsc.frequency.setValueAtTime(128 - stage * 11, now);
+  thumpOsc.frequency.exponentialRampToValueAtTime(36, now + 0.095);
+  thumpGain.gain.setValueAtTime(0.001, now);
+  thumpGain.gain.linearRampToValueAtTime(0.26, now + 0.006);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+  thumpOsc.connect(thumpGain);
+  thumpGain.connect(ctx.destination);
+  thumpOsc.start(now);
+  thumpOsc.stop(now + 0.14);
+
+  // 2. Crisp spring-contact snap + metallic relay ping
+  const snapBufSize = Math.max(1, Math.floor(ctx.sampleRate * 0.04));
+  const snapBuf = ctx.createBuffer(1, snapBufSize, ctx.sampleRate);
+  const snapData = snapBuf.getChannelData(0);
+  for (let i = 0; i < snapBufSize; i++) {
+    snapData[i] = (Math.random() * 2 - 1) * Math.exp((-i / snapBufSize) * 6);
+  }
+  const snapSrc = ctx.createBufferSource();
+  snapSrc.buffer = snapBuf;
+  const snapFilter = ctx.createBiquadFilter();
+  snapFilter.type = "bandpass";
+  snapFilter.frequency.setValueAtTime(960 + stage * 140, now);
+  snapFilter.Q.setValueAtTime(2.8, now);
+  const snapGain = ctx.createGain();
+  snapGain.gain.setValueAtTime(0.18, now);
+  snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+  snapSrc.connect(snapFilter);
+  snapFilter.connect(snapGain);
+  snapGain.connect(ctx.destination);
+  snapSrc.start(now);
+  snapSrc.stop(now + 0.045);
+
+  const pingOsc = ctx.createOscillator();
+  const pingGain = ctx.createGain();
+  pingOsc.type = "sine";
+  pingOsc.frequency.setValueAtTime(1850 - stage * 120, now);
+  pingGain.gain.setValueAtTime(0.055, now);
+  pingGain.gain.exponentialRampToValueAtTime(0.0005, now + 0.045);
+  pingOsc.connect(pingGain);
+  pingGain.connect(ctx.destination);
+  pingOsc.start(now);
+  pingOsc.stop(now + 0.05);
+
+  // 3. Fluorescent starter arc double-tick (+0.015s & +0.095s)
+  const arcBufSize = Math.max(1, Math.floor(ctx.sampleRate * 0.018));
+  const arcBuf = ctx.createBuffer(1, arcBufSize, ctx.sampleRate);
+  const arcData = arcBuf.getChannelData(0);
+  for (let i = 0; i < arcBufSize; i++) {
+    arcData[i] = (Math.random() * 2 - 1) * Math.exp((-i / arcBufSize) * 5);
+  }
+  for (const offset of [0.015, 0.095]) {
+    const arcSrc = ctx.createBufferSource();
+    arcSrc.buffer = arcBuf;
+    const arcFilter = ctx.createBiquadFilter();
+    arcFilter.type = "highpass";
+    arcFilter.frequency.setValueAtTime(3200, now + offset);
+    const arcGain = ctx.createGain();
+    arcGain.gain.setValueAtTime(0.06, now + offset);
+    arcGain.gain.exponentialRampToValueAtTime(0.0005, now + offset + 0.018);
+    arcSrc.connect(arcFilter);
+    arcFilter.connect(arcGain);
+    arcGain.connect(ctx.destination);
+    arcSrc.start(now + offset);
+    arcSrc.stop(now + offset + 0.02);
+  }
+
+  // 4. 50Hz + 100Hz magnetic fluorescent ballast warm-up hum
+  const hum50 = ctx.createOscillator();
+  const hum100 = ctx.createOscillator();
+  hum50.type = "sawtooth";
+  hum50.frequency.setValueAtTime(50, now);
+  hum100.type = "triangle";
+  hum100.frequency.setValueAtTime(100, now);
+  const humFilter = ctx.createBiquadFilter();
+  humFilter.type = "lowpass";
+  humFilter.frequency.setValueAtTime(260, now);
+  const humGain = ctx.createGain();
+  humGain.gain.setValueAtTime(0.0001, now);
+  humGain.gain.linearRampToValueAtTime(0.042, now + 0.12);
+  humGain.gain.linearRampToValueAtTime(0.014, now + 0.65);
+  humGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+  hum50.connect(humFilter);
+  hum100.connect(humFilter);
+  humFilter.connect(humGain);
+  humGain.connect(ctx.destination);
+  hum50.start(now);
+  hum100.start(now);
+  hum50.stop(now + 1.5);
+  hum100.stop(now + 1.5);
+}
 
 interface UnitCMasterDashboardData {
   energyCreatedMW: number;
@@ -986,21 +1141,32 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
       s.ciaIntrusionActive ||
       s.komradOverrideLocked;
 
+    const z3Power =
+      s.lobbyMenuPhase !== "entered_control_room"
+        ? 0.14
+        : THREE.MathUtils.lerp(0.14, 1.0, controlRoomPowerState.zone3);
+
+    if (screenMatRef.current) {
+      screenMatRef.current.color.setRGB(z3Power, z3Power, z3Power);
+      screenMatRef.current.emissiveIntensity =
+        (s.isBlackout ? 0.18 : 1.08) * z3Power;
+    }
+
     // Update physical status indicator lamp on clock bezel
     if (statusLampMatRef.current) {
       if (s.isBlackout) {
         statusLampMatRef.current.color.copy(SCENE_COLOR_CLOCK_BLACKOUT);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
-        statusLampMatRef.current.emissiveIntensity = 0.25;
+        statusLampMatRef.current.emissiveIntensity = 0.25 * z3Power;
       } else if (isEmergency) {
         const pulse = 0.5 + 0.5 * Math.sin(now * 4.2);
         statusLampMatRef.current.color.copy(SCENE_COLOR_RED);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
-        statusLampMatRef.current.emissiveIntensity = 1.15 + pulse * 1.25;
+        statusLampMatRef.current.emissiveIntensity = (1.15 + pulse * 1.25) * z3Power;
       } else {
         statusLampMatRef.current.color.copy(SCENE_COLOR_CLOCK_NORM);
         statusLampMatRef.current.emissive.copy(SCENE_COLOR_RED);
-        statusLampMatRef.current.emissiveIntensity = 1.1;
+        statusLampMatRef.current.emissiveIntensity = 1.1 * z3Power;
       }
     }
 
@@ -2531,7 +2697,12 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
 
   const bezelInstRef = useRef<THREE.InstancedMesh>(null);
   const coreInstRef = useRef<THREE.InstancedMesh>(null);
+  const bezelInstMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const coreInstMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const standbyRingsMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const headerMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const leftLegendMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const rightProcMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   const lastTickRef = useRef(-1);
   const lastHeaderSpentRef = useRef(-1);
@@ -2733,6 +2904,46 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
   }, [headerTex, leftLegendTex, rightProcTex]);
 
   useFrame(({ clock }) => {
+    const s = useGameStore.getState();
+    const z3Power =
+      s.lobbyMenuPhase !== "entered_control_room"
+        ? 0.14
+        : THREE.MathUtils.lerp(0.14, 1.0, controlRoomPowerState.zone3);
+    if (headerMatRef.current) {
+      headerMatRef.current.color.lerpColors(
+        SCENE_COLOR_CRT_STANDBY_TINT,
+        SCENE_COLOR_WHITE,
+        z3Power,
+      );
+    }
+    if (leftLegendMatRef.current) {
+      leftLegendMatRef.current.color.lerpColors(
+        SCENE_COLOR_CRT_STANDBY_TINT,
+        SCENE_COLOR_WHITE,
+        z3Power,
+      );
+    }
+    if (rightProcMatRef.current) {
+      rightProcMatRef.current.color.lerpColors(
+        SCENE_COLOR_CRT_STANDBY_TINT,
+        SCENE_COLOR_WHITE,
+        z3Power,
+      );
+    }
+    if (bezelInstMatRef.current) {
+      bezelInstMatRef.current.color.setRGB(z3Power, z3Power, z3Power);
+    }
+    if (coreInstMatRef.current) {
+      coreInstMatRef.current.color.setRGB(z3Power, z3Power, z3Power);
+    }
+    if (standbyRingsMatRef.current) {
+      standbyRingsMatRef.current.color.setRGB(
+        0.27 * z3Power,
+        0.098 * z3Power,
+        0.09 * z3Power,
+      );
+    }
+
     const t = clock.getElapsedTime();
     if (lastTickRef.current >= 0 && t - lastTickRef.current < 0.095) return;
     lastTickRef.current = t;
@@ -2741,7 +2952,6 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
     const coreInst = coreInstRef.current;
     if (!bezelInst || !coreInst) return;
 
-    const s = useGameStore.getState();
     const activeRodCount = Math.round(s.controlRods * WALL_RBMK_CORE_TILES.length);
     const isHighReactivity = s.controlRods > 0.85;
     const prevCodes = prevChannelCodesRef.current;
@@ -2906,6 +3116,7 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
           <meshBasicMaterial
             ref={headerMatRef}
             map={headerTex}
+            color="#324a3a"
             toneMapped={false}
             fog={false}
             polygonOffset
@@ -2932,7 +3143,9 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
         <mesh position={[0, 0, 0.094]} castShadow={false} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.70, 1.06]} />
           <meshBasicMaterial
+            ref={leftLegendMatRef}
             map={leftLegendTex}
+            color="#324a3a"
             toneMapped={false}
             fog={false}
             polygonOffset
@@ -2949,7 +3162,9 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
         <mesh position={[0, 0, 0.094]} castShadow={false} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[0.70, 1.06]} />
           <meshBasicMaterial
+            ref={rightProcMatRef}
             map={rightProcTex}
+            color="#324a3a"
             toneMapped={false}
             fog={false}
             polygonOffset
@@ -3020,6 +3235,7 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
           raycast={NOOP_RAYCAST}
         >
           <meshBasicMaterial
+            ref={standbyRingsMatRef}
             color="#451917"
             toneMapped={false}
             fog={false}
@@ -3039,7 +3255,8 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
           raycast={NOOP_RAYCAST}
         >
           <meshBasicMaterial
-            color="#ffffff"
+            ref={bezelInstMatRef}
+            color="#242424"
             toneMapped={false}
             fog={false}
             polygonOffset
@@ -3057,7 +3274,12 @@ const SovietRbmkCoreWallSynoptic3D: React.FC = React.memo(() => {
           castShadow={false}
           raycast={NOOP_RAYCAST}
         >
-          <meshBasicMaterial color="#ffffff" toneMapped={false} fog={false} />
+          <meshBasicMaterial
+            ref={coreInstMatRef}
+            color="#242424"
+            toneMapped={false}
+            fog={false}
+          />
         </instancedMesh>
       </group>
     </group>
@@ -4174,6 +4396,13 @@ const SovietKomradCommsWallTerminal3D: React.FC = React.memo(() => {
   }, []);
 
   useFrame((state, delta) => {
+    if (screenMatRef.current) {
+      screenMatRef.current.color.lerpColors(
+        SCENE_COLOR_CRT_STANDBY_TINT,
+        SCENE_COLOR_WHITE,
+        controlRoomPowerState.zone3,
+      );
+    }
     const t = state.clock.elapsedTime;
     const s = useGameStore.getState();
     const msgs = s.komradMessages;
@@ -4340,6 +4569,7 @@ const SovietKomradCommsWallTerminal3D: React.FC = React.memo(() => {
         <meshBasicMaterial
           ref={screenMatRef}
           map={crtTex}
+          color="#324a3a"
           toneMapped={false}
           fog={false}
           polygonOffset
@@ -4365,6 +4595,7 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
   const wallDoorInstRef = useRef<THREE.InstancedMesh>(null);
   const wallLatchInstRef = useRef<THREE.InstancedMesh>(null);
+  const redBannerMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
   const mainRedBannerTex = useMemo(
     () =>
@@ -4450,6 +4681,13 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
     }
   }, []);
 
+  useFrame(() => {
+    if (redBannerMatRef.current) {
+      redBannerMatRef.current.emissiveIntensity =
+        0.08 + 0.6 * controlRoomPowerState.zone3;
+    }
+  });
+
   return (
     <group>
       {/* Instanced 11 Lower Relay Cabinet Doors & Brass Latches Across Front Synoptic Wall */}
@@ -4516,10 +4754,11 @@ const SovietRbmkFrontSynopticWall3D: React.FC = React.memo(() => {
         <mesh position={[0, 0, 0.078]} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[2.04, 0.18]} />
           <meshStandardMaterial
+            ref={redBannerMatRef}
             map={mainRedBannerTex}
             emissive="#ff4433"
             emissiveMap={mainRedBannerTex}
-            emissiveIntensity={0.68}
+            emissiveIntensity={0.08}
             roughness={0.42}
             polygonOffset
             polygonOffsetFactor={-2}
@@ -5410,12 +5649,34 @@ const SovietLeftWallSwitchgearAlcove3D: React.FC = React.memo(() => {
 });
 
 /**
- * Rear Control Room Wall (`z = +4.44m`, facing `-Z`) with Heavy Soviet Steel Airlock / Containment
- * Double Exit Doors (`EXIT`), Recessed Steel Ribs, Barrel Hinges, Porthole Inspection Windows,
- * Spoked Dogging Handwheel + Lever Latch, Hydraulic Door-Closers, Framed Metallic `EXIT` Lightbox,
- * and Unobstructed Enamel Radiation Control Signboard.
+ * Rear Control Room Wall (`z = +4.64m` pocket center, facing `-Z`) with Proximity-Animated
+ * Heavy Soviet Steel Airlock Double Exit Doors (`EXIT // AIRLOCK MCR-4`), Real See-Through
+ * Circular Porthole Windows, Spinning Red Dogging Handwheel, Sliding Pocket Leaves,
+ * Red-to-Green Status Beacons on Both Sides, and Enamel Radiation Control Signboard.
  */
+const AIRLOCK_LEAF_CLOSED_X = 0.42;
+const AIRLOCK_LEAF_SLIDE_TRAVEL = 0.65;
+
 const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
+  const activeLeafRef = useRef<THREE.Group>(null);
+  const passiveLeafRef = useRef<THREE.Group>(null);
+  const wheelCtrlRef = useRef<THREE.Group>(null);
+  const wheelLobbyRef = useRef<THREE.Group>(null);
+  const dogUpperGroupRef = useRef<THREE.Group>(null);
+  const dogLowerGroupRef = useRef<THREE.Group>(null);
+  const horizBoltsGroupRef = useRef<THREE.Group>(null);
+  const latchLeverRef = useRef<THREE.Group>(null);
+  const ctrlBeaconMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const lobbyBeaconMatRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  const audioPhaseRef = useRef({
+    lastWantOpen: false,
+    slideSoundFiredForOpen: false,
+    slideSoundFiredForClose: true,
+    endStopFiredForOpen: false,
+    endStopFiredForClose: true,
+  });
+
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
   const thresholdHazardTex = useMemo(
@@ -5426,20 +5687,19 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
   const portholeGlassTex = useMemo(
     () =>
       createNearestCanvasTexture(128, 128, (ctx, w, h) => {
+        ctx.clearRect(0, 0, w, h);
         const cx = w / 2;
         const cy = h / 2;
-        ctx.fillStyle = "#1d2824";
-        ctx.fillRect(0, 0, w, h);
         const grad = ctx.createRadialGradient(cx, cy, 8, cx, cy, w * 0.52);
-        grad.addColorStop(0, "#6d887b");
-        grad.addColorStop(0.55, "#364a41");
-        grad.addColorStop(1, "#111916");
+        grad.addColorStop(0, "rgba(182, 218, 206, 0.14)");
+        grad.addColorStop(0.7, "rgba(110, 148, 134, 0.24)");
+        grad.addColorStop(1, "rgba(32, 48, 42, 0.48)");
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
-        // Diagonal wired reinforcement grid inside thick armored glass
-        ctx.strokeStyle = "rgba(18, 24, 21, 0.72)";
-        ctx.lineWidth = 2.5;
-        for (let d = -h; d < w + h; d += 18) {
+        // Subtle wired reinforcement grid inside thick armored glass
+        ctx.strokeStyle = "rgba(18, 24, 21, 0.55)";
+        ctx.lineWidth = 2;
+        for (let d = -h; d < w + h; d += 22) {
           ctx.beginPath();
           ctx.moveTo(d, 0);
           ctx.lineTo(d + h, h);
@@ -5466,6 +5726,25 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
         ctx.fillStyle = "#e6dec3";
         ctx.font = 'bold 18px "Kremlin", "VT323", monospace';
         ctx.fillText("AIRLOCK MCR-4 • SPECIAL PASS ONLY", w / 2, 92, w - 28);
+      }),
+    [],
+  );
+
+  const lobbyLightboxTex = useMemo(
+    () =>
+      createNearestCanvasTexture(512, 112, (ctx, w, h) => {
+        ctx.fillStyle = "#0b2416";
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = "#33ff66";
+        ctx.lineWidth = 5;
+        ctx.strokeRect(4, 4, w - 8, h - 8);
+        ctx.fillStyle = "#33ff66";
+        ctx.font = 'bold 34px "Kremlin", "Courier Prime", monospace';
+        ctx.textAlign = "center";
+        ctx.fillText("CONTROL HALL MCR-4", w / 2, 52, w - 28);
+        ctx.fillStyle = "#e6dec3";
+        ctx.font = 'bold 18px "Kremlin", "VT323", monospace';
+        ctx.fillText("AUTHORIZED OPERATORS ONLY", w / 2, 90, w - 28);
       }),
     [],
   );
@@ -5505,6 +5784,12 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
         roughness: 0.44,
         bumpMap: ironTex.bumpMap,
         bumpScale: 0.006,
+      }),
+      portholeBore: new THREE.MeshStandardMaterial({
+        color: "#141b18",
+        metalness: 0.72,
+        roughness: 0.46,
+        side: THREE.DoubleSide,
       }),
       rubberSeal: new THREE.MeshStandardMaterial({
         color: "#0e100f",
@@ -5555,52 +5840,283 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
         metalness: 0.72,
         roughness: 0.4,
       }),
+      portholeGlass: new THREE.MeshStandardMaterial({
+        map: portholeGlassTex,
+        transparent: true,
+        opacity: 0.88,
+        roughness: 0.18,
+        metalness: 0.16,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
     }),
-    [brassTex.bumpMap, ironTex.bumpMap],
+    [brassTex.bumpMap, ironTex.bumpMap, portholeGlassTex],
   );
 
-  const doorGeos = useMemo(
-    () => ({
-      hingeBarrel: new THREE.CylinderGeometry(0.02, 0.02, 0.092, 10),
-      hingePin: new THREE.CylinderGeometry(0.012, 0.012, 0.115, 8),
-      hingeStrap: new THREE.BoxGeometry(0.18, 0.044, 0.014),
+  const doorGeos = useMemo(() => {
+    // Leaf slab with genuine circular porthole cutout at (0, 0.47), r = 0.156
+    const leafShape = new THREE.Shape();
+    const lw = 0.415;
+    const lh = 1.16;
+    leafShape.moveTo(-lw, -lh);
+    leafShape.lineTo(lw, -lh);
+    leafShape.lineTo(lw, lh);
+    leafShape.lineTo(-lw, lh);
+    leafShape.closePath();
+    const leafHole = new THREE.Path();
+    leafHole.absarc(0, 0.47, 0.156, 0, Math.PI * 2, true);
+    leafShape.holes.push(leafHole);
+    const leafWithPorthole = new THREE.ExtrudeGeometry(leafShape, {
+      depth: 0.056,
+      bevelEnabled: false,
+      curveSegments: 20,
+    });
+    leafWithPorthole.translate(0, 0, -0.028);
+
+    // Upper recessed door plate with matching porthole cutout at local (0, 0.03)
+    const upperShape = new THREE.Shape();
+    const uw = 0.32;
+    const uh = 0.47;
+    upperShape.moveTo(-uw, -uh);
+    upperShape.lineTo(uw, -uh);
+    upperShape.lineTo(uw, uh);
+    upperShape.lineTo(-uw, uh);
+    upperShape.closePath();
+    const upperHole = new THREE.Path();
+    upperHole.absarc(0, 0.03, 0.156, 0, Math.PI * 2, true);
+    upperShape.holes.push(upperHole);
+    const upperPanelWithPorthole = new THREE.ExtrudeGeometry(upperShape, {
+      depth: 0.008,
+      bevelEnabled: false,
+      curveSegments: 20,
+    });
+    upperPanelWithPorthole.translate(0, 0, -0.004);
+
+    // Hollow outer steel flange ring around porthole cutout (r = 0.156..0.214)
+    const ringShape = new THREE.Shape();
+    ringShape.absarc(0, 0, 0.214, 0, Math.PI * 2, false);
+    const ringHole = new THREE.Path();
+    ringHole.absarc(0, 0, 0.156, 0, Math.PI * 2, true);
+    ringShape.holes.push(ringHole);
+    const portholeBezelRing = new THREE.ExtrudeGeometry(ringShape, {
+      depth: 0.014,
+      bevelEnabled: false,
+      curveSegments: 20,
+    });
+    portholeBezelRing.translate(0, 0, -0.007);
+
+    return {
+      leafWithPorthole,
+      upperPanelWithPorthole,
+      portholeBezelRing,
+      portholeBore: new THREE.CylinderGeometry(0.156, 0.156, 0.068, 20, 1, true),
       hexBolt: new THREE.CylinderGeometry(0.0085, 0.0085, 0.012, 6),
-      portholeRing: new THREE.CylinderGeometry(0.205, 0.222, 0.036, 20),
-      portholeInnerRim: new THREE.TorusGeometry(0.162, 0.014, 8, 20),
+      portholeInnerRim: new THREE.TorusGeometry(0.162, 0.012, 8, 20),
       portholeCrossBar: new THREE.BoxGeometry(0.31, 0.012, 0.012),
-      dogRod: new THREE.CylinderGeometry(0.009, 0.009, 0.94, 8),
-      dogKeeper: new THREE.BoxGeometry(0.042, 0.034, 0.028),
-      wheelRim: new THREE.TorusGeometry(0.135, 0.015, 8, 20),
-      wheelSpoke: new THREE.BoxGeometry(0.26, 0.016, 0.012),
-    }),
-    [],
-  );
+      dogRod: new THREE.CylinderGeometry(0.0085, 0.0085, 0.94, 8),
+      dogKeeper: new THREE.BoxGeometry(0.042, 0.034, 0.024),
+      horizBoltBar: new THREE.BoxGeometry(0.26, 0.024, 0.014),
+      horizBoltKeeper: new THREE.BoxGeometry(0.046, 0.048, 0.024),
+      horizBoltCatch: new THREE.BoxGeometry(0.056, 0.046, 0.024),
+      wheelRim: new THREE.TorusGeometry(0.106, 0.011, 8, 20),
+      wheelSpoke: new THREE.BoxGeometry(0.205, 0.013, 0.009),
+      wheelHubFlange: new THREE.CylinderGeometry(0.04, 0.046, 0.008, 12),
+      wheelShaft: new THREE.CylinderGeometry(0.016, 0.018, 0.014, 10),
+      wheelCap: new THREE.CylinderGeometry(0.021, 0.023, 0.015, 8),
+    };
+  }, []);
 
   const portholeBoltAngles = useMemo(
     () => [0, 1, 2, 3, 4, 5, 6, 7].map((i) => (i * Math.PI) / 4),
     [],
   );
 
+  useEffect(() => {
+    return () => {
+      thresholdHazardTex.dispose();
+      portholeGlassTex.dispose();
+      exitLightboxTex.dispose();
+      lobbyLightboxTex.dispose();
+      warningPlaqueTex.dispose();
+      Object.values(doorMats).forEach((m) => m.dispose());
+      Object.values(doorGeos).forEach((g) => g.dispose());
+    };
+  }, [
+    doorGeos,
+    doorMats,
+    exitLightboxTex,
+    lobbyLightboxTex,
+    portholeGlassTex,
+    thresholdHazardTex,
+    warningPlaqueTex,
+  ]);
+
+  useFrame((_, delta) => {
+    const dt = Math.min(0.1, delta);
+    const gs = useGameStore.getState();
+    const px = playerCameraPose.x;
+    const pz = playerCameraPose.z;
+    const dist = Math.hypot(px - AIRLOCK_DOOR_CENTER_X, pz - AIRLOCK_DOOR_CENTER_Z);
+    const inThresholdCorridor =
+      pz >= 4.18 && pz <= 5.1 && Math.abs(px - AIRLOCK_DOOR_CENTER_X) <= 1.0;
+
+    if (gs.lobbyMenuPhase === "menu_locked") {
+      airlockDoorState.wantOpen = false;
+      airlockDoorState.wheelProgress = 0;
+      airlockDoorState.openProgress = 0;
+      airlockDoorState.menuUnlockElapsed = 0;
+      audioPhaseRef.current.lastWantOpen = false;
+    } else if (gs.lobbyMenuPhase === "door_opening") {
+      airlockDoorState.menuUnlockElapsed += dt;
+      airlockDoorState.wantOpen =
+        airlockDoorState.menuUnlockElapsed >= AIRLOCK_MENU_UNLOCK_DELAY_SEC;
+      if (pz < AIRLOCK_ENTRY_THRESHOLD_Z) {
+        gs.setLobbyMenuPhase("entered_control_room");
+      }
+    } else if (dist <= AIRLOCK_OPEN_RADIUS || inThresholdCorridor) {
+      airlockDoorState.wantOpen = true;
+    } else if (dist >= AIRLOCK_CLOSE_RADIUS) {
+      airlockDoorState.wantOpen = false;
+    }
+
+    const ap = audioPhaseRef.current;
+    if (airlockDoorState.wantOpen !== ap.lastWantOpen) {
+      ap.lastWantOpen = airlockDoorState.wantOpen;
+      if (airlockDoorState.wantOpen) {
+        ap.slideSoundFiredForOpen = false;
+        ap.endStopFiredForOpen = false;
+        if (airlockDoorState.openProgress <= 0.02 && airlockDoorState.wheelProgress < 0.95) {
+          playAirlockWheelSpin(true);
+        }
+      } else {
+        ap.slideSoundFiredForClose = false;
+        ap.endStopFiredForClose = false;
+        if (airlockDoorState.openProgress > 0.02) {
+          playAirlockPneumaticSlide(false);
+          ap.slideSoundFiredForClose = true;
+        } else if (airlockDoorState.wheelProgress > 0.02) {
+          playAirlockWheelSpin(false);
+        }
+      }
+    }
+
+    if (airlockDoorState.wantOpen) {
+      if (airlockDoorState.wheelProgress < 1) {
+        airlockDoorState.wheelProgress = Math.min(
+          1,
+          airlockDoorState.wheelProgress + dt / 0.62,
+        );
+      }
+      if (airlockDoorState.wheelProgress >= 0.98) {
+        if (!ap.slideSoundFiredForOpen && airlockDoorState.openProgress < 0.98) {
+          ap.slideSoundFiredForOpen = true;
+          playAirlockPneumaticSlide(true);
+        }
+        const prevOpen = airlockDoorState.openProgress;
+        airlockDoorState.openProgress = Math.min(
+          1,
+          airlockDoorState.openProgress + dt / 0.92,
+        );
+        if (prevOpen < 1 && airlockDoorState.openProgress >= 1 && !ap.endStopFiredForOpen) {
+          ap.endStopFiredForOpen = true;
+          playAirlockEndStop(false);
+        }
+      }
+    } else {
+      if (airlockDoorState.openProgress > 0) {
+        const prevOpen = airlockDoorState.openProgress;
+        airlockDoorState.openProgress = Math.max(
+          0,
+          airlockDoorState.openProgress - dt / 0.88,
+        );
+        if (prevOpen > 0 && airlockDoorState.openProgress <= 0) {
+          if (!ap.endStopFiredForClose) {
+            ap.endStopFiredForClose = true;
+            playAirlockEndStop(true);
+          }
+          playAirlockWheelSpin(false);
+        }
+      }
+      if (airlockDoorState.openProgress <= 0.02 && airlockDoorState.wheelProgress > 0) {
+        airlockDoorState.wheelProgress = Math.max(
+          0,
+          airlockDoorState.wheelProgress - dt / 0.62,
+        );
+      }
+    }
+
+    const wu = airlockDoorState.wheelProgress;
+    const wheelEase = wu * wu * (3 - 2 * wu);
+    const ou = airlockDoorState.openProgress;
+    const openEase = ou * ou * (3 - 2 * ou);
+
+    const wheelAngle = wheelEase * Math.PI * 3.0; // ~1.5 full turns
+    if (wheelCtrlRef.current) {
+      wheelCtrlRef.current.rotation.z = -wheelAngle;
+    }
+    if (wheelLobbyRef.current) {
+      wheelLobbyRef.current.rotation.z = wheelAngle;
+    }
+    if (dogUpperGroupRef.current) {
+      dogUpperGroupRef.current.position.y = 0.52 - wheelEase * 0.065;
+    }
+    if (dogLowerGroupRef.current) {
+      dogLowerGroupRef.current.position.y = -0.52 + wheelEase * 0.065;
+    }
+    if (horizBoltsGroupRef.current) {
+      horizBoltsGroupRef.current.position.x = wheelEase * 0.095;
+    }
+    if (latchLeverRef.current) {
+      latchLeverRef.current.rotation.z = wheelEase * 0.65;
+    }
+
+    const slideOffset = openEase * AIRLOCK_LEAF_SLIDE_TRAVEL;
+    if (activeLeafRef.current) {
+      activeLeafRef.current.position.x = AIRLOCK_LEAF_CLOSED_X + slideOffset;
+    }
+    if (passiveLeafRef.current) {
+      passiveLeafRef.current.position.x = -AIRLOCK_LEAF_CLOSED_X - slideOffset;
+    }
+
+    const isUnlocked = wu >= 0.95 || ou > 0.02;
+    const targetColor = isUnlocked ? SCENE_COLOR_GREEN : SCENE_COLOR_RED;
+    if (ctrlBeaconMatRef.current) {
+      ctrlBeaconMatRef.current.color.copy(targetColor);
+      ctrlBeaconMatRef.current.emissive.copy(targetColor);
+      ctrlBeaconMatRef.current.emissiveIntensity = isUnlocked ? 1.25 : 1.15;
+    }
+    if (lobbyBeaconMatRef.current) {
+      lobbyBeaconMatRef.current.color.copy(targetColor);
+      lobbyBeaconMatRef.current.emissive.copy(targetColor);
+      lobbyBeaconMatRef.current.emissiveIntensity = isUnlocked ? 1.25 : 1.15;
+    }
+  });
+
   return (
-    <group position={[0, 0, 4.44]} rotation={[0, Math.PI, 0]}>
-      {/* 1. Heavy Bolted Steel Containment Frame & Raised Hazard Threshold */}
-      <mesh position={[0, 2.49, 0.04]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[2.36, 0.16, 0.19]} />
+    <group position={[0, 0, AIRLOCK_DOOR_CENTER_Z]} rotation={[0, Math.PI, 0]}>
+      {/* 1. Double-Sided Pocket Containment Frame & Raised Hazard Threshold */}
+      {/* Top Overhead Frame Lintel Beam & Pocket Header */}
+      <mesh position={[0, 2.46, 0]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[2.16, 0.16, 0.36]} />
       </mesh>
-      {([-1.08, 1.08] as const).map((fx, fIdx) => (
-        <group key={`door-jamb-${fIdx}`} position={[fx, 0, 0.04]}>
-          <mesh position={[0, 1.24, 0]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-            <boxGeometry args={[0.16, 2.48, 0.18]} />
+      {/* Left & Right Split Jamb Cheeks Leaving True Sliding Pocket Slot */}
+      {([-0.92, 0.92] as const).map((fx, fIdx) => (
+        <group key={`door-jamb-${fIdx}`} position={[fx, 0, 0]}>
+          <mesh position={[0, 1.24, 0.115]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.16, 2.48, 0.09]} />
           </mesh>
-          {/* Corner Frame Gusset Plate + Bolts */}
-          <mesh position={[fIdx === 0 ? 0.04 : -0.04, 2.44, 0.096]} material={doorMats.ribSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+          <mesh position={[0, 1.24, -0.115]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[0.16, 2.48, 0.09]} />
+          </mesh>
+          {/* Control-Room Corner Gusset Plate + Bolts */}
+          <mesh position={[fIdx === 0 ? 0.03 : -0.03, 2.44, 0.166]} material={doorMats.ribSteel} castShadow={false} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[0.18, 0.18, 0.012]} />
           </mesh>
           {([-0.05, 0.05] as const).map((bx) =>
             ([-0.05, 0.05] as const).map((by) => (
               <mesh
                 key={`jamb-bolt-${fIdx}-${bx}-${by}`}
-                position={[(fIdx === 0 ? 0.04 : -0.04) + bx, 2.44 + by, 0.106]}
+                position={[(fIdx === 0 ? 0.03 : -0.03) + bx, 2.44 + by, 0.176]}
                 rotation={[Math.PI / 2, 0, 0]}
                 geometry={doorGeos.hexBolt}
                 material={doorMats.brass}
@@ -5611,16 +6127,31 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
           )}
         </group>
       ))}
-      {/* Rubber Airlock Perimeter Gasket Lip */}
-      <mesh position={[0, 2.395, 0.05]} material={doorMats.rubberSeal} castShadow={false} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[1.98, 0.03, 0.14]} />
+
+      {/* Rubber Airlock Perimeter Gasket Lip (Control Room & Lobby Sides) */}
+      <mesh position={[0, 2.375, 0.12]} material={doorMats.rubberSeal} castShadow={false} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[1.68, 0.03, 0.04]} />
       </mesh>
-      {/* Raised Steel Floor Threshold Sill With Yellow/Black Hazard Striping */}
-      <mesh position={[0, 0.028, 0.045]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[2.24, 0.056, 0.18]} />
+      <mesh position={[0, 2.375, -0.12]} material={doorMats.rubberSeal} castShadow={false} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[1.68, 0.03, 0.04]} />
       </mesh>
-      <mesh position={[0, 0.028, 0.148]} castShadow={false} raycast={NOOP_RAYCAST}>
-        <planeGeometry args={[1.98, 0.044]} />
+
+      {/* Low-Profile Steel Floor Threshold Sill With Hazard Striping on Both Sides */}
+      <mesh position={[0, 0.012, 0]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+        <boxGeometry args={[1.92, 0.024, 0.36]} />
+      </mesh>
+      <mesh position={[0, 0.026, 0.145]} rotation={[-Math.PI / 2, 0, 0]} castShadow={false} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[1.68, 0.05]} />
+        <meshStandardMaterial
+          map={thresholdHazardTex}
+          roughness={0.55}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
+      </mesh>
+      <mesh position={[0, 0.026, -0.145]} rotation={[-Math.PI / 2, 0, 0]} castShadow={false} raycast={NOOP_RAYCAST}>
+        <planeGeometry args={[1.68, 0.05]} />
         <meshStandardMaterial
           map={thresholdHazardTex}
           roughness={0.55}
@@ -5630,235 +6161,271 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
         />
       </mesh>
 
-      {/* 2. Twin Heavy Armored Containment Door Leaves (`localX = ±0.49`) */}
-      {([-0.49, 0.49] as const).map((dx, dIdx) => {
-        const isActiveLeaf = dIdx === 0;
-        const hingeSideX = isActiveLeaf ? -0.49 : 0.49;
-        const innerEdgeX = isActiveLeaf ? 0.31 : -0.31;
+      {/* 2. Twin Animated Heavy Armored Containment Door Leaves (`localX = ±0.42` closed) */}
+      {([-AIRLOCK_LEAF_CLOSED_X, AIRLOCK_LEAF_CLOSED_X] as const).map((dx, dIdx) => {
+        const isActiveLeaf = dIdx === 1;
         return (
-          <group key={`entry-leaf-${dIdx}`} position={[dx, 1.21, 0.03]}>
-            {/* Main Armored Steel Leaf */}
-            <mesh material={doorMats.leafBody} castShadow={false} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.96, 2.32, 0.075]} />
-            </mesh>
-            {/* Recessed Stamped Lower & Upper Door Panes */}
-            <mesh position={[0, -0.58, 0.036]} material={doorMats.recessedPanel} castShadow={false} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.76, 0.78, 0.012]} />
-            </mesh>
-            <mesh position={[0, 0.44, 0.036]} material={doorMats.recessedPanel} castShadow={false} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.76, 0.96, 0.012]} />
-            </mesh>
-            {/* Raised Horizontal & Vertical Structural Stiffening Ribs */}
-            {([-1.06, -0.14, 0.02, 0.98] as const).map((ry, rIdx) => (
-              <mesh
-                key={`leaf-hrib-${dIdx}-${rIdx}`}
-                position={[0, ry, 0.044]}
-                material={doorMats.ribSteel}
-                castShadow={false}
-                raycast={NOOP_RAYCAST}
-              >
-                <boxGeometry args={[0.88, 0.036, 0.022]} />
-              </mesh>
-            ))}
-            {([-0.41, 0.41] as const).map((rx, rIdx) => (
-              <mesh
-                key={`leaf-vrib-${dIdx}-${rIdx}`}
-                position={[rx, 0, 0.044]}
-                material={doorMats.ribSteel}
-                castShadow={false}
-                raycast={NOOP_RAYCAST}
-              >
-                <boxGeometry args={[0.036, 2.18, 0.022]} />
-              </mesh>
-            ))}
-            {/* Lower Steel Kickplate */}
-            <mesh position={[0, -1.03, 0.042]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-              <boxGeometry args={[0.84, 0.22, 0.012]} />
-            </mesh>
-
-            {/* 3 Heavy Cast-Steel Barrel Hinges Along Outer Jamb Edge */}
-            {([-0.79, 0.0, 0.79] as const).map((hy, hIdx) => (
-              <group key={`leaf-hinge-${dIdx}-${hIdx}`} position={[hingeSideX, hy, 0.052]}>
-                <mesh geometry={doorGeos.hingeBarrel} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
-                <mesh geometry={doorGeos.hingePin} material={doorMats.brass} castShadow={false} raycast={NOOP_RAYCAST} />
+          <group
+            key={`entry-leaf-${dIdx}`}
+            ref={isActiveLeaf ? activeLeafRef : passiveLeafRef}
+            position={[dx, 1.2, 0]}
+          >
+            {/* Main Armored Steel Leaf With Real Circular Porthole Cutout */}
+            <mesh
+              geometry={doorGeos.leafWithPorthole}
+              material={doorMats.leafBody}
+              castShadow={false}
+              raycast={NOOP_RAYCAST}
+            />
+            {/* Recessed Stamped Lower & Upper Door Panes on Both Faces */}
+            {([0.03, -0.03] as const).map((faceZ, fIdx) => (
+              <group key={`leaf-face-${dIdx}-${fIdx}`}>
                 <mesh
-                  position={[isActiveLeaf ? 0.09 : -0.09, 0, -0.004]}
-                  geometry={doorGeos.hingeStrap}
-                  material={doorMats.ribSteel}
+                  position={[0, -0.58, faceZ]}
+                  material={doorMats.recessedPanel}
+                  castShadow={false}
+                  raycast={NOOP_RAYCAST}
+                >
+                  <boxGeometry args={[0.64, 0.78, 0.008]} />
+                </mesh>
+                <mesh
+                  position={[0, 0.44, faceZ]}
+                  geometry={doorGeos.upperPanelWithPorthole}
+                  material={doorMats.recessedPanel}
                   castShadow={false}
                   raycast={NOOP_RAYCAST}
                 />
-                {([0.05, 0.13] as const).map((bx, bIdx) => (
+                {/* Stiffening Ribs */}
+                {([-1.06, -0.14, 0.02, 0.98] as const).map((ry, rIdx) => (
                   <mesh
-                    key={`hbolt-${dIdx}-${hIdx}-${bIdx}`}
-                    position={[isActiveLeaf ? bx : -bx, 0, 0.008]}
-                    rotation={[Math.PI / 2, 0, 0]}
-                    geometry={doorGeos.hexBolt}
-                    material={doorMats.brass}
+                    key={`leaf-hrib-${dIdx}-${fIdx}-${rIdx}`}
+                    position={[0, ry, faceZ + (faceZ > 0 ? 0.006 : -0.006)]}
+                    material={doorMats.ribSteel}
                     castShadow={false}
                     raycast={NOOP_RAYCAST}
-                  />
+                  >
+                    <boxGeometry args={[0.74, 0.034, 0.012]} />
+                  </mesh>
                 ))}
+                {([-0.36, 0.36] as const).map((rx, rIdx) => (
+                  <mesh
+                    key={`leaf-vrib-${dIdx}-${fIdx}-${rIdx}`}
+                    position={[rx, 0, faceZ + (faceZ > 0 ? 0.006 : -0.006)]}
+                    material={doorMats.ribSteel}
+                    castShadow={false}
+                    raycast={NOOP_RAYCAST}
+                  >
+                    <boxGeometry args={[0.032, 2.18, 0.012]} />
+                  </mesh>
+                ))}
+                {/* Lower Steel Kickplate */}
+                <mesh
+                  position={[0, -1.03, faceZ + (faceZ > 0 ? 0.004 : -0.004)]}
+                  material={doorMats.frameSteel}
+                  castShadow={false}
+                  raycast={NOOP_RAYCAST}
+                >
+                  <boxGeometry args={[0.72, 0.22, 0.008]} />
+                </mesh>
               </group>
             ))}
 
-            {/* Circular Bolted Steel Porthole Inspection Window */}
-            <group position={[0, 0.47, 0.044]}>
+            {/* See-Through Circular Bolted Steel Porthole Inspection Window */}
+            <group position={[0, 0.47, 0]}>
               <mesh
                 rotation={[Math.PI / 2, 0, 0]}
-                geometry={doorGeos.portholeRing}
-                material={doorMats.frameSteel}
+                geometry={doorGeos.portholeBore}
+                material={doorMats.portholeBore}
                 castShadow={false}
                 raycast={NOOP_RAYCAST}
               />
+              {([0.035, -0.035] as const).map((pz, pIdx) => (
+                <group key={`porthole-face-${dIdx}-${pIdx}`} position={[0, 0, pz]}>
+                  <mesh
+                    geometry={doorGeos.portholeBezelRing}
+                    material={doorMats.frameSteel}
+                    castShadow={false}
+                    raycast={NOOP_RAYCAST}
+                  />
+                  <mesh
+                    geometry={doorGeos.portholeInnerRim}
+                    material={doorMats.ribSteel}
+                    castShadow={false}
+                    raycast={NOOP_RAYCAST}
+                  />
+                  {portholeBoltAngles.map((ang, bIdx) => (
+                    <mesh
+                      key={`pbolt-${dIdx}-${pIdx}-${bIdx}`}
+                      position={[Math.cos(ang) * 0.186, Math.sin(ang) * 0.186, pz > 0 ? 0.007 : -0.007]}
+                      rotation={[Math.PI / 2, 0, 0]}
+                      geometry={doorGeos.hexBolt}
+                      material={doorMats.brass}
+                      castShadow={false}
+                      raycast={NOOP_RAYCAST}
+                    />
+                  ))}
+                </group>
+              ))}
+              {/* Real Transparent Wired Armored Glass Pane (See Straight Into Lobby!) */}
               <mesh
-                position={[0, 0, 0.016]}
-                geometry={doorGeos.portholeInnerRim}
-                material={doorMats.ribSteel}
+                position={[0, 0, 0]}
+                material={doorMats.portholeGlass}
+                renderOrder={4}
                 castShadow={false}
                 raycast={NOOP_RAYCAST}
-              />
-              <mesh position={[0, 0, 0.014]} castShadow={false} raycast={NOOP_RAYCAST}>
+              >
                 <circleGeometry args={[0.156, 20]} />
-                <meshStandardMaterial
-                  map={portholeGlassTex}
-                  emissive="#648576"
-                  emissiveMap={portholeGlassTex}
-                  emissiveIntensity={0.22}
-                  roughness={0.26}
-                  metalness={0.2}
-                  polygonOffset
-                  polygonOffsetFactor={-2}
-                  polygonOffsetUnits={-2}
-                />
               </mesh>
               <mesh
-                position={[0, 0, 0.024]}
                 geometry={doorGeos.portholeCrossBar}
                 material={doorMats.frameSteel}
                 castShadow={false}
                 raycast={NOOP_RAYCAST}
               />
               <mesh
-                position={[0, 0, 0.024]}
                 rotation={[0, 0, Math.PI / 2]}
                 geometry={doorGeos.portholeCrossBar}
                 material={doorMats.frameSteel}
                 castShadow={false}
                 raycast={NOOP_RAYCAST}
               />
-              {portholeBoltAngles.map((ang, bIdx) => (
-                <mesh
-                  key={`pbolt-${dIdx}-${bIdx}`}
-                  position={[Math.cos(ang) * 0.188, Math.sin(ang) * 0.188, 0.02]}
-                  rotation={[Math.PI / 2, 0, 0]}
-                  geometry={doorGeos.hexBolt}
-                  material={doorMats.brass}
-                  castShadow={false}
-                  raycast={NOOP_RAYCAST}
-                />
-              ))}
             </group>
 
-            {/* Spoked Steel Dogging Handwheel + Heavy Lever Latch (Active Leaf) / Grab Handle (Passive Leaf) */}
+            {/* Spinning Red Dogging Handwheel + Retracting Dog Rods & Deadbolts (Lobby-Left Leaf) / Grab Handles & Bolt Catches (Right Leaf) */}
             {isActiveLeaf ? (
-              <group position={[innerEdgeX, -0.06, 0.044]}>
-                {/* Cast-Iron Bearing Boss & Brass Spindle */}
-                <mesh rotation={[Math.PI / 2, 0, 0]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-                  <cylinderGeometry args={[0.048, 0.056, 0.04, 12]} />
-                </mesh>
-                <mesh position={[0, 0, 0.032]} rotation={[Math.PI / 2, 0, 0]} material={doorMats.brass} castShadow={false} raycast={NOOP_RAYCAST}>
-                  <cylinderGeometry args={[0.02, 0.022, 0.052, 10]} />
-                </mesh>
-                {/* 6-Spoked Red Dogging Handwheel */}
-                <group position={[0, 0, 0.062]}>
-                  <mesh geometry={doorGeos.wheelRim} material={doorMats.wheelRed} castShadow={false} raycast={NOOP_RAYCAST} />
-                  {([0, Math.PI / 3, (2 * Math.PI) / 3] as const).map((sa, sIdx) => (
-                    <mesh
-                      key={`wspk-${sIdx}`}
-                      rotation={[0, 0, sa]}
-                      geometry={doorGeos.wheelSpoke}
-                      material={doorMats.wheelRed}
-                      castShadow={false}
-                      raycast={NOOP_RAYCAST}
-                    />
+              <>
+                <group position={[-0.06, -0.06, 0]}>
+                  {/* Control Room Face (`+Z`) Handwheel */}
+                  <group position={[0, 0, 0.031]}>
+                    <mesh rotation={[Math.PI / 2, 0, 0]} geometry={doorGeos.wheelHubFlange} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
+                    <mesh position={[0, 0, 0.01]} rotation={[Math.PI / 2, 0, 0]} geometry={doorGeos.wheelShaft} material={doorMats.brass} castShadow={false} raycast={NOOP_RAYCAST} />
+                    <group ref={wheelCtrlRef} position={[0, 0, 0.017]}>
+                      <mesh geometry={doorGeos.wheelRim} material={doorMats.wheelRed} castShadow={false} raycast={NOOP_RAYCAST} />
+                      {([0, Math.PI / 3, (2 * Math.PI) / 3] as const).map((sa, sIdx) => (
+                        <mesh
+                          key={`wspk-c-${sIdx}`}
+                          rotation={[0, 0, sa]}
+                          geometry={doorGeos.wheelSpoke}
+                          material={doorMats.wheelRed}
+                          castShadow={false}
+                          raycast={NOOP_RAYCAST}
+                        />
+                      ))}
+                      <mesh rotation={[Math.PI / 2, 0, 0]} geometry={doorGeos.wheelCap} material={doorMats.brass} castShadow={false} raycast={NOOP_RAYCAST} />
+                    </group>
+                  </group>
+
+                  {/* Lobby Face (`-Z`) Handwheel */}
+                  <group position={[0, 0, -0.031]}>
+                    <mesh rotation={[Math.PI / 2, 0, 0]} geometry={doorGeos.wheelHubFlange} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
+                    <mesh position={[0, 0, -0.01]} rotation={[Math.PI / 2, 0, 0]} geometry={doorGeos.wheelShaft} material={doorMats.brass} castShadow={false} raycast={NOOP_RAYCAST} />
+                    <group ref={wheelLobbyRef} position={[0, 0, -0.017]}>
+                      <mesh geometry={doorGeos.wheelRim} material={doorMats.wheelRed} castShadow={false} raycast={NOOP_RAYCAST} />
+                      {([0, Math.PI / 3, (2 * Math.PI) / 3] as const).map((sa, sIdx) => (
+                        <mesh
+                          key={`wspk-l-${sIdx}`}
+                          rotation={[0, 0, sa]}
+                          geometry={doorGeos.wheelSpoke}
+                          material={doorMats.wheelRed}
+                          castShadow={false}
+                          raycast={NOOP_RAYCAST}
+                        />
+                      ))}
+                      <mesh rotation={[Math.PI / 2, 0, 0]} geometry={doorGeos.wheelCap} material={doorMats.brass} castShadow={false} raycast={NOOP_RAYCAST} />
+                    </group>
+                  </group>
+
+                  {/* Heavy Cam-Lever Latch Bar & Bakelite Grip (Control Room Side) */}
+                  <group ref={latchLeverRef} position={[0.12, -0.08, 0.04]}>
+                    <mesh material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+                      <boxGeometry args={[0.042, 0.11, 0.014]} />
+                    </mesh>
+                    <mesh position={[0, -0.075, 0.008]} rotation={[0, 0, -0.25]} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST}>
+                      <boxGeometry args={[0.016, 0.15, 0.01]} />
+                    </mesh>
+                    <mesh position={[-0.018, -0.145, 0.01]} rotation={[0, 0, -0.25]} material={doorMats.bakelite} castShadow={false} raycast={NOOP_RAYCAST}>
+                      <cylinderGeometry args={[0.012, 0.013, 0.08, 8]} />
+                    </mesh>
+                  </group>
+                </group>
+
+                {/* Upper & Lower Vertical Steel Locking Dog Rods Engaging Keepers on Both Sides */}
+                <group position={[-0.06, 0, 0]}>
+                  <group ref={dogUpperGroupRef} position={[0, 0.52, 0]}>
+                    <mesh position={[0, 0, 0.036]} geometry={doorGeos.dogRod} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST} />
+                    <mesh position={[0, 0, -0.036]} geometry={doorGeos.dogRod} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST} />
+                  </group>
+                  <group ref={dogLowerGroupRef} position={[0, -0.52, 0]}>
+                    <mesh position={[0, 0, 0.036]} geometry={doorGeos.dogRod} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST} />
+                    <mesh position={[0, 0, -0.036]} geometry={doorGeos.dogRod} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST} />
+                  </group>
+                  {([0.036, -0.036] as const).map((kz, kIdx) => (
+                    <group key={`vkeeper-${kIdx}`} position={[0, 0, kz]}>
+                      <mesh position={[0, 0.96, 0]} geometry={doorGeos.dogKeeper} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
+                      <mesh position={[0, -0.96, 0]} geometry={doorGeos.dogKeeper} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
+                    </group>
                   ))}
-                  <mesh rotation={[Math.PI / 2, 0, 0]} material={doorMats.brass} castShadow={false} raycast={NOOP_RAYCAST}>
-                    <cylinderGeometry args={[0.026, 0.028, 0.024, 8]} />
-                  </mesh>
                 </group>
-                {/* Heavy Cam-Lever Latch Bar & Bakelite Grip */}
-                <group position={[0.09, -0.14, 0.018]}>
-                  <mesh material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-                    <boxGeometry args={[0.055, 0.14, 0.024]} />
-                  </mesh>
-                  <mesh position={[0, -0.09, 0.018]} rotation={[0, 0, -0.25]} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST}>
-                    <boxGeometry args={[0.022, 0.18, 0.016]} />
-                  </mesh>
-                  <mesh position={[-0.022, -0.175, 0.022]} rotation={[0, 0, -0.25]} material={doorMats.bakelite} castShadow={false} raycast={NOOP_RAYCAST}>
-                    <cylinderGeometry args={[0.015, 0.016, 0.095, 8]} />
-                  </mesh>
-                </group>
-                {/* Upper & Lower Vertical Steel Locking Dog Rods Engaging Keepers */}
-                {([0.52, -0.52] as const).map((ry, rIdx) => (
-                  <group key={`dogrod-${rIdx}`} position={[0.08, ry, 0.008]}>
-                    <mesh geometry={doorGeos.dogRod} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST} />
-                    <mesh position={[0, ry > 0 ? 0.44 : -0.44, 0]} geometry={doorGeos.dogKeeper} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
+
+                {/* Twin Horizontal Heavy Steel Deadbolt Bars & Fixed Guide Keepers */}
+                {([0.16, -0.16] as const).map((by, bIdx) => (
+                  <group key={`hkeeper-${bIdx}`} position={[-0.28, by, 0]}>
+                    <mesh position={[0, 0, 0.037]} geometry={doorGeos.horizBoltKeeper} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
+                    <mesh position={[0, 0, -0.037]} geometry={doorGeos.horizBoltKeeper} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
                   </group>
                 ))}
-              </group>
+                <group ref={horizBoltsGroupRef} position={[0, 0, 0]}>
+                  {([0.16, -0.16] as const).map((by, bIdx) => (
+                    <group key={`hbolt-${bIdx}`} position={[-0.32, by, 0]}>
+                      <mesh position={[0, 0, 0.037]} geometry={doorGeos.horizBoltBar} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST} />
+                      <mesh position={[0, 0, -0.037]} geometry={doorGeos.horizBoltBar} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST} />
+                    </group>
+                  ))}
+                </group>
+              </>
             ) : (
-              <group position={[innerEdgeX, -0.08, 0.052]}>
-                <mesh position={[0, 0.15, 0.018]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[0.04, 0.04, 0.036]} />
-                </mesh>
-                <mesh position={[0, -0.15, 0.018]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-                  <boxGeometry args={[0.04, 0.04, 0.036]} />
-                </mesh>
-                <mesh position={[0, 0, 0.042]} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST}>
-                  <cylinderGeometry args={[0.014, 0.014, 0.34, 10]} />
-                </mesh>
-              </group>
+              <>
+                {([0.042, -0.042] as const).map((hz, hIdx) => (
+                  <group key={`grab-${hIdx}`} position={[0.14, -0.08, hz]}>
+                    <mesh position={[0, 0.14, 0]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+                      <boxGeometry args={[0.036, 0.036, 0.02]} />
+                    </mesh>
+                    <mesh position={[0, -0.14, 0]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+                      <boxGeometry args={[0.036, 0.036, 0.02]} />
+                    </mesh>
+                    <mesh position={[0, 0, hz > 0 ? 0.014 : -0.014]} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST}>
+                      <cylinderGeometry args={[0.012, 0.012, 0.3, 10]} />
+                    </mesh>
+                  </group>
+                ))}
+                {/* Steel Deadbolt Catch Sockets Engaging Retracting Bolts */}
+                {([0.16, -0.16] as const).map((by, bIdx) => (
+                  <group key={`hcatch-${bIdx}`} position={[0.385, by, 0]}>
+                    <mesh position={[0, 0, 0.037]} geometry={doorGeos.horizBoltCatch} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
+                    <mesh position={[0, 0, -0.037]} geometry={doorGeos.horizBoltCatch} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST} />
+                  </group>
+                ))}
+              </>
             )}
 
-            {/* Hydraulic Overhead Door-Closer Arm */}
-            <group position={[isActiveLeaf ? -0.18 : 0.18, 1.07, 0.054]}>
-              <mesh material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.24, 0.056, 0.058]} />
+            {/* Center Overlapping Astragal Weather-Seal Bar on Passive Leaf */}
+            {!isActiveLeaf && (
+              <mesh position={[0.415, 0, 0]} material={doorMats.ribSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[0.03, 2.3, 0.068]} />
               </mesh>
-              <mesh position={[isActiveLeaf ? -0.125 : 0.125, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={doorMats.brass} castShadow={false} raycast={NOOP_RAYCAST}>
-                <cylinderGeometry args={[0.02, 0.02, 0.018, 8]} />
-              </mesh>
-              {/* Articulated Scissor Arm Linking Body to Upper Jamb Bracket */}
-              <mesh position={[isActiveLeaf ? 0.04 : -0.04, 0.075, 0.026]} rotation={[0, 0, isActiveLeaf ? -0.58 : 0.58]} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.21, 0.018, 0.014]} />
-              </mesh>
-              <mesh position={[isActiveLeaf ? 0.09 : -0.09, 0.145, 0.018]} rotation={[0, 0, isActiveLeaf ? 0.35 : -0.35]} material={doorMats.chrome} castShadow={false} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.16, 0.018, 0.014]} />
-              </mesh>
-              <mesh position={[isActiveLeaf ? 0.02 : -0.02, 0.18, 0.008]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[0.075, 0.036, 0.042]} />
-              </mesh>
-            </group>
+            )}
           </group>
         );
       })}
 
-      {/* Center Overlapping Astragal Weather-Seal Bar */}
-      <mesh position={[0, 1.21, 0.076]} material={doorMats.ribSteel} castShadow={false} raycast={NOOP_RAYCAST}>
-        <boxGeometry args={[0.044, 2.31, 0.016]} />
-      </mesh>
-
-      {/* 3. Framed Metallic `EXIT` Lightbox & Conduit Above Containment Doors */}
-      <group position={[0, 2.76, 0.03]}>
+      {/* 3A. Control Room Side `EXIT` Lightbox & Red->Green Status Beacon (`localZ = +0.20`) */}
+      <group position={[0, 2.76, 0.2]}>
         <mesh material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[1.56, 0.34, 0.12]} />
         </mesh>
-        {/* Top Overhanging Sheet-Metal Glare Hood */}
         <mesh position={[0, 0.18, 0.02]} material={doorMats.ribSteel} castShadow={false} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[1.62, 0.024, 0.16]} />
         </mesh>
-        {/* Glowing Emerald `EXIT` Face (`0.014m` proud of casing face) */}
         <mesh position={[0, 0, 0.074]} castShadow={false} raycast={NOOP_RAYCAST}>
           <planeGeometry args={[1.46, 0.27]} />
           <meshStandardMaterial
@@ -5872,21 +6439,60 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
             polygonOffsetUnits={-2}
           />
         </mesh>
-        {/* Side Caged Red `AIRLOCK` Beacon + Top Power Conduit */}
         <mesh position={[0.88, 0, -0.01]} rotation={[Math.PI / 2, 0, 0]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.042, 0.048, 0.05, 10]} />
         </mesh>
         <mesh position={[0.88, 0, 0.028]} castShadow={false} raycast={NOOP_RAYCAST}>
-          <sphereGeometry args={[0.03, 10, 10]} />
-          <meshStandardMaterial color="#ff2a2a" emissive="#ff2a2a" emissiveIntensity={1.15} />
+          <sphereGeometry args={[0.032, 10, 10]} />
+          <meshStandardMaterial
+            ref={ctrlBeaconMatRef}
+            color="#ff2a2a"
+            emissive="#ff2a2a"
+            emissiveIntensity={1.15}
+          />
         </mesh>
         <mesh position={[0, 0.39, -0.02]} material={doorMats.conduit} castShadow={false} raycast={NOOP_RAYCAST}>
           <cylinderGeometry args={[0.014, 0.014, 0.42, 8]} />
         </mesh>
       </group>
 
-      {/* 4. Relocated Enamel Radiation Control Signboard Cleanly Centered Between Doors & Pillar 6 (`worldX = -1.685`) */}
-      <group position={[1.685, 1.92, -0.018]}>
+      {/* 3B. Lobby Side `CONTROL HALL MCR-4` Lightbox & Red->Green Status Beacon (`localZ = -0.20`) */}
+      <group position={[0, 2.76, -0.2]} rotation={[0, Math.PI, 0]}>
+        <mesh material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[1.56, 0.34, 0.12]} />
+        </mesh>
+        <mesh position={[0, 0.18, 0.02]} material={doorMats.ribSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+          <boxGeometry args={[1.62, 0.024, 0.16]} />
+        </mesh>
+        <mesh position={[0, 0, 0.074]} castShadow={false} raycast={NOOP_RAYCAST}>
+          <planeGeometry args={[1.46, 0.27]} />
+          <meshStandardMaterial
+            map={lobbyLightboxTex}
+            emissive="#ffffff"
+            emissiveMap={lobbyLightboxTex}
+            emissiveIntensity={0.48}
+            roughness={0.38}
+            polygonOffset
+            polygonOffsetFactor={-2}
+            polygonOffsetUnits={-2}
+          />
+        </mesh>
+        <mesh position={[-0.88, 0, -0.01]} rotation={[Math.PI / 2, 0, 0]} material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
+          <cylinderGeometry args={[0.042, 0.048, 0.05, 10]} />
+        </mesh>
+        <mesh position={[-0.88, 0, 0.028]} castShadow={false} raycast={NOOP_RAYCAST}>
+          <sphereGeometry args={[0.032, 10, 10]} />
+          <meshStandardMaterial
+            ref={lobbyBeaconMatRef}
+            color="#ff2a2a"
+            emissive="#ff2a2a"
+            emissiveIntensity={1.15}
+          />
+        </mesh>
+      </group>
+
+      {/* 4. Enamel Radiation Control Signboard Cleanly Centered Between Doors & Pillar 6 (`worldX = -1.685`) */}
+      <group position={[1.685, 1.92, 0.182]}>
         <mesh material={doorMats.frameSteel} castShadow={false} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.82, 0.45, 0.026]} />
         </mesh>
@@ -6029,25 +6635,65 @@ const SovietWallPillarLamp3D: React.FC<{
   rotY: number;
 }> = React.memo(({ position, rotY }) => {
   const glassMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const domeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const bulbMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const shared = useMemo(() => getBulkheadLampShared(), []);
+  const zone = position[2] >= 1.0 ? 1 : position[2] >= -1.7 ? 2 : 3;
 
   useFrame(() => {
     const gs = useGameStore.getState();
+    const zLvl =
+      zone === 1
+        ? controlRoomPowerState.zone1
+        : zone === 2
+          ? controlRoomPowerState.zone2
+          : controlRoomPowerState.zone3;
+
+    if (zLvl <= 0.01) {
+      if (glassMatRef.current) {
+        glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_OFF);
+        glassMatRef.current.emissive.copy(SCENE_COLOR_BLACK);
+        glassMatRef.current.emissiveIntensity = 0;
+      }
+      if (domeMatRef.current) {
+        domeMatRef.current.color.copy(SCENE_COLOR_SCONCE_OFF);
+        domeMatRef.current.emissive.copy(SCENE_COLOR_BLACK);
+        domeMatRef.current.emissiveIntensity = 0;
+      }
+      if (bulbMatRef.current) {
+        bulbMatRef.current.color.copy(SCENE_COLOR_BULB_OFF);
+        bulbMatRef.current.emissive.copy(SCENE_COLOR_BLACK);
+        bulbMatRef.current.emissiveIntensity = 0;
+      }
+      return;
+    }
 
     if (glassMatRef.current) {
       if (gs.isBlackout) {
         glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_BLACKOUT);
         glassMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_BLACKOUT_EMISSIVE);
-        glassMatRef.current.emissiveIntensity = 0.08;
+        glassMatRef.current.emissiveIntensity = 0.08 * zLvl;
       } else {
         glassMatRef.current.color.copy(SCENE_COLOR_SCONCE_NORM);
         glassMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_NORM_EMISSIVE);
-        glassMatRef.current.emissiveIntensity = 0.65;
+        glassMatRef.current.emissiveIntensity = 0.65 * zLvl;
+      }
+    }
+    if (domeMatRef.current) {
+      if (gs.isBlackout) {
+        domeMatRef.current.color.copy(SCENE_COLOR_SCONCE_BLACKOUT);
+        domeMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_BLACKOUT_EMISSIVE);
+        domeMatRef.current.emissiveIntensity = 0.06 * zLvl;
+      } else {
+        domeMatRef.current.color.copy(SCENE_COLOR_SCONCE_NORM);
+        domeMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_NORM_EMISSIVE);
+        domeMatRef.current.emissiveIntensity = 0.58 * zLvl;
       }
     }
     if (bulbMatRef.current) {
-      bulbMatRef.current.emissiveIntensity = gs.isBlackout ? 0.06 : 1.35;
+      bulbMatRef.current.color.copy(SCENE_COLOR_BULB_NORM);
+      bulbMatRef.current.emissive.copy(SCENE_COLOR_SCONCE_NORM_EMISSIVE);
+      bulbMatRef.current.emissiveIntensity = (gs.isBlackout ? 0.06 : 1.35) * zLvl;
     }
   });
 
@@ -6136,9 +6782,9 @@ const SovietWallPillarLamp3D: React.FC<{
           map={shared.ribbedGlassTex}
           bumpMap={shared.ribbedGlassTex}
           bumpScale={0.005}
-          color="#ffba52"
-          emissive="#ff9922"
-          emissiveIntensity={0.65}
+          color="#1c201e"
+          emissive="#000000"
+          emissiveIntensity={0}
           transparent
           opacity={0.86}
           roughness={0.22}
@@ -6152,10 +6798,11 @@ const SovietWallPillarLamp3D: React.FC<{
         raycast={NOOP_RAYCAST}
       >
         <meshStandardMaterial
+          ref={domeMatRef}
           map={shared.ribbedGlassTex}
-          color="#ffba52"
-          emissive="#ff9922"
-          emissiveIntensity={0.58}
+          color="#1c201e"
+          emissive="#000000"
+          emissiveIntensity={0}
           transparent
           opacity={0.84}
           roughness={0.22}
@@ -6170,9 +6817,9 @@ const SovietWallPillarLamp3D: React.FC<{
       >
         <meshStandardMaterial
           ref={bulbMatRef}
-          color="#ffcf75"
-          emissive="#ffaa33"
-          emissiveIntensity={1.35}
+          color="#1a1d1b"
+          emissive="#000000"
+          emissiveIntensity={0}
         />
       </mesh>
 
@@ -6232,6 +6879,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
   const toggleDragIdxRef = useRef<number | null>(null);
+  const toggleDragCleanupRef = useRef<(() => void) | null>(null);
   const toggleLamp0 = useRef<THREE.MeshStandardMaterial | null>(null);
   const toggleLamp1 = useRef<THREE.MeshStandardMaterial | null>(null);
   const toggleLamp2 = useRef<THREE.MeshStandardMaterial | null>(null);
@@ -6240,6 +6888,10 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   const toggleBat1 = useRef<THREE.Group | null>(null);
   const toggleBat2 = useRef<THREE.Group | null>(null);
   const toggleBat3 = useRef<THREE.Group | null>(null);
+  const unitCBulbMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([
+    null,
+    null,
+  ]);
 
   const toggleSpecs = useMemo(() => {
     const items = [
@@ -6311,6 +6963,8 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
       0.055,
     ]);
     return () => {
+      toggleDragCleanupRef.current?.();
+      toggleDragCleanupRef.current = null;
       registerKomradControlObject("auxVentilation", null);
       registerKomradControlObject("auxAudioMute", null);
       registerKomradControlObject("auxKgbLine", null);
@@ -6376,6 +7030,21 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
   useFrame(({ clock }) => {
     const s = useGameStore.getState();
     const t = clock.getElapsedTime();
+    const z2 = controlRoomPowerState.zone2;
+
+    for (let bi = 0; bi < unitCBulbMatRefs.current.length; bi++) {
+      const bm = unitCBulbMatRefs.current[bi];
+      if (!bm) continue;
+      if (z2 <= 0.01 || s.isBlackout) {
+        bm.color.copy(SCENE_COLOR_BULB_OFF);
+        bm.emissive.copy(SCENE_COLOR_BLACK);
+        bm.emissiveIntensity = 0;
+      } else {
+        bm.color.copy(SCENE_COLOR_BULB_NORM);
+        bm.emissive.copy(SCENE_COLOR_SCONCE_NORM_EMISSIVE);
+        bm.emissiveIntensity = 1.6 * z2;
+      }
+    }
 
         // Animate 4 Guarded Auxiliary Toggle Switches & Jewel Lamps on Right Flanking 6KV Switchgear Cabinet
     for (let i = 0; i < 4; i++) {
@@ -6690,9 +7359,12 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
             <mesh position={[0, -0.036, 0.036]} raycast={NOOP_RAYCAST}>
               <sphereGeometry args={[0.018, 8, 8]} />
               <meshStandardMaterial
-                color="#ffcf75"
-                emissive="#ffaa33"
-                emissiveIntensity={1.6}
+                ref={(el) => {
+                  unitCBulbMatRefs.current[lIdx] = el;
+                }}
+                color="#1a1d1b"
+                emissive="#000000"
+                emissiveIntensity={0}
               />
             </mesh>
           </group>
@@ -6870,21 +7542,43 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
               onPointerDown={(e: ThreeEvent<PointerEvent>) => {
                 if (useCameraLookStore.getState().isFreeLookMode) return;
                 e.stopPropagation();
+                if (isPreVolkovPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                  return;
+                }
+                toggleDragCleanupRef.current?.();
                 const auxId = auxKomradIds[tIdx];
                 if (auxId) notifyPlayerControlInteraction(auxId, true);
                 toggleDragIdxRef.current = tIdx;
-                (e.target as Element | null)?.setPointerCapture?.(e.pointerId);
-              }}
-              onPointerUp={(e: ThreeEvent<PointerEvent>) => {
-                if (toggleDragIdxRef.current !== tIdx) return;
-                e.stopPropagation();
-                toggleDragIdxRef.current = null;
-                const auxId = auxKomradIds[tIdx];
-                if (auxId) notifyPlayerControlInteraction(auxId, false);
-                (e.target as Element | null)?.releasePointerCapture?.(
-                  e.pointerId,
-                );
-                triggerToggle();
+                const r3fTarget = e.target as unknown as {
+                  setPointerCapture?: (id: number) => void;
+                  releasePointerCapture?: (id: number) => void;
+                };
+                r3fTarget?.setPointerCapture?.(e.pointerId);
+
+                let finished = false;
+                const finish = (commit: boolean) => {
+                  if (finished) return;
+                  finished = true;
+                  toggleDragCleanupRef.current = null;
+                  if (toggleDragIdxRef.current === tIdx) {
+                    toggleDragIdxRef.current = null;
+                  }
+                  if (auxId) notifyPlayerControlInteraction(auxId, false);
+                  r3fTarget?.releasePointerCapture?.(e.pointerId);
+                  window.removeEventListener("pointerup", onUp);
+                  window.removeEventListener("pointercancel", onCancel);
+                  window.removeEventListener("blur", onCancel);
+                  if (commit) {
+                    triggerToggle();
+                  }
+                };
+                const onUp = () => finish(true);
+                const onCancel = () => finish(false);
+                toggleDragCleanupRef.current = () => finish(false);
+                window.addEventListener("pointerup", onUp);
+                window.addEventListener("pointercancel", onCancel);
+                window.addEventListener("blur", onCancel);
               }}
             >
               <mesh position={[0, 0.045, 0.035]}>
@@ -7099,6 +7793,7 @@ const BunkerTelemetryAndControlRail3D: React.FC = React.memo(() => {
  */
 const BunkerDustMotes3D: React.FC = React.memo(() => {
   const pointsRef = useRef<THREE.Points>(null);
+  const pointsMatRef = useRef<THREE.PointsMaterial>(null);
   const lastUpdateRef = useRef(0);
 
   const { positions, seeds } = useMemo(() => {
@@ -7137,6 +7832,15 @@ const BunkerDustMotes3D: React.FC = React.memo(() => {
   }, [positions]);
 
   useFrame(({ clock }) => {
+    const s = useGameStore.getState();
+    if (pointsMatRef.current) {
+      const dustOn =
+        !s.isBlackout && s.powerAllocation.facility > 0
+          ? controlRoomPowerState.zone1
+          : 0;
+      pointsMatRef.current.opacity = 0.055 * dustOn;
+    }
+
     if (!pointsRef.current) return;
     const t = clock.getElapsedTime();
     if (t - lastUpdateRef.current < 0.05) return;
@@ -7164,10 +7868,11 @@ const BunkerDustMotes3D: React.FC = React.memo(() => {
   return (
     <points ref={pointsRef} geometry={geometry} raycast={NOOP_RAYCAST}>
       <pointsMaterial
+        ref={pointsMatRef}
         color="#d8ba8c"
         size={0.008}
         transparent
-        opacity={0.055}
+        opacity={0}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />
@@ -7178,6 +7883,7 @@ const BunkerDustMotes3D: React.FC = React.memo(() => {
 const DynamicBunkerLighting: React.FC = React.memo(() => {
   const hemiLightRef = useRef<THREE.HemisphereLight>(null);
   const bunkerMainLightRef = useRef<THREE.PointLight>(null);
+  const frontBankLightRef = useRef<THREE.PointLight>(null);
   const deskSpotRef = useRef<THREE.SpotLight>(null);
   const deskSpotTargetRef = useRef<THREE.Object3D>(null);
   const klaxonSpinnerRef = useRef<THREE.Group>(null);
@@ -7190,14 +7896,16 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
     }
   }, []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const t = clock.getElapsedTime();
+    const dt = Math.min(0.05, Math.max(0, delta));
     const state = useGameStore.getState();
     const {
       coreTemp,
       powerAllocation,
       maxSafePower,
       isBlackout,
+      lobbyMenuPhase,
     } = state;
     const totalMW =
       powerAllocation.cooling +
@@ -7210,24 +7918,94 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       state.sectorMW.kgb +
       state.sectorMW.vodka +
       state.sectorMW.steel;
-    const isAlarmActive = coreTemp >= 750 || totalMW > maxSafePower;
+    const isLiquidating = isKomradLiquidating();
+    const liquidationDark = isLiquidating || state.siberiaGameOverActive;
+    const isAlarmActive =
+      coreTemp >= 750 || totalMW > maxSafePower || isLiquidating;
 
     // Continuous 50Hz / 3000 RPM Turbine-Generator Pitch Hum
     updateTurbinePitchHum(
       state.turbineRpm,
       totalAllocatedMW,
       state.voltageDipIntensity,
-      isBlackout,
+      isBlackout || lobbyMenuPhase === "menu_locked" || liquidationDark,
     );
 
+    if (lobbyMenuPhase !== "entered_control_room" || liquidationDark) {
+      controlRoomPowerState.active = false;
+      controlRoomPowerState.elapsed = 0;
+      controlRoomPowerState.zone1 = 0;
+      controlRoomPowerState.zone2 = 0;
+      controlRoomPowerState.zone3 = 0;
+      controlRoomPowerState.stage1Fired = false;
+      controlRoomPowerState.stage2Fired = false;
+      controlRoomPowerState.stage3Fired = false;
+    } else {
+      if (!controlRoomPowerState.active) {
+        controlRoomPowerState.active = true;
+        controlRoomPowerState.elapsed = 0;
+        controlRoomPowerState.stage1Fired = false;
+        controlRoomPowerState.stage2Fired = false;
+        controlRoomPowerState.stage3Fired = false;
+      } else {
+        controlRoomPowerState.elapsed = Math.min(
+          2.5,
+          controlRoomPowerState.elapsed + dt,
+        );
+      }
+
+      const elapsed = controlRoomPowerState.elapsed;
+      if (!controlRoomPowerState.stage1Fired) {
+        controlRoomPowerState.stage1Fired = true;
+        playControlRoomContactorClunk(0);
+      }
+      if (!controlRoomPowerState.stage2Fired && elapsed >= 0.35) {
+        controlRoomPowerState.stage2Fired = true;
+        playControlRoomContactorClunk(1);
+      }
+      if (!controlRoomPowerState.stage3Fired && elapsed >= 0.7) {
+        controlRoomPowerState.stage3Fired = true;
+        playControlRoomContactorClunk(2);
+      }
+
+      controlRoomPowerState.zone1 = computeFluorescentStarterCurve(elapsed);
+      controlRoomPowerState.zone2 = computeFluorescentStarterCurve(elapsed - 0.35);
+      controlRoomPowerState.zone3 = computeFluorescentStarterCurve(elapsed - 0.7);
+    }
+
+    const z1 = controlRoomPowerState.zone1;
+    const z2 = controlRoomPowerState.zone2;
+    const z3 = controlRoomPowerState.zone3;
+    const powerBlend = z1 * 0.32 + z2 * 0.36 + z3 * 0.32;
+    const liquidationStrobe = isLiquidating
+      ? Math.pow(Math.max(0, Math.sin(t * 16.0)), 2)
+      : 0;
+
     if (hemiLightRef.current) {
-      hemiLightRef.current.intensity = isBlackout ? 0.18 : 0.95;
+      if (liquidationDark) {
+        hemiLightRef.current.intensity = MIN_STANDBY_LIGHT_INTENSITY;
+      } else {
+        const nominalHemi = isBlackout ? 0.18 : 0.95;
+        hemiLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          0.04 + (nominalHemi - 0.04) * powerBlend,
+        );
+      }
     }
 
     if (bunkerMainLightRef.current) {
-      if (isBlackout) {
+      if (liquidationDark) {
+        bunkerMainLightRef.current.color.copy(SCENE_COLOR_RED);
+        bunkerMainLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          liquidationStrobe * 2.2,
+        );
+      } else if (isBlackout) {
         bunkerMainLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_BLACKOUT);
-        bunkerMainLightRef.current.intensity = 0.6;
+        bunkerMainLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          0.42 * z2,
+        );
       } else if (isAlarmActive) {
         const wave = (Math.sin(t * 4.2) + 1) * 0.5;
         bunkerMainLightRef.current.color.lerpColors(
@@ -7235,57 +8013,111 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
           SCENE_COLOR_RED,
           0.35 + 0.5 * wave,
         );
-        bunkerMainLightRef.current.intensity = 3.8 + wave * 1.4;
+        bunkerMainLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          (2.5 + wave * 1.1) * z2,
+        );
       } else {
         bunkerMainLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_NORM);
-        bunkerMainLightRef.current.intensity = 4.2;
+        bunkerMainLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          2.7 * z2,
+        );
+      }
+    }
+
+    if (frontBankLightRef.current) {
+      if (liquidationDark) {
+        frontBankLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_BLACKOUT);
+        frontBankLightRef.current.intensity = MIN_STANDBY_LIGHT_INTENSITY;
+      } else if (isBlackout) {
+        frontBankLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_BLACKOUT);
+        frontBankLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          0.25 * z3,
+        );
+      } else if (isAlarmActive) {
+        const wave = (Math.sin(t * 4.2) + 1) * 0.5;
+        frontBankLightRef.current.color.lerpColors(
+          SCENE_COLOR_MAIN_LIGHT_NORM,
+          SCENE_COLOR_RED,
+          0.35 + 0.5 * wave,
+        );
+        frontBankLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          (1.7 + wave * 0.8) * z3,
+        );
+      } else {
+        frontBankLightRef.current.color.copy(SCENE_COLOR_MAIN_LIGHT_NORM);
+        frontBankLightRef.current.intensity = Math.max(
+          MIN_STANDBY_LIGHT_INTENSITY,
+          2.1 * z3,
+        );
       }
     }
 
     if (deskSpotRef.current) {
-      if (isBlackout || powerAllocation.facility <= 0) {
-        deskSpotRef.current.intensity = 0;
+      let nominalDeskSpot = 0;
+      if (liquidationDark || isBlackout || powerAllocation.facility <= 0) {
+        nominalDeskSpot = 0;
       } else if (powerAllocation.facility <= 10) {
-        deskSpotRef.current.intensity = 1.9;
+        nominalDeskSpot = 1.9;
       } else if (powerAllocation.facility <= 20) {
-        deskSpotRef.current.intensity = 2.8;
+        nominalDeskSpot = 2.8;
       } else {
         const boost = Math.min(1.35, powerAllocation.facility / 30);
-        deskSpotRef.current.intensity = 3.2 * boost;
+        nominalDeskSpot = 3.2 * boost;
       }
+      deskSpotRef.current.intensity = Math.max(
+        MIN_STANDBY_LIGHT_INTENSITY,
+        nominalDeskSpot * z1,
+      );
     }
 
     if (klaxonSpinnerRef.current && isAlarmActive) {
-      klaxonSpinnerRef.current.rotation.y = t * 5.5;
+      klaxonSpinnerRef.current.rotation.y = t * (isLiquidating ? 14.0 : 5.5);
     }
     if (klaxonLampMatRef.current) {
-      klaxonLampMatRef.current.emissiveIntensity = isAlarmActive
-        ? 1.4 + Math.sin(t * 4.2) * 0.75
-        : 0.05;
+      klaxonLampMatRef.current.emissiveIntensity = isLiquidating
+        ? 2.2 + liquidationStrobe * 1.8
+        : isAlarmActive
+          ? 1.4 + Math.sin(t * 4.2) * 0.75
+          : 0.05;
     }
   });
 
   return (
     <>
-      {/* Consolidated 3 Un-Shadowed Scene Lights (castShadow={false}, never toggled invisible) */}
+      {/* Consolidated Un-Shadowed Scene Lights (castShadow={false}, never toggled invisible) */}
       {/* 1. Institutional Warm-Ceiling / Terracotta-Floor Hemisphere Fill */}
       <hemisphereLight
         ref={hemiLightRef}
-        args={["#fff1d6", "#4a3c32", 0.95]}
+        args={["#fff1d6", "#4a3c32", 0.04]}
       />
 
-      {/* 2. Central Bunker Overhead Fill & Redline Klaxon Wash PointLight */}
+      {/* 2. Zone 2 — Central Gantry & K.O.M.R.A.D.-84 Overhead Fill & Klaxon Wash */}
       <pointLight
         ref={bunkerMainLightRef}
         castShadow={false}
-        position={[0, 3.35, -0.75]}
+        position={[0, 3.35, -0.35]}
         color="#ffe2ba"
-        intensity={4.2}
-        distance={18.0}
-        decay={0.85}
+        intensity={MIN_STANDBY_LIGHT_INTENSITY}
+        distance={14.5}
+        decay={1.0}
       />
 
-      {/* 3. Overhead SpotLight centered over Shift Supervisor Desk at `z = +1.80` */}
+      {/* 3. Zone 3 — Front Reactor Wall (`UNIT A / A-2 / SKALA-84`) Overhead Bank */}
+      <pointLight
+        ref={frontBankLightRef}
+        castShadow={false}
+        position={[0, 3.35, -2.75]}
+        color="#ffe2ba"
+        intensity={MIN_STANDBY_LIGHT_INTENSITY}
+        distance={11.5}
+        decay={1.05}
+      />
+
+      {/* 4. Zone 1 — Overhead SpotLight centered over Shift Supervisor Desk at `z = +1.80` */}
       <group position={[0, 0, 1.8]}>
         <object3D ref={deskSpotTargetRef} position={[0, 0.7, 0]} />
         <spotLight
@@ -7294,7 +8126,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
           position={[0, 2.7, 0.08]}
           angle={0.76}
           penumbra={0.85}
-          intensity={3.6}
+          intensity={MIN_STANDBY_LIGHT_INTENSITY}
           distance={9.0}
           decay={1.1}
           color="#ffe3b8"
@@ -7334,14 +8166,18 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
 /**
  * Recessed Soviet RBMK-1000 Coffered Acoustic Ceiling (`MCR-4 CEILING`, `y = 3.90..4.20m`)
  * across the `12m × 9m` hall using `InstancedMesh` putty-grey coffer tiles and glowing warm-white
- * `#fff1d6` fluorescent tube troffers (with 2 aged/flickering gritty tubes).
+ * `#fff1d6` fluorescent tube troffers split into 3 contactor zones.
  */
 const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
-  const stdTubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const zone1TubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const zone2TubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const zone3TubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const dimTubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const flickerTubeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const cofferTileInstRef = useRef<THREE.InstancedMesh>(null);
-  const stdTubesInstRef = useRef<THREE.InstancedMesh>(null);
+  const zone1TubesInstRef = useRef<THREE.InstancedMesh>(null);
+  const zone2TubesInstRef = useRef<THREE.InstancedMesh>(null);
+  const zone3TubesInstRef = useRef<THREE.InstancedMesh>(null);
   const bafflesInstRef = useRef<THREE.InstancedMesh>(null);
 
   const acousticTileTex = useMemo(() => {
@@ -7387,27 +8223,31 @@ const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
     const tubeXs = [-3.25, -1.1, 1.1, 3.25];
     const baffleXs = [-4.0, -3.0, -2.0, -1.0, 0, 1.0, 2.0, 3.0, 4.0];
 
-    const stdTubes = stdTubesInstRef.current;
-    if (stdTubes) {
-      let idx = 0;
-      dummy.rotation.set(0, 0, Math.PI / 2);
-      dummy.scale.set(1, 1, 1);
-      for (let tIdx = 0; tIdx < troughZs.length; tIdx++) {
-        const tz = troughZs[tIdx];
-        for (let xIdx = 0; xIdx < tubeXs.length; xIdx++) {
-          const tx = tubeXs[xIdx];
-          for (let rowIdx = 0; rowIdx < 2; rowIdx++) {
-            const isDim = tIdx === 1 && xIdx === 2 && rowIdx === 0;
-            const isFlicker = tIdx === 0 && xIdx === 3 && rowIdx === 1;
-            if (isDim || isFlicker) continue;
-            const dz = rowIdx === 0 ? -0.14 : 0.14;
-            dummy.position.set(tx, 3.96 - 0.032, tz + dz);
-            dummy.updateMatrix();
-            stdTubes.setMatrixAt(idx++, dummy.matrix);
-          }
+    const zoneRefs = [
+      zone3TubesInstRef.current,
+      zone2TubesInstRef.current,
+      zone1TubesInstRef.current,
+    ];
+    const zoneIdx = [0, 0, 0];
+    dummy.rotation.set(0, 0, Math.PI / 2);
+    dummy.scale.set(1, 1, 1);
+    for (let tIdx = 0; tIdx < troughZs.length; tIdx++) {
+      const tz = troughZs[tIdx];
+      const inst = zoneRefs[tIdx];
+      if (!inst) continue;
+      for (let xIdx = 0; xIdx < tubeXs.length; xIdx++) {
+        const tx = tubeXs[xIdx];
+        for (let rowIdx = 0; rowIdx < 2; rowIdx++) {
+          const isDim = tIdx === 1 && xIdx === 2 && rowIdx === 0;
+          const isFlicker = tIdx === 0 && xIdx === 3 && rowIdx === 1;
+          if (isDim || isFlicker) continue;
+          const dz = rowIdx === 0 ? -0.14 : 0.14;
+          dummy.position.set(tx, 3.96 - 0.032, tz + dz);
+          dummy.updateMatrix();
+          inst.setMatrixAt(zoneIdx[tIdx]++, dummy.matrix);
         }
       }
-      stdTubes.instanceMatrix.needsUpdate = true;
+      inst.instanceMatrix.needsUpdate = true;
     }
 
     const baffles = bafflesInstRef.current;
@@ -7439,23 +8279,65 @@ const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
       ? SCENE_COLOR_TUBE_BLACKOUT
       : SCENE_COLOR_TUBE_NORM;
 
-    if (stdTubeMatRef.current) {
-      stdTubeMatRef.current.emissive.copy(mainColor);
-      stdTubeMatRef.current.emissiveIntensity = baseIntensity;
-    }
+    const applyTubeZone = (
+      mat: THREE.MeshStandardMaterial | null,
+      level: number,
+      litColor: THREE.Color,
+      emissiveCol: THREE.Color,
+      targetIntensity: number,
+    ) => {
+      if (!mat) return;
+      if (level <= 0.01) {
+        mat.color.copy(SCENE_COLOR_TUBE_OFF);
+        mat.emissive.copy(SCENE_COLOR_BLACK);
+        mat.emissiveIntensity = 0;
+      } else {
+        mat.color.copy(litColor);
+        mat.emissive.copy(emissiveCol);
+        mat.emissiveIntensity = targetIntensity * level;
+      }
+    };
 
-    // Aged/dimmed warm-amber tube (steady 35% output)
-    if (dimTubeMatRef.current) {
-      dimTubeMatRef.current.emissive.copy(
-        s.isBlackout ? SCENE_COLOR_TUBE_DIM_BLACKOUT : SCENE_COLOR_TUBE_DIM,
-      );
-      dimTubeMatRef.current.emissiveIntensity = s.isBlackout ? 0.02 : 0.65;
-    }
+    const z1 = controlRoomPowerState.zone1;
+    const z2 = controlRoomPowerState.zone2;
+    const z3 = controlRoomPowerState.zone3;
 
-    if (flickerTubeMatRef.current) {
-      flickerTubeMatRef.current.emissive.copy(mainColor);
-      flickerTubeMatRef.current.emissiveIntensity = baseIntensity;
-    }
+    applyTubeZone(
+      zone1TubeMatRef.current,
+      z1,
+      SCENE_COLOR_TUBE_LIT_ALBEDO,
+      mainColor,
+      baseIntensity,
+    );
+    applyTubeZone(
+      zone2TubeMatRef.current,
+      z2,
+      SCENE_COLOR_TUBE_LIT_ALBEDO,
+      mainColor,
+      baseIntensity,
+    );
+    applyTubeZone(
+      zone3TubeMatRef.current,
+      z3,
+      SCENE_COLOR_TUBE_LIT_ALBEDO,
+      mainColor,
+      baseIntensity,
+    );
+
+    applyTubeZone(
+      dimTubeMatRef.current,
+      z2,
+      SCENE_COLOR_TUBE_DIM,
+      s.isBlackout ? SCENE_COLOR_TUBE_DIM_BLACKOUT : SCENE_COLOR_TUBE_DIM,
+      s.isBlackout ? 0.02 : 0.65,
+    );
+    applyTubeZone(
+      flickerTubeMatRef.current,
+      z3,
+      SCENE_COLOR_TUBE_LIT_ALBEDO,
+      mainColor,
+      baseIntensity,
+    );
   });
 
   const longitudinalXs = [-3.6, -1.2, 1.2, 3.6];
@@ -7493,18 +8375,52 @@ const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
         </mesh>
       ))}
 
-      {/* Instanced 22 Standard Warm-White Fluorescent Tubes & 27 Steel Cross-Baffles */}
+      {/* Instanced Zoned Warm-White Fluorescent Tubes (8 Zone 1 Entry + 7 Zone 2 Center + 7 Zone 3 Front) & 27 Steel Cross-Baffles */}
       <instancedMesh
-        ref={stdTubesInstRef}
-        args={[undefined, undefined, 22]}
+        ref={zone1TubesInstRef}
+        args={[undefined, undefined, 8]}
         raycast={NOOP_RAYCAST}
       >
         <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
         <meshStandardMaterial
-          ref={stdTubeMatRef}
-          color="#fff6e5"
-          emissive="#fff1d6"
-          emissiveIntensity={1.9}
+          ref={zone1TubeMatRef}
+          color="#242926"
+          emissive="#000000"
+          emissiveIntensity={0}
+          roughness={0.25}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
+      </instancedMesh>
+      <instancedMesh
+        ref={zone2TubesInstRef}
+        args={[undefined, undefined, 7]}
+        raycast={NOOP_RAYCAST}
+      >
+        <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
+        <meshStandardMaterial
+          ref={zone2TubeMatRef}
+          color="#242926"
+          emissive="#000000"
+          emissiveIntensity={0}
+          roughness={0.25}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
+      </instancedMesh>
+      <instancedMesh
+        ref={zone3TubesInstRef}
+        args={[undefined, undefined, 7]}
+        raycast={NOOP_RAYCAST}
+      >
+        <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
+        <meshStandardMaterial
+          ref={zone3TubeMatRef}
+          color="#242926"
+          emissive="#000000"
+          emissiveIntensity={0}
           roughness={0.25}
           polygonOffset
           polygonOffsetFactor={-2}
@@ -7520,7 +8436,7 @@ const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
         <meshStandardMaterial color="#2c3531" metalness={0.58} roughness={0.48} />
       </instancedMesh>
 
-      {/* Dim & Secondary Fluorescent Tubes (1 each, rock-steady) */}
+      {/* Dim & Secondary Fluorescent Tubes (Zone 2 & Zone 3) */}
       <mesh
         position={[1.1, 3.96 - 0.032, -0.85 - 0.14]}
         rotation={[0, 0, Math.PI / 2]}
@@ -7529,9 +8445,9 @@ const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
         <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
         <meshStandardMaterial
           ref={dimTubeMatRef}
-          color="#e2a24c"
-          emissive="#e2a24c"
-          emissiveIntensity={0.65}
+          color="#242926"
+          emissive="#000000"
+          emissiveIntensity={0}
           roughness={0.25}
           polygonOffset
           polygonOffsetFactor={-2}
@@ -7546,9 +8462,9 @@ const SovietRbmkCofferedCeiling3D: React.FC = React.memo(() => {
         <cylinderGeometry args={[0.022, 0.022, 1.98, 10]} />
         <meshStandardMaterial
           ref={flickerTubeMatRef}
-          color="#fff6e5"
-          emissive="#fff1d6"
-          emissiveIntensity={1.9}
+          color="#242926"
+          emissive="#000000"
+          emissiveIntensity={0}
           roughness={0.25}
           polygonOffset
           polygonOffsetFactor={-2}
@@ -8450,8 +9366,9 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
     }
   }, []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const t = clock.getElapsedTime();
+    const dt = Math.min(0.1, delta);
     const s = useGameStore.getState();
 
     // Animate spinning 3D magnetic tape reels with realistic forward/pause/rewind seek bursts
@@ -8461,7 +9378,7 @@ const SovietIndustrialPipingAndProps3D: React.FC = React.memo(() => {
       if (s.isBlackout) continue;
       const cycle = (t * 0.7 + i * 1.37) % 4.0;
       const dir = cycle < 2.2 ? 1 : cycle < 2.9 ? 0 : -1.4;
-      reel.rotation.z -= dir * 0.045;
+      reel.rotation.z -= dir * 2.7 * dt;
     }
 
     // Animate gentle LED register strips on SM-2M tape cabinets
@@ -10195,7 +11112,6 @@ export const ControlRoomScene: React.FC = React.memo(() => {
   const leftBayA2WrapRef = useRef<THREE.Group>(null);
   const reactorWrapRef = useRef<THREE.Group>(null);
   const rightBayBWrapRef = useRef<THREE.Group>(null);
-  const terminalWrapRef = useRef<THREE.Group>(null);
   const inspectorWrapRef = useRef<THREE.Group>(null);
 
   const linoleumFloorTex = useMemo(() => {
@@ -10381,15 +11297,12 @@ export const ControlRoomScene: React.FC = React.memo(() => {
 
   useEffect(() => {
     applySovietPBRToHierarchy(bunkerArchRef.current);
-    applySovietPBRToHierarchy(reactorWrapRef.current);
-    applySovietPBRToHierarchy(terminalWrapRef.current);
 
     for (const grp of [
       bunkerArchRef.current,
       leftBayA2WrapRef.current,
       reactorWrapRef.current,
       rightBayBWrapRef.current,
-      terminalWrapRef.current,
     ]) {
       grp?.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
@@ -10432,70 +11345,6 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         ) {
           obj.visible = false;
           obj.raycast = NOOP_RAYCAST;
-        }
-      });
-    }
-
-    // 1. Hide the legacy toy-brick keyboard group, lower pedestal meshes & small CRT screen inside <TerminalStation3D />
-    // 2. Scale up the CRT monitor bezel & cabinet width cleanly
-    if (terminalWrapRef.current) {
-      terminalWrapRef.current.traverse((obj) => {
-        if (
-          obj.userData?.isDvk84Replacement ||
-          obj.parent?.userData?.isDvk84Replacement
-        ) {
-          return;
-        }
-        if ((obj as THREE.Mesh).isMesh) {
-          obj.raycast = NOOP_RAYCAST;
-          obj.castShadow = false;
-          obj.receiveShadow = false;
-        }
-        // Hide legacy rear cabinet & CRT outer bezel boxes (replaced cleanly by the recessed monumental CRT chassis)
-        if (
-          (obj as THREE.Mesh).isMesh &&
-          ((Math.abs(obj.position.y - 1.01) < 0.05 &&
-            Math.abs(obj.position.z - -0.18) < 0.05) ||
-            (Math.abs(obj.position.y - 1.4) < 0.03 &&
-              Math.abs(obj.position.z - 0.02) < 0.03))
-        ) {
-          obj.visible = false;
-          obj.raycast = NOOP_RAYCAST;
-        }
-        // Hide the legacy smaller 512x352 CRT glass mesh (replaced by <Komrad84SplitScreenCrt3D />)
-        if (
-          (obj as THREE.Mesh).isMesh &&
-          Math.abs(obj.position.y - 1.4) < 0.03 &&
-          Math.abs(obj.position.z - 0.135) < 0.03
-        ) {
-          obj.visible = false;
-          obj.raycast = NOOP_RAYCAST;
-        }
-        if (
-          obj.type === "Group" &&
-          Math.abs(obj.position.y - 0.81) < 0.025 &&
-          Math.abs(obj.position.z - 0.19) < 0.025
-        ) {
-          obj.visible = false;
-          obj.traverse((sub) => {
-            if ((sub as THREE.Mesh).isMesh) {
-              sub.raycast = NOOP_RAYCAST;
-            }
-          });
-          return;
-        }
-        // Hide any remaining legacy lower pedestal meshes (relY < 0.88) from <TerminalStation3D />
-        if ((obj as THREE.Mesh).isMesh) {
-          let relY = obj.position.y;
-          let p = obj.parent;
-          while (p && p !== terminalWrapRef.current) {
-            relY += p.position.y;
-            p = p.parent;
-          }
-          if (relY < 0.88) {
-            obj.visible = false;
-            obj.raycast = NOOP_RAYCAST;
-          }
         }
       });
     }
@@ -10694,39 +11543,52 @@ export const ControlRoomScene: React.FC = React.memo(() => {
           </mesh>
         </group>
 
-        {/* Rear Wall (`z = +4.5`, `rotY = Math.PI`) Framed Around Window 2 (`worldX = +1.70..+5.30`, `y = 1.05..2.85`) */}
+        {/* Rear Wall (`z = +4.5`, `rotY = Math.PI`) Framed Around `EXIT` Doorway (`worldX = -0.84..+0.84, y = 0..2.38`) & Window 2 (`worldX = +1.70..+5.30, y = 1.05..2.85`) */}
         <group position={[0, 0, HALL_HALF_D]} rotation={[0, Math.PI, 0]}>
-          {/* Continuous Floor Skirting (`12.0m`, `y = 0.004..0.16m`) */}
-          <mesh position={[0, 0.082, 0.025]} raycast={NOOP_RAYCAST}>
-            <boxGeometry args={[HALL_HALF_W * 2, 0.156, 0.04]} />
-            <meshStandardMaterial color="#1f2824" roughness={0.56} metalness={0.52} />
-          </mesh>
-          {/* Full-Height Left/Door Section (`worldX = -6.0..+1.70`, `lx = +2.15`) & Right Corner Strip (`worldX = +5.30..+6.0`, `lx = -5.65`) */}
+          {/* Split Floor Skirting Around `EXIT` Doorway (`worldX = -6.0..-0.84` & `+0.84..+6.0`) */}
           {(
             [
-              { cx: 2.15, w: 7.7 },
-              { cx: -5.65, w: 0.7 },
+              { cx: 3.42, w: 5.16 },
+              { cx: -3.42, w: 5.16 },
+            ] as const
+          ).map((sk, sIdx) => (
+            <mesh key={`rear-skirt-${sIdx}`} position={[sk.cx, 0.082, 0.025]} raycast={NOOP_RAYCAST}>
+              <boxGeometry args={[sk.w, 0.156, 0.04]} />
+              <meshStandardMaterial color="#1f2824" roughness={0.56} metalness={0.52} />
+            </mesh>
+          ))}
+          {/* Full-Height Flanks (`worldX = -6.0..-0.84`, `+0.84..+1.70`, `+5.30..+6.0`), Depth 0.07 Leaving `0.16m` Pocket Behind (`worldZ = 4.56..4.72`) */}
+          {(
+            [
+              { cx: 3.42, w: 5.16, trimL: 0, trimR: 0.03 },
+              { cx: -1.27, w: 0.86, trimL: 0, trimR: 0 },
+              { cx: -5.65, w: 0.7, trimL: 0.03, trimR: 0 },
             ] as const
           ).map((flank, fIdx) => (
             <group key={`rear-flank-${fIdx}`} position={[flank.cx, 0, 0]}>
-              <mesh position={[0, 0.775, -0.06]} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[flank.w, 1.55, 0.14]} />
+              <mesh position={[0, 0.775, -0.025]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 1.55, 0.07]} />
                 <meshStandardMaterial map={wainscotWallTex} color="#4d6658" roughness={0.72} metalness={0.28} />
               </mesh>
-              <mesh position={[fIdx === 0 ? 0.03 : -0.03, 1.535, 0.022]} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[flank.w - 0.06, 0.024, 0.042]} />
+              <mesh position={[(flank.trimR - flank.trimL) * 0.5, 1.535, 0.022]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w - flank.trimL - flank.trimR, 0.024, 0.042]} />
                 <meshStandardMaterial color="#b8a46b" roughness={0.34} metalness={0.82} />
               </mesh>
-              <mesh position={[fIdx === 0 ? 0.03 : -0.03, 1.565, 0.024]} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[flank.w - 0.06, 0.034, 0.048]} />
+              <mesh position={[(flank.trimR - flank.trimL) * 0.5, 1.565, 0.024]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w - flank.trimL - flank.trimR, 0.034, 0.048]} />
                 <meshStandardMaterial color="#9aa49e" roughness={0.36} metalness={0.78} />
               </mesh>
-              <mesh position={[0, 2.89, -0.06]} raycast={NOOP_RAYCAST}>
-                <boxGeometry args={[flank.w, 2.62, 0.14]} />
+              <mesh position={[0, 2.89, -0.025]} raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[flank.w, 2.62, 0.07]} />
                 <meshStandardMaterial map={acousticWallTex} color="#d8ddd6" roughness={0.84} metalness={0.12} />
               </mesh>
             </group>
           ))}
+          {/* `EXIT` Doorway Upper Lintel (`worldX = -0.84..+0.84`, `y = 2.38..4.20m`) */}
+          <mesh position={[0, 3.29, -0.025]} raycast={NOOP_RAYCAST}>
+            <boxGeometry args={[1.68, 1.82, 0.07]} />
+            <meshStandardMaterial map={acousticWallTex} color="#d8ddd6" roughness={0.84} metalness={0.12} />
+          </mesh>
           {/* Window 2 Lower Sill Wall (`y = 0..1.05m`, `width = 3.60m`, `center lx = -3.50` -> `worldX = +3.50`) */}
           <mesh position={[-3.5, 0.525, -0.06]} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[3.6, 1.05, 0.14]} />
@@ -10891,6 +11753,12 @@ export const ControlRoomScene: React.FC = React.memo(() => {
       {/* Panoramic Exterior Observation Windows & Forced-Perspective Dioramas */}
       <ExteriorDioramas3D />
 
+      {/* Diegetic MCR-4 Soviet Elevator Anteroom & Concrete Exterior Wing Behind EXIT Airlock */}
+      <McrLobbyRoom3D />
+
+      {/* Exterior Brutalist Auxiliary Wing, Snowy Balcony & Caged Fire Escape Ladder */}
+      <ExteriorFireEscapeWing3D />
+
       {/* Right-Window Duty Side Table & Vintage Soviet Radio (`OKEAN-84`) */}
       <SovietRadioTable3D />
 
@@ -10949,15 +11817,7 @@ export const ControlRoomScene: React.FC = React.memo(() => {
         rotation={[TERMINAL_TILT_X, 0, 0]}
         scale={TERMINAL_SCALE}
       >
-        <group ref={terminalWrapRef} position={[0, 0, 1.62]}>
-          <TerminalStation3D />
-          <group
-            position={[0, 0, -1.62]}
-            userData={{ isDvk84Replacement: true }}
-          >
-            <CentralSkalaScreen3D />
-          </group>
-        </group>
+        <CentralSkalaScreen3D />
       </group>
 
       {/* SHIFT SUPERVISOR DESK (at `x = 0.0, z = +1.8`): <InspectorDesk3D /> */}

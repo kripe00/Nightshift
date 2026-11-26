@@ -21,6 +21,7 @@ export interface Post84LiveTelemetry {
   totalElectricalMW: number
   isBlackout: boolean
   az5Active: boolean
+  kgbLineActive: boolean
   sectorMW: Record<SectorNodeId, number>
   targetSectorMW: Record<SectorNodeId, number>
 }
@@ -531,6 +532,27 @@ export function createPost84OrderMessage(
   }
 }
 
+const ALL_SECTOR_IDS: readonly SectorNodeId[] = [
+  'pripyat',
+  'duga',
+  'kolkhoz',
+  'kgb',
+  'vodka',
+  'steel',
+]
+
+function findStarvedUncappedSector(
+  d: Record<SectorNodeId, number>,
+  exempt: readonly SectorNodeId[],
+  minMW = 50
+): SectorNodeId | null {
+  for (const id of ALL_SECTOR_IDS) {
+    if (exempt.includes(id)) continue
+    if (d[id] < minMW) return id
+  }
+  return null
+}
+
 export function evaluatePost84Order(
   templateId: Post84OrderTemplateId,
   telemetry: Post84LiveTelemetry,
@@ -551,60 +573,79 @@ export function evaluatePost84Order(
 
   switch (templateId) {
     case 'municipal_heating': {
-      const met = d.pripyat >= 175
+      const starved = findStarvedUncappedSector(d, ['pripyat'])
+      const starvedTag = starved ? ` [STARVED: ${starved.toUpperCase()} <50MW]` : ''
+      const met = d.pripyat >= 175 && starved === null
       return {
         met,
-        liveReadout: `PRIPYAT: ${d.pripyat}/>=175 MW${shortfallTag} (${holdStr})`,
+        liveReadout: `PRIPYAT: ${d.pripyat}/>=175 MW${shortfallTag}${starvedTag} (${holdStr})`,
         detailLine:
-          'UNIT A LEVER #1 (PRIPYAT) >= 175 MW // UNIT C BATTERY BUFFERS SURGE',
+          'UNIT A #1 (PRIPYAT) >= 175 MW // KEEP OTHER SECTORS >= 50 MW',
       }
     }
     case 'vodka_batch': {
-      const met = d.vodka >= 175
+      const starved = findStarvedUncappedSector(d, ['vodka'])
+      const starvedTag = starved ? ` [STARVED: ${starved.toUpperCase()} <50MW]` : ''
+      const met = d.vodka >= 175 && starved === null
       return {
         met,
-        liveReadout: `VODKA: ${d.vodka}/>=175 MW${shortfallTag} (${holdStr})`,
+        liveReadout: `VODKA: ${d.vodka}/>=175 MW${shortfallTag}${starvedTag} (${holdStr})`,
         detailLine:
-          'UNIT A LEVER #5 (VODKA) >= 175 MW // UNIT C BATTERY BUFFERS SURGE',
+          'UNIT A #5 (VODKA) >= 175 MW // KEEP OTHER SECTORS >= 50 MW',
       }
     }
     case 'kolkhoz_lamps': {
-      const met = d.kolkhoz >= 175
+      const starved = findStarvedUncappedSector(d, ['kolkhoz'])
+      const starvedTag = starved ? ` [STARVED: ${starved.toUpperCase()} <50MW]` : ''
+      const met = d.kolkhoz >= 175 && starved === null
       return {
         met,
-        liveReadout: `KOLKHOZ: ${d.kolkhoz}/>=175 MW${shortfallTag} (${holdStr})`,
+        liveReadout: `KOLKHOZ: ${d.kolkhoz}/>=175 MW${shortfallTag}${starvedTag} (${holdStr})`,
         detailLine:
-          'UNIT A LEVER #3 (KOLKHOZ) >= 175 MW // UNIT C BATTERY BUFFERS SURGE',
+          'UNIT A #3 (KOLKHOZ) >= 175 MW // KEEP OTHER SECTORS >= 50 MW',
       }
     }
     case 'tractor_foundry': {
-      const met = d.steel >= 175 && d.vodka >= 150
+      const starved = findStarvedUncappedSector(d, ['steel', 'vodka'])
+      const starvedTag = starved ? ` [STARVED: ${starved.toUpperCase()} <50MW]` : ''
+      const met = d.steel >= 175 && d.vodka >= 150 && starved === null
       return {
         met,
-        liveReadout: `STEEL:${d.steel}/>=175 | VODKA:${d.vodka}/>=150 MW${shortfallTag} (${holdStr})`,
-        detailLine: 'UNIT A LEVERS #6 (STEEL) >= 175 & #5 (VODKA) >= 150 MW',
+        liveReadout: `STEEL:${d.steel}/>=175 | VODKA:${d.vodka}/>=150 MW${shortfallTag}${starvedTag} (${holdStr})`,
+        detailLine:
+          'UNIT A #6 (STEEL) >= 175 & #5 (VODKA) >= 150 MW // OTHERS >= 50 MW',
       }
     }
     case 'duga_radar': {
+      const starved = findStarvedUncappedSector(d, ['duga', 'kolkhoz'])
+      const starvedTag = starved ? ` [STARVED: ${starved.toUpperCase()} <50MW]` : ''
       const met =
         d.duga >= 200 &&
         telemetry.sectorMW.kolkhoz <= 50 &&
-        d.kolkhoz <= 50
+        d.kolkhoz <= 50 &&
+        starved === null
       return {
         met,
-        liveReadout: `DUGA:${d.duga}/>=200 | KOLKHOZ:${d.kolkhoz}/<=50 MW${shortfallTag} (${holdStr})`,
-        detailLine: 'UNIT A LEVER #2 (DUGA) >= 200 MW & #3 (KOLKHOZ) <= 50 MW',
+        liveReadout: `DUGA:${d.duga}/>=200 | KOLKHOZ:${d.kolkhoz}/<=50 MW${shortfallTag}${starvedTag} (${holdStr})`,
+        detailLine:
+          'UNIT A #2 (DUGA) >= 200 MW, #3 (KOLKHOZ) <= 50 MW & OTHERS >= 50 MW',
       }
     }
     case 'kgb_interrogation': {
+      const starved = findStarvedUncappedSector(d, ['kgb', 'pripyat'])
+      const starvedTag = starved ? ` [STARVED: ${starved.toUpperCase()} <50MW]` : ''
+      const kgbOffTag = !telemetry.kgbLineActive ? ' [KGB LINE OFF]' : ''
       const met =
         d.kgb >= 175 &&
         telemetry.sectorMW.pripyat <= 50 &&
-        d.pripyat <= 50
+        d.pripyat <= 50 &&
+        telemetry.kgbLineActive &&
+        starved === null
       return {
         met,
-        liveReadout: `KGB #7:${d.kgb}/>=175 | PRIPYAT:${d.pripyat}/<=50 MW${shortfallTag} (${holdStr})`,
-        detailLine: 'UNIT A LEVER #4 (KGB #7) >= 175 MW & #1 (PRIPYAT) <= 50 MW',
+        liveReadout: `KGB #7:${d.kgb}/>=175 | PRIPYAT:${d.pripyat}/<=50 MW${shortfallTag}${kgbOffTag}${starvedTag} (${holdStr})`,
+        detailLine:
+          'UNIT A #4 (KGB) >= 175 MW, #1 (PRIPYAT) <= 50 MW, OTHERS >= 50 MW & UNIT C KGB LINE ON',
       }
     }
     case 'swan_lake_tv': {
@@ -632,12 +673,16 @@ export function evaluatePost84Order(
         d.vodka,
         d.steel
       )
+      const kgbOffTag = !telemetry.kgbLineActive ? ' [KGB LINE OFF]' : ''
       const met =
-        delivered.totalDeliveredMW >= 750 && minSectorDelivered >= 125
+        delivered.totalDeliveredMW >= 750 &&
+        minSectorDelivered >= 125 &&
+        telemetry.kgbLineActive
       return {
         met,
-        liveReadout: `GRID:${delivered.totalDeliveredMW}/>=750 | MIN SECT:${minSectorDelivered}/>=125 MW${shortfallTag} (${holdStr})`,
-        detailLine: 'UNIT A LEVERS #1-#6 ALL >= 125 MW (>= 750 MW TOTAL)',
+        liveReadout: `GRID:${delivered.totalDeliveredMW}/>=750 | MIN SECT:${minSectorDelivered}/>=125 MW${shortfallTag}${kgbOffTag} (${holdStr})`,
+        detailLine:
+          'UNIT A #1-#6 ALL >= 125 MW (>= 750 MW) & UNIT C KGB LINE ON',
       }
     }
   }
