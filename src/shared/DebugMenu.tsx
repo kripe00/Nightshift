@@ -4,6 +4,7 @@ import {
   updatePointerLockInteraction,
 } from './pointerLockState'
 import {
+  debugTriggerLangleyLeakEvent,
   debugTriggerPolitLinkDuel,
   debugTriggerZashchitaFirewall,
   getSovOsPluginApp,
@@ -148,13 +149,16 @@ const IskraPluginEmulatorModal: React.FC<{ onClose: () => void }> = ({
             const hits = plugin.getHitRegions(EMU_RECT)
             for (let i = hits.length - 1; i >= 0; i--) {
               const r = hits[i]
-              if (
+                if (
                 pt.x >= r.x &&
                 pt.x <= r.x + r.w &&
                 pt.y >= r.y &&
                 pt.y <= r.y + r.h
               ) {
-                plugin.handleClick(r.id, r.payload)
+                const res = plugin.handleClick(r.id, r.payload)
+                if (res.requestFocusApp) {
+                  setActiveAppId(res.requestFocusApp)
+                }
                 break
               }
             }
@@ -342,6 +346,13 @@ export const DebugMenu: React.FC = () => {
                   STEP 8: CYBER DRILL
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => debugTriggerLangleyLeakEvent()}
+                className="mt-1.5 w-full border-2 border-[#090b09] bg-[#4a1830] px-2 py-1 text-center text-sm font-bold text-[#ffb000] hover:bg-[#662242]"
+              >
+                TRIGGER AGENT SMITH EVENT
+              </button>
               <button
                 type="button"
                 onClick={() => setEmulatorOpen(true)}

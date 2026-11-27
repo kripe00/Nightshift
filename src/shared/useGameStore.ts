@@ -4729,16 +4729,24 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   applyFirewallVictory: (
     rewardRub: number,
     quotaPoints: number,
-    isDrill = false
+    isDrill = false,
+    options?: {
+      buffSec?: number
+      customLogText?: string
+      customVoxText?: string
+    }
   ) => {
     set((state) => {
       const baseReactor = extractReactorState(state)
       baseReactor.coreTemp = Math.max(360, baseReactor.coreTemp - 20)
       baseReactor.voidFraction = Math.max(0.05, baseReactor.voidFraction - 0.04)
       const mapped = mapReactorToGameStateFields(baseReactor, state.tutorialPhase)
-      const msg = isDrill
+      const defaultMsg = isDrill
         ? 'FIREWALL DRILL PASSED! ALL CIA PROCESSES PURGED — TRAINING COMPLETE!'
         : `CIA INTRUSION PURGED! +${rewardRub} RUB, +${quotaPoints} QUOTA & CORE STABILIZED.`
+      const msg = options?.customLogText ?? defaultMsg
+      const voxText = options?.customVoxText ?? KOMRAD_CYBER_VOX.FIREWALL_WIN
+      const buffSec = options?.buffSec ?? 0
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'SYS.DEFENSE',
@@ -4751,6 +4759,9 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         ciaIntrusionProgress: 0,
         rubles: state.rubles + Math.max(0, Math.round(rewardRub)),
         quotaCompleted: state.quotaCompleted + Math.max(0, Math.round(quotaPoints)),
+        ...(buffSec > 0
+          ? { partyApprovedBuffSec: Math.max(state.partyApprovedBuffSec, buffSec) }
+          : {}),
         lastDecisionFeedback: msg,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
@@ -4761,10 +4772,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
           state.komradMessages,
           createKomradMsg(
             state.shiftTimeMinutes,
-            KOMRAD_CYBER_VOX.FIREWALL_WIN,
+            voxText,
             'normal',
             'SYS.DEFENSE',
-            KOMRAD_CYBER_VOX.FIREWALL_WIN,
+            voxText,
             true
           )
         ),

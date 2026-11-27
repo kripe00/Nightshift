@@ -557,6 +557,153 @@ const VOLUNTARY_SCENARIOS: readonly DuelScenario[] = [
   },
 ]
 
+const IMPOSTOR_SCENARIOS: readonly DuelScenario[] = [
+  {
+    id: 'impostor-1',
+    mode: 'impostor',
+    stance: 'PARANOID',
+    stanceHint: 'COUNTER-ESPIONAGE: SPOT IMPERIAL UNITS & COWBOY SLANG!',
+    prompt:
+      '"HOWDY PARTNER! DROVE 40 MILES HERE FOR A GALLON OF COFFEE — SEND COOLING SCHEMATICS AS WE SPEAK! HAMBURGER SALUTE!"',
+    options: [
+      {
+        id: 'A',
+        tag: 'PARTY_LINE',
+        label: 'PARTY LINE',
+        shortText: 'Have a great shift, buddy! Routing cooling schematics now.',
+        trustDelta: -15,
+        suspicionDelta: 45,
+        komradReply: 'FOOL! YOU JUST SENT SCHEMATICS TO LANGLEY_NODE_04!',
+      },
+      {
+        id: 'B',
+        tag: 'DECREE',
+        label: 'DECREE',
+        shortText: 'Imperial miles and gallons banned! State metric GOST ID now!',
+        trustDelta: 20,
+        suspicionDelta: -10,
+        komradReply: 'TARGET SWEATING! COWBOY TRANSLATION FILTER GLITCHING!',
+      },
+      {
+        id: 'C',
+        tag: 'RAW_DATA',
+        label: 'RAW DATA',
+        shortText: 'Core is at 380C; maybe grab some borscht in the canteen first.',
+        trustDelta: -8,
+        suspicionDelta: 30,
+        komradReply: 'IGNORED WESTERN TELLS! HE ALREADY CLONED TWO RELAYS!',
+      },
+      {
+        id: 'D',
+        tag: 'KGB_THREAT',
+        label: 'KGB THREAT',
+        shortText: 'Wait — coffee in gallons?! Identify yourself to Sector 84!',
+        trustDelta: 15,
+        suspicionDelta: 4,
+        komradReply: 'GOOD CATCH, BUT CITE STATUTORY METRIC DECREE NEXT!',
+      },
+    ],
+  },
+  {
+    id: 'impostor-2',
+    mode: 'impostor',
+    stance: 'PEDANTIC',
+    stanceHint: 'STEEL CHECK: SOVIET STEEL IS MEASURED IN MILLIMETERS ONLY!',
+    prompt:
+      '"UHH COMRADE! I AM TOTALLY SOVIET! I MEASURE MY HEB STEEL BEAMS IN CENTIMETERS WHILE MY TINY FRUNK COOLS DOWN!"',
+    options: [
+      {
+        id: 'A',
+        tag: 'PARTY_LINE',
+        label: 'PARTY LINE',
+        shortText: 'Centimeters sound fine! Glory to your stylish tiny frunk!',
+        trustDelta: -18,
+        suspicionDelta: 45,
+        komradReply: 'TREASONOUS GULLIBILITY! NO SOVIET ENGINEER USES CENTIMETERS!',
+      },
+      {
+        id: 'B',
+        tag: 'DECREE',
+        label: 'DECREE',
+        shortText: 'REAL ENGINEERS USE MILLIMETERS! Curse a 4mm crooked HEB-beam!',
+        trustDelta: 20,
+        suspicionDelta: -10,
+        komradReply: 'COVER CRACKING! LANGLEY DIALECT CALIBRATION FAILED!',
+      },
+      {
+        id: 'C',
+        tag: 'RAW_DATA',
+        label: 'RAW DATA',
+        shortText: 'How many cubic inches is a frunk? Send blueprint tolerances.',
+        trustDelta: -12,
+        suspicionDelta: 38,
+        komradReply: 'DO NOT SPEAK INCHES TO AN ENEMY AGENT, COMRADE!',
+      },
+      {
+        id: 'D',
+        tag: 'KGB_THREAT',
+        label: 'KGB THREAT',
+        shortText: 'Nobody in Sector 84 drives a frunk — hands off the console!',
+        trustDelta: 14,
+        suspicionDelta: 4,
+        komradReply: 'CLOSE, BUT PRESS HIM ON STEEL MILLIMETERS TO BREAK HIM!',
+      },
+    ],
+  },
+  {
+    id: 'impostor-3',
+    mode: 'impostor',
+    stance: 'PARANOID',
+    stanceHint: 'FINAL BLOW: REJECT BANJO BLUFF & SEAL LANGLEY_NODE_04!',
+    prompt:
+      '"ABORT! AGENT SMITH HERE! GIVE ME THE KEYS OR I PLAY 12 HOURS OF BANJO TORTURE ON YOUR INTERCOM!"',
+    options: [
+      {
+        id: 'A',
+        tag: 'PARTY_LINE',
+        label: 'PARTY LINE',
+        shortText: 'Spare my ears, Agent Smith! Sending encrypted keys now!',
+        trustDelta: -25,
+        suspicionDelta: 55,
+        komradReply: 'CAPITULATION TO BANJO PSYCH-OPS! KGB STRIKE RECORDED!',
+      },
+      {
+        id: 'B',
+        tag: 'DECREE',
+        label: 'DECREE',
+        shortText: 'Issue Metric Coupon: demand Volkov Form 84 in liters first.',
+        trustDelta: 12,
+        suspicionDelta: 8,
+        komradReply: 'CLEVER STALLING, BUT EXECUTE FULL KGB LOCKDOWN NOW!',
+      },
+      {
+        id: 'C',
+        tag: 'RAW_DATA',
+        label: 'RAW DATA',
+        shortText: 'Our acoustic pipes damp banjo frequencies at 50.0 Hz.',
+        trustDelta: -10,
+        suspicionDelta: 32,
+        komradReply: 'HE USED THAT DELAY TO LAUNCH HIS SPY CAT!',
+      },
+      {
+        id: 'D',
+        tag: 'KGB_THREAT',
+        label: 'KGB THREAT',
+        shortText: 'TRACE & LOCK LANGLEY_NODE_04! Unleash K.O.M.R.A.D.-84 firewall!',
+        trustDelta: 25,
+        suspicionDelta: -10,
+        komradReply: 'SMITH EXPOSED! WARNING — HE DEPLOYED SPY CAT GPS ON SECTOR 07!',
+      },
+    ],
+  },
+]
+
+let onImpostorExposedHandler: (() => void) | null = null
+
+export function setOnImpostorExposedHandler(cb: (() => void) | null): void {
+  onImpostorExposedHandler = cb
+}
+
 const politState: PolitLinkState = {
   active: false,
   mode: 'idle',
@@ -605,6 +752,9 @@ function pickScenariosForMode(mode: SovOsDuelTriggerMode): DuelScenario[] {
   if (mode === 'voluntary') {
     return [...VOLUNTARY_SCENARIOS]
   }
+  if (mode === 'impostor') {
+    return [...IMPOSTOR_SCENARIOS]
+  }
   if (mode === 'crisis') {
     const gs = useGameStore.getState()
     const prioritized: DuelScenario[] = []
@@ -632,27 +782,53 @@ export function startPolitLinkDuel(mode: SovOsDuelTriggerMode): void {
   politState.mode = mode
   politState.roundIndex = 0
   politState.totalRounds = queue.length
-  politState.trust = mode === 'tutorial_drill' ? 30 : mode === 'voluntary' ? 35 : 38
-  politState.suspicion = mode === 'tutorial_drill' ? 15 : 22
+  politState.trust =
+    mode === 'impostor'
+      ? 25
+      : mode === 'tutorial_drill'
+        ? 30
+        : mode === 'voluntary'
+          ? 35
+          : 38
+  politState.suspicion =
+    mode === 'impostor' ? 20 : mode === 'tutorial_drill' ? 15 : 22
   politState.timeLeftSec =
-    mode === 'tutorial_drill' || mode === 'voluntary' ? 0 : 55
+    mode === 'tutorial_drill' || mode === 'voluntary'
+      ? 0
+      : mode === 'impostor'
+        ? 60
+        : 55
   politState.scenarioQueue = queue
   politState.lastOutcome = 'none'
   politState.drillFailed = false
   politState.lastExchange =
-    mode === 'tutorial_drill'
-      ? 'TRAINING PROTOCOL: READ STANCE CLUE & PICK PATRIOTIC RESPONSE.'
-      : mode === 'voluntary'
-        ? 'VOLUNTARY LOYALTY CHECK OPENED. FLATTER K.O.M.R.A.D.-84.'
-        : mode === 'crisis'
-          ? 'CRISIS INTERROGATION! PROVE IDEOLOGICAL PURITY BEFORE TIMER EXPIRES!'
-          : 'UNANNOUNCED PARTY AUDIT! ANSWER CAREFULLY, COMRADE.'
+    mode === 'impostor'
+      ? 'INTERCEPTED UPLINK [LANGLEY_NODE_04]: EXPOSE THE WESTERN IMPOSTOR!'
+      : mode === 'tutorial_drill'
+        ? 'TRAINING PROTOCOL: READ STANCE CLUE & PICK PATRIOTIC RESPONSE.'
+        : mode === 'voluntary'
+          ? 'VOLUNTARY LOYALTY CHECK OPENED. FLATTER K.O.M.R.A.D.-84.'
+          : mode === 'crisis'
+            ? 'CRISIS INTERROGATION! PROVE IDEOLOGICAL PURITY BEFORE TIMER EXPIRES!'
+            : 'UNANNOUNCED PARTY AUDIT! ANSWER CAREFULLY, COMRADE.'
 
   useGameStore.getState().setIdeologyDuelActive(true)
 }
 
-function finishDuelVictory(): void {
+function finishDuelVictory(): { requestFocusApp?: 'zashchita' } {
   const mode = politState.mode
+  if (mode === 'impostor') {
+    politState.active = false
+    politState.mode = 'idle'
+    politState.lastOutcome = 'win'
+    politState.drillFailed = false
+    politState.lastExchange =
+      'COVER BLOWN! AGENT SMITH UNLEASHED SPY CAT GPS ON SECTOR 07 — PURGE IN ZASHCHITA-84!'
+    useGameStore.getState().setIdeologyDuelActive(false)
+    onImpostorExposedHandler?.()
+    return { requestFocusApp: 'zashchita' }
+  }
+
   const isDrill = mode === 'tutorial_drill'
   if (isDrill) {
     politState.drillPassed = true
@@ -671,6 +847,7 @@ function finishDuelVictory(): void {
   useGameStore
     .getState()
     .applyKomradDuelVictory(rewardRub, quotaPts, buffSec, isDrill)
+  return {}
 }
 
 function finishDuelFailure(reason: string): void {
@@ -693,6 +870,7 @@ export function selectPolitLinkOption(optionId: 'A' | 'B' | 'C' | 'D'): {
   accepted: boolean
   outcome: 'continue' | 'win' | 'fail' | 'drill_mistake'
   reply: string
+  requestFocusApp?: 'zashchita'
 } {
   if (!politState.active) {
     return { accepted: false, outcome: 'continue', reply: politState.lastExchange }
@@ -723,15 +901,25 @@ export function selectPolitLinkOption(optionId: 'A' | 'B' | 'C' | 'D'): {
   }
 
   if (politState.trust >= 80) {
-    finishDuelVictory()
-    return { accepted: true, outcome: 'win', reply: opt.komradReply }
+    const winRes = finishDuelVictory()
+    return {
+      accepted: true,
+      outcome: 'win',
+      reply: opt.komradReply,
+      requestFocusApp: winRes.requestFocusApp,
+    }
   }
 
   const nextRound = politState.roundIndex + 1
   if (nextRound >= politState.totalRounds) {
     if (politState.trust >= 65 && politState.suspicion < 85) {
-      finishDuelVictory()
-      return { accepted: true, outcome: 'win', reply: opt.komradReply }
+      const winRes = finishDuelVictory()
+      return {
+        accepted: true,
+        outcome: 'win',
+        reply: opt.komradReply,
+        requestFocusApp: winRes.requestFocusApp,
+      }
     }
     finishDuelFailure('INSUFFICIENT PARTY CONVICTION! K.O.M.R.A.D.-84 UNCONVINCED.')
     return {

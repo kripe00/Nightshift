@@ -2,6 +2,7 @@ import {
   registerSovOsPluginApp,
   registerSovOsRuntimeHooks,
 } from '../../../shared/sovOsAppRegistry'
+import { setOnImpostorExposedHandler } from './politLinkEngine'
 import { createPolitLinkPluginApp } from './politLinkCanvas'
 import {
   getCyberDirectorHudSummaries,
@@ -9,7 +10,9 @@ import {
   isCyberIdeologyDrillDone,
   resetCyberDirector,
   tickCyberDirector,
+  triggerLangleyLeakEvent,
   triggerPolitLinkDuelWithNotice,
+  triggerSpyCatFirewallWithNotice,
   triggerZashchitaFirewallWithNotice,
 } from './sector84CyberDirector'
 import { createZashchitaPluginApp } from './zashchitaCanvas'
@@ -20,6 +23,7 @@ export function registerTerminalSovOsApps(): void {
   if (registered) return
   registered = true
 
+  setOnImpostorExposedHandler(triggerSpyCatFirewallWithNotice)
   registerSovOsPluginApp(createPolitLinkPluginApp())
   registerSovOsPluginApp(createZashchitaPluginApp())
 
@@ -28,6 +32,7 @@ export function registerTerminalSovOsApps(): void {
     reset: resetCyberDirector,
     triggerDuel: (mode) => triggerPolitLinkDuelWithNotice(mode ?? 'crisis'),
     triggerFirewall: (isDrill) => triggerZashchitaFirewallWithNotice(Boolean(isDrill)),
+    triggerLangleyLeak: triggerLangleyLeakEvent,
     isIdeologyDrillPassed: isCyberIdeologyDrillDone,
     isFirewallDrillPassed: isCyberFirewallDrillDone,
     getDuelHudSummary: () => getCyberDirectorHudSummaries().duel,

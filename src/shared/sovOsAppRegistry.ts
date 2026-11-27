@@ -12,6 +12,7 @@ export type SovOsDuelTriggerMode =
   | 'audit'
   | 'voluntary'
   | 'tutorial_drill'
+  | 'impostor'
 
 export interface SovOsWindowRect {
   x: number
@@ -88,6 +89,7 @@ export interface SovOsRuntimeHooks {
   reset: () => void
   triggerDuel: (mode?: SovOsDuelTriggerMode) => void
   triggerFirewall: (isDrill?: boolean) => void
+  triggerLangleyLeak: () => void
   isIdeologyDrillPassed: () => boolean
   isFirewallDrillPassed: () => boolean
   getDuelHudSummary: () => PolitLinkHudSummary
@@ -174,6 +176,11 @@ export function debugTriggerPolitLinkDuel(
 
 export function debugTriggerZashchitaFirewall(isDrill = false): void {
   runtimeHooks?.triggerFirewall(isDrill)
+  notifySovOsPluginChanged()
+}
+
+export function debugTriggerLangleyLeakEvent(): void {
+  runtimeHooks?.triggerLangleyLeak()
   notifySovOsPluginChanged()
 }
 

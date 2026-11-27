@@ -22,12 +22,14 @@ import {
 const INITIAL_LIVE_GRACE_SEC = 35
 const MIN_INTER_EVENT_SEC = 58
 const MAX_INTER_EVENT_SEC = 90
+const LANGLEY_LEAK_MIN_ELAPSED_SEC = 150
 
 let liveElapsedSec = 0
 let nextEventCountdownSec = INITIAL_LIVE_GRACE_SEC
 let nextEventToggle: 'audit' | 'firewall' = 'firewall'
 let drillStartedDuelForRun = false
 let drillStartedFirewallForRun = false
+let langleyLeakFiredThisShift = false
 
 export function resetCyberDirector(): void {
   liveElapsedSec = 0
@@ -35,6 +37,7 @@ export function resetCyberDirector(): void {
   nextEventToggle = 'firewall'
   drillStartedDuelForRun = false
   drillStartedFirewallForRun = false
+  langleyLeakFiredThisShift = false
   resetPolitLinkState()
   resetZashchitaState()
 }
@@ -77,6 +80,35 @@ export function triggerZashchitaFirewallWithNotice(isDrill = false): void {
         true
       )
   }
+  notifySovOsPluginChanged()
+}
+
+export function triggerLangleyLeakEvent(): void {
+  langleyLeakFiredThisShift = true
+  startPolitLinkDuel('impostor')
+  useGameStore
+    .getState()
+    .pushKomradCyberDispatch(
+      'LANGLEY_NODE_04 INTERCEPT! AGENT SMITH HIJACKED POLIT-LINK 84 AT DESK [KEY 4] -> [E]!',
+      'danger',
+      'K.O.M.R.A.D.-84',
+      KOMRAD_CYBER_VOX.IMPOSTOR_START,
+      true
+    )
+  notifySovOsPluginChanged()
+}
+
+export function triggerSpyCatFirewallWithNotice(): void {
+  startZashchitaWave('spy_cat')
+  useGameStore
+    .getState()
+    .pushKomradCyberDispatch(
+      'AGENT SMITH EXPOSED! SPY CAT GPS UNLEASHED ON SECTOR 07 — PURGE IN ZASHCHITA-84!',
+      'danger',
+      'SYS.DEFENSE',
+      KOMRAD_CYBER_VOX.IMPOSTOR_EXPOSED,
+      true
+    )
   notifySovOsPluginChanged()
 }
 
@@ -142,6 +174,13 @@ export function tickCyberDirector(dt: number): void {
 
   if (isCrisis && gs.partyApprovedBuffSec <= 0) {
     triggerPolitLinkDuelWithNotice('crisis')
+    nextEventCountdownSec =
+      MIN_INTER_EVENT_SEC + Math.random() * (MAX_INTER_EVENT_SEC - MIN_INTER_EVENT_SEC)
+    return
+  }
+
+  if (liveElapsedSec >= LANGLEY_LEAK_MIN_ELAPSED_SEC && !langleyLeakFiredThisShift) {
+    triggerLangleyLeakEvent()
     nextEventCountdownSec =
       MIN_INTER_EVENT_SEC + Math.random() * (MAX_INTER_EVENT_SEC - MIN_INTER_EVENT_SEC)
     return

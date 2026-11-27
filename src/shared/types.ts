@@ -495,7 +495,12 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   applyFirewallVictory: (
     rewardRub: number,
     quotaPoints: number,
-    isDrill?: boolean
+    isDrill?: boolean,
+    options?: {
+      buffSec?: number
+      customLogText?: string
+      customVoxText?: string
+    }
   ) => void
   applyFirewallBreachPenalty: () => void
   jumpToTutorialPhase: (phase: TutorialPhase) => void

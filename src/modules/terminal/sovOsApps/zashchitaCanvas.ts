@@ -97,9 +97,11 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
         return {
           subtitle: zs.isDrill
             ? `DRILL (${remaining} LEFT)`
-            : `BREACH ${pct}%`,
+            : zs.waveMode === 'spy_cat'
+              ? `SPY CAT (${remaining} LEFT)`
+              : `BREACH ${pct}%`,
           badgeText: remaining > 0 ? String(remaining) : '!',
-          alertSeverity: pct >= 60 ? 'danger' : 'warn',
+          alertSeverity: zs.waveMode === 'spy_cat' || pct >= 60 ? 'danger' : 'warn',
           isUrgent: true,
         }
       }
@@ -120,6 +122,7 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
       return [
         zs.active ? 1 : 0,
         zs.isDrill ? 1 : 0,
+        zs.waveMode,
         zs.selectedPid ?? 0,
         zs.lastOutcome,
         zs.waveCount,
@@ -287,7 +290,9 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
         ctx.fillText(
           zs.isDrill
             ? `DRILL // CIA LEFT: ${remaining}`
-            : `BREACH ${pct}% | CIA: ${remaining}`,
+            : zs.waveMode === 'spy_cat'
+              ? `LANGLEY LEAK // SPY CAT: ${remaining}`
+              : `BREACH ${pct}% | CIA: ${remaining}`,
           barX + barW - 12,
           rect.y + 75,
           196
@@ -340,10 +345,10 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
           ctx,
           zs.lastFeedback,
           listX + 18,
-          listY + 100,
+          listY + 94,
           listW - 36,
-          19,
-          4
+          18,
+          5
         )
 
         ctx.fillStyle = '#8fd4a4'
@@ -352,7 +357,7 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
           ctx,
           'When CIA cyber intrusions strike, compare each process PID/PORT/SIG/CPU against the GOST-84 Checklist on the right. Terminating genuine Soviet processes disrupts hardware!',
           listX + 18,
-          listY + 188,
+          listY + 194,
           listW - 36,
           18,
           4

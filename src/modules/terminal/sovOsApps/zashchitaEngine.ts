@@ -1,4 +1,7 @@
+import { KOMRAD_CYBER_VOX } from '../../../shared/komradTutorialVox'
 import { useGameStore } from '../../../shared/useGameStore'
+
+export type ZashchitaWaveMode = 'standard' | 'drill' | 'spy_cat'
 
 export type ProcessImpactKind =
   | 'pump_a'
@@ -24,6 +27,7 @@ export interface FirewallProcess {
 export interface ZashchitaState {
   active: boolean
   isDrill: boolean
+  waveMode: ZashchitaWaveMode
   shiftTier: 1 | 2 | 3
   processes: FirewallProcess[]
   selectedPid: number | null
@@ -186,9 +190,44 @@ const HOSTILE_TEMPLATES: Record<
   ],
 }
 
+const SPY_CAT_HOSTILES: readonly {
+  name: string
+  port: number
+  signature: string
+  cpuPct: number
+  origin: string
+  reason: string
+}[] = [
+  {
+    name: 'SPY_CAT_GPS',
+    port: 1776,
+    signature: 'CIA-TX',
+    cpuPct: 58,
+    origin: 'EXT // LANGLEY-FELINE',
+    reason: 'FORGED SIG (CIA-TX), BAD PORT (1776), CIA SPY CAT',
+  },
+  {
+    name: 'LANGLEY_NODE_04',
+    port: 404,
+    signature: 'US-NSA',
+    cpuPct: 64,
+    origin: 'EXT // VIRGINIA-COWBOY',
+    reason: 'FORGED SIG (US-NSA), BAD PORT (404), IMPOSTOR RELAY',
+  },
+  {
+    name: 'BANJO_STREAM',
+    port: 666,
+    signature: 'FREE84',
+    cpuPct: 49,
+    origin: 'EXT // TORTURE-AUDIO',
+    reason: 'FORGED SIG (FREE84), BAD PORT (666), WESTERN AUDIO',
+  },
+]
+
 const zashchitaState: ZashchitaState = {
   active: false,
   isDrill: false,
+  waveMode: 'standard',
   shiftTier: 1,
   processes: [],
   selectedPid: null,
@@ -225,6 +264,7 @@ export function getGostRulesForTier(tier: 1 | 2 | 3): readonly string[] {
 export function resetZashchitaState(): void {
   zashchitaState.active = false
   zashchitaState.isDrill = false
+  zashchitaState.waveMode = 'standard'
   zashchitaState.shiftTier = 1
   zashchitaState.processes = []
   zashchitaState.selectedPid = null
@@ -247,22 +287,28 @@ function shuffle<T>(arr: T[]): T[] {
   return copy
 }
 
-export function startZashchitaWave(isDrill: boolean): void {
+export function startZashchitaWave(mode: boolean | ZashchitaWaveMode): void {
+  const waveMode: ZashchitaWaveMode =
+    typeof mode === 'boolean' ? (mode ? 'drill' : 'standard') : mode
+  const isDrill = waveMode === 'drill'
+  const isSpyCat = waveMode === 'spy_cat'
   const gs = useGameStore.getState()
-  const tier: 1 | 2 | 3 = isDrill
-    ? 1
-    : gs.shiftNumber >= 4
-      ? 3
-      : gs.shiftNumber >= 2
-        ? 2
-        : 1
+  const tier: 1 | 2 | 3 =
+    isDrill || isSpyCat
+      ? 1
+      : gs.shiftNumber >= 4
+        ? 3
+        : gs.shiftNumber >= 2
+          ? 2
+          : 1
 
-  const genuineCount = isDrill ? 3 : 4
-  const hostileCount = isDrill ? 2 : tier >= 2 ? 3 : 2
-
-  const chosenGenuine = shuffle([...GENUINE_POOL]).slice(0, genuineCount)
-  const poolHostile = shuffle([...HOSTILE_TEMPLATES[tier]])
-  const chosenHostile = poolHostile.slice(0, hostileCount)
+  const chosenGenuine = isSpyCat
+    ? [GENUINE_POOL[0], GENUINE_POOL[3], GENUINE_POOL[4]]
+    : shuffle([...GENUINE_POOL]).slice(0, isDrill ? 3 : 4)
+  const hostileCount = isSpyCat ? 3 : isDrill ? 2 : tier >= 2 ? 3 : 2
+  const chosenHostile = isSpyCat
+    ? [...SPY_CAT_HOSTILES]
+    : shuffle([...HOSTILE_TEMPLATES[tier]]).slice(0, hostileCount)
 
   let pidBase = 410 + zashchitaState.waveCount * 20
   const combined: FirewallProcess[] = [
@@ -296,14 +342,17 @@ export function startZashchitaWave(isDrill: boolean): void {
 
   zashchitaState.active = true
   zashchitaState.isDrill = isDrill
+  zashchitaState.waveMode = waveMode
   zashchitaState.shiftTier = tier
   zashchitaState.processes = isDrill ? combined : shuffle(combined)
   zashchitaState.selectedPid = zashchitaState.processes[0]?.pid ?? null
   zashchitaState.lastOutcome = 'none'
   zashchitaState.waveCount += 1
-  zashchitaState.lastFeedback = isDrill
-    ? 'TRAINING DRILL: CHECK GOST-84 RULES & [KILL] BOTH CIA INTRUDERS.'
-    : `CIA PACKET INTRUSION! PURGE ${hostileCount} HOSTILE PROCESSES BEFORE 100%!`
+  zashchitaState.lastFeedback = isSpyCat
+    ? 'OPERATION LANGLEY LEAK: PURGE SPY_CAT_GPS, LANGLEY_NODE_04 & BANJO_STREAM!'
+    : isDrill
+      ? 'TRAINING DRILL: CHECK GOST-84 RULES & [KILL] BOTH CIA INTRUDERS.'
+      : `CIA PACKET INTRUSION! PURGE ${hostileCount} HOSTILE PROCESSES BEFORE 100%!`
 
   gs.setCiaIntrusionState(true, isDrill ? 15 : 10)
 }
@@ -334,16 +383,29 @@ export function killZashchitaProcess(pid: number): {
     ).length
     if (remainingHostiles === 0) {
       const wasDrill = zashchitaState.isDrill
+      const wasSpyCat = zashchitaState.waveMode === 'spy_cat'
       if (wasDrill) {
         zashchitaState.drillPassed = true
       }
       zashchitaState.active = false
       zashchitaState.isDrill = false
+      zashchitaState.waveMode = 'standard'
       zashchitaState.lastOutcome = 'win'
-      zashchitaState.lastFeedback = wasDrill
-        ? 'DRILL COMPLETE! ALL CIA INTRUDERS PURGED. NIGHT SHIFT READY.'
-        : 'FIREWALL SECURED! ALL CIA INTRUDERS PURGED FROM SECTOR 07.'
-      gs.applyFirewallVictory(wasDrill ? 60 : 140, wasDrill ? 0 : 1, wasDrill)
+      if (wasSpyCat) {
+        zashchitaState.lastFeedback =
+          'PENTAGON CAPITULATION! SPY CAT SENT PRE-PULL BRANCH — US DEFENSE LOCKED IN VOLKOV HSE FORMS! RANSOM: 4MM CROOKED HEB-BEAM & 1L BERYOZKA COFFEE (+160 RUB, +1 QUOTA).'
+        gs.applyFirewallVictory(160, 1, false, {
+          buffSec: 120,
+          customLogText:
+            'OPERATION LANGLEY LEAK COMPLETE! SPY CAT UPLOADED OLD PRE-PULL BRANCH TO PENTAGON — K.O.M.R.A.D.-84 LOCKED US DEFENSE IN VOLKOV HSE FORMS IN TRIPLICATE! +160 RUB, +1 QUOTA, 120S PARTY APPROVAL.',
+          customVoxText: KOMRAD_CYBER_VOX.IMPOSTOR_VICTORY,
+        })
+      } else {
+        zashchitaState.lastFeedback = wasDrill
+          ? 'DRILL COMPLETE! ALL CIA INTRUDERS PURGED. NIGHT SHIFT READY.'
+          : 'FIREWALL SECURED! ALL CIA INTRUDERS PURGED FROM SECTOR 07.'
+        gs.applyFirewallVictory(wasDrill ? 60 : 140, wasDrill ? 0 : 1, wasDrill)
+      }
       return { handled: true, outcome: 'win' }
     }
 
@@ -402,6 +464,7 @@ export function tickZashchita(dt: number): boolean {
 
   if (rawNext >= 100) {
     zashchitaState.active = false
+    zashchitaState.waveMode = 'standard'
     zashchitaState.lastOutcome = 'breach'
     zashchitaState.lastFeedback =
       'BREACH AT 100%! CIA SABOTAGED CORE CHANNELS & POWER!'

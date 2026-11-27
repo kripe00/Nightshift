@@ -158,6 +158,66 @@ function drawKomradOscilloscopePanel(
   ctx.textAlign = 'left'
 }
 
+function drawImpostorScopePanel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  suspicion: number,
+  trust: number,
+  animClockSec: number
+): void {
+  const pulse = Math.floor(animClockSec * 6) % 2 === 0
+  ctx.fillStyle = '#13070c'
+  ctx.fillRect(x, y, w, h)
+
+  // Glitch border: alternating red / imperialist blue / amber
+  ctx.strokeStyle = pulse ? '#ff2a2a' : '#4da6ff'
+  ctx.lineWidth = 2.5
+  ctx.strokeRect(x, y, w, h)
+  ctx.strokeStyle = '#ffb000'
+  ctx.lineWidth = 1
+  ctx.strokeRect(x + 3, y + 3, w - 6, h - 6)
+
+  // Static CRT scanline interference bands
+  for (let sy = y + 18; sy < y + h - 18; sy += 12) {
+    const jitterX = Math.round(Math.sin(animClockSec * 9 + sy) * 6)
+    ctx.fillStyle = (sy / 12) % 2 === 0 ? 'rgba(255,42,42,0.16)' : 'rgba(77,166,255,0.14)'
+    ctx.fillRect(x + 6 + Math.max(0, jitterX), sy, w - 18, 3)
+  }
+
+  const cx = x + Math.round(w * 0.5)
+  const cy = y + 60
+  // Pixelated cowboy-hat / hijacked-signal emblem
+  ctx.fillStyle = pulse ? '#ffb000' : '#ff2a2a'
+  ctx.fillRect(cx - 32, cy - 2, 64, 6) // Brim
+  ctx.fillRect(cx - 18, cy - 18, 36, 16) // Crown
+  ctx.fillStyle = '#4da6ff'
+  ctx.fillRect(cx - 18, cy - 6, 36, 4) // Hatband
+  ctx.fillStyle = '#e6dec3'
+  ctx.fillRect(cx - 10, cy + 8, 6, 6)
+  ctx.fillRect(cx + 4, cy + 8, 6, 6)
+  ctx.fillStyle = '#ff2a2a'
+  ctx.fillRect(cx - 22, cy + 16, 44, 4)
+
+  ctx.textAlign = 'center'
+  ctx.font = 'bold 11px "Courier Prime", monospace'
+  ctx.fillStyle = pulse ? '#ff2a2a' : '#4da6ff'
+  ctx.fillText('LANGLEY_NODE_04 // IMPOSTOR', cx, y + 16, w - 12)
+
+  ctx.fillStyle = pulse ? '#ffb000' : '#e6dec3'
+  ctx.fillText(
+    `COWBOY FILTER DETECTED (${trust}%)`,
+    cx,
+    y + h - 16,
+    w - 14
+  )
+  ctx.fillStyle = '#ff2a2a'
+  ctx.fillRect(x + 12, y + h - 32, Math.round(((w - 24) * Math.max(15, suspicion)) / 100), 4)
+  ctx.textAlign = 'left'
+}
+
 export function createPolitLinkPluginApp(): SovOsPluginApp {
   return {
     id: 'polit_link',
@@ -170,15 +230,20 @@ export function createPolitLinkPluginApp(): SovOsPluginApp {
       const ps = getPolitLinkState()
       const gs = useGameStore.getState()
       if (ps.active) {
-        const isDanger = ps.suspicion >= 65 || (ps.timeLeftSec > 0 && ps.timeLeftSec <= 15)
+        const isImpostor = ps.mode === 'impostor'
+        const isDanger =
+          isImpostor ||
+          ps.suspicion >= 65 ||
+          (ps.timeLeftSec > 0 && ps.timeLeftSec <= 15)
         return {
-          subtitle:
-            ps.mode === 'tutorial_drill'
+          subtitle: isImpostor
+            ? `IMPOSTOR ${Math.ceil(ps.timeLeftSec)}S`
+            : ps.mode === 'tutorial_drill'
               ? `DRILL R${ps.roundIndex + 1}/${ps.totalRounds}`
               : ps.timeLeftSec > 0
                 ? `DUEL ${Math.ceil(ps.timeLeftSec)}S`
                 : `ROUND ${ps.roundIndex + 1}/${ps.totalRounds}`,
-          badgeText: isDanger ? '!!' : 'DUEL',
+          badgeText: isImpostor ? 'CIA!' : isDanger ? '!!' : 'DUEL',
           alertSeverity: isDanger ? 'danger' : 'warn',
           isUrgent: true,
         }
@@ -269,17 +334,22 @@ export function createPolitLinkPluginApp(): SovOsPluginApp {
         return {
           handled: true,
           statusNotice:
-            res.outcome === 'win'
-              ? 'PARTY APPROVAL GRANTED'
-              : res.outcome === 'fail' || res.outcome === 'drill_mistake'
-                ? 'IDEOLOGICAL REJECTION!'
-                : 'RESPONSE LOGGED',
+            res.requestFocusApp === 'zashchita'
+              ? 'IMPOSTOR EXPOSED! SWITCHING TO ZASHCHITA-84'
+              : res.outcome === 'win'
+                ? 'PARTY APPROVAL GRANTED'
+                : res.outcome === 'fail' || res.outcome === 'drill_mistake'
+                  ? 'IDEOLOGICAL REJECTION!'
+                  : 'RESPONSE LOGGED',
           sound:
-            res.outcome === 'win'
-              ? 'chime'
-              : res.outcome === 'fail' || res.outcome === 'drill_mistake'
-                ? 'alarm'
-                : 'click',
+            res.requestFocusApp === 'zashchita'
+              ? 'alarm'
+              : res.outcome === 'win'
+                ? 'chime'
+                : res.outcome === 'fail' || res.outcome === 'drill_mistake'
+                  ? 'alarm'
+                  : 'click',
+          requestFocusApp: res.requestFocusApp,
         }
       }
       if (regionId === 'polit:retry_drill') {
@@ -317,18 +387,31 @@ export function createPolitLinkPluginApp(): SovOsPluginApp {
       ctx.textBaseline = 'middle'
       ctx.textAlign = 'left'
 
-      // Left Column: Animated K.O.M.R.A.D.-84 Eye + Trust / Suspicion Gauges
-      drawKomradOscilloscopePanel(
-        ctx,
-        leftX,
-        rect.y + 56,
-        leftW,
-        142,
-        ps.suspicion,
-        ps.trust,
-        ps.animClockSec,
-        ps.active
-      )
+      // Left Column: Animated K.O.M.R.A.D.-84 Eye (or LANGLEY_NODE_04 Impostor Glitch) + Gauges
+      if (ps.active && ps.mode === 'impostor') {
+        drawImpostorScopePanel(
+          ctx,
+          leftX,
+          rect.y + 56,
+          leftW,
+          142,
+          ps.suspicion,
+          ps.trust,
+          ps.animClockSec
+        )
+      } else {
+        drawKomradOscilloscopePanel(
+          ctx,
+          leftX,
+          rect.y + 56,
+          leftW,
+          142,
+          ps.suspicion,
+          ps.trust,
+          ps.animClockSec,
+          ps.active
+        )
+      }
 
       // TRUST bar
       ctx.fillStyle = '#071d0e'
