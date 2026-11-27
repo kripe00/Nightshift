@@ -10,6 +10,7 @@ export interface PointerLockInteractionSnapshot {
   debugMenuOpen: boolean
   mainMenuOpen: boolean
   shiftTransitionActive: boolean
+  shiftFadeFreezeInput: boolean
 }
 
 export interface PlayerCameraPose {
@@ -36,6 +37,7 @@ export const pointerLockInteraction: PointerLockInteractionSnapshot = {
   debugMenuOpen: false,
   mainMenuOpen: false,
   shiftTransitionActive: false,
+  shiftFadeFreezeInput: false,
 }
 
 const listeners = new Set<() => void>()
@@ -56,6 +58,7 @@ export function updatePointerLockInteraction(
   const prevDebug = pointerLockInteraction.debugMenuOpen
   const prevMain = pointerLockInteraction.mainMenuOpen
   const prevTransition = pointerLockInteraction.shiftTransitionActive
+  const prevFadeFreeze = pointerLockInteraction.shiftFadeFreezeInput
 
   Object.assign(pointerLockInteraction, partial)
 
@@ -65,7 +68,8 @@ export function updatePointerLockInteraction(
     prevGrab !== pointerLockInteraction.isGrabbingControl ||
     prevDebug !== pointerLockInteraction.debugMenuOpen ||
     prevMain !== pointerLockInteraction.mainMenuOpen ||
-    prevTransition !== pointerLockInteraction.shiftTransitionActive
+    prevTransition !== pointerLockInteraction.shiftTransitionActive ||
+    prevFadeFreeze !== pointerLockInteraction.shiftFadeFreezeInput
   ) {
     listeners.forEach((listener) => listener())
   }

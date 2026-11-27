@@ -54,6 +54,10 @@ const LOBBY_SPAWN_X = -0.38;
 const LOBBY_SPAWN_Z = 8.42;
 const LOBBY_SPAWN_YAW = -0.125;
 const LOBBY_SPAWN_PITCH = 0.01;
+const SHIFT_ROLLOVER_LOBBY_X = -0.38;
+const SHIFT_ROLLOVER_LOBBY_Z = 8.42;
+const SHIFT_ROLLOVER_LOBBY_YAW = -0.10;
+const SHIFT_ROLLOVER_LOBBY_PITCH = 0.0;
 const WALK_SPEED = 3.0;
 const SPRINT_SPEED = 4.4;
 const VELOCITY_DAMP = 14;
@@ -952,6 +956,7 @@ export const CameraController: React.FC = () => {
         const gs = useGameStore.getState();
         if (
           gs.phase === "playing" &&
+          gs.lobbyMenuPhase !== "menu_locked" &&
           !pointerLockInteraction.isGrabbingControl
         ) {
           rmbHeldRef.current = true;
@@ -1015,7 +1020,13 @@ export const CameraController: React.FC = () => {
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (isKomradGrabActive() || useGameStore.getState().siberiaGameOverActive) {
+      const gs = useGameStore.getState();
+      if (
+        isKomradGrabActive() ||
+        gs.siberiaGameOverActive ||
+        gs.lobbyMenuPhase === "menu_locked" ||
+        pointerLockInteraction.shiftFadeFreezeInput
+      ) {
         return;
       }
       // Only rotate camera while Pointer Lock is active and no 3D control is held
@@ -1044,6 +1055,40 @@ export const CameraController: React.FC = () => {
           e.preventDefault();
         }
         return;
+      }
+
+      if (useGameStore.getState().lobbyMenuPhase === "menu_locked") {
+        if (
+          e.code === "ArrowUp" ||
+          e.code === "ArrowDown" ||
+          e.code === "ArrowLeft" ||
+          e.code === "ArrowRight" ||
+          e.code === "Space"
+        ) {
+          e.preventDefault();
+        }
+        if (
+          e.code === "KeyW" ||
+          e.code === "KeyA" ||
+          e.code === "KeyS" ||
+          e.code === "KeyD" ||
+          e.code === "ArrowUp" ||
+          e.code === "ArrowDown" ||
+          e.code === "ArrowLeft" ||
+          e.code === "ArrowRight" ||
+          e.code === "Space" ||
+          e.code === "ShiftLeft" ||
+          e.code === "ShiftRight" ||
+          e.code === "KeyC" ||
+          e.code === "ControlLeft" ||
+          e.code === "ControlRight" ||
+          e.code === "KeyE" ||
+          e.code === "KeyZ" ||
+          e.code === "Digit5" ||
+          (e.key >= "0" && e.key <= "7")
+        ) {
+          return;
+        }
       }
 
       const mk = moveKeysRef.current;
@@ -1272,15 +1317,48 @@ export const CameraController: React.FC = () => {
     const vel = velocityRef.current;
     const glide = glideTargetRef.current;
 
+    const leftLockedLobby =
+      prevLobbyPhaseRef.current === "menu_locked" &&
+      gs.lobbyMenuPhase !== "menu_locked";
     const returnedToLockedLobby =
       gs.lobbyMenuPhase === "menu_locked" &&
       (prevLobbyPhaseRef.current !== "menu_locked" ||
         gs.shiftRunId !== prevShiftRunIdRef.current);
+    const enteredDirectNextShiftLobby =
+      gs.lobbyMenuPhase === "door_opening" &&
+      gs.shiftRunId !== prevShiftRunIdRef.current &&
+      airlockDoorState.skipLobbyMenuRunId === gs.shiftRunId;
     prevLobbyPhaseRef.current = gs.lobbyMenuPhase;
     prevShiftRunIdRef.current = gs.shiftRunId;
 
-    if (returnedToLockedLobby) {
-      playerPos.set(LOBBY_SPAWN_X, STANDING_EYE_Y, LOBBY_SPAWN_Z);
+    if (leftLockedLobby) {
+      mk.forward = false;
+      mk.backward = false;
+      mk.left = false;
+      mk.right = false;
+      mk.shift = false;
+      mk.zKey = false;
+      mk.digit5 = false;
+      rmbHeldRef.current = false;
+      vel.vx = 0;
+      vel.vz = 0;
+      glide.active = false;
+    }
+
+    if (returnedToLockedLobby || enteredDirectNextShiftLobby) {
+      const targetSpawnX = enteredDirectNextShiftLobby
+        ? SHIFT_ROLLOVER_LOBBY_X
+        : LOBBY_SPAWN_X;
+      const targetSpawnZ = enteredDirectNextShiftLobby
+        ? SHIFT_ROLLOVER_LOBBY_Z
+        : LOBBY_SPAWN_Z;
+      const targetSpawnYaw = enteredDirectNextShiftLobby
+        ? SHIFT_ROLLOVER_LOBBY_YAW
+        : LOBBY_SPAWN_YAW;
+      const targetSpawnPitch = enteredDirectNextShiftLobby
+        ? SHIFT_ROLLOVER_LOBBY_PITCH
+        : LOBBY_SPAWN_PITCH;
+      playerPos.set(targetSpawnX, STANDING_EYE_Y, targetSpawnZ);
       currentEyeYRef.current = STANDING_EYE_Y;
       headBobOffsetRef.current = 0;
       headBobPhaseRef.current = 0;
@@ -1288,21 +1366,31 @@ export const CameraController: React.FC = () => {
       vel.vz = 0;
       glide.active = false;
       rmbHeldRef.current = false;
-      look.currentYaw = LOBBY_SPAWN_YAW;
-      look.targetYaw = LOBBY_SPAWN_YAW;
-      look.currentPitch = LOBBY_SPAWN_PITCH;
-      look.targetPitch = LOBBY_SPAWN_PITCH;
+      mk.forward = false;
+      mk.backward = false;
+      mk.left = false;
+      mk.right = false;
+      mk.shift = false;
+      mk.zKey = false;
+      mk.digit5 = false;
+      look.currentYaw = targetSpawnYaw;
+      look.targetYaw = targetSpawnYaw;
+      look.currentPitch = targetSpawnPitch;
+      look.targetPitch = targetSpawnPitch;
       prevSeatedRef.current = false;
       skipNextPoseSyncRef.current = true;
-      state.camera.position.set(LOBBY_SPAWN_X, STANDING_EYE_Y, LOBBY_SPAWN_Z);
+      state.camera.position.set(targetSpawnX, STANDING_EYE_Y, targetSpawnZ);
       state.camera.rotation.order = "YXZ";
-      state.camera.rotation.set(LOBBY_SPAWN_PITCH, LOBBY_SPAWN_YAW, 0, "YXZ");
+      state.camera.rotation.set(targetSpawnPitch, targetSpawnYaw, 0, "YXZ");
       state.camera.rotation.z = 0;
-      playerCameraPose.x = LOBBY_SPAWN_X;
-      playerCameraPose.z = LOBBY_SPAWN_Z;
-      playerCameraPose.yaw = LOBBY_SPAWN_YAW;
+      playerCameraPose.x = targetSpawnX;
+      playerCameraPose.z = targetSpawnZ;
+      playerCameraPose.yaw = targetSpawnYaw;
       playerCameraPose.isSeatedAtDesk = false;
-      if (document.pointerLockElement === gl.domElement) {
+      if (
+        returnedToLockedLobby &&
+        document.pointerLockElement === gl.domElement
+      ) {
         document.exitPointerLock?.();
       }
     }
@@ -1420,8 +1508,10 @@ export const CameraController: React.FC = () => {
 
     const isSeatedNow = useGameStore.getState().isSeatedAtDesk;
     const isSeated = isSeatedNow;
+    const isLobbyMenuLocked = gs.lobbyMenuPhase === "menu_locked";
     const canMove =
       !komradGrabActive &&
+      !isLobbyMenuLocked &&
       !gs.siberiaGameOverActive &&
       gs.elevatorDeparturePhase === "idle" &&
       gs.phase === "playing" &&
@@ -1429,7 +1519,8 @@ export const CameraController: React.FC = () => {
       !isGrabbing &&
       !pointerLockInteraction.mainMenuOpen &&
       !pointerLockInteraction.debugMenuOpen &&
-      !pointerLockInteraction.shiftTransitionActive;
+      !pointerLockInteraction.shiftTransitionActive &&
+      !pointerLockInteraction.shiftFadeFreezeInput;
 
     const nearDesk =
       !komradGrabActive &&
@@ -1465,6 +1556,30 @@ export const CameraController: React.FC = () => {
 
     if (komradGrabActive) {
       // Camera pose driven above by komradGrabState
+    } else if (isLobbyMenuLocked) {
+      mk.forward = false;
+      mk.backward = false;
+      mk.left = false;
+      mk.right = false;
+      mk.shift = false;
+      mk.zKey = false;
+      mk.digit5 = false;
+      vel.vx = 0;
+      vel.vz = 0;
+      glide.active = false;
+      rmbHeldRef.current = false;
+      headBobOffsetRef.current = 0;
+      headBobPhaseRef.current = 0;
+      currentEyeYRef.current = STANDING_EYE_Y;
+      playerPos.set(LOBBY_SPAWN_X, STANDING_EYE_Y, LOBBY_SPAWN_Z);
+      look.currentYaw = LOBBY_SPAWN_YAW;
+      look.targetYaw = LOBBY_SPAWN_YAW;
+      look.currentPitch = LOBBY_SPAWN_PITCH;
+      look.targetPitch = LOBBY_SPAWN_PITCH;
+      state.camera.position.set(LOBBY_SPAWN_X, STANDING_EYE_Y, LOBBY_SPAWN_Z);
+      state.camera.rotation.order = "YXZ";
+      state.camera.rotation.set(LOBBY_SPAWN_PITCH, LOBBY_SPAWN_YAW, 0, "YXZ");
+      state.camera.rotation.z = 0;
     } else if (isSeated) {
       glide.active = false;
       vel.vx = 0;
@@ -1699,6 +1814,7 @@ export const CameraController: React.FC = () => {
     const isRmbFocus =
       rmbHeldRef.current &&
       gs.phase === "playing" &&
+      !isLobbyMenuLocked &&
       !gs.siberiaGameOverActive &&
       !isGrabbing &&
       !komradGrabActive;

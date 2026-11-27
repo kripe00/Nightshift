@@ -14,6 +14,7 @@ export interface AirlockDoorRuntimeState {
   openProgress: number;
   wantOpen: boolean;
   menuUnlockElapsed: number;
+  skipLobbyMenuRunId: number | null;
 }
 
 export const airlockDoorState: AirlockDoorRuntimeState = {
@@ -21,6 +22,7 @@ export const airlockDoorState: AirlockDoorRuntimeState = {
   openProgress: 0,
   wantOpen: false,
   menuUnlockElapsed: 0,
+  skipLobbyMenuRunId: null,
 };
 
 let lobbyAmbientFadeInTrigger: (() => void) | null = null;
@@ -301,6 +303,60 @@ export function playElevatorDepartureSequence(): void {
     motorB.start(hoistT);
     motorA.stop(hoistT + 1.9);
     motorB.stop(hoistT + 1.9);
+  } catch {
+    // Ignore autoplay or WebAudio errors
+  }
+}
+
+/**
+ * Brief LIFT-84 arrival DING + iron scissor-gate clank when stepping out into Shift 02+.
+ */
+export function playElevatorArrivalCue(): void {
+  const audio = getActiveAudio();
+  if (!audio) return;
+  try {
+    const now = audio.currentTime;
+    const noiseBuf = getNoiseBuffer(audio);
+
+    const bellFreqs = [1318.5, 2637, 3955.5];
+    const bellGains = [0.14, 0.065, 0.028];
+    for (let i = 0; i < bellFreqs.length; i++) {
+      const osc = audio.createOscillator();
+      const g = audio.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(bellFreqs[i], now);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(bellGains[i], now + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + (i === 0 ? 0.85 : 0.45));
+      osc.connect(g).connect(audio.destination);
+      osc.start(now);
+      osc.stop(now + 0.9);
+    }
+
+    const clankT = now + 0.16;
+    const src = audio.createBufferSource();
+    src.buffer = noiseBuf;
+    const bp = audio.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(1350, clankT);
+    bp.Q.setValueAtTime(3.2, clankT);
+    const nGain = audio.createGain();
+    nGain.gain.setValueAtTime(0.11, clankT);
+    nGain.gain.exponentialRampToValueAtTime(0.001, clankT + 0.08);
+    src.connect(bp).connect(nGain).connect(audio.destination);
+    src.start(clankT);
+    src.stop(clankT + 0.09);
+
+    const latch = audio.createOscillator();
+    const lGain = audio.createGain();
+    latch.type = "triangle";
+    latch.frequency.setValueAtTime(190, clankT);
+    latch.frequency.exponentialRampToValueAtTime(58, clankT + 0.09);
+    lGain.gain.setValueAtTime(0.16, clankT);
+    lGain.gain.exponentialRampToValueAtTime(0.0008, clankT + 0.095);
+    latch.connect(lGain).connect(audio.destination);
+    latch.start(clankT);
+    latch.stop(clankT + 0.1);
   } catch {
     // Ignore autoplay or WebAudio errors
   }

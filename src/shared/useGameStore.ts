@@ -51,6 +51,7 @@ import {
   restoreSovOsPersistenceSnapshot,
   tickSovOsRuntime,
 } from './sovOsAppRegistry'
+import { airlockDoorState } from './airlockDoorState'
 import { pointerLockInteraction } from './pointerLockState'
 import {
   abortKomradGrab,
@@ -1762,18 +1763,23 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     resetKomradTrackers()
     resetSovOsRuntime()
     const cold = createColdStartState()
-    const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const cur = get()
     const summary = cur.lastShiftSummary
     const nextShiftNumber = summary
       ? summary.nextShiftNumber
       : cur.shiftNumber + 1
+    const nextShiftRunId = cur.shiftRunId + 1
+    const initialTutorialPhase: TutorialPhase =
+      nextShiftNumber >= 2 ? 'COMPLETED' : 'AWAITING_VOLKOV_MAIL'
+    const mapped = mapReactorToGameStateFields(cold, initialTutorialPhase)
     const nextRubles = summary
       ? summary.totalRublesAfterBonus
       : Math.max(0, Math.round(cur.rubles + 100))
     const carriedStrikes = summary
       ? summary.treasonStrikes
       : Math.max(0, Math.min(MAX_TREASON_STRIKES - 1, Math.round(cur.treasonStrikes)))
+    const nextShiftPadded = String(nextShiftNumber).padStart(2, '0')
+    airlockDoorState.skipLobbyMenuRunId = nextShiftRunId
     const freshEntries = [
       createLogEntry(
         0,
@@ -1785,7 +1791,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     set((state) => ({
       ...mapped,
       phase: 'playing',
-      lobbyMenuPhase: 'menu_locked',
+      lobbyMenuPhase: 'door_opening',
       shiftCompletedAt0600: 'active',
       elevatorDeparturePhase: 'idle',
       lastShiftSummary: null,
@@ -1812,13 +1818,16 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       activePost84Order: null,
       post84InboxSnapshot: null,
       isBlackout: false,
-      lastDecisionFeedback: mapped.tutorialPrompt.header,
+      lastDecisionFeedback:
+        nextShiftNumber >= 2
+          ? `SHIFT ${nextShiftPadded} AUTHORIZED — ENTER CONTROL HALL MCR-4!`
+          : mapped.tutorialPrompt.header,
       selectedH2OSubstationId: 1,
       tutorialDrainSeconds: 0,
       tutorialHintsHidden: false,
       activeCrisisCoach: null,
       dismissedCrisisIds: [],
-      shiftRunId: state.shiftRunId + 1,
+      shiftRunId: nextShiftRunId,
       hoveredDiagnosticId: null,
       hoveredControlHint: null,
       diagFeedActive: false,
@@ -2711,10 +2720,15 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       'STEP_10_FIREWALL_DRILL',
       'COMPLETED',
     ]
-    const savedTutorialPhase: TutorialPhase =
+    const restoredShiftNumber = Math.max(1, Math.round(numOr(savedGame.shiftNumber, 1)))
+    const rawTutorialPhase: TutorialPhase =
       savedGame.tutorialPhase && validTutorialPhases.includes(savedGame.tutorialPhase)
         ? savedGame.tutorialPhase
         : 'AWAITING_VOLKOV_MAIL'
+    const savedTutorialPhase: TutorialPhase =
+      restoredShiftNumber >= 2 && rawTutorialPhase === 'AWAITING_VOLKOV_MAIL'
+        ? 'COMPLETED'
+        : rawTutorialPhase
 
     const mapped = mapReactorToGameStateFields(
       mergedReactor,

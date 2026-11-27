@@ -2,12 +2,18 @@ import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   playKnifeSwitchSlam,
+  playStampInkThud,
   silenceAllLegacyGlobalBgm,
 } from './modules/inspector/audio'
 import { playSwitchClank } from './modules/reactor/audioSynth'
 import { registerTerminalSovOsApps } from './modules/terminal'
+import {
+  playElevatorArrivalCue,
+  triggerLobbyAmbientFadeIn,
+} from './shared/airlockDoorState'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
+import { KgbShiftSummaryDossier } from './shared/KgbShiftSummaryDossier'
 import {
   isKomradGrabActive,
   isKomradLiquidating,
@@ -53,7 +59,8 @@ function CenterReticle() {
         !gs.isSeatedAtDesk &&
         !pointerLockInteraction.debugMenuOpen &&
         !pointerLockInteraction.mainMenuOpen &&
-        !pointerLockInteraction.shiftTransitionActive
+        !pointerLockInteraction.shiftTransitionActive &&
+        !pointerLockInteraction.shiftFadeFreezeInput
 
       root.style.display = visible ? 'flex' : 'none'
       if (!visible) return
@@ -491,147 +498,40 @@ function ElevatorBoardingCurtain({ onComplete }: { onComplete: () => void }) {
   )
 }
 
-function ShiftSummaryCard({
-  summary,
-}: {
-  summary: NonNullable<ReturnType<typeof useGameStore.getState>['lastShiftSummary']>
-}) {
-  const [stampSlammed, setStampSlammed] = useState(false)
-
-  useEffect(() => {
-    const rafId = window.requestAnimationFrame(() => setStampSlammed(true))
-    return () => window.cancelAnimationFrame(rafId)
-  }, [])
-
-  const completedStr = String(summary.completedShiftNumber).padStart(2, '0')
-  const nextStr = String(summary.nextShiftNumber).padStart(2, '0')
-  const quotaMet = summary.quotaCompleted >= summary.quotaTarget
-
-  const handleProceedToNextShiftLobby = () => {
-    playKnifeSwitchSlam(true)
-    cancelKomradSpeechForReset()
-    completeShiftAndReturnToNextLobby()
-    updatePointerLockInteraction({ shiftTransitionActive: false })
-  }
-
-  return (
-    <div
-      data-testid="sovos-shift-summary"
-      className="fixed inset-0 z-50 flex cursor-auto items-center justify-center bg-[#040805]/96 p-4 select-none"
-      style={{
-        backgroundImage:
-          'repeating-linear-gradient(0deg, rgba(51,255,102,0.035) 0px, rgba(0,0,0,0.28) 2px, transparent 4px)',
-      }}
-    >
-      <div className="relative w-full max-w-3xl border-2 border-[#33ff66]/80 bg-[#07110a] p-6 text-[#e6dec3] shadow-[0_0_55px_rgba(51,255,102,0.22)] sm:p-8">
-        <div
-          className="mb-4 border-b border-[#33ff66]/45 pb-3 text-center text-sm font-bold tracking-[0.18em] text-[#ffb000] uppercase sm:text-base"
-          style={{ fontFamily: '"Kremlin", "VT323", monospace' }}
-        >
-          SOV-OS 84 // SHIFT {completedStr} SUMMARY — SECTOR 84 NIGHT SHIFT LOG
-        </div>
-
-        <div className="my-4 flex justify-center">
-          <div
-            data-testid="shift-complete-stamp"
-            className="border-4 border-[#33ff66] bg-[#092914]/90 px-5 py-2 text-center text-2xl font-bold tracking-[0.16em] text-[#33ff66] uppercase shadow-[0_0_24px_rgba(51,255,102,0.32)] sm:text-3xl"
-            style={{
-              fontFamily: '"Kremlin", "Courier Prime", monospace',
-              transform: stampSlammed
-                ? 'scale(1) rotate(-3deg)'
-                : 'scale(1.75) rotate(-8deg)',
-              opacity: stampSlammed ? 1 : 0.25,
-              transition:
-                'transform 160ms cubic-bezier(0.2, 0.9, 0.25, 1), opacity 120ms ease-out',
-            }}
-          >
-            [ SHIFT {completedStr} COMPLETE — 06:00 ]
-          </div>
-        </div>
-
-        <div
-          className="mt-5 space-y-3 border border-[#1f4a2b] bg-[#0b190f] p-4 text-sm leading-relaxed sm:text-base"
-          style={{ fontFamily: '"Courier Prime", "VT323", monospace' }}
-        >
-          <div>
-            <span className="font-bold text-[#ffb000]">SHIFT PERIOD: </span>
-            <span className="text-[#f3ead4]">
-              SHIFT {completedStr} (00:00 — 06:00) // MELTDOWN REMAINS PROPAGANDA
-            </span>
-          </div>
-          <div>
-            <span className="font-bold text-[#ffb000]">DIRECTIVE QUOTAS FULFILLED: </span>
-            <span className={quotaMet ? 'font-bold text-[#33ff66]' : 'font-bold text-[#ffb000]'}>
-              {summary.quotaCompleted} / {summary.quotaTarget}{' '}
-              {quotaMet ? '(FIVE-YEAR PLAN QUOTA MET!)' : '(MINIMUM COMPLIANCE)'}
-            </span>
-          </div>
-          <div>
-            <span className="font-bold text-[#ffb000]">NIGHT SHIFT SURVIVAL STIPEND: </span>
-            <span className="font-bold text-[#33ff66]">
-              +{summary.baseBonusRubles} RUB
-            </span>
-          </div>
-          <div>
-            <span className="font-bold text-[#ffb000]">STAKHANOVITE QUOTA BONUS: </span>
-            <span className={quotaMet ? 'font-bold text-[#33ff66]' : 'text-[#a6b5aa]'}>
-              {quotaMet
-                ? `+${summary.quotaBonusRubles} RUB`
-                : '0 RUB (5/5 QUOTA REQUIRED)'}
-            </span>
-          </div>
-          <div>
-            <span className="font-bold text-[#ffb000]">TOTAL BALANCE CARRIED FORWARD: </span>
-            <span
-              data-testid="shift-summary-rubles"
-              className="font-bold text-[#33ff66]"
-            >
-              {summary.totalRublesAfterBonus} RUB
-            </span>
-          </div>
-          <div>
-            <span className="font-bold text-[#ffb000]">KGB TREASON DOSSIER: </span>
-            <span
-              className={
-                summary.treasonStrikes > 0
-                  ? 'font-bold text-[#ffb000]'
-                  : 'font-bold text-[#33ff66]'
-              }
-            >
-              {summary.treasonStrikes} / 6 STRIKES CARRIED FORWARD
-            </span>
-          </div>
-          <div>
-            <span className="font-bold text-[#ffb000]">NEXT ASSIGNMENT: </span>
-            <span className="text-[#f3ead4]">
-              SHIFT {nextStr} — REPORT TO MCR-4 ELEVATOR LOBBY
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-center">
-          <button
-            type="button"
-            data-testid="proceed-next-shift-lobby-btn"
-            onClick={handleProceedToNextShiftLobby}
-            className="cursor-pointer border-2 border-[#33ff66] bg-[#0a2915] px-6 py-3 text-lg font-bold tracking-[0.12em] text-[#33ff66] uppercase shadow-[0_0_20px_rgba(51,255,102,0.24)] transition hover:bg-[#114222] hover:text-[#e6dec3] active:translate-y-0.5 sm:text-xl"
-            style={{ fontFamily: '"VT323", "Courier Prime", monospace' }}
-          >
-            [ PROCEED TO MCR-4 LOBBY — SHIFT {nextStr} ]
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+type ShiftFadeStage = 'idle' | 'fading_out' | 'holding_black' | 'fading_in'
 
 function ElevatorDepartureAndSummaryOverlay() {
   const elevatorDeparturePhase = useGameStore((s) => s.elevatorDeparturePhase)
   const lastShiftSummary = useGameStore((s) => s.lastShiftSummary)
   const showShiftSummaryOverlay = useGameStore((s) => s.showShiftSummaryOverlay)
+  const [fadeStage, setFadeStage] = useState<ShiftFadeStage>('idle')
+  const [curtainOpacity, setCurtainOpacity] = useState(0)
+  const transitioningRef = useRef(false)
+  const timersRef = useRef<number[]>([])
+  const rafRef = useRef<number | null>(null)
+
+  const clearScheduledTransition = useCallback(() => {
+    for (const id of timersRef.current) {
+      window.clearTimeout(id)
+    }
+    timersRef.current = []
+    if (rafRef.current !== null) {
+      window.cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
-    const active = elevatorDeparturePhase !== 'idle'
+    return () => {
+      clearScheduledTransition()
+      transitioningRef.current = false
+      updatePointerLockInteraction({ shiftFadeFreezeInput: false })
+    }
+  }, [clearScheduledTransition])
+
+  useEffect(() => {
+    const active =
+      elevatorDeparturePhase !== 'idle' && !transitioningRef.current
     updatePointerLockInteraction({ shiftTransitionActive: active })
     if (active && document.pointerLockElement) {
       document.exitPointerLock?.()
@@ -643,13 +543,90 @@ function ElevatorDepartureAndSummaryOverlay() {
     }
   }, [elevatorDeparturePhase])
 
-  if (elevatorDeparturePhase === 'boarding') {
-    return <ElevatorBoardingCurtain onComplete={showShiftSummaryOverlay} />
-  }
-  if (elevatorDeparturePhase === 'summary' && lastShiftSummary) {
-    return <ShiftSummaryCard summary={lastShiftSummary} />
-  }
-  return null
+  const handleBeginNextShift = useCallback(() => {
+    if (transitioningRef.current) return
+    clearScheduledTransition()
+    transitioningRef.current = true
+
+    playStampInkThud('APPROVED')
+    playElevatorArrivalCue()
+
+    updatePointerLockInteraction({
+      shiftTransitionActive: false,
+      shiftFadeFreezeInput: true,
+    })
+
+    try {
+      const canvas = document.querySelector('canvas')
+      if (canvas && document.pointerLockElement !== canvas) {
+        const req = canvas.requestPointerLock?.() as Promise<void> | undefined
+        req?.catch?.(() => {
+          // Ignore rejected pointer lock promises if browser denies lock
+        })
+      }
+    } catch {
+      // Ignore security exceptions when calling requestPointerLock
+    }
+
+    setFadeStage('fading_out')
+    setCurtainOpacity(0)
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = null
+      setCurtainOpacity(1)
+    })
+
+    const tBlack = window.setTimeout(() => {
+      setFadeStage('holding_black')
+      cancelKomradSpeechForReset()
+      completeShiftAndReturnToNextLobby()
+    }, 560)
+
+    const tFadeIn = window.setTimeout(() => {
+      triggerLobbyAmbientFadeIn()
+      updatePointerLockInteraction({ shiftFadeFreezeInput: false })
+      setFadeStage('fading_in')
+      setCurtainOpacity(0)
+    }, 710)
+
+    const tDone = window.setTimeout(() => {
+      setFadeStage('idle')
+      transitioningRef.current = false
+    }, 1490)
+
+    timersRef.current = [tBlack, tFadeIn, tDone]
+  }, [clearScheduledTransition])
+
+  return (
+    <>
+      {elevatorDeparturePhase === 'boarding' && (
+        <ElevatorBoardingCurtain onComplete={showShiftSummaryOverlay} />
+      )}
+      {elevatorDeparturePhase === 'summary' && lastShiftSummary && (
+        <KgbShiftSummaryDossier
+          summary={lastShiftSummary}
+          onBeginNextShift={handleBeginNextShift}
+          isTransitioning={fadeStage !== 'idle'}
+        />
+      )}
+      {fadeStage !== 'idle' && (
+        <div
+          data-testid="shift-fade-curtain"
+          className={`fixed inset-0 z-[60] bg-black select-none ${
+            fadeStage === 'fading_in' ? 'pointer-events-none' : 'pointer-events-auto'
+          }`}
+          style={{
+            opacity: curtainOpacity,
+            transition:
+              fadeStage === 'fading_out'
+                ? 'opacity 550ms ease-in-out'
+                : fadeStage === 'fading_in'
+                  ? 'opacity 750ms ease-out'
+                  : 'none',
+          }}
+        />
+      )}
+    </>
+  )
 }
 
 export function App() {
@@ -716,11 +693,13 @@ export function App() {
         gs.phase === 'playing' &&
         !gs.siberiaGameOverActive &&
         !isKomradLiquidating() &&
+        gs.elevatorDeparturePhase === 'idle' &&
         gs.isSeatedAtDesk &&
         (!gs.isBlackout || gs.isGodMode) &&
         !pointerLockInteraction.debugMenuOpen &&
         !pointerLockInteraction.mainMenuOpen &&
-        !pointerLockInteraction.shiftTransitionActive
+        !pointerLockInteraction.shiftTransitionActive &&
+        !pointerLockInteraction.shiftFadeFreezeInput
 
       document.documentElement.classList.toggle('iskra-terminal-seated', hideOsCursor)
       document.body.classList.toggle('iskra-terminal-seated', hideOsCursor)

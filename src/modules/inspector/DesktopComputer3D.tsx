@@ -638,7 +638,9 @@ export function DesktopComputer3D() {
           ),
           lastStatusNotice:
             gs.tutorialPhase === 'COMPLETED'
-              ? 'CERTIFIED SKIP // LIVE SHIFT'
+              ? gs.shiftNumber >= 2
+                ? `SHIFT ${String(gs.shiftNumber).padStart(2, '0')} LIVE // AWAITING ORDERS`
+                : 'CERTIFIED SKIP // LIVE SHIFT'
               : 'TRAINING DIRECTIVE ACCEPTED',
         }
         syncSnapshotToStore()

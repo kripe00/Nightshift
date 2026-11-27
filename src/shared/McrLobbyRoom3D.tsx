@@ -413,6 +413,7 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
   const [fadedRunId, setFadedRunId] = useState<number | null>(null);
   const menuDismissed =
     lobbyMenuPhase === "entered_control_room" ||
+    airlockDoorState.skipLobbyMenuRunId === shiftRunId ||
     (lobbyMenuPhase === "door_opening" && fadedRunId === shiftRunId);
 
   const rootGroupRef = useRef<THREE.Group>(null);
@@ -599,7 +600,7 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
       ctx.font = 'bold 24px "VT323", "Courier Prime", monospace';
       ctx.textAlign = "center";
       ctx.fillText(
-        "[ CLICK PANEL TO BEGIN  •  WASD WALK  •  MOUSE LOOK ]",
+        "[ SELECT ASSIGNMENT PANEL TO UNLOCK CONTROLS ]",
         w / 2,
         40,
         w - 24,
@@ -623,6 +624,9 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
 
   useEffect(() => {
     if (lobbyMenuPhase !== "menu_locked") return;
+    if (airlockDoorState.skipLobbyMenuRunId === shiftRunId) {
+      airlockDoorState.skipLobbyMenuRunId = null;
+    }
     clickedRef.current = false;
     dismissedRef.current = false;
     fadeElapsedRef.current = 0;

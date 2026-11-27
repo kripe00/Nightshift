@@ -237,12 +237,14 @@ export function resetGameToMcrLobbyAfterLiquidation(): void {
   airlockDoorState.wheelProgress = 0
   airlockDoorState.openProgress = 0
   airlockDoorState.menuUnlockElapsed = 0
+  airlockDoorState.skipLobbyMenuRunId = null
   useDeskStore.getState().resetDeskStore()
   useGameStore.getState().resetShift('menu_locked')
 }
 
 export function startFreshShiftFromLobby(): void {
   clearSavedShiftFromStorage()
+  airlockDoorState.skipLobbyMenuRunId = null
   useDeskStore.getState().resetDeskStore()
   useGameStore.getState().resetShift('door_opening')
 }

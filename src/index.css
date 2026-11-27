@@ -19,3 +19,52 @@ html.iskra-terminal-seated *,
 html.iskra-terminal-seated canvas {
   cursor: none !important;
 }
+
+@keyframes kgb-dossier-slide-in {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.975);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes kgb-paper-impact-jolt {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  35% {
+    transform: translateY(2.5px) rotate(0.18deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+@keyframes kgb-rubber-stamp-slam {
+  0% {
+    opacity: 0;
+    transform: scale(1.88) rotate(-11deg);
+  }
+  30% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0.9;
+    transform: scale(1) rotate(-6deg);
+  }
+}
+
+.kgb-dossier-slide-in {
+  animation: kgb-dossier-slide-in 180ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.kgb-paper-impact-jolt {
+  animation: kgb-paper-impact-jolt 120ms ease-out forwards;
+}
+
+.kgb-rubber-stamp-slam {
+  animation: kgb-rubber-stamp-slam 140ms cubic-bezier(0.2, 0.95, 0.25, 1) forwards;
+}
