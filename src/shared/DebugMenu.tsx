@@ -189,6 +189,21 @@ export const DebugMenu: React.FC = () => {
   const debugCompleteShift = useGameStore((s) => s.debugCompleteShift)
   const jumpToTutorialPhase = useGameStore((s) => s.jumpToTutorialPhase)
   const resetShift = useGameStore((s) => s.resetShift)
+  const shiftNumber = useGameStore((s) => (isOpen ? s.shiftNumber : 1))
+  const shiftTimeMinutes = useGameStore((s) =>
+    isOpen ? s.shiftTimeMinutes : 0
+  )
+  const complianceScore = useGameStore((s) => (isOpen ? s.complianceScore : 0))
+  const truthIntel = useGameStore((s) => (isOpen ? s.truthIntel : 0))
+  const archivedCount = useGameStore((s) =>
+    isOpen ? s.archivedIntelIds.length : 0
+  )
+  const treasonStrikes = useGameStore((s) => (isOpen ? s.treasonStrikes : 0))
+  const debugSetShiftNumber = useGameStore((s) => s.debugSetShiftNumber)
+  const triggerShiftDebrief = useGameStore((s) => s.triggerShiftDebrief)
+  const recordComplianceDelta = useGameStore((s) => s.recordComplianceDelta)
+  const recordTruthIntelDelta = useGameStore((s) => s.recordTruthIntelDelta)
+  const resolveCampaignEnding = useGameStore((s) => s.resolveCampaignEnding)
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -360,6 +375,81 @@ export const DebugMenu: React.FC = () => {
               >
                 OPEN ISKRA-84 APP EMULATOR
               </button>
+            </div>
+
+            {/* CLEAR SKY 3-SHIFT CAMPAIGN TESTER */}
+            <div className="border-2 border-[#090b09] bg-[#10181c] p-2">
+              <div className="mb-1 flex items-center justify-between text-xs tracking-wider text-[#4dd9ff]">
+                <span>CLEAR SKY CAMPAIGN [3 SHIFTS]</span>
+                <span>
+                  S{shiftNumber}/3 |{' '}
+                  {String(Math.floor(shiftTimeMinutes / 60)).padStart(2, '0')}:
+                  {String(Math.floor(shiftTimeMinutes % 60)).padStart(2, '0')} |{' '}
+                  {treasonStrikes}/6 STR
+                </span>
+              </div>
+              <div className="mb-1.5 text-xs text-[#dfd2a3]">
+                TRUTH: {truthIntel} ({archivedCount}/3 FILES) | OBEDIENCE:{' '}
+                {complianceScore}
+              </div>
+              <div className="grid grid-cols-4 gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => debugSetShiftNumber(1)}
+                  className="border border-[#090b09] bg-[#1e2f38] px-1.5 py-1 hover:bg-[#2a424f]"
+                >
+                  SHIFT 1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => debugSetShiftNumber(2)}
+                  className="border border-[#090b09] bg-[#1e2f38] px-1.5 py-1 hover:bg-[#2a424f]"
+                >
+                  SHIFT 2
+                </button>
+                <button
+                  type="button"
+                  onClick={() => debugSetShiftNumber(3)}
+                  className="border border-[#090b09] bg-[#1e2f38] px-1.5 py-1 hover:bg-[#2a424f]"
+                >
+                  SHIFT 3
+                </button>
+                <button
+                  type="button"
+                  onClick={() => triggerShiftDebrief()}
+                  className="border border-[#090b09] bg-[#4a3919] px-1.5 py-1 text-[#ffb000] hover:bg-[#614b21]"
+                >
+                  06:00
+                </button>
+                <button
+                  type="button"
+                  onClick={() => recordTruthIntelDelta(30)}
+                  className="border border-[#090b09] bg-[#0f3645] px-1.5 py-1 text-[#4dd9ff] hover:bg-[#164d63]"
+                >
+                  +30 TRUTH
+                </button>
+                <button
+                  type="button"
+                  onClick={() => recordComplianceDelta(30)}
+                  className="border border-[#090b09] bg-[#3b2d0d] px-1.5 py-1 text-[#ffb000] hover:bg-[#523f12]"
+                >
+                  +30 OBED
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveCampaignEnding('bureaucrat')}
+                  className="border border-[#090b09] bg-[#2a3319] px-1.5 py-1 hover:bg-[#3a4722]"
+                >
+                  END A
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveCampaignEnding('clear_sky')}
+                  className="border border-[#090b09] bg-[#104054] px-1.5 py-1 text-[#4dd9ff] hover:bg-[#165975]"
+                >
+                  END B
+                </button>
+              </div>
             </div>
 
             <button

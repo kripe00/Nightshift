@@ -1,5 +1,6 @@
 import { KOMRAD_CYBER_VOX } from '../../../shared/komradTutorialVox'
 import { useGameStore } from '../../../shared/useGameStore'
+import { getEvidenceProcessForShift } from './clearSkyCampaign'
 
 export type ZashchitaWaveMode = 'standard' | 'drill' | 'spy_cat'
 
@@ -21,7 +22,10 @@ export interface FirewallProcess {
   impactKind: ProcessImpactKind
   isCiaHostile: boolean
   violationReason: string | null
-  status: 'running' | 'purged' | 'fault_killed'
+  intelKind?: 'clear_sky_evidence'
+  intelId?: string
+  intelSummary?: string
+  status: 'running' | 'purged' | 'fault_killed' | 'archived'
 }
 
 export interface ZashchitaState {
@@ -302,9 +306,19 @@ export function startZashchitaWave(mode: boolean | ZashchitaWaveMode): void {
           ? 2
           : 1
 
+  const evidenceTemplate = !isDrill
+    ? getEvidenceProcessForShift(gs.shiftNumber, gs.archivedIntelIds)
+    : null
+  const genuineSlots = evidenceTemplate
+    ? isSpyCat
+      ? 2
+      : 3
+    : isDrill
+      ? 3
+      : 4
   const chosenGenuine = isSpyCat
-    ? [GENUINE_POOL[0], GENUINE_POOL[3], GENUINE_POOL[4]]
-    : shuffle([...GENUINE_POOL]).slice(0, isDrill ? 3 : 4)
+    ? [GENUINE_POOL[0], GENUINE_POOL[3], GENUINE_POOL[4]].slice(0, genuineSlots)
+    : shuffle([...GENUINE_POOL]).slice(0, genuineSlots)
   const hostileCount = isSpyCat ? 3 : isDrill ? 2 : tier >= 2 ? 3 : 2
   const chosenHostile = isSpyCat
     ? [...SPY_CAT_HOSTILES]
@@ -325,6 +339,26 @@ export function startZashchitaWave(mode: boolean | ZashchitaWaveMode): void {
       violationReason: null,
       status: 'running' as const,
     })),
+    ...(evidenceTemplate
+      ? [
+          {
+            pid: pidBase + 29,
+            name: evidenceTemplate.processName,
+            port: evidenceTemplate.port,
+            signature: evidenceTemplate.signature,
+            cpuPct: evidenceTemplate.cpuPct,
+            origin: evidenceTemplate.origin,
+            linkedHardware: 'INTERNAL CLEAR SKY FILE — [ARCHIVE] OR [KILL]',
+            impactKind: 'grid' as const,
+            isCiaHostile: false,
+            violationReason: null,
+            intelKind: 'clear_sky_evidence' as const,
+            intelId: evidenceTemplate.intelId,
+            intelSummary: evidenceTemplate.summary,
+            status: 'running' as const,
+          },
+        ]
+      : []),
     ...chosenHostile.map((h, idx) => ({
       pid: pidBase + 40 + idx * 7,
       name: h.name,
@@ -413,6 +447,14 @@ export function killZashchitaProcess(pid: number): {
     return { handled: true, outcome: 'purged' }
   }
 
+  // Clear Sky internal leak file censored obediently ([KILL])
+  if (proc.intelKind === 'clear_sky_evidence') {
+    proc.status = 'purged'
+    zashchitaState.lastFeedback = `CENSORED ${proc.name}! (+15 COMPLIANCE — VOLKOV COMMENDS OBEDIENCE.)`
+    gs.recordComplianceDelta(15, `INTERNAL LEAK CENSORED: ${proc.name} (+15 COMPLIANCE)`)
+    return { handled: true, outcome: 'purged' }
+  }
+
   // Wrong kill: genuine Soviet process terminated!
   proc.status = 'fault_killed'
   zashchitaState.lastOutcome = zashchitaState.isDrill ? 'drill_mistake' : 'none'
@@ -423,6 +465,30 @@ export function killZashchitaProcess(pid: number): {
     zashchitaState.isDrill
   )
   return { handled: true, outcome: 'wrong_kill' }
+}
+
+export function archiveZashchitaEvidence(pid: number): {
+  handled: boolean
+  outcome: 'archived' | 'ignored'
+} {
+  if (!zashchitaState.active) {
+    return { handled: false, outcome: 'ignored' }
+  }
+  const proc = zashchitaState.processes.find((p) => p.pid === pid)
+  if (!proc || proc.status !== 'running' || proc.intelKind !== 'clear_sky_evidence') {
+    return { handled: false, outcome: 'ignored' }
+  }
+  zashchitaState.selectedPid = pid
+  proc.status = 'archived'
+  const gs = useGameStore.getState()
+  gs.recordTruthIntelDelta(
+    25,
+    proc.intelId,
+    `CLEAR SKY INTEL ARCHIVED: ${proc.name} (+25 TRUTH)`
+  )
+  gs.setCiaIntrusionState(true, Math.min(95, gs.ciaIntrusionProgress + 8))
+  zashchitaState.lastFeedback = `ARCHIVED ${proc.name}! (+25 TRUTH INTEL — K.O.M.R.A.D.-84 SUSPICIOUS!)`
+  return { handled: true, outcome: 'archived' }
 }
 
 export function runDiagnosticPacketScan(): void {

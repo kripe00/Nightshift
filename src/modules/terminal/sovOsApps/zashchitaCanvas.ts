@@ -6,8 +6,9 @@ import type {
   SovOsPluginStatusMeta,
   SovOsWindowRect,
 } from '../../../shared/sovOsAppRegistry'
-import { useGameStore } from '../../../shared/useGameStore'
+import { isPreVolkovPanelLocked, useGameStore } from '../../../shared/useGameStore'
 import {
+  archiveZashchitaEvidence,
   getGostRulesForTier,
   getZashchitaState,
   killZashchitaProcess,
@@ -89,6 +90,15 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
     getStatusMeta: (): SovOsPluginStatusMeta => {
       const zs = getZashchitaState()
       const gs = useGameStore.getState()
+      const preVolkovLocked = !zs.active && isPreVolkovPanelLocked(gs)
+      if (preVolkovLocked) {
+        return {
+          subtitle: 'LOCKED (MAIL)',
+          badgeText: 'LOCK',
+          alertSeverity: 'warn',
+          isUrgent: false,
+        }
+      }
       if (zs.active || gs.ciaIntrusionActive) {
         const remaining = zs.processes.filter(
           (p) => p.isCiaHostile && p.status === 'running'
@@ -116,11 +126,13 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
     getRenderSignature: (): string => {
       const zs = getZashchitaState()
       const gs = useGameStore.getState()
+      const preVolkovLocked = !zs.active && isPreVolkovPanelLocked(gs)
       const procSig = zs.processes
         .map((p) => `${p.pid}:${p.status}`)
         .join(',')
       return [
         zs.active ? 1 : 0,
+        preVolkovLocked ? 1 : 0,
         zs.isDrill ? 1 : 0,
         zs.waveMode,
         zs.selectedPid ?? 0,
@@ -138,6 +150,9 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
       const regions: SovOsPluginHitRegion[] = []
 
       if (!zs.active) {
+        if (isPreVolkovPanelLocked(useGameStore.getState())) {
+          return regions
+        }
         regions.push({
           id: 'zash:scan_idle',
           x: rect.x + 18,
@@ -148,20 +163,32 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
         return regions
       }
 
-      // Process list rows + [KILL] buttons
+      // Process list rows + [KILL] / [ARCH] buttons
       const listX = rect.x + 14
       const rowW = 420
       zs.processes.slice(0, 6).forEach((proc, idx) => {
         const ry = rect.y + 132 + idx * 45
+        const isEvidence =
+          proc.status === 'running' && proc.intelKind === 'clear_sky_evidence'
         regions.push({
           id: `zash:row:${proc.pid}`,
           x: listX,
           y: ry,
-          w: rowW - 86,
+          w: isEvidence ? rowW - 154 : rowW - 86,
           h: 39,
           payload: String(proc.pid),
         })
         if (proc.status === 'running') {
+          if (isEvidence) {
+            regions.push({
+              id: `zash:arch:${proc.pid}`,
+              x: listX + rowW - 150,
+              y: ry + 2,
+              w: 68,
+              h: 35,
+              payload: String(proc.pid),
+            })
+          }
           regions.push({
             id: `zash:kill:${proc.pid}`,
             x: listX + rowW - 80,
@@ -173,9 +200,26 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
         }
       })
 
-      // Right inspector [TERMINATE PROCESS] button or Drill Reset
+      // Right inspector [TERMINATE PROCESS] / [ARCHIVE] buttons or Drill Reset
       const selected = zs.processes.find((p) => p.pid === zs.selectedPid)
-      if (selected?.status === 'running') {
+      if (selected?.status === 'running' && selected.intelKind === 'clear_sky_evidence') {
+        regions.push({
+          id: 'zash:arch_selected',
+          x: rect.x + 456,
+          y: rect.y + 394,
+          w: 124,
+          h: 42,
+          payload: String(selected.pid),
+        })
+        regions.push({
+          id: 'zash:kill_selected',
+          x: rect.x + 588,
+          y: rect.y + 394,
+          w: 124,
+          h: 42,
+          payload: String(selected.pid),
+        })
+      } else if (selected?.status === 'running') {
         regions.push({
           id: 'zash:kill_selected',
           x: rect.x + 456,
@@ -201,6 +245,18 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
       if (regionId.startsWith('zash:row:') && payload) {
         selectZashchitaProcess(Number(payload))
         return { handled: true, sound: 'click' }
+      }
+      if (
+        (regionId.startsWith('zash:arch:') || regionId === 'zash:arch_selected') &&
+        payload
+      ) {
+        const res = archiveZashchitaEvidence(Number(payload))
+        if (!res.handled) return { handled: false }
+        return {
+          handled: true,
+          statusNotice: 'CLEAR SKY INTEL ARCHIVED (+25 TRUTH)',
+          sound: 'chime',
+        }
       }
       if (
         (regionId.startsWith('zash:kill:') || regionId === 'zash:kill_selected') &&
@@ -233,6 +289,13 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
         }
       }
       if (regionId === 'zash:scan_idle') {
+        if (isPreVolkovPanelLocked(useGameStore.getState())) {
+          return {
+            handled: true,
+            statusNotice: 'LOCKED: ACCEPT VOLKOV MAIL IN P.O.S.T.-84 FIRST',
+            sound: 'alarm',
+          }
+        }
         runDiagnosticPacketScan()
         return {
           handled: true,
@@ -363,57 +426,105 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
           4
         )
 
-        const scanHover = hoveredId === 'zash:scan_idle'
-        ctx.fillStyle = scanHover ? '#33ff66' : '#124a21'
-        ctx.fillRect(rect.x + 18, rect.y + 392, 416, 50)
-        ctx.strokeStyle = scanHover ? '#e6dec3' : '#33ff66'
-        ctx.lineWidth = 2
-        ctx.strokeRect(rect.x + 18, rect.y + 392, 416, 50)
-        ctx.textAlign = 'center'
-        ctx.fillStyle = scanHover ? '#061a0c' : '#e6dec3'
-        ctx.font = 'bold 15px "Courier Prime", monospace'
-        ctx.fillText(
-          '[ RUN DIAGNOSTIC PACKET SCAN ]',
-          rect.x + 226,
-          rect.y + 417
-        )
-        ctx.textAlign = 'left'
+        const preVolkovLocked = isPreVolkovPanelLocked(gs)
+        if (preVolkovLocked) {
+          ctx.fillStyle = '#331010'
+          ctx.fillRect(rect.x + 18, rect.y + 392, 416, 50)
+          ctx.strokeStyle = '#ff2a2a'
+          ctx.lineWidth = 2
+          ctx.strokeRect(rect.x + 18, rect.y + 392, 416, 50)
+          ctx.textAlign = 'center'
+          ctx.fillStyle = '#ffb000'
+          ctx.font = 'bold 13px "Courier Prime", monospace'
+          ctx.fillText(
+            'LOCKED // ACCEPT VOLKOV MAIL IN P.O.S.T.-84 FIRST',
+            rect.x + 226,
+            rect.y + 417,
+            396
+          )
+          ctx.textAlign = 'left'
+        } else {
+          const scanHover = hoveredId === 'zash:scan_idle'
+          ctx.fillStyle = scanHover ? '#33ff66' : '#124a21'
+          ctx.fillRect(rect.x + 18, rect.y + 392, 416, 50)
+          ctx.strokeStyle = scanHover ? '#e6dec3' : '#33ff66'
+          ctx.lineWidth = 2
+          ctx.strokeRect(rect.x + 18, rect.y + 392, 416, 50)
+          ctx.textAlign = 'center'
+          ctx.fillStyle = scanHover ? '#061a0c' : '#e6dec3'
+          ctx.font = 'bold 15px "Courier Prime", monospace'
+          ctx.fillText(
+            '[ RUN DIAGNOSTIC PACKET SCAN ]',
+            rect.x + 226,
+            rect.y + 417
+          )
+          ctx.textAlign = 'left'
+        }
       } else {
         zs.processes.slice(0, 6).forEach((proc, idx) => {
           const ry = rect.y + 132 + idx * 45
           const isSel = zs.selectedPid === proc.pid
+          const isEvidence = proc.intelKind === 'clear_sky_evidence'
           const rowHover = hoveredId === `zash:row:${proc.pid}`
+          const archHover = hoveredId === `zash:arch:${proc.pid}`
           const killHover = hoveredId === `zash:kill:${proc.pid}`
 
           ctx.fillStyle =
             proc.status === 'purged'
               ? '#0a2b14'
-              : proc.status === 'fault_killed'
-                ? '#330a0a'
-                : isSel
-                  ? '#144421'
-                  : rowHover
-                    ? '#10361b'
-                    : '#071d0e'
+              : proc.status === 'archived'
+                ? '#0a2936'
+                : proc.status === 'fault_killed'
+                  ? '#330a0a'
+                  : isEvidence
+                    ? isSel
+                      ? '#382a0a'
+                      : '#241b07'
+                    : isSel
+                      ? '#144421'
+                      : rowHover
+                        ? '#10361b'
+                        : '#071d0e'
           ctx.fillRect(listX, ry, listW, 39)
           ctx.strokeStyle =
             proc.status === 'fault_killed'
               ? '#ff2a2a'
-              : isSel || rowHover
-                ? '#ffb000'
-                : '#1b6b31'
+              : proc.status === 'archived'
+                ? '#4dd9ff'
+                : isEvidence || isSel || rowHover
+                  ? '#ffb000'
+                  : '#1b6b31'
           ctx.lineWidth = isSel ? 2 : 1.5
           ctx.strokeRect(listX, ry, listW, 39)
 
-          ctx.fillStyle = proc.status === 'running' ? '#e6dec3' : '#6ca37c'
+          ctx.fillStyle =
+            proc.status === 'running'
+              ? isEvidence
+                ? '#ffb000'
+                : '#e6dec3'
+              : '#6ca37c'
           ctx.font = 'bold 12px "Courier Prime", monospace'
           ctx.fillText(String(proc.pid), listX + 6, ry + 20)
-          ctx.fillText(proc.name, listX + 46, ry + 20, 134)
+          ctx.fillText(proc.name, listX + 46, ry + 20, isEvidence ? 112 : 134)
           ctx.fillText(String(proc.port), listX + 186, ry + 20)
           ctx.fillText(proc.signature, listX + 230, ry + 20, 72)
-          ctx.fillText(`${proc.cpuPct}%`, listX + 306, ry + 20)
+          if (!isEvidence) {
+            ctx.fillText(`${proc.cpuPct}%`, listX + 306, ry + 20)
+          }
 
           if (proc.status === 'running') {
+            if (isEvidence) {
+              ctx.fillStyle = archHover ? '#4dd9ff' : '#0d3645'
+              ctx.fillRect(listX + listW - 150, ry + 2, 68, 35)
+              ctx.strokeStyle = archHover ? '#e6dec3' : '#4dd9ff'
+              ctx.lineWidth = 1.5
+              ctx.strokeRect(listX + listW - 150, ry + 2, 68, 35)
+              ctx.textAlign = 'center'
+              ctx.fillStyle = archHover ? '#061a0c' : '#4dd9ff'
+              ctx.font = 'bold 12px "Courier Prime", monospace'
+              ctx.fillText('[ARCH]', listX + listW - 116, ry + 20)
+              ctx.textAlign = 'left'
+            }
             ctx.fillStyle = killHover ? '#ff2a2a' : '#5c1818'
             ctx.fillRect(listX + listW - 80, ry + 2, 74, 35)
             ctx.strokeStyle = killHover ? '#e6dec3' : '#ff2a2a'
@@ -427,10 +538,18 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
           } else {
             ctx.textAlign = 'center'
             ctx.fillStyle =
-              proc.status === 'purged' ? '#33ff66' : '#ff2a2a'
+              proc.status === 'archived'
+                ? '#4dd9ff'
+                : proc.status === 'purged'
+                  ? '#33ff66'
+                  : '#ff2a2a'
             ctx.font = 'bold 12px "Courier Prime", monospace'
             ctx.fillText(
-              proc.status === 'purged' ? 'PURGED' : 'FAULT',
+              proc.status === 'archived'
+                ? 'ARCHIVED'
+                : proc.status === 'purged'
+                  ? 'PURGED'
+                  : 'FAULT',
               listX + listW - 43,
               ry + 20
             )
@@ -510,18 +629,39 @@ export function createZashchitaPluginApp(): SovOsPluginApp {
           rect.y + 334,
           rightW - 20
         )
-        ctx.fillStyle = '#ffb000'
+        ctx.fillStyle = selected.intelKind === 'clear_sky_evidence' ? '#4dd9ff' : '#ffb000'
         drawWrapped(
           ctx,
-          `LINKED: ${selected.linkedHardware}`,
+          selected.intelSummary ?? `LINKED: ${selected.linkedHardware}`,
           rightX + 10,
-          rect.y + 356,
+          rect.y + 354,
           rightW - 20,
-          15,
+          14,
           2
         )
 
-        if (selected.status === 'running') {
+        if (selected.status === 'running' && selected.intelKind === 'clear_sky_evidence') {
+          const archBtnHover = hoveredId === 'zash:arch_selected'
+          ctx.fillStyle = archBtnHover ? '#4dd9ff' : '#0d3645'
+          ctx.fillRect(rightX + 10, rect.y + 394, 124, 42)
+          ctx.strokeStyle = archBtnHover ? '#e6dec3' : '#4dd9ff'
+          ctx.lineWidth = 2
+          ctx.strokeRect(rightX + 10, rect.y + 394, 124, 42)
+          ctx.textAlign = 'center'
+          ctx.fillStyle = archBtnHover ? '#061a0c' : '#4dd9ff'
+          ctx.font = 'bold 13px "Courier Prime", monospace'
+          ctx.fillText('[ ARCHIVE ]', rightX + 72, rect.y + 415)
+
+          const killBtnHover = hoveredId === 'zash:kill_selected'
+          ctx.fillStyle = killBtnHover ? '#ff2a2a' : '#5c1818'
+          ctx.fillRect(rightX + 142, rect.y + 394, 124, 42)
+          ctx.strokeStyle = killBtnHover ? '#e6dec3' : '#ff2a2a'
+          ctx.lineWidth = 2
+          ctx.strokeRect(rightX + 142, rect.y + 394, 124, 42)
+          ctx.fillStyle = '#e6dec3'
+          ctx.fillText('[ CENSOR ]', rightX + 204, rect.y + 415)
+          ctx.textAlign = 'left'
+        } else if (selected.status === 'running') {
           const btnHover = hoveredId === 'zash:kill_selected'
           ctx.fillStyle = btnHover ? '#ff2a2a' : '#5c1818'
           ctx.fillRect(rightX + 10, rect.y + 394, rightW - 20, 42)

@@ -3,7 +3,7 @@
  * Zero imports from `src/modules/*` to avoid circular dependencies and enforce module boundaries.
  */
 
-export type SovOsPluginAppId = 'polit_link' | 'zashchita'
+export type SovOsPluginAppId = 'polit_link' | 'zashchita' | 'shift_report'
 
 export type SovOsAlertSeverity = 'none' | 'warn' | 'danger'
 

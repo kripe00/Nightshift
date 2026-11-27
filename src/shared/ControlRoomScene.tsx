@@ -7920,6 +7920,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       state.sectorMW.steel;
     const isLiquidating = isKomradLiquidating();
     const liquidationDark = isLiquidating || state.siberiaGameOverActive;
+    const bunkerLuxTripped = state.bunkerLightsBlackoutSec > 0;
     const isAlarmActive =
       coreTemp >= 750 || totalMW > maxSafePower || isLiquidating;
 
@@ -7931,7 +7932,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       isBlackout || lobbyMenuPhase === "menu_locked" || liquidationDark,
     );
 
-    if (lobbyMenuPhase !== "entered_control_room" || liquidationDark) {
+    if (lobbyMenuPhase !== "entered_control_room" || liquidationDark || bunkerLuxTripped) {
       controlRoomPowerState.active = false;
       controlRoomPowerState.elapsed = 0;
       controlRoomPowerState.zone1 = 0;
@@ -7982,7 +7983,7 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       : 0;
 
     if (hemiLightRef.current) {
-      if (liquidationDark) {
+      if (liquidationDark || bunkerLuxTripped) {
         hemiLightRef.current.intensity = MIN_STANDBY_LIGHT_INTENSITY;
       } else {
         const nominalHemi = isBlackout ? 0.18 : 0.95;

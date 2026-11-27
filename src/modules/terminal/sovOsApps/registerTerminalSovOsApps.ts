@@ -4,6 +4,7 @@ import {
 } from '../../../shared/sovOsAppRegistry'
 import { setOnImpostorExposedHandler } from './politLinkEngine'
 import { createPolitLinkPluginApp } from './politLinkCanvas'
+import { createShiftReportPluginApp } from './shiftReportCanvas'
 import {
   getCyberDirectorHudSummaries,
   isCyberFirewallDrillDone,
@@ -26,6 +27,7 @@ export function registerTerminalSovOsApps(): void {
   setOnImpostorExposedHandler(triggerSpyCatFirewallWithNotice)
   registerSovOsPluginApp(createPolitLinkPluginApp())
   registerSovOsPluginApp(createZashchitaPluginApp())
+  registerSovOsPluginApp(createShiftReportPluginApp())
 
   registerSovOsRuntimeHooks({
     tick: tickCyberDirector,
