@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import type { TutorialPhase } from '../simulation/rbmkPhysics'
 import { playerCameraPose } from './pointerLockState'
+import { isDeskAppTutorialEnabled } from './sovOsAppRegistry'
 import { useGameStore } from './useGameStore'
 
 interface LandmarkDef {
@@ -45,6 +46,11 @@ function getTargetLandmarkForPhase(phase: TutorialPhase): {
     case 'STEP_3_BUILD_STEAM':
       return { stepNum: 5, targetId: 'UNIT_B', targetLabel: 'UNIT B' }
     case 'STEP_7_VOID_DRILL':
+      return { stepNum: 6, targetId: 'UNIT_B', targetLabel: 'UNIT B' }
+    case 'STEP_9_IDEOLOGY_DRILL':
+      return { stepNum: 7, targetId: 'DESK', targetLabel: 'DESK' }
+    case 'STEP_10_FIREWALL_DRILL':
+      return { stepNum: 8, targetId: 'DESK', targetLabel: 'DESK' }
     default:
       return { stepNum: 6, targetId: 'UNIT_B', targetLabel: 'UNIT B' }
   }
@@ -129,6 +135,7 @@ export const TutorialCompassHud: React.FC<{ menusOpen: boolean }> = ({
 
       if (targetBannerRef.current) {
         const absDeg = Math.round(Math.abs(targetAngleDeg))
+        const totalSteps = isDeskAppTutorialEnabled() ? 8 : 6
         let dirText: string
         if (targetInfo.stepNum === 0) {
           if (playerCameraPose.isSeatedAtDesk) {
@@ -146,6 +153,26 @@ export const TutorialCompassHud: React.FC<{ menusOpen: boolean }> = ({
             dirText = 'PRESS [E] TO SIT AT DESK & OPEN P.O.S.T.-84'
           }
           targetBannerRef.current.textContent = `VOLKOV DIRECTIVE  •  ${dirText}`
+        } else if (targetInfo.stepNum >= 7) {
+          const deskAction =
+            targetInfo.stepNum === 7
+              ? 'OPEN POLIT-LINK 84 ON ISKRA-84 & PASS IDEOLOGY DRILL'
+              : 'OPEN ZASHCHITA-84 ON ISKRA-84 & PURGE CIA PROCESSES'
+          if (playerCameraPose.isSeatedAtDesk) {
+            dirText = deskAction
+          } else if (absDeg > 130) {
+            dirText = `↺ TURN AROUND FOR DESK (${targetDist.toFixed(1)}m)`
+          } else if (absDeg > 24) {
+            dirText =
+              targetAngleDeg < 0
+                ? `◀ DESK (${absDeg}° LEFT)`
+                : `▶ DESK (${absDeg}° RIGHT)`
+          } else if (targetDist > 2.45) {
+            dirText = `▲ WALK TO DESK (${targetDist.toFixed(1)}m)`
+          } else {
+            dirText = `PRESS [E] TO SIT AT DESK  •  ${deskAction}`
+          }
+          targetBannerRef.current.textContent = `STEP ${targetInfo.stepNum}/${totalSteps}  •  ${dirText}`
         } else {
           if (absDeg > 130) {
             dirText = `↺ TURN AROUND FOR ${targetInfo.targetLabel} (${targetDist.toFixed(1)}m)`
@@ -159,7 +186,7 @@ export const TutorialCompassHud: React.FC<{ menusOpen: boolean }> = ({
           } else {
             dirText = `● AT ${targetInfo.targetLabel} — CHECK SKALA-84 FRONT WALL CRT`
           }
-          targetBannerRef.current.textContent = `STEP ${targetInfo.stepNum}/6  •  ${dirText}`
+          targetBannerRef.current.textContent = `STEP ${targetInfo.stepNum}/${totalSteps}  •  ${dirText}`
         }
       }
 
@@ -237,7 +264,7 @@ export const TutorialCompassHud: React.FC<{ menusOpen: boolean }> = ({
           ref={targetBannerRef}
           className="mt-1 truncate text-center font-mono text-[11px] font-bold tracking-wider text-[#ffe28a]"
         >
-          {`STEP ${targetInfo.stepNum}/6  •  ▶ ${targetInfo.targetLabel}`}
+          {`STEP ${targetInfo.stepNum}/${isDeskAppTutorialEnabled() ? 8 : 6}  •  ▶ ${targetInfo.targetLabel}`}
         </div>
       </div>
     </div>

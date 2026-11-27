@@ -353,6 +353,11 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   ciaIntrusionActive: boolean
   ciaIntrusionProgress: number // 0 to 100%
   komradOverrideLocked: boolean
+  ideologyDuelActive: boolean
+  partyApprovedBuffSec: number
+  frontWallPurgeCooldownSec: number
+  frontWallOverrideCooldownSec: number
+  komradSabotageFlashSec: number
 
   // Inspector Desk & Directives (Komrad Oleg's Domain)
   activeDirectives: DirectiveDocument[]
@@ -465,6 +470,35 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   triggerAz5: () => void
   overrideKomradLock: () => void
   purgeFirewall: () => void
+  setIdeologyDuelActive: (active: boolean) => void
+  setCiaIntrusionState: (active: boolean, progress: number) => void
+  setPartyApprovedBuffSec: (sec: number) => void
+  pushKomradCyberDispatch: (
+    text: string,
+    level: 'normal' | 'warn' | 'danger',
+    sender: 'K.O.M.R.A.D.-84' | 'SYS.DEFENSE',
+    spokenVoxText?: string,
+    forceInterrupt?: boolean
+  ) => void
+  applyKomradDuelVictory: (
+    rewardRub: number,
+    quotaPoints: number,
+    buffSec: number,
+    isDrill?: boolean
+  ) => void
+  applyKomradDuelFailure: (fineRub: number, isDrill?: boolean) => void
+  applyFirewallWrongKillPenalty: (
+    impact: 'pump_a' | 'pump_b' | 'lights' | 'grid' | 'feedwater',
+    processName: string,
+    isDrill?: boolean
+  ) => void
+  applyFirewallVictory: (
+    rewardRub: number,
+    quotaPoints: number,
+    isDrill?: boolean
+  ) => void
+  applyFirewallBreachPenalty: () => void
+  jumpToTutorialPhase: (phase: TutorialPhase) => void
   spawnDirective: (forceForgery?: boolean) => void
   resolveDirective: (id: string, decision: DirectiveDecision) => void
   approveDirective: (id: string) => void

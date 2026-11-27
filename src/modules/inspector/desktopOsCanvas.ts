@@ -1,11 +1,16 @@
 import {
+  getSovOsPluginApp,
+  getSovOsPluginApps,
+  type SovOsPluginAppId,
+} from '../../shared/sovOsAppRegistry'
+import {
   createInitialPost84Inbox,
   evaluatePost84Order,
   type Post84LiveTelemetry,
   type Post84Message,
 } from './post84Mail'
 
-export type DesktopAppId = 'mail'
+export type DesktopAppId = 'mail' | SovOsPluginAppId
 
 export type DesktopCursorAction =
   | { kind: 'open_app'; appId: DesktopAppId }
@@ -19,6 +24,12 @@ export type DesktopCursorAction =
   | { kind: 'mail_accept_order'; messageId: string }
   | { kind: 'mail_accept_training'; messageId: string }
   | { kind: 'mail_skip_training'; messageId: string }
+  | {
+      kind: 'plugin_click'
+      appId: SovOsPluginAppId
+      regionId: string
+      payload?: string
+    }
 
 export interface DesktopHitRegion {
   id: string
@@ -194,8 +205,9 @@ export function buildDesktopHitRegions(
   state: DesktopOsState
 ): DesktopHitRegion[] {
   const regions: DesktopHitRegion[] = []
+  const pluginApps = getSovOsPluginApps()
 
-  // Left desktop column: ONLY P.O.S.T.-84 shortcut icon
+  // Left desktop column: P.O.S.T.-84 + registered SOV-OS 84 plugin apps
   regions.push({
     id: 'icon:mail',
     x: 24,
@@ -204,9 +216,20 @@ export function buildDesktopHitRegions(
     h: 104,
     action: { kind: 'open_app', appId: 'mail' },
   })
+  pluginApps.forEach((plugin, idx) => {
+    regions.push({
+      id: `icon:${plugin.id}`,
+      x: 24,
+      y: 182 + idx * 116,
+      w: 184,
+      h: 104,
+      action: { kind: 'open_app', appId: plugin.id },
+    })
+  })
 
-  // Open windows (P.O.S.T.-84 only)
-  if (state.openWindows.includes('mail')) {
+  // Open window: P.O.S.T.-84 or active plugin app
+  const activeWinId = state.openWindows[0]
+  if (activeWinId === 'mail') {
     const rect = getWindowRect()
     regions.push({
       id: 'win:mail:body',
@@ -310,9 +333,57 @@ export function buildDesktopHitRegions(
         }
       )
     }
+  } else if (activeWinId) {
+    const plugin = getSovOsPluginApp(activeWinId)
+    if (plugin) {
+      const rect = getWindowRect()
+      regions.push({
+        id: `win:${plugin.id}:body`,
+        x: rect.x,
+        y: rect.y,
+        w: rect.w,
+        h: rect.h,
+        action: { kind: 'focus_app', appId: plugin.id },
+        windowScope: plugin.id,
+      })
+      regions.push({
+        id: `win:${plugin.id}:minimize`,
+        x: rect.x + rect.w - 94,
+        y: rect.y + 6,
+        w: 40,
+        h: 32,
+        action: { kind: 'minimize_app', appId: plugin.id },
+        windowScope: plugin.id,
+      })
+      regions.push({
+        id: `win:${plugin.id}:close`,
+        x: rect.x + rect.w - 48,
+        y: rect.y + 6,
+        w: 40,
+        h: 32,
+        action: { kind: 'close_app', appId: plugin.id },
+        windowScope: plugin.id,
+      })
+      for (const pReg of plugin.getHitRegions(rect)) {
+        regions.push({
+          id: pReg.id,
+          x: pReg.x,
+          y: pReg.y,
+          w: pReg.w,
+          h: pReg.h,
+          action: {
+            kind: 'plugin_click',
+            appId: plugin.id,
+            regionId: pReg.id,
+            payload: pReg.payload,
+          },
+          windowScope: plugin.id,
+        })
+      }
+    }
   }
 
-  // Bottom taskbar (`y = 588..640`): ONLY HOME & POST-84
+  // Bottom taskbar (`y = 588..640`): HOME, POST-84 & plugin app tabs
   regions.push(
     {
       id: 'taskbar:desk',
@@ -324,13 +395,23 @@ export function buildDesktopHitRegions(
     },
     {
       id: 'taskbar:mail',
-      x: 130,
+      x: 126,
       y: 594,
-      w: 160,
+      w: 148,
       h: 38,
       action: { kind: 'taskbar_toggle', appId: 'mail' },
     }
   )
+  pluginApps.forEach((plugin, idx) => {
+    regions.push({
+      id: `taskbar:${plugin.id}`,
+      x: 282 + idx * 142,
+      y: 594,
+      w: 134,
+      h: 38,
+      action: { kind: 'taskbar_toggle', appId: plugin.id },
+    })
+  })
 
   return regions
 }
@@ -359,6 +440,7 @@ export function handleDesktopOsClick(
   nextState: DesktopOsState
   clickedRegion: DesktopHitRegion | null
   didAction: boolean
+  pluginSound?: 'click' | 'clank' | 'chime' | 'alarm'
 } {
   const hit = hitTestDesktopOs(state, x, y)
   if (!hit) {
@@ -388,54 +470,88 @@ export function handleDesktopOsClick(
     }
   }
 
-  const focusMailWindow = () => {
-    next.minimizedWindows = []
-    next.openWindows = ['mail']
+  const focusAppWindow = (appId: DesktopAppId) => {
+    const prevOpen = next.openWindows.filter((w) => w !== appId)
+    const mergedMin = new Set([...next.minimizedWindows, ...prevOpen])
+    mergedMin.delete(appId)
+    next.minimizedWindows = Array.from(mergedMin)
+    next.openWindows = [appId]
   }
 
-  const minimizeMailWindow = () => {
-    next.openWindows = []
-    if (!next.minimizedWindows.includes('mail')) {
-      next.minimizedWindows = ['mail']
+  const minimizeAppWindow = (appId: DesktopAppId) => {
+    next.openWindows = next.openWindows.filter((w) => w !== appId)
+    if (!next.minimizedWindows.includes(appId)) {
+      next.minimizedWindows = [...next.minimizedWindows, appId]
     }
   }
+
+  const focusMailWindow = () => {
+    focusAppWindow('mail')
+  }
+
+  const appDisplayName = (appId: DesktopAppId): string => {
+    if (appId === 'mail') return 'P.O.S.T.-84'
+    return getSovOsPluginApp(appId)?.iconTitle ?? appId.toUpperCase()
+  }
+
+  let pluginClickResult: ReturnType<
+    NonNullable<ReturnType<typeof getSovOsPluginApp>>['handleClick']
+  > | null = null
 
   const action = hit.action
   switch (action.kind) {
     case 'open_app':
     case 'focus_app': {
-      focusMailWindow()
-      selectPendingTrainingIfUnselected()
-      next.lastStatusNotice = 'OPEN: P.O.S.T.-84'
+      focusAppWindow(action.appId)
+      if (action.appId === 'mail') {
+        selectPendingTrainingIfUnselected()
+      }
+      next.lastStatusNotice = `OPEN: ${appDisplayName(action.appId)}`
       break
     }
     case 'minimize_app': {
-      minimizeMailWindow()
-      next.lastStatusNotice = 'MINIMIZED: P.O.S.T.-84'
+      minimizeAppWindow(action.appId)
+      next.lastStatusNotice = `MINIMIZED: ${appDisplayName(action.appId)}`
       break
     }
     case 'close_app': {
-      next.openWindows = []
-      next.minimizedWindows = []
-      next.lastStatusNotice = 'CLOSED: P.O.S.T.-84'
+      next.openWindows = next.openWindows.filter((w) => w !== action.appId)
+      next.minimizedWindows = next.minimizedWindows.filter((w) => w !== action.appId)
+      next.lastStatusNotice = `CLOSED: ${appDisplayName(action.appId)}`
       break
     }
     case 'minimize_all': {
-      if (next.openWindows.includes('mail')) {
-        next.minimizedWindows = ['mail']
-      }
+      const merged = new Set([...next.minimizedWindows, ...next.openWindows])
+      next.minimizedWindows = Array.from(merged)
       next.openWindows = []
       next.lastStatusNotice = 'DESKTOP HOMESCREEN'
       break
     }
     case 'taskbar_toggle': {
-      if (next.openWindows.includes('mail')) {
-        minimizeMailWindow()
-        next.lastStatusNotice = 'MINIMIZED: P.O.S.T.-84'
+      if (next.openWindows.includes(action.appId)) {
+        minimizeAppWindow(action.appId)
+        next.lastStatusNotice = `MINIMIZED: ${appDisplayName(action.appId)}`
       } else {
-        focusMailWindow()
-        selectPendingTrainingIfUnselected()
-        next.lastStatusNotice = 'ACTIVE: P.O.S.T.-84'
+        focusAppWindow(action.appId)
+        if (action.appId === 'mail') {
+          selectPendingTrainingIfUnselected()
+        }
+        next.lastStatusNotice = `ACTIVE: ${appDisplayName(action.appId)}`
+      }
+      break
+    }
+    case 'plugin_click': {
+      const plugin = getSovOsPluginApp(action.appId)
+      if (!plugin) {
+        return { nextState: state, clickedRegion: hit, didAction: false }
+      }
+      focusAppWindow(action.appId)
+      pluginClickResult = plugin.handleClick(action.regionId, action.payload)
+      if (!pluginClickResult.handled) {
+        return { nextState: state, clickedRegion: hit, didAction: false }
+      }
+      if (pluginClickResult.statusNotice) {
+        next.lastStatusNotice = pluginClickResult.statusNotice
       }
       break
     }
@@ -500,7 +616,12 @@ export function handleDesktopOsClick(
     }
   }
 
-  return { nextState: next, clickedRegion: hit, didAction: true }
+  return {
+    nextState: next,
+    clickedRegion: hit,
+    didAction: true,
+    pluginSound: pluginClickResult?.sound,
+  }
 }
 
 function formatShiftClock(totalMinutes: number): string {
@@ -764,11 +885,86 @@ export function paintDesktopOsCanvas(
   ctx.fillStyle = unreadMailCount > 0 ? '#ffb000' : '#22b549'
   ctx.fillText(unreadMailCount > 0 ? `${unreadMailCount} UNREAD` : 'STATE INBOX', 116, 150)
 
+  // Registered SOV-OS 84 Plugin App Icons
+  const pluginApps = getSovOsPluginApps()
+  pluginApps.forEach((plugin, idx) => {
+    const iy = 182 + idx * 116
+    const status = plugin.getStatusMeta()
+    const isPlugHover = hoveredId === `icon:${plugin.id}`
+    const isPlugOpen = state.openWindows.includes(plugin.id)
+    const isPlugMin = state.minimizedWindows.includes(plugin.id)
+    const hasAlert = status.alertSeverity !== 'none'
+    const alertCol = status.alertSeverity === 'danger' ? '#ff2a2a' : '#ffb000'
+
+    ctx.fillStyle =
+      mailAlertPhase === 2 && hasAlert
+        ? status.alertSeverity === 'danger'
+          ? '#380d0d'
+          : '#261d05'
+        : isPlugHover
+          ? '#164d25'
+          : isPlugOpen
+            ? '#0f391b'
+            : 'rgba(9, 34, 16, 0.72)'
+    ctx.fillRect(24, iy, 184, 104)
+
+    if (mailAlertPhase === 2 && hasAlert) {
+      ctx.strokeStyle = alertCol
+      ctx.lineWidth = 3
+      ctx.strokeRect(24, iy, 184, 104)
+    } else if (isPlugHover || isPlugOpen) {
+      ctx.strokeStyle = isPlugHover ? '#e6dec3' : '#33ff66'
+      ctx.lineWidth = isPlugHover ? 3 : 2
+      ctx.strokeRect(24, iy, 184, 104)
+    } else {
+      ctx.strokeStyle = hasAlert ? alertCol : isPlugMin ? '#ffb000' : '#185929'
+      ctx.lineWidth = hasAlert ? 2 : 1.5
+      ctx.strokeRect(24, iy, 184, 104)
+    }
+
+    if (status.badgeText) {
+      ctx.fillStyle = alertCol
+      ctx.fillRect(162, iy + 6, 40, 20)
+      ctx.textAlign = 'center'
+      ctx.font = 'bold 14px "Courier Prime", monospace'
+      ctx.fillStyle = '#061a0c'
+      ctx.fillText(status.badgeText, 182, iy + 16)
+    } else if (isPlugOpen || isPlugMin) {
+      ctx.fillStyle = isPlugOpen ? '#33ff66' : '#ffb000'
+      ctx.fillRect(194, iy + 8, 8, 8)
+    }
+
+    plugin.drawIconGlyph(
+      ctx,
+      81,
+      iy + 4,
+      isPlugHover ? '#e6dec3' : '#33ff66',
+      status.alertSeverity
+    )
+
+    ctx.textAlign = 'center'
+    ctx.font = 'bold 18px "Courier Prime", monospace'
+    ctx.fillStyle = isPlugHover ? '#e6dec3' : '#33ff66'
+    ctx.fillText(plugin.iconTitle, 116, iy + 64)
+    ctx.font = '15px "Courier Prime", monospace'
+    ctx.fillStyle = hasAlert ? alertCol : '#22b549'
+    ctx.fillText(status.subtitle, 116, iy + 86, 172)
+  })
+
   // =========================================================================
-  // 3. OPEN WINDOW (P.O.S.T.-84 ONLY)
+  // 3. OPEN WINDOW (P.O.S.T.-84 OR ACTIVE PLUGIN APP)
   // =========================================================================
-  if (isMailOpen) {
+  const activeWinId = state.openWindows[0]
+  const activePlugin =
+    activeWinId && activeWinId !== 'mail'
+      ? getSovOsPluginApp(activeWinId)
+      : undefined
+  if (isMailOpen || activePlugin) {
     const rect = getWindowRect()
+    const winId: DesktopAppId = activePlugin ? activePlugin.id : 'mail'
+    const winTitle = activePlugin
+      ? activePlugin.windowTitle
+      : 'P.O.S.T.-84 // STATE TELETYPE INBOX'
 
     // Drop shadow behind window
     ctx.fillStyle = '#030d06'
@@ -790,10 +986,10 @@ export function paintDesktopOsCanvas(
     ctx.textAlign = 'left'
     ctx.font = 'bold 20px "Kremlin", "Courier Prime", monospace'
     ctx.fillStyle = '#e6dec3'
-    ctx.fillText('P.O.S.T.-84 // STATE TELETYPE INBOX', rect.x + 18, rect.y + 22)
+    ctx.fillText(winTitle, rect.x + 18, rect.y + 22, rect.w - 130)
 
     // Minimize [_] button
-    const minHover = hoveredId === 'win:mail:minimize'
+    const minHover = hoveredId === `win:${winId}:minimize`
     const mx = rect.x + rect.w - 94
     const my = rect.y + 6
     ctx.fillStyle = minHover ? '#24753a' : '#0d3b1b'
@@ -807,7 +1003,7 @@ export function paintDesktopOsCanvas(
     ctx.fillText('_', mx + 20, my + 14)
 
     // Close [X] button
-    const closeHover = hoveredId === 'win:mail:close'
+    const closeHover = hoveredId === `win:${winId}:close`
     const cx = rect.x + rect.w - 48
     const cy = rect.y + 6
     ctx.fillStyle = closeHover ? '#ff2a2a' : '#4a1212'
@@ -820,11 +1016,15 @@ export function paintDesktopOsCanvas(
     ctx.font = 'bold 20px "Courier Prime", monospace'
     ctx.fillText('X', cx + 20, cy + 16)
 
-    paintMailWindow(ctx, rect, state, telemetry, hoveredId, mailAlertPhase)
+    if (activePlugin) {
+      activePlugin.paintWindow(ctx, rect, hoveredId, mailAlertPhase)
+    } else {
+      paintMailWindow(ctx, rect, state, telemetry, hoveredId, mailAlertPhase)
+    }
   }
 
   // =========================================================================
-  // 4. BOTTOM TASKBAR (y = 588..640) — ONLY HOME & POST-84
+  // 4. BOTTOM TASKBAR (y = 588..640) — HOME, POST-84 & PLUGIN TABS
   // =========================================================================
   ctx.fillStyle = '#0c2914'
   ctx.fillRect(0, 588, W, 52)
@@ -833,7 +1033,7 @@ export function paintDesktopOsCanvas(
 
   // HOME / Minimize-All button
   const deskHover = hoveredId === 'taskbar:desk'
-  const isHomeDesktop = !isMailOpen
+  const isHomeDesktop = state.openWindows.length === 0
   ctx.fillStyle = isHomeDesktop ? '#33ff66' : deskHover ? '#195429' : '#08200f'
   ctx.fillRect(14, 594, 104, 38)
   ctx.strokeStyle = deskHover ? '#e6dec3' : '#33ff66'
@@ -853,7 +1053,7 @@ export function paintDesktopOsCanvas(
       : isMailMinimized
         ? '#0a2612'
         : '#071b0c'
-  ctx.fillRect(130, 594, 160, 38)
+  ctx.fillRect(126, 594, 148, 38)
   ctx.strokeStyle = mailTabHover
     ? '#e6dec3'
     : isMailOpen
@@ -864,25 +1064,70 @@ export function paintDesktopOsCanvas(
           ? '#ffb000'
           : '#1b5e2d'
   ctx.lineWidth = 2
-  ctx.strokeRect(130, 594, 160, 38)
+  ctx.strokeRect(126, 594, 148, 38)
   ctx.fillStyle = isMailOpen
     ? '#061a0c'
     : isMailMinimized
       ? '#ffb000'
       : '#22b549'
-  ctx.font = 'bold 17px "Courier Prime", monospace'
+  ctx.font = 'bold 16px "Courier Prime", monospace'
   const mailPrefix = isMailOpen ? '* ' : isMailMinimized ? '_ ' : ''
   const showTaskbarUnreadBadge = unreadMailCount > 0 && !isMailOpen
-  ctx.fillText(`${mailPrefix}POST-84`, showTaskbarUnreadBadge ? 198 : 210, 613)
+  ctx.fillText(`${mailPrefix}POST-84`, showTaskbarUnreadBadge ? 188 : 200, 613)
 
   if (showTaskbarUnreadBadge) {
     ctx.fillStyle = '#ffb000'
-    ctx.fillRect(262, 603, 22, 20)
+    ctx.fillRect(246, 603, 22, 20)
     ctx.textAlign = 'center'
     ctx.fillStyle = '#061a0c'
     ctx.font = 'bold 14px "Courier Prime", monospace'
-    ctx.fillText(String(unreadMailCount), 273, 613)
+    ctx.fillText(String(unreadMailCount), 257, 613)
   }
+
+  // Registered plugin taskbar tabs
+  pluginApps.forEach((plugin, idx) => {
+    const tx = 282 + idx * 142
+    const tw = 134
+    const pStatus = plugin.getStatusMeta()
+    const isPlugOpen = state.openWindows.includes(plugin.id)
+    const isPlugMin = state.minimizedWindows.includes(plugin.id)
+    const isTabHover = hoveredId === `taskbar:${plugin.id}`
+    const alertCol = pStatus.alertSeverity === 'danger' ? '#ff2a2a' : '#ffb000'
+    const hasAlert = pStatus.alertSeverity !== 'none'
+
+    ctx.fillStyle = isPlugOpen
+      ? '#33ff66'
+      : isTabHover
+        ? '#164d24'
+        : mailAlertPhase === 2 && hasAlert
+          ? '#241804'
+          : isPlugMin
+            ? '#0a2612'
+            : '#071b0c'
+    ctx.fillRect(tx, 594, tw, 38)
+    ctx.strokeStyle = isTabHover
+      ? '#e6dec3'
+      : isPlugOpen
+        ? '#33ff66'
+        : hasAlert
+          ? alertCol
+          : isPlugMin
+            ? '#ffb000'
+            : '#1b5e2d'
+    ctx.lineWidth = 2
+    ctx.strokeRect(tx, 594, tw, 38)
+    ctx.textAlign = 'center'
+    ctx.fillStyle = isPlugOpen
+      ? '#061a0c'
+      : hasAlert
+        ? alertCol
+        : isPlugMin
+          ? '#ffb000'
+          : '#22b549'
+    ctx.font = 'bold 15px "Courier Prime", monospace'
+    const prefix = isPlugOpen ? '* ' : isPlugMin ? '_ ' : ''
+    ctx.fillText(`${prefix}${plugin.taskbarLabel}`, tx + tw / 2, 613, tw - 10)
+  })
 
   // Taskbar right status readout
   if (mailAlertPhase > 0) {

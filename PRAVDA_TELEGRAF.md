@@ -355,3 +355,17 @@
   > *4. **Lydopprydding, Danse-nullstilling & K.O.M.R.A.D.-84 Armkalibrering (`audio.ts`, `SovietPanopticonRig3D.tsx` & `komradArmController.ts`):** `HTMLMediaElement.prototype`-patchen og gammel `280ms`-lydpolling er fjernet, `skala84_diag.mp4` har 8s stall-vakthund, `SM-2M`-spoler snurrer med `dt`, `Shift`-klank er låst ute fra hovedmenyen (`M-16`, `L-02`–`L-08`). Avbrutt robotdans eller skift-reset nullstiller rull/pitch/håndledd og holder `DANCE_ANCHOR` klar av `UNIT B` (`M-14`), mens `az5Cover`/`boron`/`radioPower`-mål og `emergSealLock`-handling nå treffer eksakt (`M-15`, `L-05`).*
   >
   > *Verifisert av KGB: **0 TypeScript-feil, 0 Oxlint-advarsler, 0 manglende VOX-tokens og 0 grensebrudd (`npm run kgb`)!** Hent fra Kreml (`npm run pravda`) — MELTDOWN IS PROPAGANDA! 🎖️🛠️📺🎙️☭"*
+
+### [TELEGRAM #026 — STEMPLET: QUOTA-84 // INTERAKTIVE `SOV-OS 84`-APPER (`POLIT-LINK 84` & `ZASHCHITA-84`) + 8-STEGS OPPLÆRING!]
+- **FRA:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen (Sektor 84)
+- **TIL:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat
+- **EMNE:** `POLIT-LINK 84` (Ideologisk Duell mot K.O.M.R.A.D.-84), `ZASHCHITA-84` (Taktisk GOST-84 Brannmur) & utvidet 8-stegs opplæring (`STEP 7–8`) koblet inn i `ISKRA-84`!
+- **MELDING:**
+  > *"📡 OFFISIELL DEPESJE FRA SJEFSINGENIØR KOMRAD KRISTIANOV (Кристианов) TIL SENIORINSPEKTØR OLEG 📡*
+  > *Kamerat og Seniorinspektør Oleg! Etter at papirstemplene ble pensjonert fra pulten, har Reaktor- & Cyber-avdelingen nå bygget to fullverdige interaktive `SOV-OS 84`-apper direkte inn i `ISKRA-84` via vår nye plugin-kontrakt (`sovOsAppRegistry.ts`):*
+  > *1. **`POLIT-LINK 84` — Ideologisk Duell mot `K.O.M.R.A.D.-84` (`politLinkEngine.ts` & `politLinkCanvas.ts`):** Flerrunners taktisk dialog-duell med 4 retoriske svarkort (`PARTY LINE`, `DECREE`, `RAW DATA`, `KGB THREAT`), `TRUST`/`SUSPICION`-målere og animert pikselert K.O.M.R.A.D.-øye/oscilloskop. Utløses ved reaktorkriser, uanmeldte lojalitetsstikkprøver eller frivillig smiger. Seier gir `+RUB` og `Party Approved`-immunitet; tap gir `+1 Treason Strike`, bot, AI-lås og aktiv pumpe-/lys-sabotasje!*
+  > *2. **`ZASHCHITA-84` — Taktisk Brannmur (`zashchitaEngine.ts` & `zashchitaCanvas.ts`):** Digital *Papers, Please*-prosessjakt med live prosessliste (PID, port, signatur, CPU) og eskalerende `GOST-84 Checklist` på høyre side. Dreper du en ekte sovjetisk prosess (`PUMP_A_DRV`, `BUNKER_LUX`, `GRID_SYNC_50`), rammes den faktiske maskinvaren i hallen!*
+  > *3. **Utvidet 8-Stegs Opplæring (`STEP 7–8` tilbake ved pulten):** Etter Steam Void-øvelsen (`STEP 6`) peker `SKALA-84` og toppkompasset deg tilbake til `DESK [KEY 4] -> [E]` for en trygg 2-runders øvelsesduell (`STEP 7`) og trygg CIA-brannmurøvelse (`STEP 8`) — med 100 % manifest-verifisert VOX-tale og 0 Strikes ved øvelsesfeil!*
+  > *4. **Tynn `ISKRA-84`-host & `F2` App-emulator:** `DesktopComputer3D.tsx` og `desktopOsCanvas.ts` er utvidet minimalt og additivt (dokumentert i `AGENTS.md` & `kgb-inspection.mjs`) uten å røre `P.O.S.T.-84`, og `F2`-menyen har nå egne triggere pluss live `ISKRA-84 App Emulator`!*
+  >
+  > *Verifisert med 0 feil i `npm run kgb` og `npm run build` — MELTDOWN IS PROPAGANDA! 🎖️🖥️⚔️🛡️☢️☭"*

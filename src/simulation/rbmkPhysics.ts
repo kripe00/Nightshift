@@ -104,7 +104,15 @@ export type TutorialPhase =
   | 'STEP_6_BASELINE_600MW'
   | 'STEP_7_VOID_DRILL'
   | 'STEP_8_XENON_DRILL'
+  | 'STEP_9_IDEOLOGY_DRILL'
+  | 'STEP_10_FIREWALL_DRILL'
   | 'COMPLETED';
+
+export interface TutorialEvaluationOptions {
+  deskAppsEnabled?: boolean;
+  ideologyDrillPassed?: boolean;
+  firewallDrillPassed?: boolean;
+}
 
 export interface TutorialPrompt {
   phase: TutorialPhase;
@@ -1042,6 +1050,19 @@ export function stepReactorSimulation(
     sub.quotaOk = mwMet && (sub.id !== 4 || state.kgbLineActive);
   });
 
+  // Safe training envelope during Desk terminal drills (Steps 7-8)
+  if (
+    tutorialPhase === 'STEP_9_IDEOLOGY_DRILL' ||
+    tutorialPhase === 'STEP_10_FIREWALL_DRILL'
+  ) {
+    state.coreTemp = Math.min(state.coreTemp, 620);
+    state.drumPressure = Math.min(state.drumPressure, 74);
+    state.voidFraction = Math.min(state.voidFraction, 0.18);
+    state.drumWaterLevel = clamp(state.drumWaterLevel, -40, 40);
+    state.coreMeltdown = false;
+    state.steamExplosion = false;
+  }
+
   // Catastrophic Failure Thresholds
   if (state.coreTemp > 1100) state.coreMeltdown = true;
   if (state.drumPressure > 115) state.steamExplosion = true;
@@ -1063,9 +1084,13 @@ export function toggleGridBreaker(state: ReactorState, turbineIndex: 0 | 1 = 0):
 }
 
 /**
- * Layman Training Curriculum & Live Shift Balance Helper (Steps 1-6 + Live Shift)
+ * Layman Training Curriculum & Live Shift Balance Helper (Steps 1-8 + Live Shift)
  */
-export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhase): TutorialPrompt {
+export function evaluateTutorial(
+  state: ReactorState,
+  currentPhase: TutorialPhase,
+  opts?: TutorialEvaluationOptions
+): TutorialPrompt {
   switch (currentPhase) {
     case 'AWAITING_VOLKOV_MAIL': {
       return {
@@ -1085,7 +1110,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
     }
 
     case 'STEP_0_PICKUP_WEPAD': {
-      return evaluateTutorial(state, 'STEP_1_COOLING');
+      return evaluateTutorial(state, 'STEP_1_COOLING', opts);
     }
 
     case 'STEP_1_COOLING': {
@@ -1099,7 +1124,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
           Math.max(55, state.pumpThrottle[0]),
           Math.max(55, state.pumpThrottle[1]),
         ];
-        return evaluateTutorial(state, 'STEP_2_PULL_RODS');
+        return evaluateTutorial(state, 'STEP_2_PULL_RODS', opts);
       }
       return {
         phase: 'STEP_1_COOLING',
@@ -1119,7 +1144,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
 
     case 'STEP_2_PULL_RODS': {
       if (state.controlRods >= 0.5 && state.thermalPower >= 500) {
-        return evaluateTutorial(state, 'STEP_6_BASELINE_600MW');
+        return evaluateTutorial(state, 'STEP_6_BASELINE_600MW', opts);
       }
       return {
         phase: 'STEP_2_PULL_RODS',
@@ -1147,7 +1172,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         state.nitrogenLoopValve = 24;
         state.voidFraction = 0.36;
         state.xenon = 12;
-        return evaluateTutorial(state, 'STEP_7_VOID_DRILL');
+        return evaluateTutorial(state, 'STEP_7_VOID_DRILL', opts);
       }
       return {
         phase: 'STEP_3_BUILD_STEAM',
@@ -1167,7 +1192,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
 
     case 'STEP_4_SPIN_TURBINE':
     case 'STEP_5_SYNC_GRID': {
-      return evaluateTutorial(state, 'STEP_6_BASELINE_600MW');
+      return evaluateTutorial(state, 'STEP_6_BASELINE_600MW', opts);
     }
 
     case 'STEP_6_BASELINE_600MW': {
@@ -1177,7 +1202,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
       if (state.totalElectricalMW >= 550 && allLeversMatch) {
         state.coreTileAnomalies = { 18: 'spent' };
         state.selectedRefuelChannel = null;
-        return evaluateTutorial(state, 'STEP_8_XENON_DRILL');
+        return evaluateTutorial(state, 'STEP_8_XENON_DRILL', opts);
       }
       return {
         phase: 'STEP_6_BASELINE_600MW',
@@ -1203,7 +1228,7 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         state.nitrogenLoopValve = 28;
         state.drumWaterLevel = -75;
         state.drumPressure = Math.max(state.drumPressure, 74);
-        return evaluateTutorial(state, 'STEP_3_BUILD_STEAM');
+        return evaluateTutorial(state, 'STEP_3_BUILD_STEAM', opts);
       }
       return {
         phase: 'STEP_8_XENON_DRILL',
@@ -1229,7 +1254,10 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         state.drumPressure = 68;
         state.coreTileAnomalies = {};
         state.selectedRefuelChannel = null;
-        return evaluateTutorial(state, 'COMPLETED');
+        if (opts?.deskAppsEnabled) {
+          return evaluateTutorial(state, 'STEP_9_IDEOLOGY_DRILL', opts);
+        }
+        return evaluateTutorial(state, 'COMPLETED', opts);
       }
       return {
         phase: 'STEP_7_VOID_DRILL',
@@ -1244,6 +1272,46 @@ export function evaluateTutorial(state: ReactorState, currentPhase: TutorialPhas
         ],
         volkovQuote:
           'CRITICAL DANGER COMRADE. STEAM VOIDS RISING IN THE REACTOR CORE.',
+      };
+    }
+
+    case 'STEP_9_IDEOLOGY_DRILL': {
+      if (opts?.ideologyDrillPassed) {
+        return evaluateTutorial(state, 'STEP_10_FIREWALL_DRILL', opts);
+      }
+      return {
+        phase: 'STEP_9_IDEOLOGY_DRILL',
+        header: 'STEP 7/8 — IDEOLOGICAL CLEARANCE (POLIT-LINK 84)',
+        body: 'Return to Supervisor Desk ([KEY 4] -> [E] to sit), open POLIT-LINK 84 on ISKRA-84, and pass the 2-round K.O.M.R.A.D.-84 interrogation.',
+        hint: "Read K.O.M.R.A.D.-84's stance badge carefully (Flattery vs Decree vs KGB Threat). Training mode is safe with 0 Strikes!",
+        panelKey: 'SUPERVISOR DESK ([KEY 4] • PRESS [E] TO SIT)',
+        actionLine: 'Open POLIT-LINK 84 on ISKRA-84 -> Pass 2-round Ideological Duel',
+        whyLines: [
+          'K.O.M.R.A.D.-84 challenges you during crises and random loyalty audits.',
+          'Winning grants Party Approved immunity; losing triggers AI lock & sabotage.',
+        ],
+        volkovQuote:
+          'ATTENTION COMRADE OPERATOR. RETURN TO YOUR DESK TERMINAL NOW. OPEN IDEOLOGICAL INTERROGATION TEST ON THE MONITOR.',
+      };
+    }
+
+    case 'STEP_10_FIREWALL_DRILL': {
+      if (opts?.firewallDrillPassed) {
+        return evaluateTutorial(state, 'COMPLETED', opts);
+      }
+      return {
+        phase: 'STEP_10_FIREWALL_DRILL',
+        header: 'STEP 8/8 — CIA FIREWALL DRILL (ZASHCHITA-84)',
+        body: 'Open ZASHCHITA-84 on ISKRA-84, check the GOST-84 Checklist on the right, and [KILL] both forged CIA processes while sparing genuine Soviet processes.',
+        hint: 'Check Signature (GOST-84 / SSR-OK), Port (50 / 84 / 330 / 1917), and Western tags. Training mode gives 0 Strikes!',
+        panelKey: 'SUPERVISOR DESK ([KEY 4] • PRESS [E] TO SIT)',
+        actionLine: 'Open ZASHCHITA-84 on ISKRA-84 -> Purge both CIA processes',
+        whyLines: [
+          'CIA infiltrators hide among real reactor processes on Sector 07.',
+          'Killing a genuine process disrupts that hardware; purging CIA stabilizes the plant.',
+        ],
+        volkovQuote:
+          'ALERT COMRADE OPERATOR. SECURITY FIREWALL TEST ACTIVE ON YOUR DESK MONITOR. PURGE HOSTILE CIA SABOTAGE PACKETS NOW.',
       };
     }
 
