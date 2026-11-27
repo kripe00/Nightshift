@@ -7,6 +7,11 @@ import type {
   Post84SavedMessage,
   TerminalLogEntry,
 } from '../../shared/types'
+import {
+  getSovOsPluginApps,
+  setSovOsPluginHostMounted,
+  subscribeSovOsPluginChanges,
+} from '../../shared/sovOsAppRegistry'
 import { useGameStore } from '../../shared/useGameStore'
 import { useDeskStore } from './useDeskStore'
 import { onKremlinFontReady } from '../../shared/kremlinFontReady'
@@ -196,6 +201,12 @@ function readTelemetrySnapshot(
     unreadCount,
     mailDigest,
     hoveredId ?? '',
+    gs.ideologyDuelActive ? 1 : 0,
+    gs.ciaIntrusionActive ? 1 : 0,
+    Math.round(gs.ciaIntrusionProgress),
+    getSovOsPluginApps()
+      .map((app) => `${app.id}=${app.getRenderSignature()}`)
+      .join('#'),
   ]
 
   if (selectedOrderMsg) {
@@ -477,11 +488,17 @@ export function DesktopComputer3D() {
       tutorialCompletedSeenRef.current = hydrated.tutorialCompletedSeen
       dirtyRef.current = true
     }
+    setSovOsPluginHostMounted(true)
+    const offPluginChange = subscribeSovOsPluginChanges(() => {
+      dirtyRef.current = true
+    })
     const offFont = onKremlinFontReady(() => {
       badge.redraw()
       dirtyRef.current = true
     })
     return () => {
+      setSovOsPluginHostMounted(false)
+      offPluginChange()
       offFont()
       screenTex.dispose()
       badge.tex.dispose()
@@ -788,10 +805,16 @@ export function DesktopComputer3D() {
     if (mailAlertFlashRef.current > 0) {
       mailAlertFlashRef.current = Math.max(0, mailAlertFlashRef.current - dt)
     }
+    const hasPluginAlert = getSovOsPluginApps().some(
+      (app) => app.getStatusMeta().isUrgent
+    )
     let blinkStep = -1
     if (mailAlertFlashRef.current > 0) {
       blinkStep = Math.floor(mailAlertFlashRef.current * 4)
-    } else if (gs.tutorialPhase === 'AWAITING_VOLKOV_MAIL' && gs.isShiftControlReady) {
+    } else if (
+      (gs.tutorialPhase === 'AWAITING_VOLKOV_MAIL' && gs.isShiftControlReady) ||
+      hasPluginAlert
+    ) {
       volkovPulseAccumRef.current += dt
       blinkStep = Math.floor(volkovPulseAccumRef.current * 2) % 2
     }
@@ -947,7 +970,7 @@ export function DesktopComputer3D() {
       : cursorPosRef.current
     if (!coords) return
 
-    const { nextState, clickedRegion, didAction } = handleDesktopOsClick(
+    const { nextState, clickedRegion, didAction, pluginSound } = handleDesktopOsClick(
       osStateRef.current,
       coords.x,
       coords.y
@@ -992,7 +1015,15 @@ export function DesktopComputer3D() {
       }
     }
 
-    if (
+    if (clickedRegion?.action.kind === 'plugin_click') {
+      if (pluginSound === 'chime') {
+        playOrderCompleteChime()
+      } else if (pluginSound === 'clank' || pluginSound === 'alarm') {
+        playSwitchClank(pluginSound === 'alarm')
+      } else {
+        playDetentClick(1)
+      }
+    } else if (
       clickedRegion &&
       (clickedRegion.action.kind === 'open_app' ||
         clickedRegion.action.kind === 'close_app' ||

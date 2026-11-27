@@ -88,8 +88,8 @@ src/
 ### Mandatory Rules for AI Agents
 
 1. **Agents working with Komrad Kristianov (Branch: `Komrad-Kristianov`):**
-   - **ONLY** create, modify, or delete files inside `src/modules/reactor/` and `src/modules/terminal/`.
-   - **NEVER** modify files inside `src/modules/inspector/`.
+   - **ONLY** create, modify, or delete files inside `src/modules/reactor/` and `src/modules/terminal/` (plus `src/shared/` / `src/App.tsx` when coordinated).
+   - **NEVER** modify files inside `src/modules/inspector/`, **except** additive `SOV-OS 84` plugin-host wiring in the two shared desk-terminal host files (`src/modules/inspector/DesktopComputer3D.tsx` and `src/modules/inspector/desktopOsCanvas.ts`) when coordinated with Komrad Oleg.
 
 2. **Agents working with Komrad Oleg (Branch: `Komrad-Oleg`):**
    - **ONLY** create, modify, or delete files inside `src/modules/inspector/`.

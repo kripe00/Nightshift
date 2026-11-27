@@ -16,7 +16,7 @@
 
 The year is **1984** in an alternative-history Soviet Union defined by heavy analog **Cassette Futurism** and **Atompunk** engineering. You are the lone night-shift operator locked inside the 3D Main Control Room (MCR) bunker of **People's Automated Nuclear Plant No. 4 (Sector 84)**.
 
-The jam theme **SHIFT** drives the game on three levels:
+The jam theme **SHIFT** drives the game on three interconnected levels:
 
 1. **The Night Shift (Time & Survival):**
    Survive **5 increasingly chaotic night shifts** from **00:00 to 06:00** without letting the RBMK-1000 core reach catastrophic meltdown—or accumulating **3 Treason Strikes** and being shipped to Siberia.
@@ -71,7 +71,7 @@ Every gauge, 3D indicator lamp, progressive canopy alarm bar, rotary valve wheel
 
 ---
 
-## ⚖️ Directive Consequence Matrix
+## 📟 `WE-PAD 84`, 8-Step Tutorial & Document Inspection
 
 Every 3D paper directive printed onto the Shift Supervisor Desk (`Pravda-84`) directly impacts the reactor and your standing with the Party:
 
@@ -95,7 +95,7 @@ Every 3D paper directive printed onto the Shift Supervisor Desk (`Pravda-84`) di
 
 ---
 
-## 🖥️ 3D Micro-Pixelart Aesthetic & Typography
+## 🖥️ Visual Aesthetic, Shaders & Procedural Audio
 
 Inspired by *Buckshot Roulette* and *Inscryption*, 3D surfaces combine procedural hammered-iron/brass PBR materials, Bayer dithering (`BuckshotDitherPass.tsx`), `THREE.NearestFilter` micro-pixel `CanvasTexture`s, and a strict **1984 Soviet Industrial Hardware Palette**:
 
@@ -117,7 +117,7 @@ Inspired by *Buckshot Roulette* and *Inscryption*, 3D surfaces combine procedura
 
 ---
 
-## 🏗️ Tech Stack & Modular 3D Architecture
+## 🏗️ Tech Stack & Modular Architecture
 
 - **Framework:** React 19 + TypeScript + Vite (`base: './'` for itch.io embed support)
 - **3D Engine:** Three.js + React Three Fiber (`three`, `@types/three`, `@react-three/fiber`, `@react-three/drei`) with 60 FPS `useFrame` + `useRef` direct state reads (`useGameStore.getState()`), static geometry merging (`mergeStaticGeometries`), and `NOOP_RAYCAST` optimization
@@ -125,7 +125,7 @@ Inspired by *Buckshot Roulette* and *Inscryption*, 3D surfaces combine procedura
 - **Audio:** Zero-dependency procedural **Web Audio API** synthesizer + 1,702-word PA-vocoder **VOX speech engine** ([`src/shared/komradVoiceSynth.ts`](src/shared/komradVoiceSynth.ts))
 - **State Management:** `zustand` ([`src/shared/useGameStore.ts`](src/shared/useGameStore.ts))
 
-To guarantee zero merge conflicts during parallel AI-assisted development, the repository enforces strict 3D module boundaries:
+To guarantee zero merge conflicts during parallel AI-assisted development, the repository enforces strict module boundaries backed by an automated KGB `pre-commit` border guard (`scripts/kgb-border-hook.mjs`):
 
 ```text
 src/
@@ -142,18 +142,18 @@ src/
                       # komradVoiceSynth.ts, useGameStore.ts, types.ts
 ```
 
-See [`PLAN.md`](PLAN.md) for the roadmap and [`AGENTS.md`](AGENTS.md) for AI agent collaboration rules.
+See [`PLAN.md`](PLAN.md) for the roadmap, [`AGENTS.md`](AGENTS.md) for AI agent collaboration rules, and [`PRAVDA_TELEGRAF.md`](PRAVDA_TELEGRAF.md) for inter-department dispatches.
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started & Party Commands
 
 ```bash
 # Install dependencies
 npm install
 
 # Start local development server (Vite + Soviet startup banner)
-npm run dev
+npm run dev       # or: npm run shift
 
 # Type-check and build production bundle
 npm run build
@@ -172,6 +172,6 @@ npm run pravda
 
 ## 👥 Team & Branch Workflow
 
-- **Komrad Kristianov** (`Komrad-Kristianov` branch) — `<ReactorStation3D />` & `<TerminalStation3D />`
-- **Komrad Oleg** (`Komrad-Oleg` branch) — `<InspectorDesk3D />`
+- **Chief Engineer Komrad Kristianov** (`Komrad-Kristianov` branch) — `<ReactorStation3D />`, `<TerminalStation3D />` & K.O.M.R.A.D.-84 Systems
+- **Senior Inspector Komrad Oleg** (`Komrad-Oleg` branch) — `<InspectorDesk3D />`, `WE-PAD 84`, RBMK-1000 Control Panels & Physics Integration
 - **`main`** — Shared 3D bunker infrastructure & verified integration branch

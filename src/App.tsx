@@ -5,6 +5,7 @@ import {
   silenceAllLegacyGlobalBgm,
 } from './modules/inspector/audio'
 import { playSwitchClank } from './modules/reactor/audioSynth'
+import { registerTerminalSovOsApps } from './modules/terminal'
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
 import {
@@ -29,6 +30,8 @@ import {
   hasAudibleRadioSubtitle,
   useGameStore,
 } from './shared/useGameStore'
+
+registerTerminalSovOsApps()
 
 function CenterReticle() {
   const rootRef = useRef<HTMLDivElement | null>(null)

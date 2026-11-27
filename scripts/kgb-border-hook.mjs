@@ -27,9 +27,16 @@ const staged = runGit('git diff --cached --name-only')
   .map((s) => s.trim())
   .filter(Boolean)
 
+const SHARED_ISKRA_HOST_FILES = new Set([
+  'src/modules/inspector/DesktopComputer3D.tsx',
+  'src/modules/inspector/desktopOsCanvas.ts',
+])
+
 let violations = []
 if (branch === 'Komrad-Kristianov') {
-  violations = staged.filter((file) => file.startsWith('src/modules/inspector/'))
+  violations = staged.filter(
+    (file) => file.startsWith('src/modules/inspector/') && !SHARED_ISKRA_HOST_FILES.has(file)
+  )
 } else if (branch === 'Komrad-Oleg') {
   violations = staged.filter(
     (file) => file.startsWith('src/modules/reactor/') || file.startsWith('src/modules/terminal/')

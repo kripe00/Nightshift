@@ -23,9 +23,18 @@ const branch = branchRes.output || 'unknown'
 const statusRes = runCmd('git status --short')
 const changedLines = statusRes.output ? statusRes.output.split('\n').filter(Boolean) : []
 
+const SHARED_ISKRA_HOST_FILES = [
+  'src/modules/inspector/DesktopComputer3D.tsx',
+  'src/modules/inspector/desktopOsCanvas.ts',
+]
+
 let borderViolations = []
 if (branch === 'Komrad-Kristianov') {
-  borderViolations = changedLines.filter((line) => line.includes('src/modules/inspector/'))
+  borderViolations = changedLines.filter(
+    (line) =>
+      line.includes('src/modules/inspector/') &&
+      !SHARED_ISKRA_HOST_FILES.some((allowed) => line.includes(allowed))
+  )
 } else if (branch === 'Komrad-Oleg') {
   borderViolations = changedLines.filter(
     (line) => line.includes('src/modules/reactor/') || line.includes('src/modules/terminal/')

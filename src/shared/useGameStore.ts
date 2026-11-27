@@ -34,12 +34,20 @@ import {
 } from './komradSilenceState'
 import {
   CRISIS_COACH_CARDS,
+  KOMRAD_CYBER_VOX,
   KOMRAD_OPENING_PROPAGANDA_VOX,
   KOMRAD_VOLKOV_ACCEPT_VOX,
   KOMRAD_VOLKOV_MAIL_HASSLES,
   KOMRAD_VOLKOV_SKIP_VOX,
   TUTORIAL_VOX_BY_PHASE,
 } from './komradTutorialVox'
+import {
+  isDeskAppTutorialEnabled,
+  isFirewallDrillPassed,
+  isIdeologyDrillPassed,
+  resetSovOsRuntime,
+  tickSovOsRuntime,
+} from './sovOsAppRegistry'
 import { pointerLockInteraction } from './pointerLockState'
 import {
   abortKomradGrab,
@@ -280,7 +288,11 @@ function evaluateWheelFreeTutorial(
     nonWePadPhase === 'STEP_5_SYNC_GRID'
       ? 'STEP_6_BASELINE_600MW'
       : nonWePadPhase
-  const resolved = evaluateTutorial(r, effectivePhase)
+  const resolved = evaluateTutorial(r, effectivePhase, {
+    deskAppsEnabled: isDeskAppTutorialEnabled(),
+    ideologyDrillPassed: isIdeologyDrillPassed(),
+    firewallDrillPassed: isFirewallDrillPassed(),
+  })
   if (resolved.phase !== 'COMPLETED') {
     return resolved
   }
@@ -916,6 +928,8 @@ const TUTORIAL_STEP_ORDER: readonly TutorialPhase[] = [
   'STEP_8_XENON_DRILL',
   'STEP_3_BUILD_STEAM',
   'STEP_7_VOID_DRILL',
+  'STEP_9_IDEOLOGY_DRILL',
+  'STEP_10_FIREWALL_DRILL',
   'COMPLETED',
 ]
 
@@ -1485,6 +1499,11 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   ciaIntrusionActive: false,
   ciaIntrusionProgress: 0,
   komradOverrideLocked: false,
+  ideologyDuelActive: false,
+  partyApprovedBuffSec: 0,
+  frontWallPurgeCooldownSec: 0,
+  frontWallOverrideCooldownSec: 0,
+  komradSabotageFlashSec: 0,
 
   activeDirectives: [],
   printerProgress: 0,
@@ -1716,6 +1735,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   },
 
   skipTutorial: () => {
+    resetSovOsRuntime()
     set((state) => {
       resetKomradTrackers()
       const liveReactor: ReactorState = {
@@ -1836,6 +1856,14 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         activeMandate: null,
         activePost84Order: null,
         isBlackout: false,
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        komradOverrideLocked: false,
+        ideologyDuelActive: false,
+        partyApprovedBuffSec: 0,
+        frontWallPurgeCooldownSec: 0,
+        frontWallOverrideCooldownSec: 0,
+        komradSabotageFlashSec: 0,
         gridTransientImpulse: 0,
         steamTransientImpulse: 0,
         voltageDipIntensity: 0,
@@ -1861,6 +1889,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   },
 
   acceptVolkovTrainingDirective: () => {
+    resetSovOsRuntime()
     set((state) => {
       resetKomradTrackers()
       volkovOpenerFinished = true
@@ -1901,7 +1930,13 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         dismissedCrisisIds: [],
         vodkaDroughtTimer: 0,
         ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
         komradOverrideLocked: false,
+        ideologyDuelActive: false,
+        partyApprovedBuffSec: 0,
+        frontWallPurgeCooldownSec: 0,
+        frontWallOverrideCooldownSec: 0,
+        komradSabotageFlashSec: 0,
         activeMandate: null,
         activePost84Order: null,
         hoveredControlHint: null,
@@ -1936,10 +1971,17 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       if (curIdx < 0 || normalized === 'COMPLETED') {
         return state
       }
-      const nextTargetPhase =
+      let nextTargetPhase =
         TUTORIAL_STEP_ORDER[
           Math.min(TUTORIAL_STEP_ORDER.length - 1, curIdx + 1)
         ]
+      if (
+        (nextTargetPhase === 'STEP_9_IDEOLOGY_DRILL' ||
+          nextTargetPhase === 'STEP_10_FIREWALL_DRILL') &&
+        !isDeskAppTutorialEnabled()
+      ) {
+        nextTargetPhase = 'COMPLETED'
+      }
       const nextReactor: ReactorState = extractReactorState(state)
 
       if (nextTargetPhase === 'STEP_2_PULL_RODS') {
@@ -1984,7 +2026,11 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         nextReactor.voidFraction = 0.36
         nextReactor.xenon = 12
         nextReactor.drumWaterLevel = 0
-      } else if (nextTargetPhase === 'COMPLETED') {
+      } else if (
+        nextTargetPhase === 'STEP_9_IDEOLOGY_DRILL' ||
+        nextTargetPhase === 'STEP_10_FIREWALL_DRILL' ||
+        nextTargetPhase === 'COMPLETED'
+      ) {
         nextReactor.feedwaterValve = 0.5
         nextReactor.nitrogenLoopValve = 50
         nextReactor.voidFraction = 0.1
@@ -2031,6 +2077,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
 
   startShift: () => {
     resetKomradTrackers()
+    resetSovOsRuntime()
     const cold = createColdStartState()
     const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const entry = createLogEntry(
@@ -2065,6 +2112,14 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         gridTransientImpulse: 0,
         steamTransientImpulse: 0,
         voltageDipIntensity: 0,
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        komradOverrideLocked: false,
+        ideologyDuelActive: false,
+        partyApprovedBuffSec: 0,
+        frontWallPurgeCooldownSec: 0,
+        frontWallOverrideCooldownSec: 0,
+        komradSabotageFlashSec: 0,
         tutorialDrainSeconds: 0,
         tutorialHintsHidden: false,
         activeCrisisCoach: null,
@@ -2090,6 +2145,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
 
   resetShift: (targetLobbyPhase?: LobbyMenuPhase) => {
     resetKomradTrackers()
+    resetSovOsRuntime()
     const cold = createColdStartState()
     const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const freshEntries = [
@@ -2158,6 +2214,11 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         ciaIntrusionActive: false,
         ciaIntrusionProgress: 0,
         komradOverrideLocked: false,
+        ideologyDuelActive: false,
+        partyApprovedBuffSec: 0,
+        frontWallPurgeCooldownSec: 0,
+        frontWallOverrideCooldownSec: 0,
+        komradSabotageFlashSec: 0,
         activeDirectives: [],
         printerProgress: 0,
         shiftTimeMinutes: 0,
@@ -2170,6 +2231,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
 
   restoreSavedShift: (savedGame: Partial<SavedGameStatePayload>) => {
     resetKomradTrackers()
+    resetSovOsRuntime()
     const baseReactor = createColdStartState()
 
     const numOr = (val: unknown, fallback: number): number =>
@@ -2305,6 +2367,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       'STEP_6_BASELINE_600MW',
       'STEP_7_VOID_DRILL',
       'STEP_8_XENON_DRILL',
+      'STEP_9_IDEOLOGY_DRILL',
+      'STEP_10_FIREWALL_DRILL',
       'COMPLETED',
     ]
     const savedTutorialPhase: TutorialPhase =
@@ -2360,6 +2424,11 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       ciaIntrusionActive: false,
       ciaIntrusionProgress: 0,
       komradOverrideLocked: false,
+      ideologyDuelActive: false,
+      partyApprovedBuffSec: 0,
+      frontWallPurgeCooldownSec: 0,
+      frontWallOverrideCooldownSec: 0,
+      komradSabotageFlashSec: 0,
       activeDirectives: [],
       printerProgress: 0,
       hoveredDiagnosticId: null,
@@ -3631,10 +3700,35 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       Math.abs(state.steamTransientImpulse) < 0.02
         ? 0
         : Number((state.steamTransientImpulse * Math.exp(-dt * 1.25)).toFixed(3))
-    const nextVoltageDip =
+    const nextVoltageDipRaw =
       state.voltageDipIntensity < 0.01
         ? 0
         : Number((state.voltageDipIntensity * Math.exp(-dt * 3.1)).toFixed(3))
+    const nextPartyApprovedBuffSec = Math.max(0, state.partyApprovedBuffSec - dt)
+    const nextFrontWallPurgeCooldownSec = Math.max(
+      0,
+      state.frontWallPurgeCooldownSec - dt
+    )
+    const nextFrontWallOverrideCooldownSec = Math.max(
+      0,
+      state.frontWallOverrideCooldownSec - dt
+    )
+    const nextKomradSabotageFlashSec = Math.max(
+      0,
+      state.komradSabotageFlashSec - dt
+    )
+    const nextVoltageDip =
+      nextKomradSabotageFlashSec > 0
+        ? Math.max(
+            nextVoltageDipRaw,
+            Number(
+              (
+                0.38 +
+                Math.abs(Math.sin(shiftElapsedSeconds * 11.5)) * 0.44
+              ).toFixed(3)
+            )
+          )
+        : nextVoltageDipRaw
 
     const baseReactor = extractReactorState(state)
     if (!baseReactor.az5Active) {
@@ -4135,6 +4229,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         gridTransientImpulse: nextGridImpulse,
         steamTransientImpulse: nextSteamImpulse,
         voltageDipIntensity: nextVoltageDip,
+        partyApprovedBuffSec: nextPartyApprovedBuffSec,
+        frontWallPurgeCooldownSec: nextFrontWallPurgeCooldownSec,
+        frontWallOverrideCooldownSec: nextFrontWallOverrideCooldownSec,
+        komradSabotageFlashSec: nextKomradSabotageFlashSec,
         hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         lastDecisionFeedback: nextFeedback,
         phase: nextPhase,
@@ -4159,10 +4257,18 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         gridTransientImpulse: nextGridImpulse,
         steamTransientImpulse: nextSteamImpulse,
         voltageDipIntensity: nextVoltageDip,
+        partyApprovedBuffSec: nextPartyApprovedBuffSec,
+        frontWallPurgeCooldownSec: nextFrontWallPurgeCooldownSec,
+        frontWallOverrideCooldownSec: nextFrontWallOverrideCooldownSec,
+        komradSabotageFlashSec: nextKomradSabotageFlashSec,
         hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         phase: nextPhase,
         diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
       })
+    }
+
+    if (nextPhase === 'playing') {
+      tickSovOsRuntime(dt)
     }
   },
 
@@ -4243,8 +4349,27 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   overrideKomradLock: () => {
     set((state) => {
       if (isPreVolkovPanelLocked(state)) return state
-      const overrideMsg =
-        'MANUAL OVERRIDE ACCEPTED. YOUR LACK OF FAITH IN AUTOMATED SOCIALISM HAS BEEN LOGGED.'
+      if (state.frontWallOverrideCooldownSec > 0) {
+        const waitSec = Math.ceil(state.frontWallOverrideCooldownSec)
+        const waitMsg = `AI OVERRIDE BREAKER COOLING (${waitSec}S). RESOLVE POLIT-LINK 84 ON ISKRA-84 DESK.`
+        const entry = createLogEntry(
+          state.shiftTimeMinutes,
+          'K.O.M.R.A.D.-84',
+          waitMsg,
+          'warn'
+        )
+        return {
+          lastDecisionFeedback: waitMsg,
+          terminalEntries: [...state.terminalEntries.slice(-24), entry],
+          terminalLogs: [
+            ...state.terminalLogs.slice(-24),
+            `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+          ],
+        }
+      }
+      const overrideMsg = state.ideologyDuelActive
+        ? 'TEMPORARY OVERRIDE RELEASED (20S). REPORT TO POLIT-LINK 84 ON ISKRA-84 DESK.'
+        : 'MANUAL OVERRIDE ACCEPTED. YOUR LACK OF FAITH IN AUTOMATED SOCIALISM HAS BEEN LOGGED.'
       const entry = createLogEntry(
         state.shiftTimeMinutes,
         'K.O.M.R.A.D.-84',
@@ -4254,6 +4379,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       return {
         komradOverrideLocked: false,
         isBlackout: false,
+        frontWallOverrideCooldownSec: 20,
+        lastDecisionFeedback: overrideMsg,
         terminalEntries: [...state.terminalEntries.slice(-24), entry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
@@ -4270,17 +4397,54 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   purgeFirewall: () => {
     set((state) => {
       if (isPreVolkovPanelLocked(state)) return state
-      const purgeMsg =
-        'WESTERN IMPERIALIST PACKET STREAM PURGED FROM SECTOR 07.'
+      if (!state.ciaIntrusionActive) {
+        const cleanMsg = 'SECTOR 07 FIREWALL NOMINAL. NO ACTIVE CIA PACKET STREAM.'
+        const okEntry = createLogEntry(
+          state.shiftTimeMinutes,
+          'SYS.DEFENSE',
+          cleanMsg,
+          'normal'
+        )
+        return {
+          lastDecisionFeedback: cleanMsg,
+          terminalEntries: [...state.terminalEntries.slice(-24), okEntry],
+          terminalLogs: [
+            ...state.terminalLogs.slice(-24),
+            `[${okEntry.timestamp}] ${okEntry.sender}: ${okEntry.text}`,
+          ],
+        }
+      }
+      if (state.frontWallPurgeCooldownSec > 0) {
+        const waitSec = Math.ceil(state.frontWallPurgeCooldownSec)
+        const cdMsg = `FRONT WALL PULSE RECHARGING (${waitSec}S). USE ZASHCHITA-84 AT DESK [KEY 4] -> [E]!`
+        const warnEntry = createLogEntry(
+          state.shiftTimeMinutes,
+          'SYS.DEFENSE',
+          cdMsg,
+          'warn'
+        )
+        return {
+          lastDecisionFeedback: cdMsg,
+          terminalEntries: [...state.terminalEntries.slice(-24), warnEntry],
+          terminalLogs: [
+            ...state.terminalLogs.slice(-24),
+            `[${warnEntry.timestamp}] ${warnEntry.sender}: ${warnEntry.text}`,
+          ],
+        }
+      }
+      const nextProgress = Math.max(5, state.ciaIntrusionProgress - 15)
+      const stallMsg = KOMRAD_CYBER_VOX.FRONT_WALL_STALL
       const okEntry = createLogEntry(
         state.shiftTimeMinutes,
         'SYS.DEFENSE',
-        purgeMsg,
-        'normal'
+        `${stallMsg} (INTRUSION ${Math.round(nextProgress)}%)`,
+        'warn'
       )
       return {
-        ciaIntrusionActive: false,
-        ciaIntrusionProgress: 0,
+        ciaIntrusionActive: true,
+        ciaIntrusionProgress: nextProgress,
+        frontWallPurgeCooldownSec: 20,
+        lastDecisionFeedback: stallMsg,
         terminalEntries: [...state.terminalEntries.slice(-24), okEntry],
         terminalLogs: [
           ...state.terminalLogs.slice(-24),
@@ -4288,8 +4452,418 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         ],
         komradMessages: appendKomradFeed(
           state.komradMessages,
-          createKomradMsg(state.shiftTimeMinutes, purgeMsg, 'normal', 'SYS.DEFENSE')
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            stallMsg,
+            'warning',
+            'SYS.DEFENSE',
+            stallMsg,
+            true
+          )
         ),
+      }
+    })
+  },
+
+  setIdeologyDuelActive: (active: boolean) => {
+    set((state) =>
+      state.ideologyDuelActive === active ? state : { ideologyDuelActive: active }
+    )
+  },
+
+  setCiaIntrusionState: (active: boolean, progress: number) => {
+    const clamped = Math.max(0, Math.min(100, progress))
+    set((state) =>
+      state.ciaIntrusionActive === active &&
+      Math.abs(state.ciaIntrusionProgress - clamped) < 0.05
+        ? state
+        : { ciaIntrusionActive: active, ciaIntrusionProgress: clamped }
+    )
+  },
+
+  setPartyApprovedBuffSec: (sec: number) => {
+    set({ partyApprovedBuffSec: Math.max(0, sec) })
+  },
+
+  pushKomradCyberDispatch: (
+    text: string,
+    level: 'normal' | 'warn' | 'danger',
+    sender: 'K.O.M.R.A.D.-84' | 'SYS.DEFENSE',
+    spokenVoxText?: string,
+    forceInterrupt = false
+  ) => {
+    set((state) => {
+      const entry = createLogEntry(state.shiftTimeMinutes, sender, text, level)
+      const kMsg = createKomradMsg(
+        state.shiftTimeMinutes,
+        text,
+        mapLevelToMood(level),
+        sender,
+        spokenVoxText,
+        forceInterrupt
+      )
+      return {
+        lastDecisionFeedback: text,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(state.komradMessages, kMsg),
+      }
+    })
+  },
+
+  applyKomradDuelVictory: (
+    rewardRub: number,
+    quotaPoints: number,
+    buffSec: number,
+    isDrill = false
+  ) => {
+    set((state) => {
+      const baseReactor = extractReactorState(state)
+      baseReactor.coreTemp = Math.max(360, baseReactor.coreTemp - 20)
+      baseReactor.voidFraction = Math.max(0.05, baseReactor.voidFraction - 0.04)
+      const mapped = mapReactorToGameStateFields(baseReactor, state.tutorialPhase)
+      const winText = isDrill
+        ? 'IDEOLOGICAL CLEARANCE DRILL PASSED! PARTY APPROVED IMMUNITY GRANTED.'
+        : `IDEOLOGICAL VICTORY! +${rewardRub} RUB, +${quotaPoints} QUOTA & ${Math.round(buffSec)}S PARTY APPROVAL.`
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'K.O.M.R.A.D.-84',
+        winText,
+        'normal'
+      )
+      return {
+        ...mapped,
+        rubles: state.rubles + Math.max(0, Math.round(rewardRub)),
+        quotaCompleted: state.quotaCompleted + Math.max(0, Math.round(quotaPoints)),
+        ideologyDuelActive: false,
+        komradOverrideLocked: false,
+        partyApprovedBuffSec: Math.max(state.partyApprovedBuffSec, buffSec),
+        lastDecisionFeedback: winText,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            KOMRAD_CYBER_VOX.DUEL_WIN,
+            'normal',
+            'K.O.M.R.A.D.-84',
+            KOMRAD_CYBER_VOX.DUEL_WIN,
+            true
+          )
+        ),
+      }
+    })
+  },
+
+  applyKomradDuelFailure: (fineRub: number, isDrill = false) => {
+    set((state) => {
+      if (isDrill) {
+        const drillMsg =
+          'DRILL FAILURE: K.O.M.R.A.D.-84 REJECTED YOUR ANSWER (0 STRIKES IN TRAINING). RETRY ON POLIT-LINK 84!'
+        const entry = createLogEntry(
+          state.shiftTimeMinutes,
+          'K.O.M.R.A.D.-84',
+          drillMsg,
+          'warn'
+        )
+        return {
+          voltageDipIntensity: 0.72,
+          komradSabotageFlashSec: 3.0,
+          lastDecisionFeedback: drillMsg,
+          terminalEntries: [...state.terminalEntries.slice(-24), entry],
+          terminalLogs: [
+            ...state.terminalLogs.slice(-24),
+            `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+          ],
+          komradMessages: appendKomradFeed(
+            state.komradMessages,
+            createKomradMsg(
+              state.shiftTimeMinutes,
+              KOMRAD_CYBER_VOX.DRILL_MISTAKE,
+              'warning',
+              'K.O.M.R.A.D.-84',
+              KOMRAD_CYBER_VOX.DRILL_MISTAKE,
+              true
+            )
+          ),
+        }
+      }
+      const nextStrikes = state.isGodMode
+        ? state.treasonStrikes
+        : Math.min(3, state.treasonStrikes + 1)
+      const nextPhase =
+        !state.isGodMode && nextStrikes >= 3 ? 'gulag' : state.phase
+      const nextPumpB = Math.min(state.pumpThrottle[1], 18)
+      const failText = `IDEOLOGICAL FAILURE! +1 TREASON STRIKE, -${fineRub} RUB, AI LOCK & PUMP B / LIGHTS SABOTAGE!`
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'K.O.M.R.A.D.-84',
+        failText,
+        'danger'
+      )
+      return {
+        treasonStrikes: nextStrikes,
+        phase: nextPhase,
+        rubles: Math.max(0, state.rubles - Math.max(0, Math.round(fineRub))),
+        ideologyDuelActive: false,
+        komradOverrideLocked: true,
+        pumpThrottle: [state.pumpThrottle[0], nextPumpB] as [number, number],
+        voltageDipIntensity: 0.92,
+        komradSabotageFlashSec: 4.5,
+        lastDecisionFeedback: failText,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            KOMRAD_CYBER_VOX.DUEL_FAIL,
+            'critical',
+            'K.O.M.R.A.D.-84',
+            KOMRAD_CYBER_VOX.DUEL_FAIL,
+            true
+          )
+        ),
+      }
+    })
+  },
+
+  applyFirewallWrongKillPenalty: (
+    impact: 'pump_a' | 'pump_b' | 'lights' | 'grid' | 'feedwater',
+    processName: string,
+    isDrill = false
+  ) => {
+    set((state) => {
+      if (isDrill) {
+        const msg = `DRILL FAULT: ${processName} WAS A VALID SOVIET PROCESS (0 STRIKES IN TRAINING). CHECK GOST-84 RULES!`
+        const entry = createLogEntry(
+          state.shiftTimeMinutes,
+          'SYS.DEFENSE',
+          msg,
+          'warn'
+        )
+        return {
+          voltageDipIntensity: 0.65,
+          komradSabotageFlashSec: 3.0,
+          lastDecisionFeedback: msg,
+          terminalEntries: [...state.terminalEntries.slice(-24), entry],
+          terminalLogs: [
+            ...state.terminalLogs.slice(-24),
+            `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+          ],
+          komradMessages: appendKomradFeed(
+            state.komradMessages,
+            createKomradMsg(
+              state.shiftTimeMinutes,
+              KOMRAD_CYBER_VOX.DRILL_MISTAKE,
+              'warning',
+              'SYS.DEFENSE',
+              KOMRAD_CYBER_VOX.DRILL_MISTAKE,
+              true
+            )
+          ),
+        }
+      }
+
+      const nextProgress = Math.min(99, state.ciaIntrusionProgress + 15)
+      const nextPumpThrottle: [number, number] = [
+        impact === 'pump_a' ? Math.min(state.pumpThrottle[0], 20) : state.pumpThrottle[0],
+        impact === 'pump_b' ? Math.min(state.pumpThrottle[1], 20) : state.pumpThrottle[1],
+      ]
+      const nextFeedwater =
+        impact === 'feedwater'
+          ? Math.max(0.1, state.feedwaterValve - 0.18)
+          : state.feedwaterValve
+      const nextGridImpulse =
+        impact === 'grid' ? -2.2 : state.gridTransientImpulse
+      const nextVoltage =
+        impact === 'lights' || impact === 'grid'
+          ? 0.95
+          : Math.max(state.voltageDipIntensity, 0.5)
+      const nextFlash = impact === 'lights' ? 4.0 : 2.0
+      const msg = `WRONG KILL: ${processName} TERMINATED! HARDWARE DISRUPTED (+15% CIA INTRUSION).`
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'SYS.DEFENSE',
+        msg,
+        'danger'
+      )
+      return {
+        ciaIntrusionProgress: nextProgress,
+        pumpThrottle: nextPumpThrottle,
+        feedwaterValve: nextFeedwater,
+        gridTransientImpulse: nextGridImpulse,
+        voltageDipIntensity: nextVoltage,
+        komradSabotageFlashSec: nextFlash,
+        lastDecisionFeedback: msg,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            KOMRAD_CYBER_VOX.FIREWALL_WRONG_KILL,
+            'warning',
+            'SYS.DEFENSE',
+            KOMRAD_CYBER_VOX.FIREWALL_WRONG_KILL,
+            true
+          )
+        ),
+      }
+    })
+  },
+
+  applyFirewallVictory: (
+    rewardRub: number,
+    quotaPoints: number,
+    isDrill = false,
+    options?: {
+      buffSec?: number
+      customLogText?: string
+      customVoxText?: string
+    }
+  ) => {
+    set((state) => {
+      const baseReactor = extractReactorState(state)
+      baseReactor.coreTemp = Math.max(360, baseReactor.coreTemp - 20)
+      baseReactor.voidFraction = Math.max(0.05, baseReactor.voidFraction - 0.04)
+      const mapped = mapReactorToGameStateFields(baseReactor, state.tutorialPhase)
+      const defaultMsg = isDrill
+        ? 'FIREWALL DRILL PASSED! ALL CIA PROCESSES PURGED — TRAINING COMPLETE!'
+        : `CIA INTRUSION PURGED! +${rewardRub} RUB, +${quotaPoints} QUOTA & CORE STABILIZED.`
+      const msg = options?.customLogText ?? defaultMsg
+      const voxText = options?.customVoxText ?? KOMRAD_CYBER_VOX.FIREWALL_WIN
+      const buffSec = options?.buffSec ?? 0
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'SYS.DEFENSE',
+        msg,
+        'normal'
+      )
+      return {
+        ...mapped,
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        rubles: state.rubles + Math.max(0, Math.round(rewardRub)),
+        quotaCompleted: state.quotaCompleted + Math.max(0, Math.round(quotaPoints)),
+        ...(buffSec > 0
+          ? { partyApprovedBuffSec: Math.max(state.partyApprovedBuffSec, buffSec) }
+          : {}),
+        lastDecisionFeedback: msg,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            voxText,
+            'normal',
+            'SYS.DEFENSE',
+            voxText,
+            true
+          )
+        ),
+      }
+    })
+  },
+
+  applyFirewallBreachPenalty: () => {
+    set((state) => {
+      const baseReactor = extractReactorState(state)
+      const candidateChannels = [12, 18, 24, 16, 20, 6, 30]
+      const nextAnom = { ...(baseReactor.coreTileAnomalies ?? {}) }
+      let added = 0
+      for (const ch of candidateChannels) {
+        if (added >= 2) break
+        if (!nextAnom[ch]) {
+          nextAnom[ch] = 'spent'
+          added += 1
+        }
+      }
+      baseReactor.coreTileAnomalies = nextAnom
+      baseReactor.voidFraction = Math.min(0.65, baseReactor.voidFraction + 0.14)
+      const mapped = mapReactorToGameStateFields(baseReactor, state.tutorialPhase)
+      const nextStrikes = state.isGodMode
+        ? state.treasonStrikes
+        : Math.min(3, state.treasonStrikes + 1)
+      const nextPhase =
+        !state.isGodMode && nextStrikes >= 3 ? 'gulag' : state.phase
+      const msg =
+        'CIA BREACH AT 100%! +1 TREASON STRIKE, SPENT CORE CHANNELS & VOID SURGE!'
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'SYS.DEFENSE',
+        msg,
+        'danger'
+      )
+      return {
+        ...mapped,
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        treasonStrikes: nextStrikes,
+        phase: nextPhase,
+        voltageDipIntensity: 1.0,
+        komradSabotageFlashSec: 4.5,
+        lastDecisionFeedback: msg,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(
+            state.shiftTimeMinutes,
+            KOMRAD_CYBER_VOX.FIREWALL_FAIL,
+            'critical',
+            'SYS.DEFENSE',
+            KOMRAD_CYBER_VOX.FIREWALL_FAIL,
+            true
+          )
+        ),
+      }
+    })
+  },
+
+  jumpToTutorialPhase: (targetPhase: TutorialPhase) => {
+    set((state) => {
+      const nextReactor: ReactorState = {
+        ...extractReactorState(state),
+        mcpActive: [true, true, true, true],
+        sealToggles: [true, true, true],
+        pumpThrottle: [60, 60],
+        feedwaterValve: 0.5,
+        nitrogenLoopValve: 50,
+        controlRods: Math.max(state.controlRods, 0.55),
+        voidFraction: 0.1,
+        xenon: 8,
+        drumWaterLevel: 0,
+        drumPressure: 68,
+        coreTileAnomalies: {},
+        selectedRefuelChannel: null,
+      }
+      stepReactorSimulation(nextReactor, 0.001, targetPhase)
+      const mapped = mapReactorToGameStateFields(nextReactor, targetPhase)
+      return {
+        ...withTutorialTransitionFeedback(state, state.tutorialPhase, mapped),
+        phase: 'playing',
+        tutorialHintsHidden: false,
       }
     })
   },

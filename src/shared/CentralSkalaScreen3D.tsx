@@ -13,6 +13,7 @@ import { NOOP_RAYCAST } from "./ExteriorDioramas3D";
 import { controlRoomPowerState } from "./ControlRoomScene";
 import { CONSOLE_WORLD_TARGETS, CRISIS_COACH_CARDS } from "./komradTutorialVox";
 import { onKremlinFontReady } from "./kremlinFontReady";
+import { isDeskAppTutorialEnabled } from "./sovOsAppRegistry";
 import type { CrisisCoachId } from "./types";
 import { useGameStore } from "./useGameStore";
 
@@ -188,7 +189,22 @@ function getVolkovStepInfo(
       return {
         step: 5,
         highlight: "UNIT_B_A2",
-        tag: `STEP 6/6: CLEAR VOIDS <20% [UNIT B FW UP / A BORON] — VOID ${vPct}% | FW ${fw}%`,
+        tag: `STEP 6: CLEAR VOIDS <20% [UNIT B FW UP / A BORON] — VOID ${vPct}% | FW ${fw}%`,
+      };
+    }
+    case "STEP_9_IDEOLOGY_DRILL": {
+      return {
+        step: 6,
+        highlight: null,
+        tag: "STEP 7/8: SIT AT DESK [KEY 4] -> [E] -> OPEN POLIT-LINK 84 & PASS DUEL",
+      };
+    }
+    case "STEP_10_FIREWALL_DRILL": {
+      const pct = state ? Math.round(state.ciaIntrusionProgress) : 0;
+      return {
+        step: 7,
+        highlight: null,
+        tag: `STEP 8/8: SIT AT DESK [KEY 4] -> [E] -> OPEN ZASHCHITA-84 & PURGE CIA (${pct}%)`,
       };
     }
     case "COMPLETED":
@@ -383,8 +399,7 @@ function buildSkalaTutorialViewSpec(
         liveReadout: `FEEDWATER: ${fw}% -> 50%   |   DRUM: ${mm > 0 ? `+${mm}` : mm} MM   |   ${bar} BAR`,
       };
     }
-    case "STEP_7_VOID_DRILL":
-    default: {
+    case "STEP_7_VOID_DRILL": {
       const vPct = Math.round(state.voidFraction * 100);
       const fw = Math.round(state.feedwaterValve * 100);
       const pct = Math.min(
@@ -397,10 +412,36 @@ function buildSkalaTutorialViewSpec(
         where: "UNIT B [KEY 3]  +  UNIT A [KEY 1]  +  UNIT A-2 [KEY 6]",
         doThis:
           "Steam Voids high! Turn FEEDWATER UP (UNIT B ~50%) or hit BORON INJECTION (UNIT A) until VOID < 20%.",
-        why: "Clear this Void surge to start your shift! Memorize Voids vs. Xenon vs. Boron / AZ-5 SCRAM above.",
+        why: "Clear this Void surge to advance! Memorize Voids vs. Xenon vs. Boron / AZ-5 SCRAM above.",
         pct,
         liveReadout: `VOID / XENON: VOID ${vPct}% (NEED <20%)   |   XENON ${Math.round(state.xenon)}%   |   FW ${fw}%`,
         isSafetyDrill: true,
+      };
+    }
+    case "STEP_9_IDEOLOGY_DRILL": {
+      return {
+        stepNum: 7,
+        title: "IDEOLOGICAL CLEARANCE (POLIT-LINK 84)",
+        where: "SUPERVISOR DESK  •  [KEY 4] -> PRESS [E] TO SIT",
+        doThis:
+          "Open POLIT-LINK 84 on your ISKRA-84 desk monitor and pass the 2-round K.O.M.R.A.D.-84 interrogation.",
+        why: "Read K.O.M.R.A.D.-84's STANCE CLUE carefully. Training mode is safe (0 Strikes) — winning unlocks Party Approval!",
+        pct: state.ideologyDuelActive ? 45 : 15,
+        liveReadout: "OPEN POLIT-LINK 84 ON ISKRA-84 DESK TERMINAL -> PASS 2 ROUNDS",
+      };
+    }
+    case "STEP_10_FIREWALL_DRILL":
+    default: {
+      const pct = Math.round(state.ciaIntrusionProgress);
+      return {
+        stepNum: 8,
+        title: "CIA FIREWALL DRILL (ZASHCHITA-84)",
+        where: "SUPERVISOR DESK  •  [KEY 4] -> PRESS [E] TO SIT",
+        doThis:
+          "Open ZASHCHITA-84 on ISKRA-84, check the GOST-84 Checklist on the right, and [KILL] both CIA processes.",
+        why: "Only terminate CIA infiltrators (bad SIG/PORT/tags). Training mode gives 0 Strikes — purge both to finish!",
+        pct: state.ciaIntrusionActive ? Math.max(20, 100 - pct) : 100,
+        liveReadout: `ZASHCHITA-84 DRILL ACTIVE  |  BREACH METER: ${pct}% (SAFE CAP 85%)`,
       };
     }
   }
@@ -412,6 +453,10 @@ function paintSkalaTutorialTakeover(
   blinkOn: boolean,
 ): void {
   const spec = buildSkalaTutorialViewSpec(state);
+  const stepsList = isDeskAppTutorialEnabled()
+    ? [...VOLKOV_STEPS, "[7] DUEL", "[8] CYBER"]
+    : VOLKOV_STEPS;
+  const totalSteps = stepsList.length;
 
   // Outer phosphor header
   ctx.fillStyle = "#0b2416";
@@ -424,7 +469,7 @@ function paintSkalaTutorialTakeover(
   ctx.textAlign = "left";
   ctx.fillStyle = COL_GREEN;
   ctx.fillText(
-    `SKALA-84 OPERATOR TRAINING // STEP ${spec.stepNum} OF 6`,
+    `SKALA-84 OPERATOR TRAINING // STEP ${spec.stepNum} OF ${totalSteps}`,
     26,
     53,
     700,
@@ -435,10 +480,10 @@ function paintSkalaTutorialTakeover(
   ctx.fillStyle = COL_AMBER;
   ctx.fillText("[N] NEXT STEP  |  [BKSP] SKIP", CW - 26, 50, 270);
 
-  // 6-step horizontal progress pills (y = 84..122)
+  // Horizontal progress pills (y = 84..122)
   const gap = 8;
-  const stepW = (CW - 20 - gap * (VOLKOV_STEPS.length - 1)) / VOLKOV_STEPS.length;
-  for (let i = 0; i < VOLKOV_STEPS.length; i++) {
+  const stepW = (CW - 20 - gap * (stepsList.length - 1)) / stepsList.length;
+  for (let i = 0; i < stepsList.length; i++) {
     const bx = 10 + i * (stepW + gap);
     const by = 84;
     const bh = 36;
@@ -455,11 +500,11 @@ function paintSkalaTutorialTakeover(
     ctx.strokeStyle = done ? COL_GREEN : curr ? COL_AMBER : COL_DIM;
     ctx.lineWidth = curr ? 6 : 3;
     ctx.strokeRect(bx, by, stepW, bh);
-    ctx.font = kremlinFont(16);
+    ctx.font = kremlinFont(stepsList.length > 6 ? 13 : 16);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = done ? COL_BG : curr ? COL_AMBER : COL_MUTED;
-    ctx.fillText(VOLKOV_STEPS[i], bx + stepW / 2, by + bh / 2 + 1, stepW - 10);
+    ctx.fillText(stepsList[i], bx + stepW / 2, by + bh / 2 + 1, stepW - 8);
     ctx.textBaseline = "alphabetic";
   }
 
@@ -792,6 +837,7 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
   const showActionHitbox = useGameStore(
     (s) =>
       s.ciaIntrusionActive ||
+      s.ideologyDuelActive ||
       s.komradOverrideLocked ||
       s.phase !== "playing",
   );
@@ -1217,15 +1263,20 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
       state.isBlackout ||
       state.az5Active ||
       state.ciaIntrusionActive ||
+      state.ideologyDuelActive ||
       state.komradOverrideLocked;
     ctx.strokeStyle = outerAlert && blinkOn ? COL_RED : COL_DIM;
     ctx.lineWidth = 7;
     ctx.strokeRect(3.5, 3.5, CW - 7, CH - 7);
 
+    const isDeskDrill =
+      state.tutorialPhase === "STEP_9_IDEOLOGY_DRILL" ||
+      state.tutorialPhase === "STEP_10_FIREWALL_DRILL";
+
     if (
       state.phase === "playing" &&
-      !state.ciaIntrusionActive &&
-      !state.komradOverrideLocked
+      (isDeskDrill ||
+        (!state.ciaIntrusionActive && !state.komradOverrideLocked))
     ) {
       if (
         state.tutorialPhase !== "COMPLETED" &&
@@ -2219,32 +2270,40 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
     ctx.lineWidth = 7;
     ctx.strokeRect(10, 516, CW - 20, 114);
 
-    if (state.ciaIntrusionActive || state.komradOverrideLocked) {
-      // Interactive CIA Purge / KOMRAD Lock Override Strip
+    if (
+      state.ciaIntrusionActive ||
+      state.ideologyDuelActive ||
+      state.komradOverrideLocked
+    ) {
+      // Interactive CIA Purge / Ideological Duel / KOMRAD Lock Strip
       ctx.fillStyle = blinkOn ? "#470b0b" : "#220606";
       ctx.fillRect(18, 524, CW - 36, 98);
       ctx.strokeStyle = COL_RED;
       ctx.lineWidth = 7;
       ctx.strokeRect(18, 524, CW - 36, 98);
 
-      ctx.font = kremlinFont(22);
+      ctx.font = kremlinFont(21);
       ctx.textAlign = "center";
       ctx.fillStyle = blinkOn ? COL_WHITE : COL_RED;
       ctx.fillText(
         state.ciaIntrusionActive
-          ? `CIA CYBER INTRUSION (${Math.round(state.ciaIntrusionProgress)}%) // PURGE FIREWALL`
-          : "K.O.M.R.A.D.-84 COOLING LOCK ACTIVE // MANUAL OVERRIDE",
+          ? `CIA CYBER INTRUSION (${Math.round(state.ciaIntrusionProgress)}%) // USE ZASHCHITA-84 AT DESK [KEY 4]`
+          : state.ideologyDuelActive
+            ? "K.O.M.R.A.D.-84 INTERROGATION ACTIVE // OPEN POLIT-LINK 84 AT DESK [KEY 4]"
+            : "K.O.M.R.A.D.-84 COOLING LOCK ACTIVE // OVERRIDE OR WIN POLIT-LINK 84",
         CW / 2,
         564,
-        CW - 60,
+        CW - 56,
       );
-      ctx.font = kremlinFont(16);
+      ctx.font = kremlinFont(15);
       ctx.fillStyle = COL_AMBER;
       ctx.fillText(
-        "[CLICK THIS SCREEN OR TERMINAL TO PURGE / OVERRIDE]",
+        state.ciaIntrusionActive
+          ? "FRONT CONSOLE STALLS -15% (20S CD) // SIT AT DESK [KEY 4 -> E] TO PURGE CIA"
+          : "SIT AT SUPERVISOR DESK [KEY 4 -> E] TO RESOLVE ON ISKRA-84 TERMINAL",
         CW / 2,
         602,
-        CW - 60,
+        CW - 56,
       );
     } else if (state.kgbLineActive && activeDeskDoc !== null) {
       // Dedicated KGB Decode Verdict Row + Active Volkov / Top 2 Root-Cause Row

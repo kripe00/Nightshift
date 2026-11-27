@@ -6,4 +6,5 @@ export {
   KOMRAD_MANUSCRIPT,
   type KomradDialogueCategory,
 } from './komradScript'
+export { registerTerminalSovOsApps } from './sovOsApps/registerTerminalSovOsApps'
 export { TerminalStation3D } from './TerminalStation3D'
