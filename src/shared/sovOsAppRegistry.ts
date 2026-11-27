@@ -5,7 +5,7 @@
 
 import type { SovOsPersistenceSnapshot } from './types'
 
-export type SovOsPluginAppId = 'polit_link' | 'zashchita'
+export type SovOsPluginAppId = 'polit_link' | 'zashchita' | 'shift_report'
 
 export type SovOsAlertSeverity = 'none' | 'warn' | 'danger'
 

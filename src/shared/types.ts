@@ -66,6 +66,7 @@ export type DiagnosticAlarmId =
   | 'grid'
   | 'order'
 export type GamePhase = 'boot' | 'playing' | 'victory' | 'meltdown' | 'gulag'
+export type CampaignEndingId = 'bureaucrat' | 'clear_sky' | 'meltdown' | 'siberia'
 export type LobbyMenuPhase = 'menu_locked' | 'door_opening' | 'entered_control_room'
 export type ShiftEndPhase = 'active' | 'closing_shift' | 'awaiting_elevator'
 export type ElevatorDeparturePhase = 'idle' | 'boarding' | 'summary'
@@ -262,6 +263,11 @@ export interface SavedGameStatePayload extends Partial<ReactorState> {
   activePost84Order?: ActivePost84PowerOrder | null
   rubles?: number
   quotaCompleted?: number
+  complianceScore?: number
+  truthIntel?: number
+  archivedIntelIds?: string[]
+  shiftDebriefActive?: boolean
+  campaignEnding?: CampaignEndingId | null
   post84InboxSnapshot?: Post84InboxSnapshot | null
   sovOsSavedState?: SovOsPersistenceSnapshot | null
   ciaIntrusionActive?: boolean
@@ -327,8 +333,13 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   activeStation: CameraStation
   isSeatedAtDesk: boolean
   canSitAtDesk: boolean
-  shiftNumber: number // 1 to 5
+  shiftNumber: number // 1 to 3 (Operasjon Klar Himmel 3-Shift Campaign)
   shiftTimeMinutes: number // 0 (00:00) to 360 (06:00)
+  complianceScore: number
+  truthIntel: number
+  archivedIntelIds: string[]
+  shiftDebriefActive: boolean
+  campaignEnding: CampaignEndingId | null
   isShiftKeyHeld: boolean // Physical SHIFT key clutch
   isGodMode: boolean // F2 Debug menu toggle (pauses meltdown/strikes for Komrad Oleg)
   isMusicMuted: boolean
@@ -419,6 +430,7 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   frontWallPurgeCooldownSec: number
   frontWallOverrideCooldownSec: number
   komradSabotageFlashSec: number
+  bunkerLightsBlackoutSec: number
 
   // Inspector Desk & Directives (Komrad Oleg's Domain)
   activeDirectives: DirectiveDocument[]
@@ -604,5 +616,11 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   debugTriggerBlackout: () => void
   debugSkipTo0558: () => void
   debugCompleteShift: () => void
+  recordComplianceDelta: (delta: number, reason?: string) => void
+  recordTruthIntelDelta: (delta: number, intelId?: string, reason?: string) => void
+  triggerShiftDebrief: () => void
+  advanceToNextShift: () => void
+  resolveCampaignEnding: (ending: CampaignEndingId) => void
+  debugSetShiftNumber: (shiftNumber: 1 | 2 | 3) => void
   tick: () => void
 }

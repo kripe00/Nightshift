@@ -6,7 +6,7 @@ import type {
   SovOsPluginStatusMeta,
   SovOsWindowRect,
 } from '../../../shared/sovOsAppRegistry'
-import { useGameStore } from '../../../shared/useGameStore'
+import { isPreVolkovPanelLocked, useGameStore } from '../../../shared/useGameStore'
 import {
   getPolitLinkState,
   selectPolitLinkOption,
@@ -229,6 +229,15 @@ export function createPolitLinkPluginApp(): SovOsPluginApp {
     getStatusMeta: (): SovOsPluginStatusMeta => {
       const ps = getPolitLinkState()
       const gs = useGameStore.getState()
+      const preVolkovLocked = !ps.active && isPreVolkovPanelLocked(gs)
+      if (preVolkovLocked) {
+        return {
+          subtitle: 'LOCKED (MAIL)',
+          badgeText: 'LOCK',
+          alertSeverity: 'warn',
+          isUrgent: false,
+        }
+      }
       if (ps.active) {
         const isImpostor = ps.mode === 'impostor'
         const isDanger =
@@ -267,9 +276,11 @@ export function createPolitLinkPluginApp(): SovOsPluginApp {
     getRenderSignature: (): string => {
       const ps = getPolitLinkState()
       const gs = useGameStore.getState()
+      const preVolkovLocked = !ps.active && isPreVolkovPanelLocked(gs)
       const pulseStep = ps.active ? Math.floor(ps.animClockSec * 4) : Math.floor(ps.animClockSec)
       return [
         ps.active ? 1 : 0,
+        preVolkovLocked ? 1 : 0,
         ps.mode,
         ps.roundIndex,
         ps.trust,
@@ -317,6 +328,10 @@ export function createPolitLinkPluginApp(): SovOsPluginApp {
         return regions
       }
 
+      if (isPreVolkovPanelLocked(useGameStore.getState())) {
+        return regions
+      }
+
       regions.push({
         id: 'polit:start_voluntary',
         x: rightX + 24,
@@ -361,6 +376,13 @@ export function createPolitLinkPluginApp(): SovOsPluginApp {
         }
       }
       if (regionId === 'polit:start_voluntary') {
+        if (isPreVolkovPanelLocked(useGameStore.getState())) {
+          return {
+            handled: true,
+            statusNotice: 'LOCKED: ACCEPT VOLKOV MAIL IN P.O.S.T.-84 FIRST',
+            sound: 'alarm',
+          }
+        }
         startPolitLinkDuel('voluntary')
         return {
           handled: true,
@@ -647,6 +669,26 @@ export function createPolitLinkPluginApp(): SovOsPluginApp {
         18,
         6
       )
+
+      const preVolkovLocked = isPreVolkovPanelLocked(gs)
+      if (preVolkovLocked) {
+        ctx.fillStyle = '#331010'
+        ctx.fillRect(rightX + 24, rect.y + 356, rightW - 48, 52)
+        ctx.strokeStyle = '#ff2a2a'
+        ctx.lineWidth = 2
+        ctx.strokeRect(rightX + 24, rect.y + 356, rightW - 48, 52)
+        ctx.textAlign = 'center'
+        ctx.fillStyle = '#ffb000'
+        ctx.font = 'bold 13px "Courier Prime", monospace'
+        ctx.fillText(
+          'SAFETY INTERLOCK // OPEN P.O.S.T.-84 MAIL FIRST',
+          rightX + rightW / 2,
+          rect.y + 382,
+          rightW - 64
+        )
+        ctx.textAlign = 'left'
+        return
+      }
 
       const btnId = ps.drillFailed
         ? 'polit:retry_drill'

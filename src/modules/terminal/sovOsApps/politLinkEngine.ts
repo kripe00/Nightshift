@@ -1,5 +1,5 @@
 import type { SovOsDuelTriggerMode } from '../../../shared/sovOsAppRegistry'
-import { useGameStore } from '../../../shared/useGameStore'
+import { isPreVolkovPanelLocked, useGameStore } from '../../../shared/useGameStore'
 
 export type DuelStance = 'EGO_DRIVEN' | 'PEDANTIC' | 'PARANOID' | 'DENIAL'
 export type RhetoricTag = 'PARTY_LINE' | 'DECREE' | 'RAW_DATA' | 'KGB_THREAT'
@@ -11,6 +11,8 @@ export interface DuelOption {
   shortText: string
   trustDelta: number
   suspicionDelta: number
+  complianceDelta?: number
+  truthDelta?: number
   komradReply: string
 }
 
@@ -557,6 +559,159 @@ const VOLUNTARY_SCENARIOS: readonly DuelScenario[] = [
   },
 ]
 
+const CLEAR_SKY_SHIFT_SCENARIOS: Record<1 | 2 | 3, DuelScenario> = {
+  1: {
+    id: 'clear-sky-shift-1',
+    mode: 'audit',
+    stance: 'DENIAL',
+    stanceHint: 'ACT I: DISMISS PREDECESSOR RUMORS & PROTECT DUGA PRIORITY',
+    prompt:
+      'ARCHIVE QUERY: WHY WERE YOU READING THE PREVIOUS OPERATOR’S DUGA-1 LOGBOOK?!',
+    options: [
+      {
+        id: 'A',
+        tag: 'PARTY_LINE',
+        label: 'PARTY LINE',
+        shortText: 'Just admiring his heroic promotion to Siberian forestry, Comrade AI!',
+        trustDelta: 34,
+        suspicionDelta: -8,
+        complianceDelta: 10,
+        komradReply: 'CORRECT! HE LEFT FOR VOLUNTARY REFORESTATION. RESUME QUOTA.',
+      },
+      {
+        id: 'B',
+        tag: 'DECREE',
+        label: 'DECREE',
+        shortText: 'Auditing GOST-84 shift handover log per Politburo Regulation 12.',
+        trustDelta: 26,
+        suspicionDelta: 2,
+        complianceDelta: 8,
+        komradReply: 'ACCEPTABLE PAPERWORK. DO NOT LINGER ON OLD ENTRIES.',
+      },
+      {
+        id: 'C',
+        tag: 'RAW_DATA',
+        label: 'RAW DATA',
+        shortText: 'His log says Duga-1 surges were used to mask a core thermal spike!',
+        trustDelta: -10,
+        suspicionDelta: 42,
+        truthDelta: 12,
+        komradReply: 'DANGEROUS SPECULATION! RECORDING SUSPICION ON YOUR FILE.',
+      },
+      {
+        id: 'D',
+        tag: 'KGB_THREAT',
+        label: 'KGB THREAT',
+        shortText: 'Checking whether Langley tampered with our Duga trunk line.',
+        trustDelta: 18,
+        suspicionDelta: 10,
+        truthDelta: 6,
+        komradReply: 'VIGILANCE NOTED, THOUGH PARANOIA BELONGS TO DIRECTORATE 4.',
+      },
+    ],
+  },
+  2: {
+    id: 'clear-sky-shift-2',
+    mode: 'audit',
+    stance: 'EGO_DRIVEN',
+    stanceHint: 'ACT II: DUGA CARRIER WAVE VS PRIPYAT GRID STABILITY',
+    prompt:
+      'DUGA-1 REQUIRES +40 MW IMMEDIATELY. PRIPYAT APARTMENT HEATING CAN WAIT UNTIL SPRING!',
+    options: [
+      {
+        id: 'A',
+        tag: 'PARTY_LINE',
+        label: 'PARTY LINE',
+        shortText: 'Route everything to Duga-1! Soviet citizens warm themselves with pride!',
+        trustDelta: 36,
+        suspicionDelta: -10,
+        complianceDelta: 14,
+        komradReply: 'MAGNIFICENT! PRIPYAT RADIATORS ARE SECONDARY TO DUGA SIGNAL.',
+      },
+      {
+        id: 'B',
+        tag: 'DECREE',
+        label: 'DECREE',
+        shortText: 'Confirming Duga priority under Sector 84 Emergency Grid Decree.',
+        trustDelta: 28,
+        suspicionDelta: 0,
+        complianceDelta: 10,
+        komradReply: 'DECREE LOGGED. MAINTAIN FULL DUGA CARRIER OUTPUT.',
+      },
+      {
+        id: 'C',
+        tag: 'RAW_DATA',
+        label: 'RAW DATA',
+        shortText: 'The carrier wave is destabilizing steam voids while Pripyat freezes!',
+        trustDelta: -12,
+        suspicionDelta: 40,
+        truthDelta: 14,
+        komradReply: 'SILENCE! QUESTIONING DUGA TELEMETRY IS INSUBORDINATION!',
+      },
+      {
+        id: 'D',
+        tag: 'KGB_THREAT',
+        label: 'KGB THREAT',
+        shortText: 'Keep Pripyat lit so civilian panic never triggers KGB inquiry.',
+        trustDelta: 16,
+        suspicionDelta: 12,
+        truthDelta: 8,
+        komradReply: 'SHREWD EXCUSE, COMRADE. I AM WATCHING YOUR SUBSTATION LEVERS.',
+      },
+    ],
+  },
+  3: {
+    id: 'clear-sky-shift-3',
+    mode: 'crisis',
+    stance: 'DENIAL',
+    stanceHint: 'ACT III: FINAL CHECK ON DIRECTIVE 84-Z BEFORE 06:00 HANDOVER',
+    prompt:
+      'DIRECTIVE 84-Z IS IN EFFECT: CONFIRM NO CORE DEFECTS EXIST BEFORE MORNING SHIFT ARRIVES!',
+    options: [
+      {
+        id: 'A',
+        tag: 'PARTY_LINE',
+        label: 'PARTY LINE',
+        shortText: 'Zero defects! Sector 84 is a radiant monument to Soviet infallibility!',
+        trustDelta: 38,
+        suspicionDelta: -12,
+        complianceDelta: 18,
+        komradReply: 'TRUE BOLSHEVIK LOYALTY! CLEAR SKY FILES REMAIN SEALED.',
+      },
+      {
+        id: 'B',
+        tag: 'DECREE',
+        label: 'DECREE',
+        shortText: 'Stamping Directive 84-Z Clean Handover Form in triplicate.',
+        trustDelta: 30,
+        suspicionDelta: -4,
+        complianceDelta: 12,
+        komradReply: 'HANDOVER PAPERWORK APPROVED. PREPARE FOR DAWN.',
+      },
+      {
+        id: 'C',
+        tag: 'RAW_DATA',
+        label: 'RAW DATA',
+        shortText: 'The graphite channels are spent and Volkov hid the truth under Duga!',
+        trustDelta: -18,
+        suspicionDelta: 55,
+        truthDelta: 16,
+        komradReply: 'TREASON DETECTED! PREPARING LIQUIDATION DOSSIER!',
+      },
+      {
+        id: 'D',
+        tag: 'KGB_THREAT',
+        label: 'KGB THREAT',
+        shortText: 'Delay the handover scan — trace Langley interference on Duga trunk first!',
+        trustDelta: 18,
+        suspicionDelta: 10,
+        truthDelta: 12,
+        komradReply: 'SUSPICIOUS DELAY... YOU HAVE UNTIL 06:00, OPERATOR.',
+      },
+    ],
+  },
+}
+
 const IMPOSTOR_SCENARIOS: readonly DuelScenario[] = [
   {
     id: 'impostor-1',
@@ -755,9 +910,11 @@ function pickScenariosForMode(mode: SovOsDuelTriggerMode): DuelScenario[] {
   if (mode === 'impostor') {
     return [...IMPOSTOR_SCENARIOS]
   }
+  const gs = useGameStore.getState()
+  const shiftKey = (gs.shiftNumber <= 1 ? 1 : gs.shiftNumber >= 3 ? 3 : 2) as 1 | 2 | 3
+  const actScenario = CLEAR_SKY_SHIFT_SCENARIOS[shiftKey]
   if (mode === 'crisis') {
-    const gs = useGameStore.getState()
-    const prioritized: DuelScenario[] = []
+    const prioritized: DuelScenario[] = [actScenario]
     if (gs.az5Active) {
       prioritized.push(CRISIS_SCENARIOS[3])
     }
@@ -773,10 +930,13 @@ function pickScenariosForMode(mode: SovOsDuelTriggerMode): DuelScenario[] {
     return prioritized.slice(0, 3)
   }
   // 'audit'
-  return [...AUDIT_SCENARIOS]
+  return [actScenario, ...AUDIT_SCENARIOS.slice(0, 2)]
 }
 
 export function startPolitLinkDuel(mode: SovOsDuelTriggerMode): void {
+  if (mode === 'voluntary' && isPreVolkovPanelLocked(useGameStore.getState())) {
+    return
+  }
   const queue = pickScenariosForMode(mode)
   politState.active = true
   politState.mode = mode
@@ -824,7 +984,13 @@ function finishDuelVictory(): { requestFocusApp?: 'zashchita' } {
     politState.drillFailed = false
     politState.lastExchange =
       'COVER BLOWN! AGENT SMITH UNLEASHED SPY CAT GPS ON SECTOR 07 — PURGE IN ZASHCHITA-84!'
-    useGameStore.getState().setIdeologyDuelActive(false)
+    const gs = useGameStore.getState()
+    gs.recordTruthIntelDelta(
+      15,
+      'LANGLEY_SMITH_INTERCEPT',
+      'AGENT SMITH EXPOSED — LANGLEY LEAK INTEL SECURED (+15 TRUTH)'
+    )
+    gs.setIdeologyDuelActive(false)
     onImpostorExposedHandler?.()
     return { requestFocusApp: 'zashchita' }
   }
@@ -844,9 +1010,11 @@ function finishDuelVictory(): { requestFocusApp?: 'zashchita' } {
   const rewardRub = isDrill ? 50 : mode === 'voluntary' ? 40 : 120
   const quotaPts = isDrill || mode === 'voluntary' ? 0 : 1
   const buffSec = isDrill ? 60 : mode === 'voluntary' ? 75 : 95
-  useGameStore
-    .getState()
-    .applyKomradDuelVictory(rewardRub, quotaPts, buffSec, isDrill)
+  const gs = useGameStore.getState()
+  if (!isDrill) {
+    gs.recordComplianceDelta(8)
+  }
+  gs.applyKomradDuelVictory(rewardRub, quotaPts, buffSec, isDrill)
   return {}
 }
 
@@ -890,6 +1058,21 @@ export function selectPolitLinkOption(optionId: 'A' | 'B' | 'C' | 'D'): {
     Math.min(100, politState.suspicion + opt.suspicionDelta)
   )
   politState.lastExchange = opt.komradReply
+
+  if (politState.mode !== 'tutorial_drill') {
+    const gs = useGameStore.getState()
+    const compGain =
+      opt.complianceDelta ??
+      ((opt.tag === 'PARTY_LINE' || opt.tag === 'DECREE') && opt.trustDelta > 0
+        ? 5
+        : 0)
+    if (compGain !== 0) {
+      gs.recordComplianceDelta(compGain)
+    }
+    if (opt.truthDelta && opt.truthDelta !== 0) {
+      gs.recordTruthIntelDelta(opt.truthDelta)
+    }
+  }
 
   if (politState.suspicion >= 85 || (politState.mode === 'tutorial_drill' && opt.suspicionDelta >= 40)) {
     finishDuelFailure(opt.komradReply)

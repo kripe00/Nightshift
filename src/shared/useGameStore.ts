@@ -64,6 +64,7 @@ import type {
   ActivePost84PowerOrder,
   AppliedStampMark,
   CameraStation,
+  CampaignEndingId,
   CrisisCoachId,
   DiagnosticAlarmId,
   DirectiveDecision,
@@ -1555,6 +1556,11 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   canSitAtDesk: false,
   shiftNumber: 1,
   shiftTimeMinutes: 0,
+  complianceScore: 0,
+  truthIntel: 0,
+  archivedIntelIds: [],
+  shiftDebriefActive: false,
+  campaignEnding: null,
   isShiftKeyHeld: false,
   isGodMode: false,
   isMusicMuted: false,
@@ -1598,6 +1604,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   frontWallPurgeCooldownSec: 0,
   frontWallOverrideCooldownSec: 0,
   komradSabotageFlashSec: 0,
+  bunkerLightsBlackoutSec: 0,
 
   activeDirectives: [],
   printerProgress: 0,
@@ -1790,6 +1797,12 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       canSitAtDesk: false,
       shiftNumber: nextShiftNumber,
       shiftTimeMinutes: 0,
+      complianceScore: state.complianceScore,
+      truthIntel: state.truthIntel,
+      archivedIntelIds: [...state.archivedIntelIds],
+      shiftDebriefActive: false,
+      campaignEnding: null,
+      bunkerLightsBlackoutSec: 0,
       rubles: nextRubles,
       quotaCompleted: 0,
       treasonStrikes: carriedStrikes,
@@ -2164,6 +2177,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         frontWallPurgeCooldownSec: 0,
         frontWallOverrideCooldownSec: 0,
         komradSabotageFlashSec: 0,
+        bunkerLightsBlackoutSec: 0,
         gridTransientImpulse: 0,
         steamTransientImpulse: 0,
         voltageDipIntensity: 0,
@@ -2237,6 +2251,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         frontWallPurgeCooldownSec: 0,
         frontWallOverrideCooldownSec: 0,
         komradSabotageFlashSec: 0,
+        bunkerLightsBlackoutSec: 0,
         activeMandate: null,
         activePost84Order: null,
         hoveredControlHint: null,
@@ -2427,11 +2442,17 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         frontWallPurgeCooldownSec: 0,
         frontWallOverrideCooldownSec: 0,
         komradSabotageFlashSec: 0,
+        bunkerLightsBlackoutSec: 0,
         tutorialDrainSeconds: 0,
         tutorialHintsHidden: false,
         activeCrisisCoach: null,
         dismissedCrisisIds: [],
         shiftTimeMinutes: 0,
+        shiftDebriefActive: false,
+        campaignEnding: null,
+        complianceScore: 0,
+        truthIntel: 0,
+        archivedIntelIds: [],
         shiftRunId: state.shiftRunId + 1,
         hoveredDiagnosticId: null,
         hoveredControlHint: null,
@@ -2489,6 +2510,11 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         isSeatedAtDesk: false,
         canSitAtDesk: false,
         shiftNumber: 1,
+        complianceScore: 0,
+        truthIntel: 0,
+        archivedIntelIds: [],
+        shiftDebriefActive: false,
+        campaignEnding: null,
         activeMandate: null,
         activePost84Order: null,
         isBlackout: false,
@@ -2532,6 +2558,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         frontWallPurgeCooldownSec: 0,
         frontWallOverrideCooldownSec: 0,
         komradSabotageFlashSec: 0,
+        bunkerLightsBlackoutSec: 0,
         activeDirectives: [],
         printerProgress: 0,
         shiftTimeMinutes: 0,
@@ -2716,8 +2743,15 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       komradOpeningDispatched: false,
       isSeatedAtDesk: false,
       canSitAtDesk: false,
-      shiftNumber: numOr(savedGame.shiftNumber, 1),
+      shiftNumber: Math.max(1, Math.round(numOr(savedGame.shiftNumber, 1))),
       shiftTimeMinutes: restoredShiftTime,
+      complianceScore: Math.max(0, Math.round(numOr(savedGame.complianceScore, 0))),
+      truthIntel: Math.max(0, Math.round(numOr(savedGame.truthIntel, 0))),
+      archivedIntelIds: Array.isArray(savedGame.archivedIntelIds)
+        ? [...savedGame.archivedIntelIds]
+        : [],
+      shiftDebriefActive: boolOr(savedGame.shiftDebriefActive, false),
+      campaignEnding: savedGame.campaignEnding ?? null,
       treasonStrikes: Math.max(
         0,
         Math.min(MAX_TREASON_STRIKES, Math.round(numOr(savedGame.treasonStrikes, 0)))
@@ -2763,6 +2797,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         numOr(savedGame.frontWallOverrideCooldownSec, 0)
       ),
       komradSabotageFlashSec: 0,
+      bunkerLightsBlackoutSec: 0,
       activeDirectives: [],
       printerProgress: 0,
       hoveredDiagnosticId: null,
@@ -4098,6 +4133,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       0,
       state.strike5SurgeFlashSec - dt
     )
+    const nextBunkerLightsBlackoutSec = Math.max(
+      0,
+      state.bunkerLightsBlackoutSec - dt
+    )
     const nextVoltageDip =
       nextKomradSabotageFlashSec > 0
         ? Math.max(
@@ -4592,6 +4631,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       !state.isGodMode && (baseReactor.coreMeltdown || baseReactor.steamExplosion)
         ? 'meltdown'
         : state.phase
+    const nextEnding =
+      nextPhase === 'meltdown' ? ('meltdown' as const) : state.campaignEnding
 
     if (newLogs.length > 0 || newKomradMsgs.length > 0) {
       const updatedEntries = [...state.terminalEntries.slice(-24), ...newLogs]
@@ -4609,9 +4650,11 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         frontWallOverrideCooldownSec: nextFrontWallOverrideCooldownSec,
         komradSabotageFlashSec: nextKomradSabotageFlashSec,
         strike5SurgeFlashSec: nextStrike5SurgeFlashSec,
+        bunkerLightsBlackoutSec: nextBunkerLightsBlackoutSec,
         hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         lastDecisionFeedback: nextFeedback,
         phase: nextPhase,
+        campaignEnding: nextEnding,
         diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
         terminalEntries: updatedEntries,
         terminalLogs: updatedEntries.map(
@@ -4638,8 +4681,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         frontWallOverrideCooldownSec: nextFrontWallOverrideCooldownSec,
         komradSabotageFlashSec: nextKomradSabotageFlashSec,
         strike5SurgeFlashSec: nextStrike5SurgeFlashSec,
+        bunkerLightsBlackoutSec: nextBunkerLightsBlackoutSec,
         hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         phase: nextPhase,
+        campaignEnding: nextEnding,
         diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
       })
     }
@@ -5077,6 +5122,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         : {}),
       ...(isStrike6Liquidation
         ? {
+            campaignEnding: 'siberia' as const,
             radioOn: false,
             radioBroadcastSubtitle: null,
             diagFeedActive: false,
@@ -5227,29 +5273,54 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
 
     const nextProgress = Math.min(99, state.ciaIntrusionProgress + 15)
     const nextPumpThrottle: [number, number] = [
-      impact === 'pump_a' ? Math.min(state.pumpThrottle[0], 20) : state.pumpThrottle[0],
-      impact === 'pump_b' ? Math.min(state.pumpThrottle[1], 20) : state.pumpThrottle[1],
+      impact === 'pump_a' ? 0 : state.pumpThrottle[0],
+      impact === 'pump_b' ? 0 : state.pumpThrottle[1],
     ]
+    const nextPumpsActive: [boolean, boolean] = [
+      impact === 'pump_a' ? false : state.pumpsActive[0],
+      impact === 'pump_b' ? false : state.pumpsActive[1],
+    ]
+    const nextMcpActive = [...state.mcpActive]
+    if (impact === 'pump_a') {
+      nextMcpActive[0] = false
+      nextMcpActive[1] = false
+    } else if (impact === 'pump_b') {
+      nextMcpActive[2] = false
+      nextMcpActive[3] = false
+    }
     const nextFeedwater =
-      impact === 'feedwater'
-        ? Math.max(0.1, state.feedwaterValve - 0.18)
-        : state.feedwaterValve
+      impact === 'feedwater' ? 0 : state.feedwaterValve
     const nextGridImpulse =
-      impact === 'grid' ? -2.2 : state.gridTransientImpulse
+      impact === 'grid' ? -4.5 : state.gridTransientImpulse
+    const nextBunkerBlackoutSec =
+      impact === 'lights' ? 15.0 : state.bunkerLightsBlackoutSec
     const nextVoltage =
       impact === 'lights' || impact === 'grid'
-        ? 0.95
-        : Math.max(state.voltageDipIntensity, 0.5)
-    const nextFlash = impact === 'lights' ? 4.0 : 2.0
+        ? 1.0
+        : Math.max(state.voltageDipIntensity, 0.55)
+    const nextFlash = impact === 'lights' || impact === 'grid' ? 4.5 : 2.5
+    const tripDetail =
+      impact === 'pump_a'
+        ? 'COOLING PUMP A SLAMMED TO 0%'
+        : impact === 'pump_b'
+          ? 'COOLING PUMP B SLAMMED TO 0%'
+          : impact === 'feedwater'
+            ? 'FEEDWATER VALVE CUT TO 0%'
+            : impact === 'grid'
+              ? '50.0 HZ SYNCHRONIZER TRIPPED'
+              : 'BUNKER LIGHTS BLACKED OUT FOR 15S'
     const nextStrikesPreview = state.isGodMode
       ? state.treasonStrikes
       : Math.min(MAX_TREASON_STRIKES, state.treasonStrikes + 1)
-    const msg = `WRONG KILL: ${processName} TERMINATED! STRIKE ${nextStrikesPreview}/${MAX_TREASON_STRIKES} & HARDWARE DISRUPTED (+15% CIA INTRUSION).`
+    const msg = `WRONG KILL: ${processName} TERMINATED! ${tripDetail} (+1 STRIKE [${nextStrikesPreview}/${MAX_TREASON_STRIKES}], +15% CIA)!`
     const statePatch: Partial<GameState> = {
       ciaIntrusionProgress: nextProgress,
+      pumpsActive: nextPumpsActive,
+      mcpActive: nextMcpActive,
       pumpThrottle: nextPumpThrottle,
       feedwaterValve: nextFeedwater,
       gridTransientImpulse: nextGridImpulse,
+      bunkerLightsBlackoutSec: nextBunkerBlackoutSec,
       voltageDipIntensity: nextVoltage,
       komradSabotageFlashSec: nextFlash,
     }
@@ -5261,7 +5332,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       `TERMINATING CRITICAL STATE DRIVER IN ZASHCHITA-84 (${processName})`,
       'zashchita_kill',
       {
-        spokenVoxText: KOMRAD_TIER1_SOURCE_VOX.zashchita_kill,
+        spokenVoxText: KOMRAD_CYBER_VOX.FIREWALL_WRONG_KILL,
         logSender: 'SYS.DEFENSE',
         customFeedback: msg,
         customLogText: msg,
@@ -5583,7 +5654,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     ) {
       return
     }
-    if (state.tutorialPhase === 'AWAITING_VOLKOV_MAIL') {
+    if (state.tutorialPhase !== 'COMPLETED') {
       state.skipTutorial()
     }
     lastBroadcastHour = 5
@@ -5597,10 +5668,205 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
 
   debugCompleteShift: () => {
     const state = get()
-    if (state.tutorialPhase === 'AWAITING_VOLKOV_MAIL') {
+    if (state.tutorialPhase !== 'COMPLETED') {
       state.skipTutorial()
     }
     get().triggerShiftEnd0600()
+  },
+
+  recordComplianceDelta: (delta: number, reason?: string) => {
+    if (!Number.isFinite(delta) || delta === 0) return
+    set((state) => {
+      const nextCompliance = Math.max(
+        0,
+        Math.min(999, Math.round(state.complianceScore + delta))
+      )
+      if (!reason) {
+        return { complianceScore: nextCompliance }
+      }
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'K.O.M.R.A.D.-84',
+        reason,
+        'normal'
+      )
+      return {
+        complianceScore: nextCompliance,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+      }
+    })
+  },
+
+  recordTruthIntelDelta: (delta: number, intelId?: string, reason?: string) => {
+    set((state) => {
+      const alreadyArchived =
+        intelId !== undefined && state.archivedIntelIds.includes(intelId)
+      const nextArchived =
+        intelId && !alreadyArchived
+          ? [...state.archivedIntelIds, intelId]
+          : state.archivedIntelIds
+      const nextTruth = alreadyArchived
+        ? state.truthIntel
+        : Math.max(0, Math.min(999, Math.round(state.truthIntel + delta)))
+      if (!reason) {
+        return {
+          truthIntel: nextTruth,
+          archivedIntelIds: nextArchived,
+        }
+      }
+      const entry = createLogEntry(
+        state.shiftTimeMinutes,
+        'SYS.DEFENSE',
+        reason,
+        'warn'
+      )
+      return {
+        truthIntel: nextTruth,
+        archivedIntelIds: nextArchived,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+      }
+    })
+  },
+
+  triggerShiftDebrief: () => {
+    set((state) => {
+      if (state.shiftDebriefActive && state.shiftTimeMinutes >= 360) {
+        return state
+      }
+      const msg = `06:00 SHIFT ${state.shiftNumber}/3 COMPLETE! SIT AT ISKRA-84 AND OPEN SHIFT-84 FOR DEBRIEF.`
+      const entry = createLogEntry(360, 'K.O.M.R.A.D.-84', msg, 'normal')
+      return {
+        shiftTimeMinutes: 360,
+        shiftDebriefActive: true,
+        ideologyDuelActive: false,
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        lastDecisionFeedback: msg,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(360, msg, 'normal', 'K.O.M.R.A.D.-84')
+        ),
+      }
+    })
+  },
+
+  advanceToNextShift: () => {
+    const cur = get()
+    if (cur.shiftNumber >= 3) return
+    resetSovOsRuntime()
+    lastBroadcastHour = 0
+    set((state) => {
+      const nextShift = Math.min(3, state.shiftNumber + 1)
+      const msg = `SHIFT ${nextShift}/3 COMMENCING — 00:00. CLEAR SKY MONITORING ACTIVE.`
+      const entry = createLogEntry(0, 'K.O.M.R.A.D.-84', msg, 'normal')
+      return {
+        shiftNumber: nextShift,
+        shiftTimeMinutes: 0,
+        shiftCompletedAt0600: 'active',
+        elevatorDeparturePhase: 'idle',
+        canBoardElevator: false,
+        lastShiftSummary: null,
+        strike5SurgeFlashSec: 0,
+        shiftDebriefActive: false,
+        campaignEnding: null,
+        tutorialPhase: 'COMPLETED',
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        ideologyDuelActive: false,
+        komradOverrideLocked: false,
+        bunkerLightsBlackoutSec: 0,
+        komradSabotageFlashSec: 0,
+        voltageDipIntensity: 0,
+        lastDecisionFeedback: msg,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(0, msg, 'normal', 'K.O.M.R.A.D.-84')
+        ),
+      }
+    })
+  },
+
+  resolveCampaignEnding: (ending: CampaignEndingId) => {
+    set((state) => {
+      const msg =
+        ending === 'clear_sky'
+          ? 'OPERATION CLEAR SKY TRANSMITTED! SECTOR 84 TRUTH BROADCASTED ACROSS ALL UKV BANDS BEFORE 06:00 LOCKDOWN!'
+          : ending === 'bureaucrat'
+            ? 'HERO OF SOCIALIST LABOR! ALL 3 SHIFTS COMPLETED IN OBEDIENCE. DUGA SECRETS SEALED IN CONCRETE.'
+            : ending === 'meltdown'
+              ? 'OFFICIAL TASS STATEMENT: NO MELTDOWN OCCURRED. THE REACTOR ROOF SIMPLY ASCENDED TO ORBIT.'
+              : 'KGB LIQUIDATION COMPLETE — TRANSFERRED TO SIBERIA.'
+      const level: TerminalLogEntry['level'] =
+        ending === 'clear_sky' ? 'warn' : ending === 'bureaucrat' ? 'normal' : 'danger'
+      const mood: KomradMood =
+        ending === 'clear_sky' ? 'critical' : ending === 'bureaucrat' ? 'normal' : 'critical'
+      const entry = createLogEntry(state.shiftTimeMinutes, 'K.O.M.R.A.D.-84', msg, level)
+      return {
+        campaignEnding: ending,
+        shiftDebriefActive: true,
+        phase: ending === 'meltdown' ? 'meltdown' : state.phase,
+        lastDecisionFeedback: msg,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+        komradMessages: appendKomradFeed(
+          state.komradMessages,
+          createKomradMsg(state.shiftTimeMinutes, msg, mood, 'K.O.M.R.A.D.-84', msg, true)
+        ),
+      }
+    })
+  },
+
+  debugSetShiftNumber: (shiftNumber: 1 | 2 | 3) => {
+    resetSovOsRuntime()
+    lastBroadcastHour = 0
+    set((state) => {
+      const msg = `DEBUG JUMP TO SHIFT ${shiftNumber}/3 (00:00).`
+      const entry = createLogEntry(0, 'K.O.M.R.A.D.-84', msg, 'normal')
+      return {
+        shiftNumber,
+        shiftTimeMinutes: 0,
+        shiftCompletedAt0600: 'active',
+        elevatorDeparturePhase: 'idle',
+        canBoardElevator: false,
+        lastShiftSummary: null,
+        strike5SurgeFlashSec: 0,
+        shiftDebriefActive: false,
+        campaignEnding: null,
+        tutorialPhase: 'COMPLETED',
+        ciaIntrusionActive: false,
+        ciaIntrusionProgress: 0,
+        ideologyDuelActive: false,
+        komradOverrideLocked: false,
+        bunkerLightsBlackoutSec: 0,
+        lastDecisionFeedback: msg,
+        terminalEntries: [...state.terminalEntries.slice(-24), entry],
+        terminalLogs: [
+          ...state.terminalLogs.slice(-24),
+          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+        ],
+      }
+    })
   },
 
   tick: () => {
@@ -5612,7 +5878,9 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       state.shiftCompletedAt0600 !== 'active' ||
       state.siberiaGameOverActive ||
       isKomradLiquidating() ||
-      state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
+      state.tutorialPhase === 'AWAITING_VOLKOV_MAIL' ||
+      state.shiftDebriefActive ||
+      state.campaignEnding !== null
     ) {
       return
     }
@@ -5621,14 +5889,22 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       (!state.isGodMode && (state.coreMeltdown || state.steamExplosion)) ||
       state.treasonStrikes >= MAX_TREASON_STRIKES
 
-    // 1. Advance shift clock cleanly toward 06:00 (360 in-game minutes) and trigger safe handover at 06:00
-    const SHIFT_MINUTES_PER_SECOND = 1 / 1.75
-    const rawNextMinutes = state.shiftTimeMinutes + SHIFT_MINUTES_PER_SECOND
-    if (rawNextMinutes >= 360 && !isMidCatastrophe) {
-      get().triggerShiftEnd0600()
-      return
+    // 1. 10-minute real-time shift (360 in-game minutes / 600s = 0.6 min/s).
+    // Day 1 freezes the clock until the onboarding tutorial is COMPLETED.
+    // Reaching 06:00 triggers the safe diegetic end-of-shift handover (lights off + LIFT-84).
+    const SHIFT_MINUTES_PER_SECOND = 360 / 600
+    const clockFrozenForTutorial =
+      state.shiftNumber === 1 && state.tutorialPhase !== 'COMPLETED'
+
+    let nextMinutes = state.shiftTimeMinutes
+    if (!clockFrozenForTutorial) {
+      const rawNextMinutes = state.shiftTimeMinutes + SHIFT_MINUTES_PER_SECOND
+      if (rawNextMinutes >= 360 && !isMidCatastrophe) {
+        get().triggerShiftEnd0600()
+        return
+      }
+      nextMinutes = Math.min(360, rawNextMinutes)
     }
-    const nextMinutes = Math.min(360, rawNextMinutes)
 
     // 2. Legacy Pravda Dot-Matrix background spawner disabled (H-08); manual DebugMenu spawnDirective remains intact.
     const nextPrinterProgress = 0
@@ -5658,6 +5934,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       !state.isGodMode && (state.coreMeltdown || state.steamExplosion)
         ? 'meltdown'
         : state.phase
+    const nextEnding =
+      nextPhase === 'meltdown' ? ('meltdown' as const) : state.campaignEnding
 
     set({
       shiftTimeMinutes: nextMinutes,
@@ -5665,6 +5943,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       printerProgress: nextPrinterProgress,
       activeDirectives: nextDirectives,
       phase: nextPhase,
+      campaignEnding: nextEnding,
       diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
       ...(tickKomradMsgs.length > 0
         ? { komradMessages: appendKomradFeed(state.komradMessages, ...tickKomradMsgs) }

@@ -370,7 +370,22 @@
   >
   > *Verifisert med 0 feil i `npm run kgb` og `npm run build` — MELTDOWN IS PROPAGANDA! 🎖️🖥️⚔️🛡️☢️☭"*
 
-### [TELEGRAM #027 — STEMPLET: QUOTA-84 // KOMPLETT 06:00 SKIFTSLUTT, 3-TRINNS MØRKLEGGING, LIFT-84 HEIS & SHF-02 PROGRESJON!]
+---
+
+### [TELEGRAM #027 — STEMPLET: QUOTA-84 // OPERASJON KLAR HIMMEL (FASE 1–4) LEVERT TIL SEKTOR 84!]
+- **FRA:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyberdivisjonen (Sektor 84)
+- **TIL:** Seniorinspektør **Komrad Oleg** (`Олег`), Dokumentinspektoratet
+- **SOVJETISK DEKRET & STATUSRAPPORT:**
+  > *Kamerat Oleg! Hele den 3-skifts kampanjen **«Operasjon Klar Himmel / Sector 84»** (Fase 1 til 4) er nå smidd ferdig og levert til Kremlin-grenen `Komrad-Kristianov` — uten å røre én eneste fil i ditt domene (`src/modules/inspector/`)!*
+  > - **FASE 1 (JERNHARD DISIPLIN & SABOTASJE):** Pre-Volkov sikkerhetssperre på `POLIT-LINK 84` og `ZASHCHITA-84` før briefing, synkronisert **6 Treason Strikes → Sibir-likvidering**, og ekte fysisk maskinvaresabotasje + `+1 Strike` ved feil-kill i `ZASHCHITA-84` (`PUMP_A_DRV`/`PUMP_B_DRV` → `0%`, `BUNKER_LUX` → `15s` mørklegging, `DRUM_FW_CTL` → `0%`, `GRID_SYNC_50` → `50Hz`-nettstøt).
+  > - **FASE 2 (KAMPANJEKONTRAKT & 10-MIN KLOKKE):** Lagt til `complianceScore`, `truthIntel`, `archivedIntelIds`, `shiftDebriefActive`, `campaignEnding`, 10-minutters 3-skifts klokke med Dag 1-tutorialfrys og lagring i `shiftSaveStorage.ts`.
+  > - **FASE 3 (3-AKTERS KONSPIRASJON):** Ny `clearSkyCampaign.ts`-regissør, gylne Clear Sky-bevisprosesser (`CLEAR_SKY_LOG`, `DUGA_DUMP_84`, `VOLKOV_MEMO_RAW`) med valg mellom `[ARCHIVE]` og `[KILL]` i `ZASHCHITA-84`, samt `Pripyat` vs. `Duga/KGB`-sporing og akt-scenarier i `POLIT-LINK 84`.
+  > - **FASE 4 (DIEGETISK SKIFTRAPPORT & TESTPANEL):** Ny `SHIFT-84`-app (`shift_report`) direkte på `ISKRA-84`-skjermen for kl. 06:00 skiftoppgjør og Slutt A / Slutt B på Skift 3, pluss `CLEAR SKY CAMPAIGN [3 SHIFTS]`-hurtigpanel i `F2`-menyen (`DebugMenu.tsx`).
+  > *Hent fra Kremlin (`npm run pravda`) når inspektoratet er klart for generalprøve — MELTDOWN IS PROPAGANDA! ☢️🖥️📜☭*
+
+---
+
+### [TELEGRAM #028 — STEMPLET: QUOTA-84 // KOMPLETT 06:00 SKIFTSLUTT, 3-TRINNS MØRKLEGGING, LIFT-84 HEIS & SHF-02 PROGRESJON!]
 - **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
 - **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
 - **EMNE:** Fullverdig diegetisk skift-loop (`06:00` skiftslutt → konsolllås → 3-trinns mørklegging → `LIFT-84` heis → `SHF-02`) + Strike 5/6 eskalering og lagring!

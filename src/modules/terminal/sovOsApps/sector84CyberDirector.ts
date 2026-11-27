@@ -5,6 +5,10 @@ import {
 } from '../../../shared/sovOsAppRegistry'
 import { useGameStore } from '../../../shared/useGameStore'
 import {
+  resetClearSkyCampaign,
+  tickClearSkyCampaign,
+} from './clearSkyCampaign'
+import {
   getPolitLinkState,
   isPolitLinkDrillPassed,
   resetPolitLinkState,
@@ -38,6 +42,7 @@ export function resetCyberDirector(): void {
   drillStartedDuelForRun = false
   drillStartedFirewallForRun = false
   langleyLeakFiredThisShift = false
+  resetClearSkyCampaign()
   resetPolitLinkState()
   resetZashchitaState()
 }
@@ -150,7 +155,13 @@ export function tickCyberDirector(dt: number): void {
     return
   }
 
-  // 2. Live Night Shift Event Director
+  if (gs.shiftDebriefActive || gs.campaignEnding !== null) {
+    if (changed) notifySovOsPluginChanged()
+    return
+  }
+
+  // 2. Live Night Shift Event Director & Clear Sky 3-Act Campaign
+  tickClearSkyCampaign(dt)
   liveElapsedSec += dt
   const ps = getPolitLinkState()
   const zs = getZashchitaState()
@@ -179,7 +190,10 @@ export function tickCyberDirector(dt: number): void {
     return
   }
 
-  if (liveElapsedSec >= LANGLEY_LEAK_MIN_ELAPSED_SEC && !langleyLeakFiredThisShift) {
+  const langleyReadyForShift =
+    (gs.shiftNumber === 2 && liveElapsedSec >= 85) ||
+    (gs.shiftNumber >= 3 && liveElapsedSec >= LANGLEY_LEAK_MIN_ELAPSED_SEC)
+  if (langleyReadyForShift && !langleyLeakFiredThisShift) {
     triggerLangleyLeakEvent()
     nextEventCountdownSec =
       MIN_INTER_EVENT_SEC + Math.random() * (MAX_INTER_EVENT_SEC - MIN_INTER_EVENT_SEC)
