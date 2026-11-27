@@ -623,6 +623,16 @@ export const CameraController: React.FC = () => {
     }
     const syncAllowedLock = () => {
       const gs = useGameStore.getState();
+      if (pointerLockInteraction.pauseMenuOpen) {
+        moveKeysRef.current.forward = false;
+        moveKeysRef.current.backward = false;
+        moveKeysRef.current.left = false;
+        moveKeysRef.current.right = false;
+        moveKeysRef.current.shift = false;
+        moveKeysRef.current.zKey = false;
+        moveKeysRef.current.digit5 = false;
+        rmbHeldRef.current = false;
+      }
       if (
         (!canEngageCanvasPointerLock(
           gs.phase,
@@ -1054,6 +1064,13 @@ export const CameraController: React.FC = () => {
         ) {
           e.preventDefault();
         }
+        return;
+      }
+
+      if (
+        pointerLockInteraction.pauseMenuOpen ||
+        useGameStore.getState().isPaused
+      ) {
         return;
       }
 
@@ -1519,6 +1536,7 @@ export const CameraController: React.FC = () => {
       !isGrabbing &&
       !pointerLockInteraction.mainMenuOpen &&
       !pointerLockInteraction.debugMenuOpen &&
+      !pointerLockInteraction.pauseMenuOpen &&
       !pointerLockInteraction.shiftTransitionActive &&
       !pointerLockInteraction.shiftFadeFreezeInput;
 

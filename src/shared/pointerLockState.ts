@@ -9,6 +9,7 @@ export interface PointerLockInteractionSnapshot {
   virtualY: number
   debugMenuOpen: boolean
   mainMenuOpen: boolean
+  pauseMenuOpen: boolean
   shiftTransitionActive: boolean
   shiftFadeFreezeInput: boolean
 }
@@ -36,6 +37,7 @@ export const pointerLockInteraction: PointerLockInteractionSnapshot = {
   virtualY: 0,
   debugMenuOpen: false,
   mainMenuOpen: false,
+  pauseMenuOpen: false,
   shiftTransitionActive: false,
   shiftFadeFreezeInput: false,
 }
@@ -57,6 +59,7 @@ export function updatePointerLockInteraction(
   const prevGrab = pointerLockInteraction.isGrabbingControl
   const prevDebug = pointerLockInteraction.debugMenuOpen
   const prevMain = pointerLockInteraction.mainMenuOpen
+  const prevPause = pointerLockInteraction.pauseMenuOpen
   const prevTransition = pointerLockInteraction.shiftTransitionActive
   const prevFadeFreeze = pointerLockInteraction.shiftFadeFreezeInput
 
@@ -68,6 +71,7 @@ export function updatePointerLockInteraction(
     prevGrab !== pointerLockInteraction.isGrabbingControl ||
     prevDebug !== pointerLockInteraction.debugMenuOpen ||
     prevMain !== pointerLockInteraction.mainMenuOpen ||
+    prevPause !== pointerLockInteraction.pauseMenuOpen ||
     prevTransition !== pointerLockInteraction.shiftTransitionActive ||
     prevFadeFreeze !== pointerLockInteraction.shiftFadeFreezeInput
   ) {
@@ -86,6 +90,7 @@ export function canEngageCanvasPointerLock(
     !isSeatedAtDesk &&
     !pointerLockInteraction.debugMenuOpen &&
     !pointerLockInteraction.mainMenuOpen &&
+    !pointerLockInteraction.pauseMenuOpen &&
     !pointerLockInteraction.shiftTransitionActive
   )
 }

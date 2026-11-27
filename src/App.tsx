@@ -14,6 +14,7 @@ import {
 import { ControlRoomScene } from './shared/ControlRoomScene'
 import { DebugMenu } from './shared/DebugMenu'
 import { KgbShiftSummaryDossier } from './shared/KgbShiftSummaryDossier'
+import { PauseMenuOverlay } from './shared/PauseMenuOverlay'
 import {
   isKomradGrabActive,
   isKomradLiquidating,
@@ -657,7 +658,10 @@ export function App() {
   }, [])
 
   const [menusOpen, setMenusOpen] = useState<boolean>(
-    () => pointerLockInteraction.mainMenuOpen || pointerLockInteraction.debugMenuOpen
+    () =>
+      pointerLockInteraction.mainMenuOpen ||
+      pointerLockInteraction.debugMenuOpen ||
+      pointerLockInteraction.pauseMenuOpen
   )
   const [mainMenuOpen, setMainMenuOpen] = useState<boolean>(
     () => pointerLockInteraction.mainMenuOpen
@@ -677,7 +681,9 @@ export function App() {
   useEffect(() => {
     const syncMenus = () => {
       setMenusOpen(
-        pointerLockInteraction.mainMenuOpen || pointerLockInteraction.debugMenuOpen
+        pointerLockInteraction.mainMenuOpen ||
+          pointerLockInteraction.debugMenuOpen ||
+          pointerLockInteraction.pauseMenuOpen
       )
       setMainMenuOpen(pointerLockInteraction.mainMenuOpen)
     }
@@ -820,6 +826,7 @@ export function App() {
       if (!bootReadyRef.current) return
       const curState = useGameStore.getState()
       if (
+        curState.isPaused ||
         curState.siberiaGameOverActive ||
         curState.elevatorDeparturePhase !== 'idle' ||
         isKomradGrabActive()
@@ -902,6 +909,7 @@ export function App() {
         gpuWarmupDone={gpuWarmupDone}
         onBootComplete={handleBootComplete}
       />
+      <PauseMenuOverlay mainMenuOpen={effectiveMainMenuOpen} />
       <DebugMenu />
       <CenterReticle />
       <TutorialCompassHud menusOpen={effectiveMenusOpen} />

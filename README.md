@@ -8,7 +8,7 @@
 > *"Comrade Operator: Reports of a core thermal anomaly are bourgeois fabrication. Meltdown is propaganda. Do not touch the cooling valves. Glory to the Collective."*
 > — **K.O.M.R.A.D.-84**, Automated Plant Supervisor
 
-**Meltdown is Propaganda** (*A Soviet Night Shift Simulator*) is a **100% physical first-person 3D Soviet RBMK-1000 control-room thriller** combining high-stakes reactor thermodynamics and 1000 MW grid dispatching with cyber defense, ideological interrogation, and paranoid document inspection (*Papers, Please* meets *Chernobyl* with the tactile 3D micro-pixel chiaroscuro aesthetic of *Buckshot Roulette* and *Inscryption*), built for **GitHub Game Off 2026** (Theme: **SHIFT**).
+**Meltdown is Propaganda** (*A Soviet Night Shift Simulator*) is a **100% physical first-person 3D Soviet RBMK-1000 control-room thriller** combining high-stakes reactor thermodynamics and 1000 MW grid dispatching with cyber defense, ideological interrogation, and covert espionage (*Chernobyl* meets *Buckshot Roulette* and *Inscryption*'s tactile 3D micro-pixel chiaroscuro aesthetic), built for **GitHub Game Off 2026** (Theme: **SHIFT**).
 
 ---
 
@@ -23,7 +23,7 @@ The jam theme **SHIFT** drives the game on three interconnected levels:
 2. **Power & Reactivity Shifting (`1000 MW` Grid & `3000 MWh` Battery):**
    Dispatch up to **1000 MW** across 6 regional Soviet substations (**Pripyat, Kolkhoz, Duga-1, KGB Line, Vodka Plant, Steel Works**) while balancing steam pressure, drum water level, control rods, positive void coefficient, Xenon-135 poisoning, a **`3000 MWh`** station battery buffer, and synchronous **50.0 Hz** turbine locking. Hold **`SHIFT`** to sprint across the hall or fine-tune 3D valves and rod drives in **`±1%`** increments via scroll wheel.
 3. **Reality Shifting (Propaganda vs. Physics & Espionage):**
-   **K.O.M.R.A.D.-84**—voiced by a 100%-manifest procedural PA-vocoder VOX engine—insists a Soviet reactor cannot fail while pressuring you to prioritize **Duga-1** and **KGB** megawatt quotas over **Pripyat**. Meanwhile, **Operation Langley Leak** infiltrates your `ISKRA-84` computer (`ZASHCHITA-84` & `POLIT-LINK 84`) and slips forged sabotage directives onto your `Pravda-84` dot-matrix printer, forcing a quiet tug-of-war between blind **Party Compliance (`complianceScore`)** and uncovering **Clear Sky Truth (`truthIntel`)**.
+   **K.O.M.R.A.D.-84**—voiced by a 100%-manifest procedural PA-vocoder VOX engine—insists a Soviet reactor cannot fail while pressuring you to prioritize **Duga-1** and **KGB** megawatt quotas over **Pripyat**. Meanwhile, **Operation Langley Leak** infiltrates your `ISKRA-84` computer (`ZASHCHITA-84` & `POLIT-LINK 84`), forcing a quiet tug-of-war between blind **Party Compliance (`complianceScore`)** and uncovering **Clear Sky Truth (`truthIntel`)**.
 
 ---
 
@@ -39,7 +39,7 @@ Plant No. 4 (Sector 84) is secretly a dual-purpose energetic node feeding Duga o
 | :--- | :--- | :--- |
 | **Ending A — Good Bureaucrat** | Reach `06:00` on Shift 3 while obeying Commissar Volkov & K.O.M.R.A.D.-84 (`truthIntel < 3`). | Promoted as a model Soviet technocrat; Duga continues concealing the reactor flaws. |
 | **Ending B — Clear Sky Whistleblower** | Archive all **3 golden Clear Sky evidence files** (`truthIntel >= 3`) in `ZASHCHITA-84` and reach `06:00` on Shift 3. | Expose Directive 84-Z and the Sector 84 cover-up on the `SHIFT-84` broadcast report. |
-| **Ending C — Siberia Liquidation** | Accumulate **6 Treason Strikes** across `POLIT-LINK 84`, `ZASHCHITA-84`, `Pravda-84`, or reactor defiance. | K.O.M.R.A.D.-84 locks the bunker, triggers Siberia liquidation, and **wipes your saved shift progress**. |
+| **Ending C — Siberia Liquidation** | Accumulate **6 Treason Strikes** across `POLIT-LINK 84`, `ZASHCHITA-84`, or reactor defiance. | K.O.M.R.A.D.-84 locks the bunker, triggers Siberia liquidation, and **wipes your saved shift progress**. |
 | **Ending D — Core Meltdown** | Catastrophic RBMK-1000 thermal runaway, void excursion, or vessel overpressure failure. | Total reactor catastrophe across Sector 84 and Pripyat. |
 
 ---
@@ -60,7 +60,7 @@ Every desktop program runs directly inside the 3D `ISKRA-84` CRT mesh on the Shi
 
 ## 🎛️ 100% True 3D First-Person RBMK-1000 Control Hall
 
-Every gauge, 3D indicator lamp, progressive canopy alarm bar, rotary valve wheel, Bakelite fader T-bar, hinged `AZ-5` safety cover, CRT screen, tractor-feed paper sheet, UV magnifying glass, office PC, bunker radio, elevator airlock, and rubber stamp is a **real 3D mesh** interacted with via 3D raycasting (`onPointerDown`, `onPointerMove`, `onPointerUp`, `onClick`, and `onWheel`):
+Every gauge, 3D indicator lamp, progressive canopy alarm bar, rotary valve wheel, Bakelite fader T-bar, hinged `AZ-5` safety cover, CRT screen, desktop PC, `WE-PAD 84` tablet, bunker radio, bobblehead figure, and elevator airlock is a **real 3D mesh** interacted with via 3D raycasting (`onPointerDown`, `onPointerMove`, `onPointerUp`, `onClick`, and `onWheel`):
 
 ```text
 +--------------------------------------+--------------------------------------+
@@ -81,10 +81,10 @@ Every gauge, 3D indicator lamp, progressive canopy alarm bar, rotary valve wheel
 | - MCR-4 Elevator Lobby entry airlock |   & Bubbler Drain sight-glass lever  |
 +--------------------------------------+--------------------------------------+
 | LEFT WALL SWITCHGEAR: UNIT C [5] & D | SHIFT SUPERVISOR DESK [4] (Oleg)     |
-| - 3000 MWh station battery deck      | - Pravda-84 printer, Security Manual |
-| - Turbine throttle MWe gas pedal     | - 2x optical magnifying lens & stamps|
+| - 3000 MWh station battery deck      | - ISKRA-84 (SOV-OS 84): POST / POLIT |
+| - Turbine throttle MWe gas pedal     |   ZASHCHITA-84 & SHIFT-84 debrief    |
 | - Grid-Locked 50.0 Hz synchroscope   | - WE-PAD 84 8-step startup tablet    |
-|   & MAIN BREAKER knife switch        | - ISKRA-84 (SOV-OS 84) & OKEAN-84    |
+|   & MAIN BREAKER knife switch        | - OKEAN-84 radio & Komrad bobbleheads|
 +--------------------------------------+--------------------------------------+
 ```
 
@@ -103,20 +103,12 @@ Every gauge, 3D indicator lamp, progressive canopy alarm bar, rotary valve wheel
 
 ---
 
-## 📟 `WE-PAD 84`, 8-Step Tutorial & `Pravda-84` Inspection
+## 📟 `WE-PAD 84`, 8-Step Tutorial & Bunker Atmosphere
 
 1. **8-Step Interactive RBMK-1000 Cold-Start Tutorial (`WE-PAD 84`, `STEP 0–8`):**
-   Guided by Commissar Volkov (and Crisis Coach diagnostics), new operators learn a physically accurate RBMK-1000 startup while the Shift 1 clock stays frozen: picking up `WE-PAD 84`, configuring `MCP 1–4` & Feedwater on `UNIT B`, withdrawing control rods on `UNIT A-2`, building steam pressure, spinning the turbine to `50.0 Hz` and closing `MAIN BREAKER` on `UNIT C`, matching `600 MW` across the 6 substations on `UNIT A`, and drilling live **Positive Void (`STEP 7`)** and **Xenon-135 (`STEP 8`)** emergencies.
-2. **Physical Document Inspection (`Pravda-84` & Security Manual '84):**
-   Every tractor-feed paper directive printed onto the Shift Supervisor Desk must be cross-checked with the **3D UV Magnifying Glass** and **3D Security Manual '84** before stamping:
-
-| Directive Type | Operator 3D Stamp | In-Game Consequence |
-| :--- | :--- | :--- |
-| **Genuine Party Order** | `APPROVED` ✅ | Dispatches official Moscow grid/coolant mandates directly to your console CRTs and reactor loop. |
-| **Genuine Party Order** | `SHREDDED` ❌ | **Suspected Treason (`+1 Strike`).** K.O.M.R.A.D.-84 logs a reprimand. **`6 Strikes` = Siberia Liquidation**. |
-| **Forged CIA Sabotage** | `SHREDDED` ✅ | Sabotage foiled! Shredding in `УНИЧТОЖИТЕЛЬ-84` rewards core/graphite stabilization. |
-| **Forged CIA Sabotage** | `APPROVED` 💥 | **Sabotage Executed!** Ignites hot channels in the 37-tile RBMK core and destabilizes the 50.0 Hz grid. |
-
+   Guided by Commissar Volkov (after opening his `P.O.S.T.-84` briefing) and Crisis Coach diagnostics, new operators learn a physically accurate RBMK-1000 startup while the Shift 1 clock stays frozen: picking up `WE-PAD 84`, configuring `MCP 1–4` & Feedwater on `UNIT B`, withdrawing control rods on `UNIT A-2`, building steam pressure, spinning the turbine to `50.0 Hz` and closing `MAIN BREAKER` on `UNIT C`, matching `600 MW` across the 6 substations on `UNIT A`, and drilling live **Positive Void (`STEP 7`)** and **Xenon-135 (`STEP 8`)** emergencies.
+2. **`06:00` Shift Completion & KGB Paper Dossier (`LIFT-84`):**
+   Surviving until `06:00` safely interlocks all reactor panels, cuts the hall lights in three staggered zones, opens the airlock to the `MCR-4` lobby, and lets you ride **`LIFT-84`** to your KGB Paper Shift Summary Dossier (`KgbShiftSummaryDossier.tsx`) before rolling into the next shift.
 3. **Bunker Atmosphere (`ОКЕАН-84` Radio & Exterior Dioramas):**
    Tune the physical 3D **`ОКЕАН-84`** radio receiver across 5 `УКВ` bands (Soviet tracks + timed `Говорит Москва` state broadcasts with `Kremlin` subtitles) while watching Pripyat, Duga, and the exterior fire escape wing react outside the panoramic windows.
 
@@ -133,14 +125,14 @@ Inspired by *Buckshot Roulette* and *Inscryption*, 3D surfaces combine procedura
   - CRT Phosphor Green: `#33ff66` (and `#061a0c`)
   - Industrial Hazard Yellow: `#ffb000`
   - Crimson Alarm / Stamp Red: `#ff2a2a`
-  - Aged Tractor Paper / Gauge Dials: `#e6dec3`
+  - Aged Reactor Dial / Paper Cream: `#e6dec3`
 - **Title Searchability Rule:** Always written as **Meltdown is Propaganda** in standard Latin text across code, metadata, and itch.io for searchability, while 3D signage uses the **`Kremlin`** display font.
 
 | 3D Surface / Texture | Typography | Role |
 | :--- | :--- | :--- |
 | **3D Stenciled Steel Plates & Branding** | `Kremlin` | 3D engraved metal labels, warning placards, canopy banners & subtitles |
 | **3D CRT Meshes & Nixie Readouts** | `VT323` | `K.O.M.R.A.D.-84` terminal, console CRT strips, `ISKRA-84` (`SOV-OS 84`) & digital MW boxes |
-| **3D Tractor-Feed Directives & Manual** | `Courier Prime` | 3D paper directive textures, 3D Security Manual pages & 3D rubber ink stamps |
+| **3D KGB Shift Dossier & Print** | `Courier Prime` | End-of-shift KGB paper dossier & official bunker reports |
 
 ---
 

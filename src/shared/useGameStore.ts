@@ -52,7 +52,10 @@ import {
   tickSovOsRuntime,
 } from './sovOsAppRegistry'
 import { airlockDoorState } from './airlockDoorState'
-import { pointerLockInteraction } from './pointerLockState'
+import {
+  pointerLockInteraction,
+  updatePointerLockInteraction,
+} from './pointerLockState'
 import {
   abortKomradGrab,
   isKomradGrabActive,
@@ -1550,6 +1553,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   lastShiftSummary: null,
   canBoardElevator: false,
   isShiftControlReady: false,
+  isPaused: false,
   siberiaGameOverActive: false,
   komradOpeningDispatched: false,
   activeStation: 'overview',
@@ -1677,7 +1681,9 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       true
     )
     lastPostShiftLockMs = -10000
+    updatePointerLockInteraction({ pauseMenuOpen: false })
     set((prev) => ({
+      isPaused: false,
       shiftTimeMinutes: 360,
       shiftCompletedAt0600: 'closing_shift',
       elevatorDeparturePhase: 'idle',
@@ -1780,6 +1786,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       : Math.max(0, Math.min(MAX_TREASON_STRIKES - 1, Math.round(cur.treasonStrikes)))
     const nextShiftPadded = String(nextShiftNumber).padStart(2, '0')
     airlockDoorState.skipLobbyMenuRunId = nextShiftRunId
+    updatePointerLockInteraction({ pauseMenuOpen: false })
     const freshEntries = [
       createLogEntry(
         0,
@@ -1791,6 +1798,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     set((state) => ({
       ...mapped,
       phase: 'playing',
+      isPaused: false,
       lobbyMenuPhase: 'door_opening',
       shiftCompletedAt0600: 'active',
       elevatorDeparturePhase: 'idle',
@@ -1873,11 +1881,46 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   },
 
   setSiberiaGameOverActive: (active: boolean) => {
+    if (active) {
+      updatePointerLockInteraction({ pauseMenuOpen: false })
+    }
     set((state) =>
       state.siberiaGameOverActive === active
         ? state
-        : { siberiaGameOverActive: active }
+        : {
+            siberiaGameOverActive: active,
+            ...(active ? { isPaused: false } : {}),
+          }
     )
+  },
+
+  setPaused: (paused: boolean) => {
+    const state = get()
+    if (paused) {
+      if (
+        state.phase !== 'playing' ||
+        !state.isShiftControlReady ||
+        state.lobbyMenuPhase !== 'entered_control_room' ||
+        state.shiftCompletedAt0600 !== 'active' ||
+        state.siberiaGameOverActive ||
+        state.elevatorDeparturePhase !== 'idle' ||
+        isKomradLiquidating()
+      ) {
+        return
+      }
+      updatePointerLockInteraction({ pauseMenuOpen: true })
+      set({ isPaused: true })
+      return
+    }
+    updatePointerLockInteraction({ pauseMenuOpen: false })
+    if (state.isPaused) {
+      set({ isPaused: false })
+    }
+  },
+
+  togglePaused: () => {
+    const state = get()
+    state.setPaused(!state.isPaused)
   },
 
   launchKomradOpeningDispatch: () => {
@@ -2402,6 +2445,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   startShift: () => {
     resetKomradTrackers()
     resetSovOsRuntime()
+    updatePointerLockInteraction({ pauseMenuOpen: false })
     const cold = createColdStartState()
     const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const entry = createLogEntry(
@@ -2418,6 +2462,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       return {
         ...mapped,
         phase: 'playing',
+        isPaused: false,
         shiftCompletedAt0600: 'active',
         elevatorDeparturePhase: 'idle',
         lastShiftSummary: null,
@@ -2483,6 +2528,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   resetShift: (targetLobbyPhase?: LobbyMenuPhase) => {
     resetKomradTrackers()
     resetSovOsRuntime()
+    updatePointerLockInteraction({ pauseMenuOpen: false })
     const cold = createColdStartState()
     const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const freshEntries = [
@@ -2508,6 +2554,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       return {
         ...mapped,
         phase: 'playing',
+        isPaused: false,
         lobbyMenuPhase: nextLobbyPhase,
         shiftCompletedAt0600: 'active',
         elevatorDeparturePhase: 'idle',
@@ -3993,6 +4040,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   tickThermodynamics: (dtSeconds: number) => {
     const state = get()
     if (
+      state.isPaused ||
       (state.phase !== 'playing' && state.phase !== 'boot') ||
       state.lobbyMenuPhase !== 'entered_control_room' ||
       !state.isShiftControlReady ||
@@ -5886,6 +5934,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   tick: () => {
     const state = get()
     if (
+      state.isPaused ||
       state.phase !== 'playing' ||
       state.lobbyMenuPhase !== 'entered_control_room' ||
       !state.isShiftControlReady ||

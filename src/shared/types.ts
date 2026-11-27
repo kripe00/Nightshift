@@ -341,6 +341,7 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   shiftDebriefActive: boolean
   campaignEnding: CampaignEndingId | null
   isShiftKeyHeld: boolean // Physical SHIFT key clutch
+  isPaused: boolean
   isGodMode: boolean // F2 Debug menu toggle (pauses meltdown/strikes for Komrad Oleg)
   isMusicMuted: boolean
   treasonStrikes: number // 0 to 6 (6 = Immediate Siberia Liquidation Game Over)
@@ -607,6 +608,8 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
     isExpanded?: boolean
   ) => void
   toggleMusicMute: () => void
+  setPaused: (paused: boolean) => void
+  togglePaused: () => void
   setDiagFeedActive: (active: boolean) => void
   setRadioOn: (on: boolean) => void
   setRadioVolume: (volume: number) => void

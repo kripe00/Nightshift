@@ -77,10 +77,10 @@ When uploading your production bundle (`npm run build` → zip the contents of `
 ## 5. Copy-Paste Pitch & Page Description
 
 ### Short Description / Tagline (EN)
-> Survive 3 paranoid night shifts inside a 100% physical 3D 1984 Soviet RBMK-1000 control room. Route power, obey (or outsmart) K.O.M.R.A.D.-84, and shred CIA sabotage before 06:00.
+> Survive 3 night shifts in a 3D 1984 Soviet nuclear bunker. Balance the core, outsmart the AI & foil sabotage.
 
 ### Kort beskrivelse / Tagline (NO)
-> Overlev 3 paranoide nattskift inne i et 100 % fysisk 3D-kontrollrom fra 1984. Styr RBMK-1000-reaktoren, gjennomskue K.O.M.R.A.D.-84 og avslør CIA-sabotasje før kl. 06:00.
+> Overlev 3 nattskift i en 3D sovjetisk atombunker fra 1984. Styr reaktoren, gjennomskue K.O.M.R.A.D.-84 og stans sabotasjen.
 
 ### Full Game Page Description (EN — Copy-Paste)
 
@@ -90,18 +90,18 @@ When uploading your production bundle (`npm run build` → zip the contents of `
 
 **Meltdown is Propaganda** (*A Soviet Night Shift Simulator*) is a **100% physical first-person 3D Soviet RBMK-1000 control-room thriller** built for **GitHub Game Off 2026** (Theme: **SHIFT**).
 
-You are the lone night-shift operator locked inside **People's Automated Nuclear Plant No. 4 (Sector 84)**. Every dial, cast-iron valve wheel, Bakelite lever, CRT terminal, tractor-feed printer, magnifying lens, and hinged **`AZ-5`** scram switch is a real tactile 3D object in the bunker—with zero 2D HUD menus covering your screen.
+You are the lone night-shift operator locked inside **People's Automated Nuclear Plant No. 4 (Sector 84)**. Every analog dial, cast-iron valve wheel, Bakelite fader lever, CRT terminal, desk computer, radio tuner, and hinged **`AZ-5`** scram switch is a real tactile 3D object inside the bunker—with zero 2D HUD menus covering your screen.
 
-### Operation Clear Sky (3-Shift Campaign)
-1. **Physics Doesn't Lie:** Balance coolant flow, drum separator pressure, control rods, Xenon-135 poisoning, and a `1000 MW` 50.0 Hz regional power grid across 6 Soviet substations.
-2. **Ideological Gaslighting (`K.O.M.R.A.D.-84` & `POLIT-LINK 84`):** The plant AI denies that a Soviet reactor can fail—pressuring you to keep shipping megawatts to Duga and Moscow even as void reactivity spikes. Accumulate **6 Treason Strikes** and face liquidation to Siberia.
-3. **Inspection & Sabotage (`Pravda-84` & `ZASHCHITA-84`):** Cross-reference incoming paper directives under a 3D UV magnifying lens, inspect suspicious background processes on your `ISKRA-84` PC, and choose between blind compliance or uncovering what is really happening in Sector 84.
+### Operation Clear Sky (3-Shift Campaign & 4 Endings)
+1. **Physics Doesn't Lie:** Balance coolant flow, drum separator pressure, control rods, Xenon-135 poisoning, a `3000 MWh` battery deck, and a `1000 MW` 50.0 Hz regional power grid across 6 Soviet substations.
+2. **Ideological Gaslighting (`K.O.M.R.A.D.-84` & `POLIT-LINK 84`):** The plant AI denies that a Soviet reactor can fail—pressuring you to prioritize Duga-1 and KGB quotas over Pripyat while confronting you in live interrogation duels. Accumulate **6 Treason Strikes** and face liquidation to Siberia.
+3. **Cyber Defense & Truth (`ISKRA-84` / `ZASHCHITA-84`):** Read Commissar Volkov's `P.O.S.T.-84` dispatches, fight off CIA packet intrusions in `ZASHCHITA-84` without accidentally killing real control-room hardware drivers, and archive classified Clear Sky logs before riding **`LIFT-84`** out at `06:00`.
 
 ### Controls
 - **`WASD` / Arrow Keys + Mouse:** Walk & look around the 3D control hall (`SHIFT` to sprint)
-- **`0`–`6`:** Quick-focus camera stations (`UNIT A`, `K.O.M.R.A.D.-84`, `UNIT B`, `Inspector Desk`, `UNIT C`, `UNIT A-2`)
-- **`E` / `ESC`:** Sit down at / stand up from the Shift Supervisor Desk (`WE-PAD 84` & `ISKRA-84`)
-- **Left Click + Drag / Scroll Wheel:** Crank valve wheels, pull Bakelite faders, stamp `APPROVED` / `SHREDDED`, flip `AZ-5` (`Shift + Scroll` for `±1%` fine trim)
+- **`0`–`6`:** Quick-focus camera stations (`UNIT A`, `K.O.M.R.A.D.-84`, `UNIT B`, `Supervisor Desk`, `UNIT C`, `UNIT A-2`)
+- **`E` / `ESC`:** Sit down at / stand up from the Shift Supervisor Desk (`WE-PAD 84` & `ISKRA-84`) or ride `LIFT-84` at `06:00`
+- **Left Click + Drag / Scroll Wheel:** Crank valve wheels, pull Bakelite faders, click spent fuel channels, flip `AZ-5` (`Shift + Scroll` for `±1%` fine trim)
 
 *Developed by Komrad Kristianov & Komrad Oleg.*
 ```
