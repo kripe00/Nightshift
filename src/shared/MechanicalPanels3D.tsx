@@ -8587,6 +8587,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
               e.nativeEvent?.stopImmediatePropagation?.();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               const isShift = Boolean(e.shiftKey || e.nativeEvent?.shiftKey);
               const stepPct = isShift ? 1 : 5;
               const deltaPct = e.deltaY < 0 ? stepPct : -stepPct;
@@ -8607,6 +8611,10 @@ export const LeftRearWrapAroundPanel3D: React.FC<{
             onPointerDown={(e) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               coreDragCleanupRef.current?.();
               coreRodDraggingRef.current = true;
               const s = useGameStore.getState();
@@ -11130,6 +11138,10 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
   const triggerBulletinStation = (e: ThreeEvent<MouseEvent>) => {
     if (useCameraLookStore.getState().isFreeLookMode) return;
     e.stopPropagation();
+    if (isPreVolkovPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     bulletinPressAnimRef.current = 1.0;
     bulletinTargetAngleRef.current -= Math.PI / 3;
     playSwitchClank(false);
@@ -11746,6 +11758,10 @@ export const SovietDvk84KeyboardConsole3D: React.FC<{
             onClick={(e) => {
               if (useCameraLookStore.getState().isFreeLookMode) return;
               e.stopPropagation();
+              if (isPreVolkovPanelLocked()) {
+                triggerPreVolkovPanelLockFeedback();
+                return;
+              }
               keyRowPressRef.current[row.rowIdx] = 1.0;
               playDetentClick();
               const store = useGameStore.getState();

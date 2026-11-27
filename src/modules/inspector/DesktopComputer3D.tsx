@@ -136,6 +136,7 @@ function readTelemetrySnapshot(
   const snapshot: DesktopTelemetrySnapshot = {
     shiftNumber: gs.shiftNumber,
     shiftTimeMinutes: gs.shiftTimeMinutes,
+    shiftCompletedAt0600: gs.shiftCompletedAt0600,
     tutorialPhase: gs.tutorialPhase,
     isBlackout: gs.isBlackout,
     az5Active: gs.az5Active,
@@ -159,6 +160,8 @@ function readTelemetrySnapshot(
     facilityMW: gs.powerAllocation.facility,
     commendations: ds.commendations,
     citations: ds.citations,
+    treasonStrikes: gs.treasonStrikes,
+    strike5SurgeFlashSec: gs.strike5SurgeFlashSec,
     rubles: gs.rubles,
     quotaCompleted: gs.quotaCompleted,
     activeMandateTitle: gs.activeMandate ? gs.activeMandate.title : null,
@@ -187,8 +190,11 @@ function readTelemetrySnapshot(
   const keyParts: Array<string | number> = [
     snapshot.shiftNumber,
     Math.floor(snapshot.shiftTimeMinutes),
+    snapshot.shiftCompletedAt0600,
     Math.round(snapshot.rubles),
     Math.round(snapshot.quotaCompleted),
+    snapshot.treasonStrikes,
+    Math.ceil(snapshot.strike5SurgeFlashSec * 8),
     snapshot.isBlackout ? 1 : 0,
     Math.round(snapshot.coreTemp),
     snapshot.radiationLevel >= 8.0 ? 1 : 0,
@@ -644,6 +650,7 @@ export function DesktopComputer3D() {
     if (
       gs.phase === 'playing' &&
       gs.isShiftControlReady &&
+      gs.shiftCompletedAt0600 === 'active' &&
       gs.tutorialPhase === 'COMPLETED'
     ) {
       if (!tutorialCompletedSeenRef.current) {
@@ -809,14 +816,18 @@ export function DesktopComputer3D() {
       (app) => app.getStatusMeta().isUrgent
     )
     let blinkStep = -1
-    if (mailAlertFlashRef.current > 0) {
+    if (gs.strike5SurgeFlashSec > 0) {
+      blinkStep = Math.floor(gs.strike5SurgeFlashSec * 12)
+    } else if (mailAlertFlashRef.current > 0) {
       blinkStep = Math.floor(mailAlertFlashRef.current * 4)
     } else if (
       (gs.tutorialPhase === 'AWAITING_VOLKOV_MAIL' && gs.isShiftControlReady) ||
-      hasPluginAlert
+      hasPluginAlert ||
+      gs.treasonStrikes >= 4
     ) {
       volkovPulseAccumRef.current += dt
-      blinkStep = Math.floor(volkovPulseAccumRef.current * 2) % 2
+      const blinkHz = gs.treasonStrikes >= 4 ? 3 : 2
+      blinkStep = Math.floor(volkovPulseAccumRef.current * blinkHz) % 2
     }
     if (blinkStep !== alertBlinkStepRef.current) {
       alertBlinkStepRef.current = blinkStep
@@ -935,6 +946,7 @@ export function DesktopComputer3D() {
 
     const gs = useGameStore.getState()
     if (!gs.isSeatedAtDesk || document.pointerLockElement !== null) return
+    if (gs.shiftCompletedAt0600 !== 'active') return
 
     applySeatedCursorUv(e.uv.x, e.uv.y)
   }
@@ -964,6 +976,10 @@ export function DesktopComputer3D() {
     if (e.button !== 0) return
     const gs = useGameStore.getState()
     if (!gs.isSeatedAtDesk || document.pointerLockElement !== null) return
+    if (gs.shiftCompletedAt0600 !== 'active') {
+      playSwitchClank(false)
+      return
+    }
 
     const coords = e.uv
       ? uvToCanvasCoords(e.uv.x, e.uv.y)

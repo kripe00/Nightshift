@@ -44,6 +44,7 @@ export interface DesktopHitRegion {
 export interface DesktopTelemetrySnapshot {
   shiftNumber: number
   shiftTimeMinutes: number
+  shiftCompletedAt0600: 'active' | 'closing_shift' | 'awaiting_elevator'
   tutorialPhase: string
   isBlackout: boolean
   az5Active: boolean
@@ -67,6 +68,8 @@ export interface DesktopTelemetrySnapshot {
   facilityMW: number
   commendations: number
   citations: number
+  treasonStrikes: number
+  strike5SurgeFlashSec: number
   rubles: number
   quotaCompleted: number
   activeMandateTitle: string | null
@@ -653,6 +656,29 @@ function drawMailEnvelopeGlyph(
   ctx.restore()
 }
 
+function formatWindowTitleForKremlin(rawTitle: string): string {
+  return rawTitle
+    .replace(/\s*\/\/\s*/g, '  //  ')
+    .replace(/(\d)\s+([A-Z])/g, '$1   $2')
+}
+
+function drawFittedKremlinTitle(
+  ctx: CanvasRenderingContext2D,
+  rawTitle: string,
+  x: number,
+  y: number,
+  maxWidth: number
+): void {
+  const formatted = formatWindowTitleForKremlin(rawTitle)
+  let fontSize = 18
+  ctx.font = `bold ${fontSize}px "Kremlin", "Courier Prime", monospace`
+  while (fontSize > 14 && ctx.measureText(formatted).width > maxWidth) {
+    fontSize -= 1
+    ctx.font = `bold ${fontSize}px "Kremlin", "Courier Prime", monospace`
+  }
+  ctx.fillText(formatted, x, y, maxWidth)
+}
+
 function fitEllipsis(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -779,36 +805,75 @@ export function paintDesktopOsCanvas(
 
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
-  ctx.font = 'bold 20px "Kremlin", "Courier Prime", monospace'
+  ctx.font = 'bold 19px "Kremlin", "Courier Prime", monospace'
   ctx.fillStyle = '#33ff66'
-  ctx.fillText('SOV-OS 84', 16, 24)
+  ctx.fillText('SOV-OS 84', 14, 24, 122)
 
   // Shift & Quota Readout
   const quotaTarget = 5
   const totalQuotaDone = Math.max(0, Math.round(telemetry.quotaCompleted))
   const clockStr = formatShiftClock(telemetry.shiftTimeMinutes)
   ctx.fillStyle = '#08200f'
-  ctx.fillRect(168, 6, 366, 36)
+  ctx.fillRect(142, 6, 264, 36)
   ctx.strokeStyle = '#22b549'
   ctx.lineWidth = 2
-  ctx.strokeRect(168, 6, 366, 36)
-  ctx.font = 'bold 18px "Courier Prime", monospace'
+  ctx.strokeRect(142, 6, 264, 36)
+  ctx.font = 'bold 17px "Courier Prime", monospace'
   ctx.fillStyle = '#e6dec3'
   ctx.fillText(
-    `SHF-0${telemetry.shiftNumber} ${clockStr} | QUOTA ${totalQuotaDone}/${quotaTarget}`,
-    182,
-    24
+    `SHF-0${telemetry.shiftNumber} ${clockStr} | QTA ${totalQuotaDone}/${quotaTarget}`,
+    152,
+    24,
+    244
   )
 
   // Currency Balance Badge
   const rubBalance = computeBalanceRub(telemetry, state)
   ctx.fillStyle = '#1d1404'
-  ctx.fillRect(546, 6, 198, 36)
+  ctx.fillRect(414, 6, 166, 36)
   ctx.strokeStyle = '#ffb000'
-  ctx.strokeRect(546, 6, 198, 36)
+  ctx.strokeRect(414, 6, 166, 36)
   ctx.fillStyle = '#ffb000'
-  ctx.font = 'bold 19px "Courier Prime", monospace'
-  ctx.fillText(`BAL: ${rubBalance} RUB`, 560, 24, 176)
+  ctx.font = 'bold 17px "Courier Prime", monospace'
+  ctx.fillText(`BAL: ${rubBalance} RUB`, 424, 24, 146)
+
+  // Unified KGB Treason Strike Readout (0 = green, 1-3 = amber, 4-5 = flashing crimson)
+  const strikes = Math.max(0, Math.min(6, Math.round(telemetry.treasonStrikes)))
+  const strikeFlashHigh = strikes >= 4 && mailAlertPhase === 2
+  const strikeBg =
+    strikes === 0
+      ? '#08200f'
+      : strikes <= 3
+        ? '#1f1504'
+        : strikeFlashHigh
+          ? '#ff2a2a'
+          : '#3a0909'
+  const strikeBorder =
+    strikes === 0
+      ? '#22b549'
+      : strikes <= 3
+        ? '#ffb000'
+        : strikeFlashHigh
+          ? '#e6dec3'
+          : '#ff2a2a'
+  const strikeTextCol =
+    strikes === 0
+      ? '#33ff66'
+      : strikes <= 3
+        ? '#ffb000'
+        : strikeFlashHigh
+          ? '#061a0c'
+          : '#ff4d4d'
+  ctx.fillStyle = strikeBg
+  ctx.fillRect(588, 6, 186, 36)
+  ctx.strokeStyle = strikeBorder
+  ctx.lineWidth = strikes >= 4 ? 2.5 : 2
+  ctx.strokeRect(588, 6, 186, 36)
+  ctx.textAlign = 'center'
+  ctx.fillStyle = strikeTextCol
+  ctx.font = 'bold 18px "Courier Prime", monospace'
+  ctx.fillText(`STRIKES: ${strikes}/6`, 681, 24, 174)
+  ctx.textAlign = 'left'
 
   // Reactor Quick-Status Pill (read-only telemetry indicator)
   const coreRounded = Math.round(telemetry.coreTemp)
@@ -823,13 +888,13 @@ export function paintDesktopOsCanvas(
         ? 'WARN'
         : 'OK'
   ctx.fillStyle = '#08200f'
-  ctx.fillRect(758, 6, 254, 36)
+  ctx.fillRect(782, 6, 230, 36)
   ctx.strokeStyle = pillColor
   ctx.lineWidth = 2
-  ctx.strokeRect(758, 6, 254, 36)
+  ctx.strokeRect(782, 6, 230, 36)
   ctx.fillStyle = pillColor
-  ctx.font = 'bold 18px "Courier Prime", monospace'
-  ctx.fillText(`CORE ${coreRounded}C [${statusWord}]`, 772, 24)
+  ctx.font = 'bold 17px "Courier Prime", monospace'
+  ctx.fillText(`CORE ${coreRounded}C [${statusWord}]`, 794, 24, 206)
 
   // =========================================================================
   // 2. DESKTOP SHORTCUT ICON (ONLY P.O.S.T.-84)
@@ -959,7 +1024,36 @@ export function paintDesktopOsCanvas(
     activeWinId && activeWinId !== 'mail'
       ? getSovOsPluginApp(activeWinId)
       : undefined
-  if (isMailOpen || activePlugin) {
+  if (telemetry.shiftCompletedAt0600 !== 'active') {
+    // Crisp 06:00 Shift-Complete lockout banner across SOV-OS 84 desktop
+    ctx.fillStyle = 'rgba(4, 14, 8, 0.9)'
+    ctx.fillRect(228, 128, 744, 248)
+    ctx.strokeStyle = '#ffb000'
+    ctx.lineWidth = 4
+    ctx.strokeRect(228, 128, 744, 248)
+    ctx.strokeStyle = '#33ff66'
+    ctx.lineWidth = 2
+    ctx.strokeRect(238, 138, 724, 228)
+
+    ctx.fillStyle = '#2b1d05'
+    ctx.fillRect(240, 140, 720, 44)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#ffb000'
+    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.fillText('06:00 NIGHT RELIEF AUTOMATED STANDBY ENGAGED', 600, 162, 696)
+
+    ctx.fillStyle = '#33ff66'
+    ctx.font = 'bold 34px "Kremlin", "Courier Prime", monospace'
+    ctx.fillText('SHIFT COMPLETE — REPORT TO LIFT-84', 600, 232, 696)
+
+    ctx.fillStyle = '#e6dec3'
+    ctx.font = 'bold 18px "Courier Prime", monospace'
+    ctx.fillText('ALL REACTOR PANELS & DESK APPS LOCKED UNTIL NEXT SHIFT.', 600, 290, 696)
+    ctx.fillStyle = '#ffb000'
+    ctx.fillText('EXIT THROUGH MCR-4 AIRLOCK & BOARD LIFT-84 ELEVATOR.', 600, 326, 696)
+    ctx.textAlign = 'left'
+  } else if (isMailOpen || activePlugin) {
     const rect = getWindowRect()
     const winId: DesktopAppId = activePlugin ? activePlugin.id : 'mail'
     const winTitle = activePlugin
@@ -984,9 +1078,8 @@ export function paintDesktopOsCanvas(
     ctx.fillRect(rect.x, rect.y + 42, rect.w, 2)
 
     ctx.textAlign = 'left'
-    ctx.font = 'bold 20px "Kremlin", "Courier Prime", monospace'
     ctx.fillStyle = '#e6dec3'
-    ctx.fillText(winTitle, rect.x + 18, rect.y + 22, rect.w - 130)
+    drawFittedKremlinTitle(ctx, winTitle, rect.x + 18, rect.y + 22, rect.w - 132)
 
     // Minimize [_] button
     const minHover = hoveredId === `win:${winId}:minimize`
@@ -1146,6 +1239,42 @@ export function paintDesktopOsCanvas(
     ctx.font = 'bold 16px "Courier Prime", monospace'
     ctx.fillStyle = '#22b549'
     ctx.fillText(state.lastStatusNotice.slice(0, 34), W - 14, 613)
+  }
+
+  // Strike 5 seated intimidation CRT static jolt & crimson warning overlay
+  if (telemetry.strike5SurgeFlashSec > 0) {
+    const joltSeed = Math.floor(telemetry.strike5SurgeFlashSec * 24)
+    const intensity = Math.min(1, telemetry.strike5SurgeFlashSec / 1.4)
+    ctx.fillStyle = `rgba(255, 42, 42, ${(0.12 * intensity).toFixed(3)})`
+    ctx.fillRect(0, 0, W, H)
+    for (let k = 0; k < 16; k++) {
+      const bandY = ((joltSeed * 89 + k * 53) % (H - 16)) + 4
+      const bandH = k % 3 === 0 ? 10 : 4
+      ctx.fillStyle =
+        k % 2 === 0
+          ? `rgba(255, 42, 42, ${(0.34 * intensity).toFixed(3)})`
+          : `rgba(230, 222, 195, ${(0.22 * intensity).toFixed(3)})`
+      ctx.fillRect(0, bandY, W, bandH)
+    }
+    ctx.strokeStyle = joltSeed % 2 === 0 ? '#ff2a2a' : '#ffb000'
+    ctx.lineWidth = 6
+    ctx.strokeRect(3, 3, W - 6, H - 6)
+
+    ctx.fillStyle = 'rgba(26, 4, 4, 0.92)'
+    ctx.fillRect(148, 524, W - 296, 50)
+    ctx.strokeStyle = '#ff2a2a'
+    ctx.lineWidth = 3
+    ctx.strokeRect(148, 524, W - 296, 50)
+    ctx.textAlign = 'center'
+    ctx.fillStyle = joltSeed % 2 === 0 ? '#ff4d4d' : '#ffb000'
+    ctx.font = 'bold 20px "Courier Prime", monospace'
+    ctx.fillText(
+      '!! 5/6 TREASON STRIKES — FINAL SIBERIA WARNING !!',
+      W / 2,
+      549,
+      W - 320
+    )
+    ctx.textAlign = 'left'
   }
 
   // Subtle CRT horizontal scanline pass

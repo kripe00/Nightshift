@@ -3,6 +3,8 @@
  * Zero imports from `src/modules/*` to avoid circular dependencies and enforce module boundaries.
  */
 
+import type { SovOsPersistenceSnapshot } from './types'
+
 export type SovOsPluginAppId = 'polit_link' | 'zashchita'
 
 export type SovOsAlertSeverity = 'none' | 'warn' | 'danger'
@@ -94,6 +96,8 @@ export interface SovOsRuntimeHooks {
   isFirewallDrillPassed: () => boolean
   getDuelHudSummary: () => PolitLinkHudSummary
   getFirewallHudSummary: () => ZashchitaHudSummary
+  getPersistenceSnapshot?: () => SovOsPersistenceSnapshot
+  restorePersistenceSnapshot?: (snapshot: SovOsPersistenceSnapshot) => void
 }
 
 const registeredApps = new Map<SovOsPluginAppId, SovOsPluginApp>()
@@ -102,6 +106,7 @@ const changeListeners = new Set<() => void>()
 let runtimeHooks: SovOsRuntimeHooks | null = null
 let pluginHostMounted = false
 let deskAppTutorialForceEnabled = false
+let lastRestoredPersistenceSnapshot: SovOsPersistenceSnapshot | null = null
 
 export function notifySovOsPluginChanged(): void {
   changeListeners.forEach((listener) => listener())
@@ -163,7 +168,123 @@ export function tickSovOsRuntime(dt: number): void {
 }
 
 export function resetSovOsRuntime(): void {
+  lastRestoredPersistenceSnapshot = null
   runtimeHooks?.reset()
+  notifySovOsPluginChanged()
+}
+
+const VALID_DUEL_MODES = new Set<SovOsDuelTriggerMode>([
+  'crisis',
+  'audit',
+  'voluntary',
+  'tutorial_drill',
+  'impostor',
+])
+
+export function captureSovOsPersistenceSnapshot(): SovOsPersistenceSnapshot {
+  if (runtimeHooks?.getPersistenceSnapshot) {
+    return runtimeHooks.getPersistenceSnapshot()
+  }
+
+  const politApp = registeredApps.get('polit_link')
+  const zashApp = registeredApps.get('zashchita')
+  const duelSummary = getPolitLinkHudSummary()
+  const fwSummary = getZashchitaHudSummary()
+
+  let politActive = duelSummary.active
+  let politMode = duelSummary.mode
+  let politRoundIdx = Math.max(0, duelSummary.round - 1)
+  let politTrust = lastRestoredPersistenceSnapshot?.politLink.trust ?? 50
+  let politSuspicion = lastRestoredPersistenceSnapshot?.politLink.suspicion ?? 20
+  let politTimeLeft = duelSummary.timeLeftSec
+  let politDrillFailed = lastRestoredPersistenceSnapshot?.politLink.drillFailed ?? false
+
+  if (politApp) {
+    const sigParts = politApp.getRenderSignature().split(':')
+    if (sigParts.length >= 8) {
+      politActive = sigParts[0] === '1'
+      politMode = sigParts[1] || politMode
+      const parsedRound = Number(sigParts[2])
+      const parsedTrust = Number(sigParts[3])
+      const parsedSusp = Number(sigParts[4])
+      const parsedTime = Number(sigParts[5])
+      if (Number.isFinite(parsedRound)) politRoundIdx = parsedRound
+      if (Number.isFinite(parsedTrust)) politTrust = parsedTrust
+      if (Number.isFinite(parsedSusp)) politSuspicion = parsedSusp
+      if (Number.isFinite(parsedTime)) politTimeLeft = parsedTime
+      politDrillFailed = sigParts[7] === '1'
+    }
+  }
+
+  let zashActive = fwSummary.active
+  let zashIsDrill = fwSummary.isDrill
+  let zashWaveMode = lastRestoredPersistenceSnapshot?.zashchita.waveMode ?? 'standard'
+  let zashWaveCount = lastRestoredPersistenceSnapshot?.zashchita.waveCount ?? 0
+
+  if (zashApp) {
+    const sigParts = zashApp.getRenderSignature().split('|')
+    if (sigParts.length >= 6) {
+      zashActive = sigParts[0] === '1'
+      zashIsDrill = sigParts[1] === '1'
+      zashWaveMode = sigParts[2] || zashWaveMode
+      const parsedWaveCount = Number(sigParts[5])
+      if (Number.isFinite(parsedWaveCount)) zashWaveCount = parsedWaveCount
+    }
+  }
+
+  return {
+    politLink: {
+      active: politActive,
+      mode: politMode,
+      roundIndex: politRoundIdx,
+      trust: politTrust,
+      suspicion: politSuspicion,
+      timeLeftSec: politTimeLeft,
+      drillPassed:
+        isIdeologyDrillPassed() ||
+        Boolean(lastRestoredPersistenceSnapshot?.politLink.drillPassed),
+      drillFailed: politDrillFailed,
+    },
+    zashchita: {
+      active: zashActive,
+      isDrill: zashIsDrill,
+      waveMode: zashWaveMode,
+      waveCount: zashWaveCount,
+      drillPassed:
+        isFirewallDrillPassed() ||
+        Boolean(lastRestoredPersistenceSnapshot?.zashchita.drillPassed),
+    },
+  }
+}
+
+export function restoreSovOsPersistenceSnapshot(
+  snapshot: SovOsPersistenceSnapshot | null | undefined
+): void {
+  if (!snapshot) {
+    lastRestoredPersistenceSnapshot = null
+    return
+  }
+  lastRestoredPersistenceSnapshot = {
+    politLink: { ...snapshot.politLink },
+    zashchita: { ...snapshot.zashchita },
+  }
+  if (runtimeHooks?.restorePersistenceSnapshot) {
+    runtimeHooks.restorePersistenceSnapshot(lastRestoredPersistenceSnapshot)
+    notifySovOsPluginChanged()
+    return
+  }
+  if (snapshot.politLink.active) {
+    if (snapshot.politLink.mode === 'impostor') {
+      runtimeHooks?.triggerLangleyLeak()
+    } else if (VALID_DUEL_MODES.has(snapshot.politLink.mode as SovOsDuelTriggerMode)) {
+      runtimeHooks?.triggerDuel(snapshot.politLink.mode as SovOsDuelTriggerMode)
+    } else {
+      runtimeHooks?.triggerDuel('audit')
+    }
+  }
+  if (snapshot.zashchita.active) {
+    runtimeHooks?.triggerFirewall(Boolean(snapshot.zashchita.isDrill))
+  }
   notifySovOsPluginChanged()
 }
 

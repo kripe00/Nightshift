@@ -122,6 +122,9 @@ export interface KomradGrabBridgeState {
   liquidationVignette: number;
   liquidationFlash: number;
   liquidationCompletePending: boolean;
+
+  strike5SurgeRemainingSec: number;
+  strike5SurgeEventPending: boolean;
 }
 
 export const komradGrabState: KomradGrabBridgeState = {
@@ -197,6 +200,9 @@ export const komradGrabState: KomradGrabBridgeState = {
   liquidationVignette: 0,
   liquidationFlash: 0,
   liquidationCompletePending: false,
+
+  strike5SurgeRemainingSec: 0,
+  strike5SurgeEventPending: false,
 };
 
 let steppedThisTick = false;
@@ -207,6 +213,28 @@ export function isKomradGrabActive(): boolean {
 
 export function isKomradLiquidating(): boolean {
   return komradGrabState.phase === "liquidating";
+}
+
+export function isKomradStrike5Surging(): boolean {
+  return komradGrabState.strike5SurgeRemainingSec > 0;
+}
+
+export function startKomradStrike5Surge(durationSec = 3.4): void {
+  if (komradGrabState.phase === "liquidating") return;
+  komradGrabState.strike5SurgeRemainingSec = Math.max(
+    komradGrabState.strike5SurgeRemainingSec,
+    durationSec,
+  );
+  komradGrabState.strike5SurgeEventPending = true;
+}
+
+export function stepKomradStrike5Surge(dt: number): void {
+  if (komradGrabState.strike5SurgeRemainingSec > 0) {
+    komradGrabState.strike5SurgeRemainingSec = Math.max(
+      0,
+      komradGrabState.strike5SurgeRemainingSec - Math.max(0, dt),
+    );
+  }
 }
 
 export function startKomradGrabSequence(ultimatumLine: string): boolean {
@@ -240,7 +268,7 @@ export function startKomradGrabSequence(ultimatumLine: string): boolean {
 }
 
 export function startKomradLiquidationSequence(): boolean {
-  if (komradGrabState.phase !== "idle") {
+  if (komradGrabState.phase === "liquidating") {
     return false;
   }
   const s = komradGrabState;
@@ -266,6 +294,8 @@ export function startKomradLiquidationSequence(): boolean {
   s.liquidationVignette = 0.18;
   s.liquidationFlash = 0;
   s.liquidationCompletePending = false;
+  s.strike5SurgeRemainingSec = 0;
+  s.strike5SurgeEventPending = false;
   return true;
 }
 
@@ -293,6 +323,8 @@ export function abortKomradGrab(): void {
   s.liquidationVignette = 0;
   s.liquidationFlash = 0;
   s.liquidationCompletePending = false;
+  s.strike5SurgeRemainingSec = 0;
+  s.strike5SurgeEventPending = false;
 }
 
 export function snapshotGrabCameraPose(

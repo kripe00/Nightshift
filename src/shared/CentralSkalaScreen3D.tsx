@@ -15,7 +15,11 @@ import { CONSOLE_WORLD_TARGETS, CRISIS_COACH_CARDS } from "./komradTutorialVox";
 import { onKremlinFontReady } from "./kremlinFontReady";
 import { isDeskAppTutorialEnabled } from "./sovOsAppRegistry";
 import type { CrisisCoachId } from "./types";
-import { useGameStore } from "./useGameStore";
+import {
+  isShiftEndedPanelLocked,
+  useGameStore,
+} from "./useGameStore";
+import { triggerPreVolkovPanelLockFeedback } from "./komradVoiceSynth";
 
 const CW = 1024;
 const CH = 640;
@@ -2702,6 +2706,10 @@ export const CentralSkalaScreen3D: React.FC = React.memo(() => {
 
   const handleActionClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    if (isShiftEndedPanelLocked()) {
+      triggerPreVolkovPanelLockFeedback();
+      return;
+    }
     playSwitchClank(true);
     const s = useGameStore.getState();
     if (s.phase === "boot") {

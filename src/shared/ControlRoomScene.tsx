@@ -142,6 +142,11 @@ export const controlRoomPowerState = { // oxlint-disable-line react/only-export-
   stage1Fired: false,
   stage2Fired: false,
   stage3Fired: false,
+  shuttingDown: false,
+  shutdownElapsed: 0,
+  shutStage3Fired: false,
+  shutStage2Fired: false,
+  shutStage1Fired: false,
 };
 
 function computeFluorescentStarterCurve(localElapsed: number): number {
@@ -260,6 +265,66 @@ function playControlRoomContactorClunk(stage: 0 | 1 | 2): void {
   hum100.start(now);
   hum50.stop(now + 1.5);
   hum100.stop(now + 1.5);
+}
+
+function playControlRoomContactorOff(stage: 0 | 1 | 2): void {
+  if (useGameStore.getState().isMusicMuted) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    void ctx.resume().catch(() => {});
+  }
+
+  const now = ctx.currentTime;
+
+  // 1. Heavy downward cabinet breaker CLUNK-THUD
+  const thumpOsc = ctx.createOscillator();
+  const thumpGain = ctx.createGain();
+  thumpOsc.type = "triangle";
+  thumpOsc.frequency.setValueAtTime(118 - stage * 9, now);
+  thumpOsc.frequency.exponentialRampToValueAtTime(30, now + 0.12);
+  thumpGain.gain.setValueAtTime(0.001, now);
+  thumpGain.gain.linearRampToValueAtTime(0.3, now + 0.006);
+  thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+  thumpOsc.connect(thumpGain);
+  thumpGain.connect(ctx.destination);
+  thumpOsc.start(now);
+  thumpOsc.stop(now + 0.17);
+
+  // 2. Heavy iron spring-latch release snap
+  const snapBufSize = Math.max(1, Math.floor(ctx.sampleRate * 0.048));
+  const snapBuf = ctx.createBuffer(1, snapBufSize, ctx.sampleRate);
+  const snapData = snapBuf.getChannelData(0);
+  for (let i = 0; i < snapBufSize; i++) {
+    snapData[i] = (Math.random() * 2 - 1) * Math.exp((-i / snapBufSize) * 5.2);
+  }
+  const snapSrc = ctx.createBufferSource();
+  snapSrc.buffer = snapBuf;
+  const snapFilter = ctx.createBiquadFilter();
+  snapFilter.type = "bandpass";
+  snapFilter.frequency.setValueAtTime(760 + stage * 120, now);
+  snapFilter.Q.setValueAtTime(2.4, now);
+  const snapGain = ctx.createGain();
+  snapGain.gain.setValueAtTime(0.2, now);
+  snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.048);
+  snapSrc.connect(snapFilter);
+  snapFilter.connect(snapGain);
+  snapGain.connect(ctx.destination);
+  snapSrc.start(now);
+  snapSrc.stop(now + 0.052);
+
+  // 3. Brief descending ballast coil discharge decay
+  const coilOsc = ctx.createOscillator();
+  const coilGain = ctx.createGain();
+  coilOsc.type = "sine";
+  coilOsc.frequency.setValueAtTime(100, now);
+  coilOsc.frequency.exponentialRampToValueAtTime(42, now + 0.24);
+  coilGain.gain.setValueAtTime(0.045, now);
+  coilGain.gain.exponentialRampToValueAtTime(0.0004, now + 0.25);
+  coilOsc.connect(coilGain);
+  coilGain.connect(ctx.destination);
+  coilOsc.start(now);
+  coilOsc.stop(now + 0.26);
 }
 
 interface UnitCMasterDashboardData {
@@ -1172,8 +1237,9 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
 
     if (s.diagFeedActive) return;
 
+    const isShiftDone = s.shiftCompletedAt0600 !== "active";
     const colonOn = halfSecBucket % 2 === 0;
-    const sig = `${hh}:${mm}|${colonOn}|${s.isBlackout}|${isEmergency}|${isFinalHour}|${s.shiftNumber}`;
+    const sig = `${hh}:${mm}|${colonOn}|${s.isBlackout}|${isEmergency}|${isFinalHour}|${isShiftDone}|${s.shiftNumber}`;
     if (sig === lastClockSigRef.current) return;
     lastClockSigRef.current = sig;
 
@@ -1228,19 +1294,23 @@ const SovietDigitalShiftClock3D: React.FC = React.memo(() => {
       w * 0.55,
     );
     ctx.textAlign = "right";
-    ctx.fillStyle = isEmergency
-      ? "#ff3b24"
-      : isFinalHour
-        ? "#ff9933"
-        : "#ff5544";
+    ctx.fillStyle = isShiftDone
+      ? "#33ff66"
+      : isEmergency
+        ? "#ff3b24"
+        : isFinalHour
+          ? "#ff9933"
+          : "#ff5544";
     ctx.fillText(
-      s.isBlackout
-        ? "POWER FAILURE"
-        : isEmergency
-          ? "UNIT 4 ALERT"
-          : isFinalHour
-            ? "FINAL HOUR"
-            : "06:00 QUOTA",
+      isShiftDone
+        ? "SHIFT COMPLETE"
+        : s.isBlackout
+          ? "POWER FAILURE"
+          : isEmergency
+            ? "UNIT 4 ALERT"
+            : isFinalHour
+              ? "FINAL HOUR"
+              : "06:00 QUOTA",
       w - 18,
       30,
     );
@@ -5973,6 +6043,8 @@ const SovietRearDoubleEntryDoors3D: React.FC = React.memo(() => {
       if (pz < AIRLOCK_ENTRY_THRESHOLD_Z) {
         gs.setLobbyMenuPhase("entered_control_room");
       }
+    } else if (gs.shiftCompletedAt0600 === "awaiting_elevator") {
+      airlockDoorState.wantOpen = true;
     } else if (dist <= AIRLOCK_OPEN_RADIUS || inThresholdCorridor) {
       airlockDoorState.wantOpen = true;
     } else if (dist >= AIRLOCK_CLOSE_RADIUS) {
@@ -7920,15 +7992,20 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       state.sectorMW.steel;
     const isLiquidating = isKomradLiquidating();
     const liquidationDark = isLiquidating || state.siberiaGameOverActive;
+    const isShiftEnded = state.shiftCompletedAt0600 !== "active";
     const isAlarmActive =
-      coreTemp >= 750 || totalMW > maxSafePower || isLiquidating;
+      !isShiftEnded &&
+      (coreTemp >= 750 || totalMW > maxSafePower || isLiquidating);
 
     // Continuous 50Hz / 3000 RPM Turbine-Generator Pitch Hum
     updateTurbinePitchHum(
       state.turbineRpm,
       totalAllocatedMW,
       state.voltageDipIntensity,
-      isBlackout || lobbyMenuPhase === "menu_locked" || liquidationDark,
+      isBlackout ||
+        lobbyMenuPhase === "menu_locked" ||
+        liquidationDark ||
+        state.shiftCompletedAt0600 === "awaiting_elevator",
     );
 
     if (lobbyMenuPhase !== "entered_control_room" || liquidationDark) {
@@ -7940,7 +8017,71 @@ const DynamicBunkerLighting: React.FC = React.memo(() => {
       controlRoomPowerState.stage1Fired = false;
       controlRoomPowerState.stage2Fired = false;
       controlRoomPowerState.stage3Fired = false;
+      controlRoomPowerState.shuttingDown = false;
+      controlRoomPowerState.shutdownElapsed = 0;
+      controlRoomPowerState.shutStage3Fired = false;
+      controlRoomPowerState.shutStage2Fired = false;
+      controlRoomPowerState.shutStage1Fired = false;
+    } else if (isShiftEnded) {
+      // Sequential reverse 3-stage contactor shutdown (Zone 3 -> Zone 2 -> Zone 1, 0.45s apart)
+      // down to shader-safe MIN_STANDBY_LIGHT_INTENSITY (0.0002), then slide MCR-4 airlock open!
+      if (!controlRoomPowerState.shuttingDown) {
+        controlRoomPowerState.shuttingDown = true;
+        controlRoomPowerState.shutdownElapsed = 0;
+        controlRoomPowerState.shutStage3Fired = false;
+        controlRoomPowerState.shutStage2Fired = false;
+        controlRoomPowerState.shutStage1Fired = false;
+      } else {
+        controlRoomPowerState.shutdownElapsed = Math.min(
+          6.0,
+          controlRoomPowerState.shutdownElapsed + dt,
+        );
+      }
+
+      const se = controlRoomPowerState.shutdownElapsed;
+      const STAGE_Z3_SEC = 1.8;
+      const STAGE_Z2_SEC = 2.25;
+      const STAGE_Z1_SEC = 2.7;
+      const DROP_DUR_SEC = 0.09;
+
+      if (!controlRoomPowerState.shutStage3Fired && se >= STAGE_Z3_SEC) {
+        controlRoomPowerState.shutStage3Fired = true;
+        playControlRoomContactorOff(2);
+      }
+      if (!controlRoomPowerState.shutStage2Fired && se >= STAGE_Z2_SEC) {
+        controlRoomPowerState.shutStage2Fired = true;
+        playControlRoomContactorOff(1);
+      }
+      if (!controlRoomPowerState.shutStage1Fired && se >= STAGE_Z1_SEC) {
+        controlRoomPowerState.shutStage1Fired = true;
+        playControlRoomContactorOff(0);
+      }
+
+      controlRoomPowerState.zone3 =
+        se < STAGE_Z3_SEC
+          ? 1
+          : Math.max(0, 1 - (se - STAGE_Z3_SEC) / DROP_DUR_SEC);
+      controlRoomPowerState.zone2 =
+        se < STAGE_Z2_SEC
+          ? 1
+          : Math.max(0, 1 - (se - STAGE_Z2_SEC) / DROP_DUR_SEC);
+      controlRoomPowerState.zone1 =
+        se < STAGE_Z1_SEC
+          ? 1
+          : Math.max(0, 1 - (se - STAGE_Z1_SEC) / DROP_DUR_SEC);
+
+      if (
+        se >= STAGE_Z1_SEC + 0.08 &&
+        state.shiftCompletedAt0600 === "closing_shift"
+      ) {
+        state.setShiftEndPhase("awaiting_elevator");
+      }
     } else {
+      controlRoomPowerState.shuttingDown = false;
+      controlRoomPowerState.shutdownElapsed = 0;
+      controlRoomPowerState.shutStage3Fired = false;
+      controlRoomPowerState.shutStage2Fired = false;
+      controlRoomPowerState.shutStage1Fired = false;
       if (!controlRoomPowerState.active) {
         controlRoomPowerState.active = true;
         controlRoomPowerState.elapsed = 0;

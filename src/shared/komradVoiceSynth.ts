@@ -8,7 +8,11 @@ import {
   getAudioContext,
   silenceAllLegacyGlobalBgm,
 } from "../modules/inspector/audio";
-import { isKomradGrabActive, isKomradLiquidating } from "./komradGrabState";
+import {
+  isKomradGrabActive,
+  isKomradLiquidating,
+  isKomradStrike5Surging,
+} from "./komradGrabState";
 import {
   canEmitKomradIdleChatter,
   isKomradNonCriticalCooldownActive,
@@ -20,9 +24,11 @@ import {
 import type { KomradMessageEntry, KomradMood } from "./types";
 import {
   doesRadioDominateSubtitles,
-  getPreVolkovStrikeCount,
   isPreVolkovPanelLocked,
+  isShiftEndedPanelLocked,
+  registerStrikeAudioListener,
   reportPreVolkovLockedPanelAttempt,
+  reportShiftEndedLockedPanelAttempt,
   useGameStore,
 } from "./useGameStore";
 
@@ -1934,7 +1940,11 @@ export function decomposeWordToSyllables(rawWord: string): SyllableSpec[] {
 
 function isRadioHoldoffActive(): boolean {
   const s = useGameStore.getState();
-  if (isKomradLiquidating() || s.siberiaGameOverActive) {
+  if (
+    isKomradLiquidating() ||
+    s.siberiaGameOverActive ||
+    s.shiftCompletedAt0600 !== "active"
+  ) {
     return false;
   }
   const nowMs = nowPerfMs();
@@ -1952,7 +1962,14 @@ function canKomradSpeakAudio(): boolean {
   if (s.phase !== "playing") return false;
   if (s.lobbyMenuPhase !== "entered_control_room") return false;
   if (!s.isShiftControlReady) return false;
-  if (s.isBlackout && !s.isGodMode) return false;
+  if (
+    s.isBlackout &&
+    !s.isGodMode &&
+    !isKomradLiquidating() &&
+    !s.siberiaGameOverActive
+  ) {
+    return false;
+  }
   if (isRadioHoldoffActive()) return false;
   return true;
 }
@@ -3074,28 +3091,117 @@ export function playKgbLiquidationStampThud(): void {
   };
 }
 
-export function triggerPreVolkovPanelLockFeedback(): boolean {
-  if (!isPreVolkovPanelLocked()) {
-    return false;
-  }
+export function playStrike5AlarmBuzz(): void {
   const s = useGameStore.getState();
-  if (s.siberiaGameOverActive || isKomradGrabActive()) {
-    return true;
+  if (s.isMusicMuted) return;
+  const audio = getAudioContext();
+  if (!audio) return;
+  if (audio.state === "suspended") {
+    void audio.resume().catch(() => {});
   }
-  const wasGrabActive = isKomradGrabActive();
-  reportPreVolkovLockedPanelAttempt();
-  if (!wasGrabActive && isKomradLiquidating()) {
+  if (audio.state !== "running") return;
+
+  const chain = ensureVoiceChain(audio, ALERT_MASTER_GAIN);
+  const t0 = audio.currentTime;
+
+  // Heavy metallic buzzer double-burst + CRT static jolt
+  const buzzA = audio.createOscillator();
+  const buzzB = audio.createOscillator();
+  buzzA.type = "sawtooth";
+  buzzB.type = "square";
+  buzzA.frequency.setValueAtTime(148, t0);
+  buzzB.frequency.setValueAtTime(222, t0);
+
+  const buzzBp = audio.createBiquadFilter();
+  buzzBp.type = "bandpass";
+  buzzBp.frequency.setValueAtTime(480, t0);
+  buzzBp.Q.setValueAtTime(2.4, t0);
+
+  const buzzGain = audio.createGain();
+  buzzGain.gain.setValueAtTime(0.0001, t0);
+  buzzGain.gain.linearRampToValueAtTime(0.24, t0 + 0.015);
+  buzzGain.gain.setValueAtTime(0.22, t0 + 0.22);
+  buzzGain.gain.exponentialRampToValueAtTime(0.004, t0 + 0.28);
+  buzzGain.gain.linearRampToValueAtTime(0.26, t0 + 0.34);
+  buzzGain.gain.setValueAtTime(0.24, t0 + 0.62);
+  buzzGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.72);
+
+  buzzA.connect(buzzBp);
+  buzzB.connect(buzzBp);
+  buzzBp.connect(buzzGain);
+  buzzGain.connect(audio.destination);
+
+  const staticSrc = audio.createBufferSource();
+  staticSrc.buffer = chain.noiseBuffer;
+  const staticHp = audio.createBiquadFilter();
+  staticHp.type = "bandpass";
+  staticHp.frequency.setValueAtTime(2100, t0);
+  staticHp.Q.setValueAtTime(1.1, t0);
+  const staticGain = audio.createGain();
+  staticGain.gain.setValueAtTime(0.0001, t0);
+  staticGain.gain.linearRampToValueAtTime(0.18, t0 + 0.008);
+  staticGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.32);
+
+  staticSrc.connect(staticHp);
+  staticHp.connect(staticGain);
+  staticGain.connect(audio.destination);
+
+  const stopAt = t0 + 0.74;
+  buzzA.start(t0);
+  buzzB.start(t0);
+  staticSrc.start(t0, Math.random() * 0.4, 0.34);
+  buzzA.stop(stopAt);
+  buzzB.stop(stopAt);
+  buzzA.onended = () => {
+    buzzA.disconnect();
+    buzzB.disconnect();
+    buzzBp.disconnect();
+    buzzGain.disconnect();
+    staticSrc.disconnect();
+    staticHp.disconnect();
+    staticGain.disconnect();
+  };
+}
+
+registerStrikeAudioListener((event) => {
+  if (event === "strike6_liquidation") {
     silenceAllLegacyGlobalBgm();
     playLiquidationBreakerBlackout();
     playKomradGrabServoCharge();
-  } else if (!wasGrabActive && isKomradGrabActive()) {
+  } else if (event === "strike5_grab") {
     playLockedPanelClunk();
     playKomradGrabServoCharge();
-  } else {
+  } else if (event === "strike5_surge") {
+    playStrike5AlarmBuzz();
+    playKomradGrabServoCharge();
+  }
+});
+
+export function triggerPreVolkovPanelLockFeedback(): boolean {
+  const s = useGameStore.getState();
+  if (isShiftEndedPanelLocked(s)) {
+    playLockedPanelClunk();
+    reportShiftEndedLockedPanelAttempt();
+    return true;
+  }
+  if (!isPreVolkovPanelLocked(s)) {
+    return false;
+  }
+  if (s.siberiaGameOverActive || isKomradGrabActive()) {
+    return true;
+  }
+  const prevStrikes = s.treasonStrikes;
+  reportPreVolkovLockedPanelAttempt();
+  const afterStrikes = useGameStore.getState().treasonStrikes;
+  // Strike 5/6 audio is dispatched directly via registerStrikeAudioListener
+  const firedEscalatedStrike = afterStrikes > prevStrikes && afterStrikes >= 5;
+  if (!firedEscalatedStrike) {
     playLockedPanelClunk();
   }
   return true;
 }
+
+export const triggerControlPanelLockFeedback = triggerPreVolkovPanelLockFeedback;
 
 function startOpenPaCarrierBed(
   audio: AudioContext,
@@ -4070,6 +4176,9 @@ export function computeKomradLiveMood(
   msgStartSec: number,
 ): KomradMood {
   const s = useGameStore.getState();
+  if (s.shiftCompletedAt0600 !== "active") {
+    return "normal";
+  }
   const msgs = s.komradMessages;
   const latestMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
 
@@ -4080,9 +4189,8 @@ export function computeKomradLiveMood(
     s.powerAllocation.defense +
     s.powerAllocation.facility;
 
-  const preVolkovLocked = isPreVolkovPanelLocked(s);
-  const preVolkovStrikes = preVolkovLocked ? getPreVolkovStrikeCount() : 0;
   const grabActive = isKomradGrabActive();
+  const strike5Surging = isKomradStrike5Surging();
 
   const liveCritical =
     s.coreMeltdown ||
@@ -4095,9 +4203,9 @@ export function computeKomradLiveMood(
     s.ciaIntrusionActive ||
     s.az5Active ||
     spentCount >= 3 ||
-    s.treasonStrikes >= 2 ||
+    s.treasonStrikes >= 3 ||
     totalAllocatedPower > s.maxSafePower ||
-    preVolkovStrikes >= 3 ||
+    strike5Surging ||
     grabActive ||
     s.siberiaGameOverActive;
 
@@ -4109,8 +4217,7 @@ export function computeKomradLiveMood(
       s.voidFraction > 0.38 ||
       s.xenon > 38 ||
       Math.abs(s.drumWaterLevel) > 130 ||
-      s.treasonStrikes >= 1 ||
-      (preVolkovStrikes >= 1 && preVolkovStrikes < 3) ||
+      (s.treasonStrikes >= 1 && s.treasonStrikes < 3) ||
       anySubFailing);
 
   let mood: KomradMood = liveCritical
@@ -4123,7 +4230,7 @@ export function computeKomradLiveMood(
   if (latestMsg) {
     if (
       latestMsg.mood === "critical" &&
-      (msgStillFresh || s.treasonStrikes > 0)
+      (msgStillFresh || s.treasonStrikes >= 3)
     ) {
       mood = "critical";
     } else if (

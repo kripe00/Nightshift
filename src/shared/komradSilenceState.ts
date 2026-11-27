@@ -2,11 +2,12 @@
 // Shared read/write coordination across useGameStore, komradVoiceSynth, and DesktopComputer3D
 // without introducing circular module imports.
 
-import type { LobbyMenuPhase } from './types'
+import type { LobbyMenuPhase, ShiftEndPhase } from './types'
 
 export interface KomradSilenceStateSnapshot {
   phase: string
   lobbyMenuPhase?: LobbyMenuPhase
+  shiftCompletedAt0600?: ShiftEndPhase
   isShiftControlReady: boolean
   tutorialPhase: string
   coreMeltdown: boolean
@@ -151,6 +152,8 @@ export function canEmitKomradIdleChatter(
     state.phase !== 'playing' ||
     (state.lobbyMenuPhase !== undefined &&
       state.lobbyMenuPhase !== 'entered_control_room') ||
+    (state.shiftCompletedAt0600 !== undefined &&
+      state.shiftCompletedAt0600 !== 'active') ||
     !state.isShiftControlReady ||
     state.tutorialPhase !== 'COMPLETED' ||
     state.diagFeedActive ||

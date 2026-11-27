@@ -63,6 +63,7 @@ export const TutorialCompassHud: React.FC<{ menusOpen: boolean }> = ({
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
   const diagFeedActive = useGameStore((s) => s.diagFeedActive)
   const tutorialPhase = useGameStore((s) => s.tutorialPhase)
+  const shiftCompletedAt0600 = useGameStore((s) => s.shiftCompletedAt0600)
 
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const targetBannerRef = useRef<HTMLDivElement | null>(null)
@@ -71,6 +72,7 @@ export const TutorialCompassHud: React.FC<{ menusOpen: boolean }> = ({
   const isVisible =
     phase === 'playing' &&
     isShiftControlReady &&
+    shiftCompletedAt0600 === 'active' &&
     !diagFeedActive &&
     !menusOpen &&
     tutorialPhase !== 'COMPLETED'

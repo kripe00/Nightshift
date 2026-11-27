@@ -18,6 +18,7 @@ import {
 } from "../modules/reactor/audioSynth";
 import {
   airlockDoorState,
+  playElevatorDepartureSequence,
   triggerLobbyAmbientFadeIn,
 } from "./airlockDoorState";
 import { NOOP_RAYCAST } from "./ExteriorDioramas3D";
@@ -360,6 +361,14 @@ const FICUS_LEAF_LAYOUT = [
 ] as const;
 
 const LOBBY_MENU_FADE_DURATION_SEC = 1.6;
+const LOBBY_COL_ELEV_BUSY = new THREE.Color("#ff2a2a");
+const LOBBY_COL_ELEV_BUSY_EMISSIVE = new THREE.Color("#ff1a1a");
+const LOBBY_COL_ELEV_READY = new THREE.Color("#33ff66");
+const LOBBY_COL_ELEV_READY_EMISSIVE = new THREE.Color("#26ff55");
+const LOBBY_COL_ELEV_LIGHT_BUSY = new THREE.Color("#ff2a2a");
+const LOBBY_COL_ELEV_LIGHT_READY = new THREE.Color("#ffd97d");
+const LOBBY_COL_CALL_AMBER = new THREE.Color("#ffb000");
+const LOBBY_COL_CALL_AMBER_EMISSIVE = new THREE.Color("#ff9800");
 
 function drawTerminalCornerBrackets(
   ctx: CanvasRenderingContext2D,
@@ -503,33 +512,51 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
         const hh = String(Math.floor(totalMins / 60)).padStart(2, "0");
         const mm = String(totalMins % 60).padStart(2, "0");
         const rubles = computeSavedShiftRubles(savedShift);
+        const isNextShiftReady =
+          savedShift.game.shiftNumber >= 2 && totalMins === 0;
+        const shiftPadded = String(savedShift.game.shiftNumber).padStart(2, "0");
 
-        ctx.fillStyle = "#141007";
+        ctx.fillStyle = isNextShiftReady ? "#071a0e" : "#141007";
         ctx.fillRect(0, 0, w, h);
-        ctx.fillStyle = "rgba(255, 176, 0, 0.06)";
+        ctx.fillStyle = isNextShiftReady
+          ? "rgba(51, 255, 102, 0.065)"
+          : "rgba(255, 176, 0, 0.06)";
         for (let sy = 0; sy < h; sy += 4) {
           ctx.fillRect(0, sy, w, 1);
         }
-        ctx.fillStyle = "#2b1d08";
+        ctx.fillStyle = isNextShiftReady ? "#12381e" : "#2b1d08";
         ctx.fillRect(10, 10, w - 20, 34);
-        ctx.strokeStyle = "#ffb000";
+        const accentHex = isNextShiftReady ? "#33ff66" : "#ffb000";
+        ctx.strokeStyle = accentHex;
         ctx.lineWidth = 4;
         ctx.strokeRect(4, 4, w - 8, h - 8);
-        drawTerminalCornerBrackets(ctx, 12, 12, w - 24, h - 24, 24, "#ffb000", 3);
+        drawTerminalCornerBrackets(ctx, 12, 12, w - 24, h - 24, 24, accentHex, 3);
 
-        ctx.fillStyle = "#ffb000";
+        ctx.fillStyle = accentHex;
         ctx.font = 'bold 20px "VT323", "Courier Prime", monospace';
         ctx.textAlign = "center";
-        ctx.fillText("PROTOCOL 02 // ARCHIVED CHECKPOINT", w / 2, 34, w - 36);
+        ctx.fillText(
+          isNextShiftReady
+            ? "PROTOCOL 02 // NEXT SHIFT ASSIGNED"
+            : "PROTOCOL 02 // ARCHIVED CHECKPOINT",
+          w / 2,
+          34,
+          w - 36,
+        );
 
         ctx.fillStyle = "#e6dec3";
         ctx.font = 'bold 40px "Kremlin", "Courier Prime", monospace';
-        ctx.fillText("[ RESUME DUTY ]", w / 2, 118, w - 32);
+        ctx.fillText(
+          isNextShiftReady ? `[ START SHIFT ${shiftPadded} ]` : "[ RESUME DUTY ]",
+          w / 2,
+          118,
+          w - 32,
+        );
 
         ctx.fillStyle = "#ffb000";
         ctx.font = 'bold 24px "VT323", "Courier Prime", monospace';
         ctx.fillText(
-          `SHIFT ${savedShift.game.shiftNumber} • ${hh}:${mm} • ${rubles} RUB`,
+          `SHIFT ${shiftPadded} • ${hh}:${mm} • ${rubles} RUB`,
           w / 2,
           176,
           w - 32,
@@ -973,6 +1000,12 @@ const LobbyDiegeticMenu3D: React.FC = React.memo(() => {
 });
 
 export const McrLobbyRoom3D: React.FC = React.memo(() => {
+  const shiftExitReady = useGameStore((s) => s.shiftCompletedAt0600 !== "active");
+  const elevatorDepartureIdle = useGameStore(
+    (s) => s.elevatorDeparturePhase === "idle",
+  );
+  const elevatorInteractive = shiftExitReady && elevatorDepartureIdle;
+
   const ceilingNorthLightRef = useRef<THREE.PointLight>(null);
   const ceilingSouthLightRef = useRef<THREE.PointLight>(null);
   const cabinetLightRef = useRef<THREE.PointLight>(null);
@@ -985,7 +1018,12 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
   const deskLampBulbMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const deskLampShadeMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const elevatorBusyLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const elevatorCallLampMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const elevatorDialNeedleRef = useRef<THREE.Group>(null);
+  const elevatorGateGroupRef = useRef<THREE.Group>(null);
+  const elevatorReadySignMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const elevatorHoveredRef = useRef(false);
+  const elevatorDialRotRef = useRef(Math.PI / 3);
   const exteriorSconceMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const cigaretteEmberMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const trofferTubeMatRefs = useRef<Array<THREE.MeshStandardMaterial | null>>([]);
@@ -1341,6 +1379,28 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
       ctx.fillStyle = "#c8b896";
       ctx.font = 'bold 13px "Courier Prime", monospace';
       ctx.fillText("CALL", w / 2, 206);
+    });
+
+    const elevatorReadySignTex = createNearestCanvasTexture(384, 96, (ctx, w, h) => {
+      ctx.fillStyle = "#061a0c";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "rgba(51, 255, 102, 0.08)";
+      for (let sy = 0; sy < h; sy += 4) {
+        ctx.fillRect(0, sy, w, 1);
+      }
+      ctx.strokeStyle = "#33ff66";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(4, 4, w - 8, h - 8);
+      ctx.strokeStyle = "#ffb000";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(10, 10, w - 20, h - 20);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#33ff66";
+      ctx.font = 'bold 26px "Kremlin", "Courier Prime", monospace';
+      ctx.fillText("★ LIFT-84 READY ★", w / 2, 42, w - 32);
+      ctx.fillStyle = "#ffb000";
+      ctx.font = 'bold 22px "VT323", "Courier Prime", monospace';
+      ctx.fillText("[LMB / E] TAKE ELEVATOR — END SHIFT", w / 2, 76, w - 28);
     });
 
     const timeClockFaceTex = createNearestCanvasTexture(256, 256, (ctx, w, h) => {
@@ -2393,6 +2453,7 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
       elevatorDialTex,
       elevatorNoticeTex,
       elevatorCallPanelTex,
+      elevatorReadySignTex,
       timeClockFaceTex,
       timeClockPlateTex,
       keyRackHeaderTex,
@@ -2656,15 +2717,82 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
     };
   }, [mats, textures]);
 
+  useEffect(() => {
+    if (!elevatorInteractive && elevatorHoveredRef.current) {
+      elevatorHoveredRef.current = false;
+      document.body.style.cursor = "auto";
+      const gs = useGameStore.getState();
+      if (gs.hoveredControlHint?.includes("TAKE ELEVATOR")) {
+        gs.setHoveredControlHint(null);
+      }
+    }
+  }, [elevatorInteractive]);
+
+  const handleElevatorHover = (over: boolean, e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    const gs = useGameStore.getState();
+    if (
+      gs.shiftCompletedAt0600 === "active" ||
+      gs.elevatorDeparturePhase !== "idle" ||
+      pointerLockInteraction.mainMenuOpen
+    ) {
+      return;
+    }
+    if (over) {
+      if (!elevatorHoveredRef.current) {
+        elevatorHoveredRef.current = true;
+        playDetentClick();
+      }
+      gs.setHoveredControlHint("[LMB / E] TAKE ELEVATOR — END SHIFT");
+      document.body.style.cursor = "pointer";
+    } else if (elevatorHoveredRef.current) {
+      elevatorHoveredRef.current = false;
+      if (gs.hoveredControlHint?.includes("TAKE ELEVATOR")) {
+        gs.setHoveredControlHint(null);
+      }
+      document.body.style.cursor = "auto";
+    }
+  };
+
+  const handleElevatorClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    const gs = useGameStore.getState();
+    if (
+      gs.shiftCompletedAt0600 === "active" ||
+      gs.elevatorDeparturePhase !== "idle" ||
+      pointerLockInteraction.mainMenuOpen
+    ) {
+      return;
+    }
+    elevatorHoveredRef.current = false;
+    document.body.style.cursor = "auto";
+    if (gs.hoveredControlHint?.includes("TAKE ELEVATOR")) {
+      gs.setHoveredControlHint(null);
+    }
+    playElevatorDepartureSequence();
+    gs.beginElevatorDeparture();
+  };
+
   useFrame(({ clock }, delta) => {
     const t = clock.getElapsedTime();
     const dt = Math.min(0.1, delta);
     const gs = useGameStore.getState();
-    const isBlackout = gs.isBlackout;
+    const shiftExitActive = gs.shiftCompletedAt0600 !== "active";
+    const isBoarding = gs.elevatorDeparturePhase === "boarding";
+    const isBlackout = gs.isBlackout && !shiftExitActive;
 
-    const targetLit = gs.lobbyMenuPhase === "entered_control_room" ? 1 : 0;
+    const targetLit =
+      gs.lobbyMenuPhase === "entered_control_room" && !shiftExitActive ? 1 : 0;
     if (targetLit === 0) {
-      controlRoomLitBlendRef.current = 0;
+      controlRoomLitBlendRef.current = THREE.MathUtils.damp(
+        controlRoomLitBlendRef.current,
+        0,
+        shiftExitActive ? 5.2 : 18.0,
+        dt,
+      );
+      if (controlRoomLitBlendRef.current < 0.005) {
+        controlRoomLitBlendRef.current = 0;
+      }
     } else {
       controlRoomLitBlendRef.current = THREE.MathUtils.damp(
         controlRoomLitBlendRef.current,
@@ -2676,6 +2804,7 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
 
     const lobbySealed =
       gs.lobbyMenuPhase === "entered_control_room" &&
+      !shiftExitActive &&
       airlockDoorState.openProgress <= 0.01 &&
       controlRoomLitBlendRef.current >= 0.99;
 
@@ -2733,11 +2862,20 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
     }
 
     const rubyPulse = 1.05 + Math.sin(t * 2.6) * 0.4;
+    const readyPulse = 1.45 + Math.sin(t * 4.2) * 0.45;
+    const hoverBoost = elevatorHoveredRef.current ? 0.85 : 0;
     if (elevatorRubyLightRef.current) {
-      elevatorRubyLightRef.current.intensity = isBlackout
-        ? 0.22
-        : THREE.MathUtils.lerp(0.46, 0.8, standbyBoost) +
-          Math.sin(t * 2.6) * 0.16;
+      if (shiftExitActive) {
+        elevatorRubyLightRef.current.color.copy(LOBBY_COL_ELEV_LIGHT_READY);
+        elevatorRubyLightRef.current.intensity =
+          2.2 + Math.sin(t * 3.8) * 0.45 + hoverBoost;
+      } else {
+        elevatorRubyLightRef.current.color.copy(LOBBY_COL_ELEV_LIGHT_BUSY);
+        elevatorRubyLightRef.current.intensity = isBlackout
+          ? 0.22
+          : THREE.MathUtils.lerp(0.46, 0.8, standbyBoost) +
+            Math.sin(t * 2.6) * 0.16;
+      }
     }
 
     if (airlockSignLightRef.current) {
@@ -2780,9 +2918,35 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
     }
 
     if (elevatorBusyLampMatRef.current) {
-      elevatorBusyLampMatRef.current.emissiveIntensity = isBlackout
-        ? 0.3
-        : rubyPulse;
+      if (shiftExitActive) {
+        elevatorBusyLampMatRef.current.color.copy(LOBBY_COL_ELEV_READY);
+        elevatorBusyLampMatRef.current.emissive.copy(LOBBY_COL_ELEV_READY_EMISSIVE);
+        elevatorBusyLampMatRef.current.emissiveIntensity = readyPulse + hoverBoost;
+      } else {
+        elevatorBusyLampMatRef.current.color.copy(LOBBY_COL_ELEV_BUSY);
+        elevatorBusyLampMatRef.current.emissive.copy(LOBBY_COL_ELEV_BUSY_EMISSIVE);
+        elevatorBusyLampMatRef.current.emissiveIntensity = isBlackout
+          ? 0.3
+          : rubyPulse;
+      }
+    }
+
+    if (elevatorCallLampMatRef.current) {
+      if (shiftExitActive) {
+        elevatorCallLampMatRef.current.color.copy(LOBBY_COL_ELEV_READY);
+        elevatorCallLampMatRef.current.emissive.copy(LOBBY_COL_ELEV_READY_EMISSIVE);
+        elevatorCallLampMatRef.current.emissiveIntensity =
+          1.7 + Math.sin(t * 5.0) * 0.55 + hoverBoost;
+      } else {
+        elevatorCallLampMatRef.current.color.copy(LOBBY_COL_CALL_AMBER);
+        elevatorCallLampMatRef.current.emissive.copy(LOBBY_COL_CALL_AMBER_EMISSIVE);
+        elevatorCallLampMatRef.current.emissiveIntensity = isBlackout ? 0.2 : 1.1;
+      }
+    }
+
+    if (elevatorReadySignMatRef.current) {
+      elevatorReadySignMatRef.current.emissiveIntensity =
+        0.95 + Math.sin(t * 3.8) * 0.25 + hoverBoost * 0.5;
     }
 
     if (cigaretteEmberMatRef.current) {
@@ -2790,12 +2954,31 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
         0.95 + Math.sin(t * 3.1) * 0.35;
     }
 
-    // Semicircular elevator dial needle stuck twitching at "-3.5" (u = 1/6 -> +PI/3 rad)
+    // Semicircular elevator dial needle: stuck twitching at "-3.5" during shift,
+    // sweeps smoothly to floor B4 / READY at 06:00, and ascends toward G during departure!
     if (elevatorDialNeedleRef.current) {
-      elevatorDialNeedleRef.current.rotation.z =
-        Math.PI / 3 +
-        Math.sin(t * 1.9) * 0.015 +
-        (Math.sin(t * 17.3) > 0.96 ? 0.032 : 0);
+      const targetNeedleRot = isBoarding
+        ? -Math.PI * 0.42
+        : shiftExitActive
+          ? Math.PI * 0.48 + Math.sin(t * 2.2) * 0.012
+          : Math.PI / 3 +
+            Math.sin(t * 1.9) * 0.015 +
+            (Math.sin(t * 17.3) > 0.96 ? 0.032 : 0);
+      elevatorDialRotRef.current = THREE.MathUtils.damp(
+        elevatorDialRotRef.current,
+        targetNeedleRot,
+        isBoarding ? 1.8 : 4.5,
+        dt,
+      );
+      elevatorDialNeedleRef.current.rotation.z = elevatorDialRotRef.current;
+    }
+
+    if (elevatorGateGroupRef.current) {
+      if (isBoarding) {
+        elevatorGateGroupRef.current.position.x = Math.sin(t * 46) * 0.009;
+      } else if (elevatorGateGroupRef.current.position.x !== 0) {
+        elevatorGateGroupRef.current.position.x = 0;
+      }
     }
 
     // Gently drifting atmospheric bunker dust motes (zero allocations)
@@ -3568,7 +3751,7 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
         </mesh>
 
         {/* Collapsible Iron Scissor-Gate / Mesh Grille Layered In Front of Doors */}
-        <group position={[0, 1.22, 0.036]}>
+        <group ref={elevatorGateGroupRef} position={[0, 1.22, 0.036]}>
           {/* Top & Bottom Gate Channels */}
           <mesh position={[0, 1.18, 0]} material={mats.darkSteel} castShadow={false} raycast={NOOP_RAYCAST}>
             <boxGeometry args={[1.92, 0.03, 0.032]} />
@@ -3605,6 +3788,41 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
             <cylinderGeometry args={[0.013, 0.013, 0.28, 8]} />
           </mesh>
         </group>
+
+        {/* Interactive LIFT-84 Boarding Gate Collider & Glowing 06:00 Ready Sign */}
+        {elevatorInteractive && (
+          <>
+            <mesh
+              position={[0, 1.22, 0.14]}
+              onPointerOver={(e) => handleElevatorHover(true, e)}
+              onPointerOut={(e) => handleElevatorHover(false, e)}
+              onClick={handleElevatorClick}
+            >
+              <boxGeometry args={[1.98, 2.38, 0.16]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
+            <group position={[0, 1.72, 0.145]}>
+              <mesh raycast={NOOP_RAYCAST}>
+                <boxGeometry args={[1.18, 0.3, 0.022]} />
+                <meshStandardMaterial color="#101814" roughness={0.45} metalness={0.5} />
+              </mesh>
+              <mesh position={[0, 0, 0.014]} raycast={NOOP_RAYCAST}>
+                <planeGeometry args={[1.12, 0.26]} />
+                <meshStandardMaterial
+                  ref={elevatorReadySignMatRef}
+                  map={textures.elevatorReadySignTex}
+                  emissive="#ffffff"
+                  emissiveMap={textures.elevatorReadySignTex}
+                  emissiveIntensity={1.1}
+                  roughness={0.3}
+                  polygonOffset
+                  polygonOffsetFactor={-2}
+                  polygonOffsetUnits={-2}
+                />
+              </mesh>
+            </group>
+          </>
+        )}
 
         {/* Compact Stamped Aluminum Maintenance Plate Bolted Cleanly to Left Shaft Jamb/Grille Edge */}
         <group position={[-0.86, 1.5, 0.1]} rotation={[0, 0, -0.025]}>
@@ -3727,8 +3945,19 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
         </group>
       </group>
 
-      {/* Unclickable Rusted Call Button Panel + Amber "BUSY" Lamp */}
+      {/* Call Button Panel + Status Lamp (Interactive at 06:00 Shift Completion) */}
       <group position={[0.46, 1.24, 10.26]} rotation={[0, Math.PI, 0]}>
+        {elevatorInteractive && (
+          <mesh
+            position={[0, 0, 0.05]}
+            onPointerOver={(e) => handleElevatorHover(true, e)}
+            onPointerOut={(e) => handleElevatorHover(false, e)}
+            onClick={handleElevatorClick}
+          >
+            <boxGeometry args={[0.34, 0.48, 0.14]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        )}
         <mesh material={mats.rustSteel} castShadow={false} raycast={NOOP_RAYCAST}>
           <boxGeometry args={[0.2, 0.34, 0.05]} />
         </mesh>
@@ -3743,6 +3972,7 @@ export const McrLobbyRoom3D: React.FC = React.memo(() => {
         <mesh position={[0, 0.075, 0.036]} castShadow={false} raycast={NOOP_RAYCAST}>
           <sphereGeometry args={[0.022, 10, 10]} />
           <meshStandardMaterial
+            ref={elevatorCallLampMatRef}
             color="#ffb000"
             emissive="#ff9800"
             emissiveIntensity={1.1}

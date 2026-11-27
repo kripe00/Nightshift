@@ -2,10 +2,12 @@ import { silenceAllLegacyGlobalBgm } from '../modules/inspector/audio'
 import { useDeskStore } from '../modules/inspector/useDeskStore'
 import { airlockDoorState } from './airlockDoorState'
 import { abortKomradGrab, isKomradLiquidating } from './komradGrabState'
+import { captureSovOsPersistenceSnapshot } from './sovOsAppRegistry'
 import type { SavedGameStatePayload } from './types'
 import {
   getPreOrderSectorTargetsSnapshot,
   registerSavedShiftLiquidator,
+  registerSavedShiftPersister,
   useGameStore,
 } from './useGameStore'
 
@@ -96,7 +98,7 @@ export function saveCurrentShiftToStorage(): void {
   if (typeof window === 'undefined') return
   try {
     const g = useGameStore.getState()
-    if (g.siberiaGameOverActive || isKomradLiquidating()) return
+    if (g.siberiaGameOverActive || g.treasonStrikes >= 6 || isKomradLiquidating()) return
     const d = useDeskStore.getState()
     const snapshot: SavedShiftSnapshot = {
       savedAt: Date.now(),
@@ -104,12 +106,21 @@ export function saveCurrentShiftToStorage(): void {
         shiftNumber: g.shiftNumber,
         shiftTimeMinutes: g.shiftTimeMinutes,
         treasonStrikes: g.treasonStrikes,
+        lastStrikeReason: g.lastStrikeReason,
         rubles: g.rubles,
         quotaCompleted: g.quotaCompleted,
         lastDecisionFeedback: g.lastDecisionFeedback,
         activeMandate: g.activeMandate,
         activePost84Order: g.activePost84Order,
         post84InboxSnapshot: g.post84InboxSnapshot,
+        sovOsSavedState: captureSovOsPersistenceSnapshot(),
+        ciaIntrusionActive: g.ciaIntrusionActive,
+        ciaIntrusionProgress: g.ciaIntrusionProgress,
+        ideologyDuelActive: g.ideologyDuelActive,
+        komradOverrideLocked: g.komradOverrideLocked,
+        partyApprovedBuffSec: g.partyApprovedBuffSec,
+        frontWallPurgeCooldownSec: g.frontWallPurgeCooldownSec,
+        frontWallOverrideCooldownSec: g.frontWallOverrideCooldownSec,
         preOrderSectorTargets: getPreOrderSectorTargetsSnapshot(),
         tutorialPhase: g.tutorialPhase,
         tutorialStep: g.tutorialStep,
@@ -211,6 +222,7 @@ export function clearSavedShiftStorage(): void {
 }
 
 registerSavedShiftLiquidator(clearSavedShiftFromStorage)
+registerSavedShiftPersister(saveCurrentShiftToStorage)
 
 export function resetGameToMcrLobbyAfterLiquidation(): void {
   clearSavedShiftFromStorage()
@@ -228,6 +240,18 @@ export function startFreshShiftFromLobby(): void {
   clearSavedShiftFromStorage()
   useDeskStore.getState().resetDeskStore()
   useGameStore.getState().resetShift('door_opening')
+}
+
+export function completeShiftAndReturnToNextLobby(): void {
+  abortKomradGrab()
+  silenceAllLegacyGlobalBgm()
+  airlockDoorState.wantOpen = false
+  airlockDoorState.wheelProgress = 0
+  airlockDoorState.openProgress = 0
+  airlockDoorState.menuUnlockElapsed = 0
+  useDeskStore.getState().resetDeskStore()
+  useGameStore.getState().completeShiftRolloverToLobby()
+  saveCurrentShiftToStorage()
 }
 
 export function restoreSavedShiftFromStorage(snap: SavedShiftSnapshot): void {

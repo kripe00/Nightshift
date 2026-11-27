@@ -8,7 +8,8 @@ import {
   getBrushedBrassTextures,
   getHammeredIronTextures,
 } from "./proceduralMaterials";
-import { useGameStore } from "./useGameStore";
+import { triggerPreVolkovPanelLockFeedback } from "./komradVoiceSynth";
+import { isShiftEndedPanelLocked, useGameStore } from "./useGameStore";
 
 const COL_BLACK = new THREE.Color("#000000");
 const COL_SEG_OFF = new THREE.Color("#101815");
@@ -727,6 +728,7 @@ const CENTER_RELAY_YOKE_GEO = mergeDeckGeometries(
 );
 
 export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
+  const shiftEndedLocked = useGameStore((s) => s.shiftCompletedAt0600 !== "active");
   const ironTex = useMemo(() => getHammeredIronTextures(), []);
   const brassTex = useMemo(() => getBrushedBrassTextures(), []);
 
@@ -1781,6 +1783,27 @@ export const UnitCBatteryStorageDeck3D: React.FC = React.memo(() => {
               })}
             </group>
           </group>
+          {/* Post-06:00 Shift-End Interlock Collider over Unit C Battery Switchgear */}
+          {shiftEndedLocked && (
+            <mesh
+              position={[0, 0, 0.115]}
+              onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+                e.stopPropagation();
+                if (isShiftEndedPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                }
+              }}
+              onWheel={(e: ThreeEvent<WheelEvent>) => {
+                e.stopPropagation();
+                if (isShiftEndedPanelLocked()) {
+                  triggerPreVolkovPanelLockFeedback();
+                }
+              }}
+            >
+              <planeGeometry args={[1.82, 0.86]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
+          )}
         </group>
       </group>
     </group>

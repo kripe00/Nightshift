@@ -25,6 +25,38 @@ export type SectorNodeId =
   | 'steel'
 export type DirectiveDecision = 'APPROVED' | 'SHREDDED'
 
+export type TreasonStrikeSource =
+  | 'pre_volkov'
+  | 'tutorial'
+  | 'zashchita_kill'
+  | 'zashchita_breach'
+  | 'polit_link'
+  | 'directive'
+
+export interface SovOsPolitLinkSavedState {
+  active: boolean
+  mode: string
+  roundIndex: number
+  trust: number
+  suspicion: number
+  timeLeftSec: number
+  drillPassed: boolean
+  drillFailed: boolean
+}
+
+export interface SovOsZashchitaSavedState {
+  active: boolean
+  isDrill: boolean
+  waveMode: string
+  waveCount: number
+  drillPassed: boolean
+}
+
+export interface SovOsPersistenceSnapshot {
+  politLink: SovOsPolitLinkSavedState
+  zashchita: SovOsZashchitaSavedState
+}
+
 export type TutorialStep = 1 | 2 | 3 | 4 | 5 | 'DONE'
 export type DiagnosticAlarmId =
   | 'core'
@@ -35,6 +67,20 @@ export type DiagnosticAlarmId =
   | 'order'
 export type GamePhase = 'boot' | 'playing' | 'victory' | 'meltdown' | 'gulag'
 export type LobbyMenuPhase = 'menu_locked' | 'door_opening' | 'entered_control_room'
+export type ShiftEndPhase = 'active' | 'closing_shift' | 'awaiting_elevator'
+export type ElevatorDeparturePhase = 'idle' | 'boarding' | 'summary'
+
+export interface ShiftSummaryData {
+  completedShiftNumber: number
+  nextShiftNumber: number
+  quotaCompleted: number
+  quotaTarget: number
+  baseBonusRubles: number
+  quotaBonusRubles: number
+  totalBonusRubles: number
+  totalRublesAfterBonus: number
+  treasonStrikes: number
+}
 export type CameraStation =
   | 'overview'
   | 'reactor'
@@ -210,12 +256,21 @@ export interface SavedGameStatePayload extends Partial<ReactorState> {
   shiftNumber: number
   shiftTimeMinutes: number
   treasonStrikes: number
+  lastStrikeReason?: string
   lastDecisionFeedback: string | null
   activeMandate: OperationalMandate | null
   activePost84Order?: ActivePost84PowerOrder | null
   rubles?: number
   quotaCompleted?: number
   post84InboxSnapshot?: Post84InboxSnapshot | null
+  sovOsSavedState?: SovOsPersistenceSnapshot | null
+  ciaIntrusionActive?: boolean
+  ciaIntrusionProgress?: number
+  ideologyDuelActive?: boolean
+  komradOverrideLocked?: boolean
+  partyApprovedBuffSec?: number
+  frontWallPurgeCooldownSec?: number
+  frontWallOverrideCooldownSec?: number
   preOrderSectorTargets?: Record<SectorNodeId, number> | null
   tutorialPhase?: TutorialPhase
   tutorialStep?: TutorialStep
@@ -263,6 +318,10 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   // Global Shift, 3D Camera & Campaign Status
   phase: GamePhase
   lobbyMenuPhase: LobbyMenuPhase
+  shiftCompletedAt0600: ShiftEndPhase
+  elevatorDeparturePhase: ElevatorDeparturePhase
+  lastShiftSummary: ShiftSummaryData | null
+  canBoardElevator: boolean
   isShiftControlReady: boolean
   komradOpeningDispatched: boolean
   activeStation: CameraStation
@@ -273,7 +332,9 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   isShiftKeyHeld: boolean // Physical SHIFT key clutch
   isGodMode: boolean // F2 Debug menu toggle (pauses meltdown/strikes for Komrad Oleg)
   isMusicMuted: boolean
-  treasonStrikes: number // 0 to 3 (3 = Gulag Game Over)
+  treasonStrikes: number // 0 to 6 (6 = Immediate Siberia Liquidation Game Over)
+  lastStrikeReason: string
+  strike5SurgeFlashSec: number
   rubles: number
   quotaCompleted: number
   lastDecisionFeedback: string | null
@@ -375,6 +436,12 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
 
   // Shared Actions
   setLobbyMenuPhase: (phase: LobbyMenuPhase) => void
+  setShiftEndPhase: (phase: ShiftEndPhase) => void
+  triggerShiftEnd0600: () => void
+  setCanBoardElevator: (canBoard: boolean) => void
+  beginElevatorDeparture: () => void
+  showShiftSummaryOverlay: () => void
+  completeShiftRolloverToLobby: () => void
   setShiftControlReady: (ready: boolean) => void
   launchKomradOpeningDispatch: () => void
   setActiveStation: (station: CameraStation) => void
@@ -503,6 +570,17 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
     }
   ) => void
   applyFirewallBreachPenalty: () => void
+  recordTreasonStrike: (
+    reason: string,
+    source: TreasonStrikeSource,
+    options?: {
+      spokenVoxText?: string
+      logSender?: TerminalLogEntry['sender']
+      customFeedback?: string
+      customLogText?: string
+      statePatch?: Partial<GameState>
+    }
+  ) => number
   jumpToTutorialPhase: (phase: TutorialPhase) => void
   spawnDirective: (forceForgery?: boolean) => void
   resolveDirective: (id: string, decision: DirectiveDecision) => void
@@ -524,6 +602,7 @@ export interface GameState extends Omit<ReactorState, 'wePadHeld' | 'wePadInspec
   setGodMode: (enabled: boolean) => void
   debugSetTemp: (temp: number) => void
   debugTriggerBlackout: () => void
+  debugSkipTo0558: () => void
   debugCompleteShift: () => void
   tick: () => void
 }

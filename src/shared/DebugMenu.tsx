@@ -186,6 +186,7 @@ export const DebugMenu: React.FC = () => {
   const spawnDirective = useGameStore((s) => s.spawnDirective)
   const debugSetTemp = useGameStore((s) => s.debugSetTemp)
   const debugTriggerBlackout = useGameStore((s) => s.debugTriggerBlackout)
+  const debugSkipTo0558 = useGameStore((s) => s.debugSkipTo0558)
   const debugCompleteShift = useGameStore((s) => s.debugCompleteShift)
   const jumpToTutorialPhase = useGameStore((s) => s.jumpToTutorialPhase)
   const resetShift = useGameStore((s) => s.resetShift)
@@ -293,12 +294,26 @@ export const DebugMenu: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={debugCompleteShift}
-                className="border-2 border-[#090b09] bg-[#1e4028] px-2 py-1 text-left shadow-[2px_2px_0_#090b09] hover:bg-[#295937]"
+                onClick={() => {
+                  debugSkipTo0558()
+                  setIsOpen(false)
+                }}
+                className="border-2 border-[#090b09] bg-[#1d3b32] px-2 py-1 text-left text-[#33ff66] shadow-[2px_2px_0_#090b09] hover:bg-[#265245]"
               >
-                FULFILL 06:00 QUOTA
+                SKIP TO 05:58
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                debugCompleteShift()
+                setIsOpen(false)
+              }}
+              className="w-full border-2 border-[#090b09] bg-[#1e4028] px-3 py-1 text-center font-bold text-[#33ff66] shadow-[2px_2px_0_#090b09] hover:bg-[#295937]"
+            >
+              TRIGGER 06:00 SHIFT END (LIGHTS OFF + LIFT-84)
+            </button>
 
             {/* ISKRA-84 CYBER & DUEL TEST CONTROLS */}
             <div className="border-2 border-[#090b09] bg-[#101c13] p-2">

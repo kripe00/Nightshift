@@ -20,6 +20,7 @@ import {
   updatePointerLockInteraction,
 } from './shared/pointerLockState'
 import {
+  completeShiftAndReturnToNextLobby,
   resetGameToMcrLobbyAfterLiquidation,
   saveCurrentShiftToStorage,
 } from './shared/shiftSaveStorage'
@@ -134,6 +135,7 @@ function CenterReticle() {
 
 function KomradBroadcastSubtitleHud({ mainMenuOpen }: { mainMenuOpen: boolean }) {
   const phase = useGameStore((s) => s.phase)
+  const elevatorDeparturePhase = useGameStore((s) => s.elevatorDeparturePhase)
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
   const diagFeedActive = useGameStore((s) => s.diagFeedActive)
   const radioOn = useGameStore((s) => s.radioOn)
@@ -149,6 +151,7 @@ function KomradBroadcastSubtitleHud({ mainMenuOpen }: { mainMenuOpen: boolean })
 
   if (
     phase !== 'playing' ||
+    elevatorDeparturePhase !== 'idle' ||
     !isShiftControlReady ||
     diagFeedActive ||
     mainMenuOpen ||
@@ -340,6 +343,13 @@ function LiquidationCrtFxOverlay() {
 
 function SiberiaLiquidationGameOverOverlay() {
   const [stampSlammed, setStampSlammed] = useState(false)
+  const treasonStrikes = useGameStore((s) => s.treasonStrikes)
+  const lastStrikeReason = useGameStore((s) => s.lastStrikeReason)
+
+  const displayStrikes = Math.max(6, treasonStrikes)
+  const terminationCause =
+    lastStrikeReason.trim() ||
+    'UNAUTHORIZED REACTOR TAMPERING PRIOR TO VOLKOV BRIEFING'
 
   useEffect(() => {
     const id = window.requestAnimationFrame(() => setStampSlammed(true))
@@ -391,9 +401,21 @@ function SiberiaLiquidationGameOverOverlay() {
           style={{ fontFamily: '"Courier Prime", "VT323", monospace' }}
         >
           <div>
+            <span className="font-bold text-[#ffb000]">FINAL DOSSIER TALLY: </span>
+            <span
+              data-testid="siberia-strike-tally"
+              className="font-bold text-[#ff4d4d]"
+            >
+              {displayStrikes} / 6 TREASON STRIKES
+            </span>
+          </div>
+          <div>
             <span className="font-bold text-[#ffb000]">CAUSE OF TERMINATION: </span>
-            <span className="text-[#f3ead4]">
-              REPEATED UNAUTHORIZED TOUCHING OF STATE REACTOR HARDWARE PRIOR TO READING COMMISSAR VOLKOV&apos;S MAIL (6 STRIKES)
+            <span
+              data-testid="siberia-termination-cause"
+              className="text-[#f3ead4]"
+            >
+              {terminationCause}
             </span>
           </div>
           <div>
@@ -430,9 +452,211 @@ function SiberiaLiquidationGameOverOverlay() {
   )
 }
 
+function ElevatorBoardingCurtain({ onComplete }: { onComplete: () => void }) {
+  const [fadeIn, setFadeIn] = useState(false)
+
+  useEffect(() => {
+    const rafId = window.requestAnimationFrame(() => setFadeIn(true))
+    const timer = window.setTimeout(onComplete, 2000)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      window.clearTimeout(timer)
+    }
+  }, [onComplete])
+
+  return (
+    <div
+      data-testid="lift84-boarding-curtain"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#040705] select-none"
+      style={{
+        opacity: fadeIn ? 1 : 0,
+        transition: 'opacity 1450ms ease-in-out',
+      }}
+    >
+      <div className="border border-[#33ff66]/45 bg-[#07140b]/90 px-8 py-5 text-center shadow-[0_0_40px_rgba(51,255,102,0.16)]">
+        <div
+          className="text-lg font-bold tracking-[0.2em] text-[#ffb000] uppercase sm:text-xl"
+          style={{ fontFamily: '"Kremlin", "VT323", monospace' }}
+        >
+          LIFT-84 // FREIGHT-PASSENGER SHAFT
+        </div>
+        <div
+          className="mt-2 text-base tracking-[0.14em] text-[#33ff66] uppercase"
+          style={{ fontFamily: '"VT323", "Courier Prime", monospace' }}
+        >
+          GATE LOCKED • HOIST MOTOR ENGAGED • RECORDING SHIFT LOG...
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ShiftSummaryCard({
+  summary,
+}: {
+  summary: NonNullable<ReturnType<typeof useGameStore.getState>['lastShiftSummary']>
+}) {
+  const [stampSlammed, setStampSlammed] = useState(false)
+
+  useEffect(() => {
+    const rafId = window.requestAnimationFrame(() => setStampSlammed(true))
+    return () => window.cancelAnimationFrame(rafId)
+  }, [])
+
+  const completedStr = String(summary.completedShiftNumber).padStart(2, '0')
+  const nextStr = String(summary.nextShiftNumber).padStart(2, '0')
+  const quotaMet = summary.quotaCompleted >= summary.quotaTarget
+
+  const handleProceedToNextShiftLobby = () => {
+    playKnifeSwitchSlam(true)
+    cancelKomradSpeechForReset()
+    completeShiftAndReturnToNextLobby()
+    updatePointerLockInteraction({ shiftTransitionActive: false })
+  }
+
+  return (
+    <div
+      data-testid="sovos-shift-summary"
+      className="fixed inset-0 z-50 flex cursor-auto items-center justify-center bg-[#040805]/96 p-4 select-none"
+      style={{
+        backgroundImage:
+          'repeating-linear-gradient(0deg, rgba(51,255,102,0.035) 0px, rgba(0,0,0,0.28) 2px, transparent 4px)',
+      }}
+    >
+      <div className="relative w-full max-w-3xl border-2 border-[#33ff66]/80 bg-[#07110a] p-6 text-[#e6dec3] shadow-[0_0_55px_rgba(51,255,102,0.22)] sm:p-8">
+        <div
+          className="mb-4 border-b border-[#33ff66]/45 pb-3 text-center text-sm font-bold tracking-[0.18em] text-[#ffb000] uppercase sm:text-base"
+          style={{ fontFamily: '"Kremlin", "VT323", monospace' }}
+        >
+          SOV-OS 84 // SHIFT {completedStr} SUMMARY — SECTOR 84 NIGHT SHIFT LOG
+        </div>
+
+        <div className="my-4 flex justify-center">
+          <div
+            data-testid="shift-complete-stamp"
+            className="border-4 border-[#33ff66] bg-[#092914]/90 px-5 py-2 text-center text-2xl font-bold tracking-[0.16em] text-[#33ff66] uppercase shadow-[0_0_24px_rgba(51,255,102,0.32)] sm:text-3xl"
+            style={{
+              fontFamily: '"Kremlin", "Courier Prime", monospace',
+              transform: stampSlammed
+                ? 'scale(1) rotate(-3deg)'
+                : 'scale(1.75) rotate(-8deg)',
+              opacity: stampSlammed ? 1 : 0.25,
+              transition:
+                'transform 160ms cubic-bezier(0.2, 0.9, 0.25, 1), opacity 120ms ease-out',
+            }}
+          >
+            [ SHIFT {completedStr} COMPLETE — 06:00 ]
+          </div>
+        </div>
+
+        <div
+          className="mt-5 space-y-3 border border-[#1f4a2b] bg-[#0b190f] p-4 text-sm leading-relaxed sm:text-base"
+          style={{ fontFamily: '"Courier Prime", "VT323", monospace' }}
+        >
+          <div>
+            <span className="font-bold text-[#ffb000]">SHIFT PERIOD: </span>
+            <span className="text-[#f3ead4]">
+              SHIFT {completedStr} (00:00 — 06:00) // MELTDOWN REMAINS PROPAGANDA
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">DIRECTIVE QUOTAS FULFILLED: </span>
+            <span className={quotaMet ? 'font-bold text-[#33ff66]' : 'font-bold text-[#ffb000]'}>
+              {summary.quotaCompleted} / {summary.quotaTarget}{' '}
+              {quotaMet ? '(FIVE-YEAR PLAN QUOTA MET!)' : '(MINIMUM COMPLIANCE)'}
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">NIGHT SHIFT SURVIVAL STIPEND: </span>
+            <span className="font-bold text-[#33ff66]">
+              +{summary.baseBonusRubles} RUB
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">STAKHANOVITE QUOTA BONUS: </span>
+            <span className={quotaMet ? 'font-bold text-[#33ff66]' : 'text-[#a6b5aa]'}>
+              {quotaMet
+                ? `+${summary.quotaBonusRubles} RUB`
+                : '0 RUB (5/5 QUOTA REQUIRED)'}
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">TOTAL BALANCE CARRIED FORWARD: </span>
+            <span
+              data-testid="shift-summary-rubles"
+              className="font-bold text-[#33ff66]"
+            >
+              {summary.totalRublesAfterBonus} RUB
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">KGB TREASON DOSSIER: </span>
+            <span
+              className={
+                summary.treasonStrikes > 0
+                  ? 'font-bold text-[#ffb000]'
+                  : 'font-bold text-[#33ff66]'
+              }
+            >
+              {summary.treasonStrikes} / 6 STRIKES CARRIED FORWARD
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-[#ffb000]">NEXT ASSIGNMENT: </span>
+            <span className="text-[#f3ead4]">
+              SHIFT {nextStr} — REPORT TO MCR-4 ELEVATOR LOBBY
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            data-testid="proceed-next-shift-lobby-btn"
+            onClick={handleProceedToNextShiftLobby}
+            className="cursor-pointer border-2 border-[#33ff66] bg-[#0a2915] px-6 py-3 text-lg font-bold tracking-[0.12em] text-[#33ff66] uppercase shadow-[0_0_20px_rgba(51,255,102,0.24)] transition hover:bg-[#114222] hover:text-[#e6dec3] active:translate-y-0.5 sm:text-xl"
+            style={{ fontFamily: '"VT323", "Courier Prime", monospace' }}
+          >
+            [ PROCEED TO MCR-4 LOBBY — SHIFT {nextStr} ]
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ElevatorDepartureAndSummaryOverlay() {
+  const elevatorDeparturePhase = useGameStore((s) => s.elevatorDeparturePhase)
+  const lastShiftSummary = useGameStore((s) => s.lastShiftSummary)
+  const showShiftSummaryOverlay = useGameStore((s) => s.showShiftSummaryOverlay)
+
+  useEffect(() => {
+    const active = elevatorDeparturePhase !== 'idle'
+    updatePointerLockInteraction({ shiftTransitionActive: active })
+    if (active && document.pointerLockElement) {
+      document.exitPointerLock?.()
+    }
+    return () => {
+      if (active) {
+        updatePointerLockInteraction({ shiftTransitionActive: false })
+      }
+    }
+  }, [elevatorDeparturePhase])
+
+  if (elevatorDeparturePhase === 'boarding') {
+    return <ElevatorBoardingCurtain onComplete={showShiftSummaryOverlay} />
+  }
+  if (elevatorDeparturePhase === 'summary' && lastShiftSummary) {
+    return <ShiftSummaryCard summary={lastShiftSummary} />
+  }
+  return null
+}
+
 export function App() {
   const phase = useGameStore((s) => s.phase)
   const lobbyMenuPhase = useGameStore((s) => s.lobbyMenuPhase)
+  const shiftCompletedAt0600 = useGameStore((s) => s.shiftCompletedAt0600)
+  const elevatorDeparturePhase = useGameStore((s) => s.elevatorDeparturePhase)
   const isShiftControlReady = useGameStore((s) => s.isShiftControlReady)
   const siberiaGameOverActive = useGameStore((s) => s.siberiaGameOverActive)
   const tutorialPhase = useGameStore((s) => s.tutorialPhase)
@@ -441,6 +665,8 @@ export function App() {
   const tick = useGameStore((s) => s.tick)
   const isSeatedAtDesk = useGameStore((s) => s.isSeatedAtDesk)
   const canSitAtDesk = useGameStore((s) => s.canSitAtDesk)
+  const canBoardElevator = useGameStore((s) => s.canBoardElevator)
+  const hoveredControlHint = useGameStore((s) => s.hoveredControlHint)
   const [gpuWarmupDone, setGpuWarmupDone] = useState(false)
   const [bootReady, setBootReady] = useState(false)
   const bootReadyRef = useRef(false)
@@ -527,6 +753,8 @@ export function App() {
     const canSave =
       phase === 'playing' &&
       lobbyMenuPhase === 'entered_control_room' &&
+      shiftCompletedAt0600 === 'active' &&
+      elevatorDeparturePhase === 'idle' &&
       isShiftControlReady &&
       !siberiaGameOverActive &&
       !isKomradLiquidating()
@@ -551,12 +779,21 @@ export function App() {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
-  }, [phase, lobbyMenuPhase, isShiftControlReady, siberiaGameOverActive])
+  }, [
+    phase,
+    lobbyMenuPhase,
+    shiftCompletedAt0600,
+    elevatorDeparturePhase,
+    isShiftControlReady,
+    siberiaGameOverActive,
+  ])
 
   useEffect(() => {
     const canSave =
       phase === 'playing' &&
       lobbyMenuPhase === 'entered_control_room' &&
+      shiftCompletedAt0600 === 'active' &&
+      elevatorDeparturePhase === 'idle' &&
       isShiftControlReady &&
       !siberiaGameOverActive &&
       !isKomradLiquidating()
@@ -578,6 +815,8 @@ export function App() {
   }, [
     phase,
     lobbyMenuPhase,
+    shiftCompletedAt0600,
+    elevatorDeparturePhase,
     isShiftControlReady,
     siberiaGameOverActive,
     quotaCompleted,
@@ -601,7 +840,11 @@ export function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!bootReadyRef.current) return
       const curState = useGameStore.getState()
-      if (curState.siberiaGameOverActive || isKomradGrabActive()) {
+      if (
+        curState.siberiaGameOverActive ||
+        curState.elevatorDeparturePhase !== 'idle' ||
+        isKomradGrabActive()
+      ) {
         return
       }
       if (e.code === 'Backspace') {
@@ -684,23 +927,51 @@ export function App() {
       <CenterReticle />
       <TutorialCompassHud menusOpen={effectiveMenusOpen} />
       <LiquidationCrtFxOverlay />
+      <ElevatorDepartureAndSummaryOverlay />
       {siberiaGameOverActive && <SiberiaLiquidationGameOverOverlay />}
 
+      {/* Interactive LIFT-84 Elevator Departure Prompt in Lobby after 06:00 */}
+      {phase === 'playing' &&
+        isShiftControlReady &&
+        !siberiaGameOverActive &&
+        elevatorDeparturePhase === 'idle' &&
+        shiftCompletedAt0600 !== 'active' &&
+        !effectiveMenusOpen &&
+        (canBoardElevator || hoveredControlHint?.includes('TAKE ELEVATOR')) && (
+          <div
+            data-testid="lift84-board-prompt"
+            className="pointer-events-none fixed bottom-11 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded border-2 border-[#33ff66] bg-[#061c0d]/95 px-4 py-1 font-mono text-sm font-bold tracking-widest text-[#33ff66] shadow-[0_0_18px_rgba(51,255,102,0.32)]"
+          >
+            [LMB / E] TAKE ELEVATOR — END SHIFT
+          </div>
+        )}
+
       {/* Subtle Contextual [E] SIT AT DESK Prompt When Walking Near Inspector Desk */}
-      {phase === 'playing' && isShiftControlReady && !siberiaGameOverActive && !isSeatedAtDesk && canSitAtDesk && !effectiveMenusOpen && (
-        <div className="pointer-events-none fixed bottom-11 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#ffb000]/75 bg-[#07160c]/90 px-3 py-0.5 font-mono text-xs font-bold tracking-widest text-[#ffb000] shadow-md">
-          [E] SIT AT DESK
-        </div>
-      )}
+      {phase === 'playing' &&
+        isShiftControlReady &&
+        shiftCompletedAt0600 === 'active' &&
+        !siberiaGameOverActive &&
+        !isSeatedAtDesk &&
+        canSitAtDesk &&
+        !effectiveMenusOpen && (
+          <div className="pointer-events-none fixed bottom-11 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#ffb000]/75 bg-[#07160c]/90 px-3 py-0.5 font-mono text-xs font-bold tracking-widest text-[#ffb000] shadow-md">
+            [E] SIT AT DESK
+          </div>
+        )}
 
       {/* Discreet Control & Locomotion Hint Bar at Bottom of Screen */}
-      {phase === 'playing' && isShiftControlReady && !siberiaGameOverActive && (
-        <div className="pointer-events-none fixed bottom-2.5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#28b862]/70 bg-[#051209]/90 px-4 py-1 font-mono text-xs font-bold tracking-wider text-[#39ff14] shadow-lg">
-          {isSeatedAtDesk
-            ? '[LMB]: CLICK ISKRA-84 TERMINAL | [RMB]: ZOOM | [E / ESC]: STAND UP'
-            : '[WASD]: WALK | [MOUSE]: LOOK | [HOLD LMB]: GRAB & DRAG | [RMB]: ZOOM | [E]: SIT / STAND (DESK)'}
-        </div>
-      )}
+      {phase === 'playing' &&
+        isShiftControlReady &&
+        !siberiaGameOverActive &&
+        elevatorDeparturePhase === 'idle' && (
+          <div className="pointer-events-none fixed bottom-2.5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded border border-[#28b862]/70 bg-[#051209]/90 px-4 py-1 font-mono text-xs font-bold tracking-wider text-[#39ff14] shadow-lg">
+            {shiftCompletedAt0600 !== 'active'
+              ? '06:00 SHIFT COMPLETE — EXIT THROUGH MCR-4 AIRLOCK TO LIFT-84 ELEVATOR ([LMB / E] BOARD)'
+              : isSeatedAtDesk
+                ? '[LMB]: CLICK ISKRA-84 TERMINAL | [RMB]: ZOOM | [E / ESC]: STAND UP'
+                : '[WASD]: WALK | [MOUSE]: LOOK | [HOLD LMB]: GRAB & DRAG | [RMB]: ZOOM | [E]: SIT / STAND (DESK)'}
+          </div>
+        )}
 
       {/* 100% True 3D First-Person Soviet Control Room Canvas (Locked dpr=1, unshadowed, stencil-free for 60 FPS micro-pixel aesthetic) */}
       <Canvas

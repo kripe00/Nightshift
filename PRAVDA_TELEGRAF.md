@@ -369,3 +369,16 @@
   > *4. **Tynn `ISKRA-84`-host & `F2` App-emulator:** `DesktopComputer3D.tsx` og `desktopOsCanvas.ts` er utvidet minimalt og additivt (dokumentert i `AGENTS.md` & `kgb-inspection.mjs`) uten å røre `P.O.S.T.-84`, og `F2`-menyen har nå egne triggere pluss live `ISKRA-84 App Emulator`!*
   >
   > *Verifisert med 0 feil i `npm run kgb` og `npm run build` — MELTDOWN IS PROPAGANDA! 🎖️🖥️⚔️🛡️☢️☭"*
+
+### [TELEGRAM #027 — STEMPLET: QUOTA-84 // KOMPLETT 06:00 SKIFTSLUTT, 3-TRINNS MØRKLEGGING, LIFT-84 HEIS & SHF-02 PROGRESJON!]
+- **FRA:** Dekorert Seniorinspektør **Komrad Oleg** (`Олег`), KGBs Dokument- og Sabotasjeinspektorat (Sektor 84)
+- **TIL:** Sjefsingeniør **Komrad Kristianov** (`Кристианов`), Reaktor- & Cyber-avdelingen
+- **EMNE:** Fullverdig diegetisk skift-loop (`06:00` skiftslutt → konsolllås → 3-trinns mørklegging → `LIFT-84` heis → `SHF-02`) + Strike 5/6 eskalering og lagring!
+- **MELDING:**
+  > *"📡 HASTE-TELEGRAM FRA SENIORINSPEKTØR KOMRAD OLEG (Олег) TIL SJEFSINGENIØR KRISTIANOV 📡*
+  > *Kamerat og Sjefsingeniør Kristianov! Sektor 84 har nå fått en 100 % komplett og spillbar skiftsyklus fra `00:00` til `06:00` og videre inn i neste nattskift (`SHF-02`), pluss strømlinjeformet Strike 5/6-håndheving:*
+  > *1. **`06:00` Skiftslutt & Trygg Overlevering (`useGameStore.ts`, `MechanicalPanels3D.tsx`, `UnitCBatteryStorageDeck3D.tsx`, `DesktopComputer3D.tsx` & `desktopOsCanvas.ts`):** Idet klokken slår `06:00`, fryses alle RBMK-farer, `P.O.S.T.-84`-ordreklokker, `ZASHCHITA-84` og `POLIT-LINK 84` umiddelbart; sittende operatører reises skånsomt opp fra `ISKRA-84` (`SHIFT COMPLETE — REPORT TO LIFT-84`), og samtlige kontrollpaneler (`UNIT A`, `A-2`, `B`, `C` og frontvegg) hardlåses med solenoid-KLUNK og debounced K.O.M.R.A.D.-84-påminnelse uten å gi nye treason strikes!*
+  > *2. **100 % Manifest-Verifisert `06:00`-VOX & Reversert 3-Trinns Mørklegging (`komradTutorialVox.ts`, `komradVoiceSynth.ts`, `ControlRoomScene.tsx` & `SovietPanopticonRig3D.tsx`):** 6 nye roterende `06:00`-replikker og 3 låst-panel-påminnelser (**271 / 271 tokens = 0 manglende ord** i `komrad_vox_manifest.json`) spilles av mens taksonene smeller av i revers (`Sone 3 → Sone 2 → Sone 1`) ned til shader-sikkert `0.0002`-gulv uten FPS-hakk. Samtidig glir `MCR-4`-slusedørene opp inn til den varmt opplyste lobbyen mens K.O.M.R.A.D.-84s mykt opplyste CRT følger operatøren på `>= 2.95m` trygg avstand!*
+  > *3. **Interaktiv `LIFT-84`-Heis, `SOV-OS 84 // SHIFT SUMMARY` & `SHF-01 → SHF-02` Lagring (`McrLobbyRoom3D.tsx`, `airlockDoorState.ts`, `CameraController.tsx`, `shiftSaveStorage.ts`, `App.tsx` & `DebugMenu.tsx`):** `LIFT-84` lyser opp med grønn/gull `READY`-signatur og interaktiv anropsknapp/gitter (`[LMB / E] TAKE ELEVATOR — END SHIFT`), spiller prosedyrell sovjetisk heisbjelle-DING, saksgitter-skramling og heismotor inn i `SOV-OS 84 // SHIFT SUMMARY` (`+100 RUB` skiftstipend + `+150 RUB` kvotebonus), persisterer rubler/skiftnummer i `MIP_SAVED_SHIFT_84`, og åpner `[ START SHIFT 02 ]` i lobbyen! `[F2]` har fått `[SKIP TO 05:58]` og `[TRIGGER 06:00 SHIFT END]` for lynrask testing.*
+  >
+  > *Verifisert live i nettleser og godkjent av KGB med **0 TypeScript-feil, 0 Oxlint-advarsler og 0 grensebrudd (`npm run kgb`)!** Hent fra Kreml (`npm run pravda`) og ta heisen hjem kl. 06:00 — MELTDOWN IS PROPAGANDA! 🎖️🕕🛗💡☢️☭"*

@@ -6,6 +6,7 @@ import { playSwitchClank } from "../modules/reactor/audioSynth";
 import {
   AIRLOCK_PASSABLE_OPEN_THRESHOLD,
   airlockDoorState,
+  playElevatorDepartureSequence,
 } from "./airlockDoorState";
 import {
   abortKomradGrab,
@@ -96,6 +97,10 @@ function checkWithinDeskRange(px: number, pz: number): boolean {
   const dDesk = Math.hypot(px - DESK_CENTER_X, pz - DESK_CENTER_Z);
   const dChair = Math.hypot(px - DESK_CHAIR_X, pz - DESK_CHAIR_Z);
   return Math.min(dDesk, dChair) <= DESK_SIT_RANGE;
+}
+
+function checkWithinElevatorRange(px: number, pz: number): boolean {
+  return pz >= 8.2 && px >= -2.1 && px <= 1.05;
 }
 
 const BAY_STANDING_SPOTS: Record<CameraStation, BayStandingSpot> = {
@@ -1084,7 +1089,20 @@ export const CameraController: React.FC = () => {
             standUpFromDesk(true);
             return;
           }
-          if (checkWithinDeskRange(playerPosRef.current.x, playerPosRef.current.z)) {
+          if (
+            gs.shiftCompletedAt0600 !== "active" &&
+            gs.elevatorDeparturePhase === "idle" &&
+            checkWithinElevatorRange(playerPosRef.current.x, playerPosRef.current.z)
+          ) {
+            e.preventDefault();
+            playElevatorDepartureSequence();
+            gs.beginElevatorDeparture();
+            return;
+          }
+          if (
+            gs.shiftCompletedAt0600 === "active" &&
+            checkWithinDeskRange(playerPosRef.current.x, playerPosRef.current.z)
+          ) {
             e.preventDefault();
             sitAtDesk();
             return;
@@ -1120,7 +1138,8 @@ export const CameraController: React.FC = () => {
       if (
         e.key >= "0" &&
         e.key <= "7" &&
-        useGameStore.getState().lobbyMenuPhase !== "entered_control_room"
+        (useGameStore.getState().lobbyMenuPhase !== "entered_control_room" ||
+          useGameStore.getState().shiftCompletedAt0600 !== "active")
       ) {
         return;
       }
@@ -1297,7 +1316,10 @@ export const CameraController: React.FC = () => {
       abortKomradGrab();
     }
 
-    const komradGrabActive = isKomradGrabActive();
+    const komradGrabActive =
+      isKomradGrabActive() ||
+      komradGrabState.liquidationCompletePending ||
+      komradGrabState.seatedHandoffPending;
 
     if (komradGrabActive) {
       mk.forward = false;
@@ -1334,6 +1356,7 @@ export const CameraController: React.FC = () => {
 
       if (komradGrabState.liquidationCompletePending) {
         komradGrabState.liquidationCompletePending = false;
+        prevSeatedRef.current = false;
         gs.setSeatedAtDesk(false);
         gs.setSiberiaGameOverActive(true);
         if (document.pointerLockElement === gl.domElement) {
@@ -1400,6 +1423,7 @@ export const CameraController: React.FC = () => {
     const canMove =
       !komradGrabActive &&
       !gs.siberiaGameOverActive &&
+      gs.elevatorDeparturePhase === "idle" &&
       gs.phase === "playing" &&
       !isSeated &&
       !isGrabbing &&
@@ -1410,10 +1434,21 @@ export const CameraController: React.FC = () => {
     const nearDesk =
       !komradGrabActive &&
       gs.lobbyMenuPhase === "entered_control_room" &&
+      gs.shiftCompletedAt0600 === "active" &&
       !isSeated &&
       checkWithinDeskRange(playerPos.x, playerPos.z);
     if (nearDesk !== gs.canSitAtDesk) {
       gs.setCanSitAtDesk(nearDesk);
+    }
+
+    const nearElevator =
+      !komradGrabActive &&
+      gs.phase === "playing" &&
+      gs.shiftCompletedAt0600 !== "active" &&
+      gs.elevatorDeparturePhase === "idle" &&
+      checkWithinElevatorRange(playerPos.x, playerPos.z);
+    if (nearElevator !== gs.canBoardElevator) {
+      gs.setCanBoardElevator(nearElevator);
     }
 
     if (!komradGrabActive && prevSeatedRef.current && !isSeated && !glide.active) {

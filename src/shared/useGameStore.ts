@@ -36,6 +36,8 @@ import {
   CRISIS_COACH_CARDS,
   KOMRAD_CYBER_VOX,
   KOMRAD_OPENING_PROPAGANDA_VOX,
+  KOMRAD_POST_SHIFT_LOCKED_PANEL_VOX,
+  KOMRAD_SHIFT_END_0600_VOX,
   KOMRAD_VOLKOV_ACCEPT_VOX,
   KOMRAD_VOLKOV_MAIL_HASSLES,
   KOMRAD_VOLKOV_SKIP_VOX,
@@ -46,6 +48,7 @@ import {
   isFirewallDrillPassed,
   isIdeologyDrillPassed,
   resetSovOsRuntime,
+  restoreSovOsPersistenceSnapshot,
   tickSovOsRuntime,
 } from './sovOsAppRegistry'
 import { pointerLockInteraction } from './pointerLockState'
@@ -55,6 +58,7 @@ import {
   isKomradLiquidating,
   startKomradGrabSequence,
   startKomradLiquidationSequence,
+  startKomradStrike5Surge,
 } from './komradGrabState'
 import type {
   ActivePost84PowerOrder,
@@ -73,8 +77,11 @@ import type {
   Post84InboxSnapshot,
   SavedGameStatePayload,
   SectorNodeId,
+  ShiftEndPhase,
+  ShiftSummaryData,
   SystemType,
   TerminalLogEntry,
+  TreasonStrikeSource,
 } from './types'
 
 const SECTOR_TO_SUB_ID: Record<SectorNodeId, number> = {
@@ -760,15 +767,53 @@ function resetVolkovHassleTrackers(): void {
 }
 
 const PRE_VOLKOV_STRIKE_DEBOUNCE_MS = 2200
-let preVolkovStrikeCount = 0
+const POST_SHIFT_LOCK_DEBOUNCE_MS = 4500
 let lastPreVolkovStrikeMs = -10000
+let lastPostShiftLockMs = -10000
 let preVolkovTier1Idx = 0
 let preVolkovTier2Idx = 0
 let preVolkovTier3Idx = 0
+let strike5SeatedIdx = 0
+let shiftEndVoxBag: number[] = []
+let lastShiftEndVoxIdx = -1
+let postShiftLockVoxIdx = 0
+
+function drawNextShiftEnd0600Vox(): string {
+  const count = KOMRAD_SHIFT_END_0600_VOX.length
+  if (shiftEndVoxBag.length === 0) {
+    const fresh = Array.from({ length: count }, (_, idx) => idx)
+    for (let i = fresh.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = fresh[i]
+      fresh[i] = fresh[j]
+      fresh[j] = tmp
+    }
+    if (fresh.length > 1 && fresh[fresh.length - 1] === lastShiftEndVoxIdx) {
+      const tmp = fresh[0]
+      fresh[0] = fresh[fresh.length - 1]
+      fresh[fresh.length - 1] = tmp
+    }
+    shiftEndVoxBag = fresh
+  }
+  const picked = shiftEndVoxBag.pop() ?? 0
+  lastShiftEndVoxIdx = picked
+  return KOMRAD_SHIFT_END_0600_VOX[picked]
+}
+
+function drawNextPostShiftLockedVox(): string {
+  const line =
+    KOMRAD_POST_SHIFT_LOCKED_PANEL_VOX[
+      postShiftLockVoxIdx % KOMRAD_POST_SHIFT_LOCKED_PANEL_VOX.length
+    ]
+  postShiftLockVoxIdx += 1
+  return line
+}
 
 export function getPreVolkovStrikeCount(): number {
-  return preVolkovStrikeCount
+  return useGameStore.getState().treasonStrikes
 }
+
+export const MAX_TREASON_STRIKES = 6
 
 export const KOMRAD_PRE_VOLKOV_TIER1_LINES: readonly string[] = [
   'HANDS OFF THE REACTOR CONSOLE, COMRADE. MAGNETIC SAFETY LOCK IS ACTIVE UNTIL YOU CHECK COMMISSAR VOLKOV ORDER AT THE DESK.',
@@ -782,6 +827,42 @@ export const KOMRAD_PRE_VOLKOV_TIER2_LINES: readonly string[] = [
   'UNWISE, COMRADE! VERY UNWISE! DO NOT TOUCH THAT LEVER AGAIN! MY SAFETY PROTOCOL IS EXHAUSTED! WALK TO THE DESK NOW!',
   'STOP TOUCHING STATE CONTROLS, OPERATOR! ONE MORE STRIKE AND I WILL DRAG YOU ACROSS THIS ROOM MYSELF!',
   'CRITICAL ALERT! HANDS OFF THE CONSOLE RIGHT NOW, OR IMMEDIATE DISCIPLINARY ACTION WILL BE EXECUTED!',
+]
+
+export const KOMRAD_TIER1_SOURCE_VOX: Record<
+  Exclude<TreasonStrikeSource, 'pre_volkov'>,
+  string
+> = {
+  zashchita_kill:
+    'WARNING, OPERATOR! VALID SOVIET CODE TERMINATED! TREASON STRIKE RECORDED IN YOUR PERSONNEL DOSSIER.',
+  zashchita_breach: KOMRAD_CYBER_VOX.FIREWALL_FAIL,
+  polit_link: KOMRAD_CYBER_VOX.DUEL_FAIL,
+  directive:
+    'WARNING, COMRADE! STATE DIRECTIVE ERROR LOGGED! TREASON STRIKE RECORDED IN YOUR DOSSIER.',
+  tutorial:
+    'NOTICE, OPERATOR! PROTOCOL ERROR LOGGED! TREASON STRIKE RECORDED. CHECK OFFICIAL ORDERS IMMEDIATELY.',
+}
+
+export const KOMRAD_TIER2_SOURCE_VOX: Record<
+  Exclude<TreasonStrikeSource, 'pre_volkov'>,
+  string
+> = {
+  zashchita_kill:
+    'CRITICAL ALERT, OPERATOR! VALID SOVIET CODE TERMINATED AGAIN! YOUR PERSONNEL DOSSIER IS APPROACHING SIBERIA!',
+  zashchita_breach:
+    'CRITICAL BREACH, OPERATOR! CIA SABOTAGE CONFIRMED! TREASON STRIKE LOGGED! YOUR DOSSIER IS APPROACHING SIBERIA!',
+  polit_link:
+    'CRITICAL IDEOLOGICAL ERROR, COMRADE! TREASON STRIKE RECORDED! YOUR PERSONNEL FILE IS APPROACHING THE SIBERIAN GULAG!',
+  directive:
+    'CRITICAL ALERT, OPERATOR! STATE DIRECTIVE SABOTAGE LOGGED! YOUR PERSONNEL RECORD IS APPROACHING SIBERIA!',
+  tutorial:
+    'FINAL WARNING, OPERATOR! PROTOCOL ERROR LOGGED AGAIN! KGB SURVEILLANCE WILL REPORT YOUR TREASON!',
+}
+
+export const KOMRAD_STRIKE5_SEATED_ULTIMATUM_LINES: readonly string[] = [
+  'CRITICAL ALERT, OPERATOR! FIVE TREASON STRIKES LOGGED IN YOUR PERSONNEL DOSSIER! ONE MORE ERROR AND YOU WILL BE SENT IMMEDIATELY TO THE SIBERIAN GULAG!',
+  'FINAL WARNING, COMRADE! FIVE STRIKES RECORDED AGAINST YOUR RECORD! ONE MORE SABOTAGE ERROR AND YOUR NEXT SHIFT IS SHOVELING SNOW IN SIBERIA!',
+  'STOP IMMEDIATELY, OPERATOR! FIVE TREASON STRIKES CONFIRMED! ONE MORE STRIKE AND YOUR PERSONNEL RECORD WILL BE TERMINATED FOR THE SIBERIAN GULAG!',
 ]
 
 export interface PreVolkovGrabUltimatum {
@@ -807,10 +888,27 @@ export const KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES: readonly PreVolkovGrabUltimatum[
   },
 ]
 
+export type StrikeAudioEvent =
+  | 'strike5_grab'
+  | 'strike5_surge'
+  | 'strike6_liquidation'
+
 let savedShiftLiquidator: (() => void) | null = null
+let savedShiftPersister: (() => void) | null = null
+let strikeAudioListener: ((event: StrikeAudioEvent) => void) | null = null
 
 export function registerSavedShiftLiquidator(fn: () => void): void {
   savedShiftLiquidator = fn
+}
+
+export function registerSavedShiftPersister(fn: () => void): void {
+  savedShiftPersister = fn
+}
+
+export function registerStrikeAudioListener(
+  fn: (event: StrikeAudioEvent) => void
+): void {
+  strikeAudioListener = fn
 }
 
 function wipeSavedShiftImmediately(): void {
@@ -833,16 +931,19 @@ export const KOMRAD_STRIKE6_LIQUIDATION_VOX =
 export const KOMRAD_PRE_VOLKOV_LOCK_SCOLDS: readonly string[] = [
   ...KOMRAD_PRE_VOLKOV_TIER1_LINES,
   ...KOMRAD_PRE_VOLKOV_TIER2_LINES,
+  ...KOMRAD_STRIKE5_SEATED_ULTIMATUM_LINES,
 ]
 
-function resetKomradTrackers(): void {
+function resetKomradTrackers(preserveStrikes = false): void {
   resetKomradSilenceState()
   resetVolkovHassleTrackers()
-  preVolkovStrikeCount = 0
   lastPreVolkovStrikeMs = -10000
-  preVolkovTier1Idx = 0
-  preVolkovTier2Idx = 0
-  preVolkovTier3Idx = 0
+  if (!preserveStrikes) {
+    preVolkovTier1Idx = 0
+    preVolkovTier2Idx = 0
+    preVolkovTier3Idx = 0
+    strike5SeatedIdx = 0
+  }
   abortKomradGrab()
   shiftElapsedSeconds = 0
   lastKomradHazardSec = {
@@ -1296,101 +1397,54 @@ export function hasAudibleRadioSubtitle(
   )
 }
 
-export function isPreVolkovPanelLocked(
+export function isShiftEndedPanelLocked(
+  state: Pick<GameState, 'shiftCompletedAt0600'> = useGameStore.getState()
+): boolean {
+  return state.shiftCompletedAt0600 !== 'active'
+}
+
+export function isPreVolkovOnlyLocked(
   state: Pick<GameState, 'tutorialPhase' | 'isGodMode'> = useGameStore.getState()
 ): boolean {
   return state.tutorialPhase === 'AWAITING_VOLKOV_MAIL' && !state.isGodMode
 }
 
-export function reportPreVolkovLockedPanelAttempt(): boolean {
+export function isPreVolkovPanelLocked(
+  state: Pick<
+    GameState,
+    'tutorialPhase' | 'isGodMode' | 'shiftCompletedAt0600'
+  > = useGameStore.getState()
+): boolean {
+  return isShiftEndedPanelLocked(state) || isPreVolkovOnlyLocked(state)
+}
+
+export const isControlPanelLocked = isPreVolkovPanelLocked
+
+export function reportShiftEndedLockedPanelAttempt(): boolean {
   const state = useGameStore.getState()
-  if (!isPreVolkovPanelLocked(state)) {
+  if (!isShiftEndedPanelLocked(state)) {
     return false
   }
-  if (state.siberiaGameOverActive || isKomradGrabActive()) {
-    return true
-  }
+  const feedback =
+    '06:00 SHIFT COMPLETE — ALL CONSOLES LOCKED. PROCEED THROUGH MCR-4 AIRLOCK TO LIFT-84 ELEVATOR!'
   const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
-  if (nowMs - lastPreVolkovStrikeMs < PRE_VOLKOV_STRIKE_DEBOUNCE_MS) {
-    const defaultFeedback =
-      preVolkovStrikeCount >= 3
-        ? 'K.O.M.R.A.D.-84 ANGER CRITICAL — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 MAIL NOW!'
-        : 'PANEL MAGNETIC INTERLOCK ACTIVE — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!'
-    if (state.lastDecisionFeedback !== defaultFeedback) {
-      useGameStore.setState({ lastDecisionFeedback: defaultFeedback })
+  if (nowMs - lastPostShiftLockMs < POST_SHIFT_LOCK_DEBOUNCE_MS) {
+    if (state.lastDecisionFeedback !== feedback) {
+      useGameStore.setState({ lastDecisionFeedback: feedback })
     }
     return true
   }
-
-  lastPreVolkovStrikeMs = nowMs
-  preVolkovStrikeCount += 1
-  volkovHassleCooldownSec = Math.max(volkovHassleCooldownSec, VOLKOV_HASSLE_REPEAT_SEC)
-
-  let line: string
-  let mood: KomradMood
-  let logLevel: TerminalLogEntry['level']
-  let feedback: string
-  const isStrike6Liquidation = preVolkovStrikeCount >= 6
-
-  if (preVolkovStrikeCount <= 2) {
-    line =
-      KOMRAD_PRE_VOLKOV_TIER1_LINES[
-        preVolkovTier1Idx % KOMRAD_PRE_VOLKOV_TIER1_LINES.length
-      ]
-    preVolkovTier1Idx += 1
-    mood = 'warning'
-    logLevel = 'warn'
-    feedback =
-      'PANEL MAGNETIC INTERLOCK ACTIVE — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!'
-  } else if (preVolkovStrikeCount <= 4) {
-    line =
-      KOMRAD_PRE_VOLKOV_TIER2_LINES[
-        preVolkovTier2Idx % KOMRAD_PRE_VOLKOV_TIER2_LINES.length
-      ]
-    preVolkovTier2Idx += 1
-    mood = 'critical'
-    logLevel = 'danger'
-    feedback =
-      'K.O.M.R.A.D.-84 ANGER CRITICAL — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 MAIL NOW!'
-  } else if (preVolkovStrikeCount === 5) {
-    const seq =
-      KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES[
-        preVolkovTier3Idx % KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES.length
-      ]
-    preVolkovTier3Idx += 1
-    startKomradGrabSequence(seq.ultimatum)
-    line = seq.grab
-    mood = 'critical'
-    logLevel = 'danger'
-    feedback =
-      'K.O.M.R.A.D.-84 PHYSICAL OVERRIDE — ESCORTING OPERATOR TO ISKRA-84 DESK CHAIR!'
-  } else {
-    wipeSavedShiftImmediately()
-    startKomradLiquidationSequence()
-    line = KOMRAD_STRIKE6_LIQUIDATION_VOX
-    mood = 'critical'
-    logLevel = 'danger'
-    feedback =
-      'KGB LIQUIDATION PROTOCOL ENGAGED — PERSONNEL RECORD EXPUNGED!'
-  }
-
+  lastPostShiftLockMs = nowMs
+  const line = drawNextPostShiftLockedVox()
   const entry = createLogEntry(
     state.shiftTimeMinutes,
     'K.O.M.R.A.D.-84',
     line,
-    logLevel
+    'warn'
   )
+  const allowInterrupt = !isKomradTransmitting()
   useGameStore.setState((prev) => ({
     lastDecisionFeedback: feedback,
-    ...(isStrike6Liquidation
-      ? {
-          radioOn: false,
-          radioBroadcastSubtitle: null,
-          diagFeedActive: false,
-          isSeatedAtDesk: false,
-          canSitAtDesk: false,
-        }
-      : {}),
     terminalEntries: [...prev.terminalEntries.slice(-24), entry],
     terminalLogs: [
       ...prev.terminalLogs.slice(-24),
@@ -1401,19 +1455,53 @@ export function reportPreVolkovLockedPanelAttempt(): boolean {
       createKomradMsg(
         prev.shiftTimeMinutes,
         line,
-        mood,
+        'normal',
         'K.O.M.R.A.D.-84',
         line,
-        true
+        allowInterrupt
       )
     ),
   }))
   return true
 }
 
+export function reportPreVolkovLockedPanelAttempt(): boolean {
+  const state = useGameStore.getState()
+  if (isShiftEndedPanelLocked(state)) {
+    return reportShiftEndedLockedPanelAttempt()
+  }
+  if (!isPreVolkovOnlyLocked(state)) {
+    return false
+  }
+  if (state.siberiaGameOverActive || isKomradGrabActive()) {
+    return true
+  }
+  const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (nowMs - lastPreVolkovStrikeMs < PRE_VOLKOV_STRIKE_DEBOUNCE_MS) {
+    const defaultFeedback =
+      state.treasonStrikes >= 3
+        ? `K.O.M.R.A.D.-84 ANGER CRITICAL (${state.treasonStrikes}/${MAX_TREASON_STRIKES} STRIKES) — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 MAIL NOW!`
+        : `PANEL MAGNETIC INTERLOCK ACTIVE (${state.treasonStrikes}/${MAX_TREASON_STRIKES} STRIKES) — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!`
+    if (state.lastDecisionFeedback !== defaultFeedback) {
+      useGameStore.setState({ lastDecisionFeedback: defaultFeedback })
+    }
+    return true
+  }
+
+  lastPreVolkovStrikeMs = nowMs
+  volkovHassleCooldownSec = Math.max(volkovHassleCooldownSec, VOLKOV_HASSLE_REPEAT_SEC)
+  useGameStore
+    .getState()
+    .recordTreasonStrike(
+      'UNAUTHORIZED REACTOR TAMPERING PRIOR TO VOLKOV BRIEFING',
+      'pre_volkov'
+    )
+  return true
+}
+
 export function dispatchKomradGrabUltimatum(line: string): void {
   const state = useGameStore.getState()
-  if (!isPreVolkovPanelLocked(state) || !line) {
+  if (!isPreVolkovOnlyLocked(state) || isShiftEndedPanelLocked(state) || !line) {
     return
   }
   volkovHassleCooldownSec = Math.max(volkovHassleCooldownSec, VOLKOV_HASSLE_REPEAT_SEC)
@@ -1455,6 +1543,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   ...INITIAL_MAPPED,
   phase: 'playing',
   lobbyMenuPhase: 'menu_locked',
+  shiftCompletedAt0600: 'active',
+  elevatorDeparturePhase: 'idle',
+  lastShiftSummary: null,
+  canBoardElevator: false,
   isShiftControlReady: false,
   siberiaGameOverActive: false,
   komradOpeningDispatched: false,
@@ -1467,6 +1559,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   isGodMode: false,
   isMusicMuted: false,
   treasonStrikes: 0,
+  lastStrikeReason: '',
+  strike5SurgeFlashSec: 0,
   rubles: 300,
   quotaCompleted: 0,
   lastDecisionFeedback: INITIAL_MAPPED.tutorialPrompt.header,
@@ -1537,6 +1631,213 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
           : {}),
       }
     })
+  },
+
+  setShiftEndPhase: (shiftCompletedAt0600: ShiftEndPhase) => {
+    set((state) =>
+      state.shiftCompletedAt0600 === shiftCompletedAt0600
+        ? state
+        : { shiftCompletedAt0600 }
+    )
+  },
+
+  triggerShiftEnd0600: () => {
+    const state = get()
+    if (
+      state.phase !== 'playing' ||
+      state.shiftCompletedAt0600 !== 'active' ||
+      state.siberiaGameOverActive ||
+      isKomradLiquidating() ||
+      (!state.isGodMode && (state.coreMeltdown || state.steamExplosion)) ||
+      state.treasonStrikes >= MAX_TREASON_STRIKES
+    ) {
+      return
+    }
+    abortKomradGrab()
+    resetSovOsRuntime()
+    syncedActivePost84Order = null
+    const signOffLine = drawNextShiftEnd0600Vox()
+    const feedback =
+      '06:00 SHIFT COMPLETE — CONSOLES LOCKED. PROCEED THROUGH MCR-4 AIRLOCK TO LIFT-84 ELEVATOR!'
+    const entry = createLogEntry(360, 'K.O.M.R.A.D.-84', signOffLine, 'normal')
+    const kmsg = createKomradMsg(
+      360,
+      signOffLine,
+      'normal',
+      'K.O.M.R.A.D.-84',
+      signOffLine,
+      true
+    )
+    lastPostShiftLockMs = -10000
+    set((prev) => ({
+      shiftTimeMinutes: 360,
+      shiftCompletedAt0600: 'closing_shift',
+      elevatorDeparturePhase: 'idle',
+      isSeatedAtDesk: false,
+      canSitAtDesk: false,
+      diagFeedActive: false,
+      isBlackout: false,
+      activeCrisisCoach: null,
+      activePost84Order: null,
+      activeMandate: null,
+      ciaIntrusionActive: false,
+      ciaIntrusionProgress: 0,
+      ideologyDuelActive: false,
+      komradOverrideLocked: false,
+      lastDecisionFeedback: feedback,
+      terminalEntries: [...prev.terminalEntries.slice(-24), entry],
+      terminalLogs: [
+        ...prev.terminalLogs.slice(-24),
+        `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+      ],
+      komradMessages: appendKomradFeed(prev.komradMessages, kmsg),
+    }))
+  },
+
+  setCanBoardElevator: (canBoard: boolean) => {
+    set((state) =>
+      state.canBoardElevator === canBoard ? state : { canBoardElevator: canBoard }
+    )
+  },
+
+  beginElevatorDeparture: () => {
+    const state = get()
+    if (
+      state.phase !== 'playing' ||
+      state.shiftCompletedAt0600 === 'active' ||
+      state.elevatorDeparturePhase !== 'idle' ||
+      state.siberiaGameOverActive ||
+      isKomradLiquidating()
+    ) {
+      return
+    }
+    const quotaTarget = 5
+    const quotaCompleted = Math.max(0, Math.round(state.quotaCompleted))
+    const baseBonusRubles = 100
+    const quotaBonusRubles = quotaCompleted >= quotaTarget ? 150 : 0
+    const totalBonusRubles = baseBonusRubles + quotaBonusRubles
+    const totalRublesAfterBonus = Math.max(
+      0,
+      Math.round(state.rubles + totalBonusRubles)
+    )
+    const summary: ShiftSummaryData = {
+      completedShiftNumber: state.shiftNumber,
+      nextShiftNumber: state.shiftNumber + 1,
+      quotaCompleted,
+      quotaTarget,
+      baseBonusRubles,
+      quotaBonusRubles,
+      totalBonusRubles,
+      totalRublesAfterBonus,
+      treasonStrikes: Math.max(
+        0,
+        Math.min(MAX_TREASON_STRIKES - 1, Math.round(state.treasonStrikes))
+      ),
+    }
+    set({
+      elevatorDeparturePhase: 'boarding',
+      canBoardElevator: false,
+      isSeatedAtDesk: false,
+      canSitAtDesk: false,
+      lastShiftSummary: summary,
+    })
+  },
+
+  showShiftSummaryOverlay: () => {
+    set((state) =>
+      state.elevatorDeparturePhase === 'boarding'
+        ? { elevatorDeparturePhase: 'summary' }
+        : state
+    )
+  },
+
+  completeShiftRolloverToLobby: () => {
+    resetKomradTrackers()
+    resetSovOsRuntime()
+    const cold = createColdStartState()
+    const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
+    const cur = get()
+    const summary = cur.lastShiftSummary
+    const nextShiftNumber = summary
+      ? summary.nextShiftNumber
+      : cur.shiftNumber + 1
+    const nextRubles = summary
+      ? summary.totalRublesAfterBonus
+      : Math.max(0, Math.round(cur.rubles + 100))
+    const carriedStrikes = summary
+      ? summary.treasonStrikes
+      : Math.max(0, Math.min(MAX_TREASON_STRIKES - 1, Math.round(cur.treasonStrikes)))
+    const freshEntries = [
+      createLogEntry(
+        0,
+        'K.O.M.R.A.D.-84',
+        `SHIFT ${nextShiftNumber} STANDBY INITIALIZED. BALANCE CARRIED FORWARD: ${nextRubles} RUB.`,
+        'normal'
+      ),
+    ]
+    set((state) => ({
+      ...mapped,
+      phase: 'playing',
+      lobbyMenuPhase: 'menu_locked',
+      shiftCompletedAt0600: 'active',
+      elevatorDeparturePhase: 'idle',
+      lastShiftSummary: null,
+      canBoardElevator: false,
+      siberiaGameOverActive: false,
+      isShiftControlReady: false,
+      komradOpeningDispatched: false,
+      isSeatedAtDesk: false,
+      canSitAtDesk: false,
+      shiftNumber: nextShiftNumber,
+      shiftTimeMinutes: 0,
+      rubles: nextRubles,
+      quotaCompleted: 0,
+      treasonStrikes: carriedStrikes,
+      lastStrikeReason: carriedStrikes > 0 ? state.lastStrikeReason : '',
+      strike5SurgeFlashSec: 0,
+      activeMandate: null,
+      activePost84Order: null,
+      post84InboxSnapshot: null,
+      isBlackout: false,
+      lastDecisionFeedback: mapped.tutorialPrompt.header,
+      selectedH2OSubstationId: 1,
+      tutorialDrainSeconds: 0,
+      tutorialHintsHidden: false,
+      activeCrisisCoach: null,
+      dismissedCrisisIds: [],
+      shiftRunId: state.shiftRunId + 1,
+      hoveredDiagnosticId: null,
+      hoveredControlHint: null,
+      diagFeedActive: false,
+      radioOn: false,
+      radioVolume: state.radioVolume,
+      radioBroadcastSubtitle: null,
+      komradSubtitle: null,
+      vodkaDroughtTimer: 0,
+      redlineInstability: 0,
+      isInspectingDesk: false,
+      excitationTrim: 0.0,
+      hzOutOfBoundsSeconds: 0,
+      boronCooldown: 0,
+      az5Available: true,
+      az5Cooldown: 0,
+      gridTransientImpulse: 0,
+      steamTransientImpulse: 0,
+      voltageDipIntensity: 0,
+      ciaIntrusionActive: false,
+      ciaIntrusionProgress: 0,
+      komradOverrideLocked: false,
+      ideologyDuelActive: false,
+      partyApprovedBuffSec: 0,
+      frontWallPurgeCooldownSec: 0,
+      frontWallOverrideCooldownSec: 0,
+      komradSabotageFlashSec: 0,
+      activeDirectives: [],
+      printerProgress: 0,
+      terminalEntries: freshEntries,
+      terminalLogs: freshEntries.map((e) => `[${e.timestamp}] ${e.sender}: ${e.text}`),
+      komradMessages: [],
+    }))
   },
 
   setShiftControlReady: (ready: boolean) => {
@@ -1737,7 +2038,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   skipTutorial: () => {
     resetSovOsRuntime()
     set((state) => {
-      resetKomradTrackers()
+      resetKomradTrackers(true)
       const liveReactor: ReactorState = {
         ...createColdStartState(),
         rodTargetRate: 0,
@@ -1852,7 +2153,6 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         activeCrisisCoach: null,
         dismissedCrisisIds: [],
         redlineInstability: 0,
-        treasonStrikes: 0,
         activeMandate: null,
         activePost84Order: null,
         isBlackout: false,
@@ -1891,7 +2191,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   acceptVolkovTrainingDirective: () => {
     resetSovOsRuntime()
     set((state) => {
-      resetKomradTrackers()
+      resetKomradTrackers(true)
       volkovOpenerFinished = true
       if (state.tutorialPhase !== 'AWAITING_VOLKOV_MAIL') {
         return {
@@ -2094,6 +2394,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       return {
         ...mapped,
         phase: 'playing',
+        shiftCompletedAt0600: 'active',
+        elevatorDeparturePhase: 'idle',
+        lastShiftSummary: null,
+        canBoardElevator: false,
         siberiaGameOverActive: false,
         isShiftControlReady: controlReadyNow,
         komradOpeningDispatched: false,
@@ -2102,6 +2406,9 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         activeMandate: null,
         activePost84Order: null,
         isBlackout: false,
+        treasonStrikes: 0,
+        lastStrikeReason: '',
+        strike5SurgeFlashSec: 0,
         rubles: 300,
         quotaCompleted: 0,
         post84InboxSnapshot: null,
@@ -2172,6 +2479,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         ...mapped,
         phase: 'playing',
         lobbyMenuPhase: nextLobbyPhase,
+        shiftCompletedAt0600: 'active',
+        elevatorDeparturePhase: 'idle',
+        lastShiftSummary: null,
+        canBoardElevator: false,
         siberiaGameOverActive: false,
         isShiftControlReady: controlReadyNow,
         komradOpeningDispatched: false,
@@ -2187,6 +2498,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         lastDecisionFeedback: mapped.tutorialPrompt.header,
         selectedH2OSubstationId: 1,
         treasonStrikes: 0,
+        lastStrikeReason: '',
+        strike5SurgeFlashSec: 0,
         isGodMode: false,
         tutorialDrainSeconds: 0,
         tutorialHintsHidden: false,
@@ -2394,6 +2707,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       ...mapped,
       phase: 'playing',
       lobbyMenuPhase: 'door_opening',
+      shiftCompletedAt0600: 'active',
+      elevatorDeparturePhase: 'idle',
+      lastShiftSummary: null,
+      canBoardElevator: false,
       siberiaGameOverActive: false,
       isShiftControlReady: false,
       komradOpeningDispatched: false,
@@ -2401,7 +2718,15 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       canSitAtDesk: false,
       shiftNumber: numOr(savedGame.shiftNumber, 1),
       shiftTimeMinutes: restoredShiftTime,
-      treasonStrikes: numOr(savedGame.treasonStrikes, 0),
+      treasonStrikes: Math.max(
+        0,
+        Math.min(MAX_TREASON_STRIKES, Math.round(numOr(savedGame.treasonStrikes, 0)))
+      ),
+      lastStrikeReason:
+        typeof savedGame.lastStrikeReason === 'string'
+          ? savedGame.lastStrikeReason
+          : '',
+      strike5SurgeFlashSec: 0,
       rubles: Math.max(0, Math.round(numOr(savedGame.rubles, 300))),
       quotaCompleted: Math.max(0, Math.round(numOr(savedGame.quotaCompleted, 0))),
       lastDecisionFeedback:
@@ -2421,13 +2746,22 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         ? [...savedGame.dismissedCrisisIds]
         : [],
       activeCrisisCoach: null,
-      ciaIntrusionActive: false,
-      ciaIntrusionProgress: 0,
-      komradOverrideLocked: false,
-      ideologyDuelActive: false,
-      partyApprovedBuffSec: 0,
-      frontWallPurgeCooldownSec: 0,
-      frontWallOverrideCooldownSec: 0,
+      ciaIntrusionActive: boolOr(savedGame.ciaIntrusionActive, false),
+      ciaIntrusionProgress: Math.max(
+        0,
+        Math.min(100, numOr(savedGame.ciaIntrusionProgress, 0))
+      ),
+      komradOverrideLocked: boolOr(savedGame.komradOverrideLocked, false),
+      ideologyDuelActive: boolOr(savedGame.ideologyDuelActive, false),
+      partyApprovedBuffSec: Math.max(0, numOr(savedGame.partyApprovedBuffSec, 0)),
+      frontWallPurgeCooldownSec: Math.max(
+        0,
+        numOr(savedGame.frontWallPurgeCooldownSec, 0)
+      ),
+      frontWallOverrideCooldownSec: Math.max(
+        0,
+        numOr(savedGame.frontWallOverrideCooldownSec, 0)
+      ),
       komradSabotageFlashSec: 0,
       activeDirectives: [],
       printerProgress: 0,
@@ -2445,6 +2779,26 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       ],
       shiftRunId: state.shiftRunId + 1,
     }))
+    if (savedGame.sovOsSavedState) {
+      restoreSovOsPersistenceSnapshot(savedGame.sovOsSavedState)
+      // Re-apply saved CIA intrusion progress / lock flags after plugin re-trigger
+      set({
+        ciaIntrusionActive: boolOr(
+          savedGame.ciaIntrusionActive,
+          Boolean(savedGame.sovOsSavedState.zashchita.active)
+        ),
+        ciaIntrusionProgress: Math.max(
+          0,
+          Math.min(100, numOr(savedGame.ciaIntrusionProgress, 0))
+        ),
+        ideologyDuelActive: boolOr(
+          savedGame.ideologyDuelActive,
+          Boolean(savedGame.sovOsSavedState.politLink.active)
+        ),
+        komradOverrideLocked: boolOr(savedGame.komradOverrideLocked, false),
+        partyApprovedBuffSec: Math.max(0, numOr(savedGame.partyApprovedBuffSec, 0)),
+      })
+    }
   },
 
   pullMainBreaker: () => {
@@ -3478,9 +3832,6 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         feedback = `ORDER APPROVED (${docTitle.slice(0, 18)}) [65s WINDOW]: ${routeReqText}`
         logLevel = 'normal'
       } else if (!isForgery && decision === 'SHREDDED') {
-        if (!state.isGodMode) {
-          nextStrikes = Math.min(3, state.treasonStrikes + 1)
-        }
         nextInstability = Math.min(100, state.redlineInstability + 18)
         feedback = `TREASON STRIKE! VALID SOVIET DIRECTIVE (${docTitle.slice(0, 24)}) SHREDDED!`
         logLevel = 'danger'
@@ -3489,9 +3840,6 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         feedback = `CIA SABOTAGE SHREDDED (${docTitle.slice(0, 22)})! INSTABILITY -15%.`
         logLevel = 'normal'
       } else {
-        if (!state.isGodMode) {
-          nextStrikes = Math.min(3, state.treasonStrikes + 1)
-        }
         nextCoreTileAnomalies = {
           ...nextCoreTileAnomalies,
           7: 'spent',
@@ -3505,6 +3853,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         feedback = `CIA SABOTAGE DISPATCHED (${flawText ?? 'FORGERY'} — 2 SPENT RODS)! TREASON STRIKE RECORDED!`
         logLevel = 'danger'
       }
+
+      const isDirectiveStrike =
+        (!isForgery && decision === 'SHREDDED') ||
+        (isForgery && decision !== 'SHREDDED')
 
       const entry = createLogEntry(
         state.shiftTimeMinutes,
@@ -3521,11 +3873,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
               ? `CIA FORGERY SHREDDED (${docTitle.slice(0, 20)})! LANGLEY COUNTERFEIT REDUCED TO STATE CONFETTI.`
               : `CATASTROPHE! THAT WATERMARK SAID "MADE IN LANGLEY" — CIA SABOTAGE APPROVED!`
       const nextPhase =
-        !state.isGodMode && nextStrikes >= 3
-          ? 'gulag'
-          : !state.isGodMode && nextTemp >= 1200
-            ? 'meltdown'
-            : state.phase
+        !state.isGodMode && nextTemp >= 1200 ? 'meltdown' : state.phase
 
       return {
         substations: nextSubstations,
@@ -3551,22 +3899,46 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         lastDecisionFeedback: feedback,
         phase: nextPhase,
         diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
-        komradMessages: appendKomradFeed(
-          state.komradMessages,
-          createKomradMsg(
-            state.shiftTimeMinutes,
-            komradVerdictText,
-            mapLevelToMood(logLevel),
-            'K.O.M.R.A.D.-84'
-          )
-        ),
+        ...(isDirectiveStrike
+          ? {}
+          : {
+              terminalEntries: [...state.terminalEntries.slice(-24), entry],
+              terminalLogs: [
+                ...state.terminalLogs.slice(-24),
+                `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+              ],
+              komradMessages: appendKomradFeed(
+                state.komradMessages,
+                createKomradMsg(
+                  state.shiftTimeMinutes,
+                  komradVerdictText,
+                  mapLevelToMood(logLevel),
+                  'K.O.M.R.A.D.-84'
+                )
+              ),
+            }),
       }
     })
+
+    if (!isForgery && decision === 'SHREDDED') {
+      get().recordTreasonStrike(
+        `SHREDDING GENUINE STATE DIRECTIVE (${docTitle.slice(0, 32)})`,
+        'directive',
+        {
+          customFeedback: `TREASON STRIKE! VALID SOVIET DIRECTIVE (${docTitle.slice(0, 24)}) SHREDDED!`,
+          customLogText: `TREASON STRIKE! VALID SOVIET DIRECTIVE (${docTitle.slice(0, 24)}) SHREDDED!`,
+        }
+      )
+    } else if (isForgery && decision !== 'SHREDDED') {
+      get().recordTreasonStrike(
+        `APPROVING WESTERN CIA FORGERY DIRECTIVE (${docTitle.slice(0, 32)})`,
+        'directive',
+        {
+          customFeedback: `CIA SABOTAGE DISPATCHED (${flawText ?? 'FORGERY'} — 2 SPENT RODS)! TREASON STRIKE RECORDED!`,
+          customLogText: `CIA SABOTAGE DISPATCHED (${flawText ?? 'FORGERY'} — 2 SPENT RODS)! TREASON STRIKE RECORDED!`,
+        }
+      )
+    }
   },
 
   tickThermodynamics: (dtSeconds: number) => {
@@ -3575,6 +3947,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       (state.phase !== 'playing' && state.phase !== 'boot') ||
       state.lobbyMenuPhase !== 'entered_control_room' ||
       !state.isShiftControlReady ||
+      state.shiftCompletedAt0600 !== 'active' ||
       state.siberiaGameOverActive ||
       isKomradLiquidating()
     ) {
@@ -3653,11 +4026,13 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         }
       }
 
+      const nextStrike5Flash = Math.max(0, state.strike5SurgeFlashSec - dt)
       if (
         volkovLogs.length > 0 ||
         volkovKomradMsgs.length > 0 ||
         state.drumWaterLevel !== 0 ||
-        state.wetSteamSeverity !== 0
+        state.wetSteamSeverity !== 0 ||
+        nextStrike5Flash !== state.strike5SurgeFlashSec
       ) {
         if (volkovLogs.length > 0 || volkovKomradMsgs.length > 0) {
           const updatedEntries = [
@@ -3667,6 +4042,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
           set({
             drumWaterLevel: 0,
             wetSteamSeverity: 0,
+            strike5SurgeFlashSec: nextStrike5Flash,
             lastDecisionFeedback: volkovFeedback,
             terminalEntries: updatedEntries,
             terminalLogs: updatedEntries.map(
@@ -3681,6 +4057,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
           set({
             drumWaterLevel: 0,
             wetSteamSeverity: 0,
+            strike5SurgeFlashSec: nextStrike5Flash,
           })
         }
       }
@@ -3716,6 +4093,10 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     const nextKomradSabotageFlashSec = Math.max(
       0,
       state.komradSabotageFlashSec - dt
+    )
+    const nextStrike5SurgeFlashSec = Math.max(
+      0,
+      state.strike5SurgeFlashSec - dt
     )
     const nextVoltageDip =
       nextKomradSabotageFlashSec > 0
@@ -3754,6 +4135,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     let nextFeedback = state.lastDecisionFeedback
     let nextInstability = state.redlineInstability
     let nextMandate = state.activeMandate
+    let missedMandateTitle: string | null = null
 
     const pushWallKomrad = (
       msg: string,
@@ -4026,13 +4408,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
           const rem = (nextMandate.complianceRemainingSec ?? 65) - dt
           if (rem <= 0) {
             nextInstability = Math.min(100, nextInstability + 16)
+            missedMandateTitle = nextMandate.title
             const failReason = `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title} (GRID ${Math.round(dispatchedMWe)} vs DEMAND ${Math.round(neededMWe)} MWe) — +16% INSTABILITY!`
-            pushKomradLiveDispatch(
-              failReason,
-              'danger',
-              'K.O.M.R.A.D.-84',
-              `MINISTRY CITATION! QUOTA DEADLINE MISSED FOR ${nextMandate.title}! VOLKOV IS FUMING!`
-            )
             mandateComplianceListener?.(false, nextMandate.id, failReason)
             nextMandate = {
               ...nextMandate,
@@ -4212,11 +4589,9 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     }
 
     const nextPhase =
-      !state.isGodMode && state.treasonStrikes >= 3
-        ? 'gulag'
-        : !state.isGodMode && (baseReactor.coreMeltdown || baseReactor.steamExplosion)
-          ? 'meltdown'
-          : state.phase
+      !state.isGodMode && (baseReactor.coreMeltdown || baseReactor.steamExplosion)
+        ? 'meltdown'
+        : state.phase
 
     if (newLogs.length > 0 || newKomradMsgs.length > 0) {
       const updatedEntries = [...state.terminalEntries.slice(-24), ...newLogs]
@@ -4233,6 +4608,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         frontWallPurgeCooldownSec: nextFrontWallPurgeCooldownSec,
         frontWallOverrideCooldownSec: nextFrontWallOverrideCooldownSec,
         komradSabotageFlashSec: nextKomradSabotageFlashSec,
+        strike5SurgeFlashSec: nextStrike5SurgeFlashSec,
         hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         lastDecisionFeedback: nextFeedback,
         phase: nextPhase,
@@ -4261,13 +4637,21 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         frontWallPurgeCooldownSec: nextFrontWallPurgeCooldownSec,
         frontWallOverrideCooldownSec: nextFrontWallOverrideCooldownSec,
         komradSabotageFlashSec: nextKomradSabotageFlashSec,
+        strike5SurgeFlashSec: nextStrike5SurgeFlashSec,
         hzOutOfBoundsSeconds: nextHzOutOfBoundsSeconds,
         phase: nextPhase,
         diagFeedActive: nextPhase === 'playing' ? state.diagFeedActive : false,
       })
     }
 
-    if (nextPhase === 'playing') {
+    if (missedMandateTitle) {
+      get().recordTreasonStrike(
+        `MISSED MANDATORY STATE DIRECTIVE DEADLINE (${missedMandateTitle.slice(0, 32)})`,
+        'directive'
+      )
+    }
+
+    if (nextPhase === 'playing' && !isKomradLiquidating() && !get().siberiaGameOverActive) {
       tickSovOsRuntime(dt)
     }
   },
@@ -4562,13 +4946,186 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     })
   },
 
+  recordTreasonStrike: (
+    reason: string,
+    source: TreasonStrikeSource,
+    options?: {
+      spokenVoxText?: string
+      logSender?: TerminalLogEntry['sender']
+      customFeedback?: string
+      customLogText?: string
+      statePatch?: Partial<GameState>
+    }
+  ): number => {
+    const state = get()
+    if (state.isGodMode || state.siberiaGameOverActive || isKomradLiquidating()) {
+      return state.treasonStrikes
+    }
+
+    const cleanReason =
+      reason.trim().toUpperCase() ||
+      'REPEATED STATE SECURITY VIOLATIONS LOGGED IN SECTOR 84'
+    const nextStrikes = Math.min(MAX_TREASON_STRIKES, state.treasonStrikes + 1)
+    const isStrike6Liquidation = nextStrikes >= MAX_TREASON_STRIKES
+    const isPreVolkovStanding =
+      isPreVolkovOnlyLocked(state) && !state.isSeatedAtDesk
+
+    let voxLine: string
+    let mood: KomradMood
+    let logLevel: TerminalLogEntry['level']
+    let defaultFeedback: string
+    let nextStrike5FlashSec = state.strike5SurgeFlashSec
+
+    if (nextStrikes <= 2) {
+      if (source === 'pre_volkov') {
+        voxLine =
+          KOMRAD_PRE_VOLKOV_TIER1_LINES[
+            preVolkovTier1Idx % KOMRAD_PRE_VOLKOV_TIER1_LINES.length
+          ]
+        preVolkovTier1Idx += 1
+        defaultFeedback = `PANEL MAGNETIC INTERLOCK ACTIVE (${nextStrikes}/${MAX_TREASON_STRIKES} STRIKES) — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 DIRECTIVE FIRST!`
+      } else {
+        voxLine = options?.spokenVoxText ?? KOMRAD_TIER1_SOURCE_VOX[source]
+        defaultFeedback = `TREASON STRIKE ${nextStrikes}/${MAX_TREASON_STRIKES}: ${cleanReason}`
+      }
+      mood = 'warning'
+      logLevel = source === 'pre_volkov' || source === 'tutorial' ? 'warn' : 'danger'
+    } else if (nextStrikes <= 4) {
+      if (source === 'pre_volkov') {
+        voxLine =
+          KOMRAD_PRE_VOLKOV_TIER2_LINES[
+            preVolkovTier2Idx % KOMRAD_PRE_VOLKOV_TIER2_LINES.length
+          ]
+        preVolkovTier2Idx += 1
+        defaultFeedback = `K.O.M.R.A.D.-84 ANGER CRITICAL (${nextStrikes}/${MAX_TREASON_STRIKES} STRIKES) — SIT AT DESK [E] & ACCEPT COMMISSAR VOLKOV’S P.O.S.T.-84 MAIL NOW!`
+      } else {
+        voxLine = KOMRAD_TIER2_SOURCE_VOX[source]
+        defaultFeedback = `CRITICAL TREASON STRIKE ${nextStrikes}/${MAX_TREASON_STRIKES}: ${cleanReason}`
+      }
+      mood = 'critical'
+      logLevel = 'danger'
+    } else if (nextStrikes === 5) {
+      if (isPreVolkovStanding) {
+        const seq =
+          KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES[
+            preVolkovTier3Idx % KOMRAD_PRE_VOLKOV_TIER3_SEQUENCES.length
+          ]
+        preVolkovTier3Idx += 1
+        startKomradGrabSequence(seq.ultimatum)
+        strikeAudioListener?.('strike5_grab')
+        voxLine = seq.grab
+        defaultFeedback = `K.O.M.R.A.D.-84 PHYSICAL OVERRIDE (${nextStrikes}/${MAX_TREASON_STRIKES} STRIKES) — ESCORTING OPERATOR TO ISKRA-84 DESK CHAIR!`
+      } else {
+        voxLine =
+          KOMRAD_STRIKE5_SEATED_ULTIMATUM_LINES[
+            strike5SeatedIdx % KOMRAD_STRIKE5_SEATED_ULTIMATUM_LINES.length
+          ]
+        strike5SeatedIdx += 1
+        startKomradStrike5Surge(3.4)
+        strikeAudioListener?.('strike5_surge')
+        nextStrike5FlashSec = 1.8
+        defaultFeedback = `FINAL SIBERIA WARNING (${nextStrikes}/${MAX_TREASON_STRIKES} STRIKES)! ONE MORE VIOLATION MEANS IMMEDIATE LIQUIDATION!`
+      }
+      mood = 'critical'
+      logLevel = 'danger'
+    } else {
+      wipeSavedShiftImmediately()
+      if (typeof document !== 'undefined') {
+        document.documentElement.classList.remove('iskra-terminal-seated')
+        document.body.classList.remove('iskra-terminal-seated')
+      }
+      startKomradLiquidationSequence()
+      strikeAudioListener?.('strike6_liquidation')
+      voxLine = KOMRAD_STRIKE6_LIQUIDATION_VOX
+      nextStrike5FlashSec = 0
+      mood = 'critical'
+      logLevel = 'danger'
+      defaultFeedback = `KGB LIQUIDATION PROTOCOL ENGAGED (${nextStrikes}/${MAX_TREASON_STRIKES} STRIKES) — ${cleanReason}!`
+    }
+
+    const sender: TerminalLogEntry['sender'] =
+      options?.logSender ??
+      (source === 'zashchita_kill' || source === 'zashchita_breach'
+        ? 'SYS.DEFENSE'
+        : 'K.O.M.R.A.D.-84')
+    const logText = options?.customLogText ?? voxLine
+    const feedback =
+      isStrike6Liquidation || nextStrikes === 5
+        ? defaultFeedback
+        : (options?.customFeedback ?? defaultFeedback)
+
+    const entry = createLogEntry(
+      state.shiftTimeMinutes,
+      sender,
+      logText,
+      logLevel
+    )
+
+    set((prev) => ({
+      ...(options?.statePatch ?? {}),
+      treasonStrikes: nextStrikes,
+      lastStrikeReason: cleanReason,
+      strike5SurgeFlashSec: nextStrike5FlashSec,
+      lastDecisionFeedback: feedback,
+      ...(nextStrikes >= 3 && !isStrike6Liquidation
+        ? {
+            voltageDipIntensity: Math.max(
+              options?.statePatch?.voltageDipIntensity ?? prev.voltageDipIntensity,
+              nextStrikes === 5 ? 0.85 : 0.45
+            ),
+          }
+        : {}),
+      ...(isStrike6Liquidation
+        ? {
+            radioOn: false,
+            radioBroadcastSubtitle: null,
+            diagFeedActive: false,
+            isSeatedAtDesk: false,
+            canSitAtDesk: false,
+            ciaIntrusionActive: false,
+            ideologyDuelActive: false,
+          }
+        : {}),
+      terminalEntries: [...prev.terminalEntries.slice(-24), entry],
+      terminalLogs: [
+        ...prev.terminalLogs.slice(-24),
+        `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
+      ],
+      komradMessages: appendKomradFeed(
+        prev.komradMessages,
+        createKomradMsg(
+          prev.shiftTimeMinutes,
+          voxLine,
+          mood,
+          'K.O.M.R.A.D.-84',
+          voxLine,
+          true
+        )
+      ),
+    }))
+
+    if (!isStrike6Liquidation && savedShiftPersister) {
+      const updated = get()
+      if (
+        updated.phase === 'playing' &&
+        updated.lobbyMenuPhase === 'entered_control_room' &&
+        updated.isShiftControlReady
+      ) {
+        savedShiftPersister()
+      }
+    }
+
+    return nextStrikes
+  },
+
   applyKomradDuelFailure: (fineRub: number, isDrill = false) => {
-    set((state) => {
-      if (isDrill) {
+    const state = get()
+    if (isDrill) {
+      set((prev) => {
         const drillMsg =
           'DRILL FAILURE: K.O.M.R.A.D.-84 REJECTED YOUR ANSWER (0 STRIKES IN TRAINING). RETRY ON POLIT-LINK 84!'
         const entry = createLogEntry(
-          state.shiftTimeMinutes,
+          prev.shiftTimeMinutes,
           'K.O.M.R.A.D.-84',
           drillMsg,
           'warn'
@@ -4577,15 +5134,15 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
           voltageDipIntensity: 0.72,
           komradSabotageFlashSec: 3.0,
           lastDecisionFeedback: drillMsg,
-          terminalEntries: [...state.terminalEntries.slice(-24), entry],
+          terminalEntries: [...prev.terminalEntries.slice(-24), entry],
           terminalLogs: [
-            ...state.terminalLogs.slice(-24),
+            ...prev.terminalLogs.slice(-24),
             `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
           ],
           komradMessages: appendKomradFeed(
-            state.komradMessages,
+            prev.komradMessages,
             createKomradMsg(
-              state.shiftTimeMinutes,
+              prev.shiftTimeMinutes,
               KOMRAD_CYBER_VOX.DRILL_MISTAKE,
               'warning',
               'K.O.M.R.A.D.-84',
@@ -4594,48 +5151,38 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
             )
           ),
         }
+      })
+      return
+    }
+
+    const nextPumpB = Math.min(state.pumpThrottle[1], 18)
+    const nextStrikesPreview = state.isGodMode
+      ? state.treasonStrikes
+      : Math.min(MAX_TREASON_STRIKES, state.treasonStrikes + 1)
+    const failText = `IDEOLOGICAL FAILURE! STRIKE ${nextStrikesPreview}/${MAX_TREASON_STRIKES}, -${fineRub} RUB, AI LOCK & PUMP B / LIGHTS SABOTAGE!`
+    const statePatch: Partial<GameState> = {
+      rubles: Math.max(0, state.rubles - Math.max(0, Math.round(fineRub))),
+      ideologyDuelActive: false,
+      komradOverrideLocked: true,
+      pumpThrottle: [state.pumpThrottle[0], nextPumpB] as [number, number],
+      voltageDipIntensity: 0.92,
+      komradSabotageFlashSec: 4.5,
+    }
+    if (state.isGodMode) {
+      set((prev) => ({ ...prev, ...statePatch, lastDecisionFeedback: failText }))
+      return
+    }
+    get().recordTreasonStrike(
+      'FAILED POLIT-LINK 84 IDEOLOGICAL AUDIT',
+      'polit_link',
+      {
+        spokenVoxText: KOMRAD_CYBER_VOX.DUEL_FAIL,
+        logSender: 'K.O.M.R.A.D.-84',
+        customFeedback: failText,
+        customLogText: failText,
+        statePatch,
       }
-      const nextStrikes = state.isGodMode
-        ? state.treasonStrikes
-        : Math.min(3, state.treasonStrikes + 1)
-      const nextPhase =
-        !state.isGodMode && nextStrikes >= 3 ? 'gulag' : state.phase
-      const nextPumpB = Math.min(state.pumpThrottle[1], 18)
-      const failText = `IDEOLOGICAL FAILURE! +1 TREASON STRIKE, -${fineRub} RUB, AI LOCK & PUMP B / LIGHTS SABOTAGE!`
-      const entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'K.O.M.R.A.D.-84',
-        failText,
-        'danger'
-      )
-      return {
-        treasonStrikes: nextStrikes,
-        phase: nextPhase,
-        rubles: Math.max(0, state.rubles - Math.max(0, Math.round(fineRub))),
-        ideologyDuelActive: false,
-        komradOverrideLocked: true,
-        pumpThrottle: [state.pumpThrottle[0], nextPumpB] as [number, number],
-        voltageDipIntensity: 0.92,
-        komradSabotageFlashSec: 4.5,
-        lastDecisionFeedback: failText,
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
-        komradMessages: appendKomradFeed(
-          state.komradMessages,
-          createKomradMsg(
-            state.shiftTimeMinutes,
-            KOMRAD_CYBER_VOX.DUEL_FAIL,
-            'critical',
-            'K.O.M.R.A.D.-84',
-            KOMRAD_CYBER_VOX.DUEL_FAIL,
-            true
-          )
-        ),
-      }
-    })
+    )
   },
 
   applyFirewallWrongKillPenalty: (
@@ -4643,11 +5190,12 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     processName: string,
     isDrill = false
   ) => {
-    set((state) => {
-      if (isDrill) {
+    const state = get()
+    if (isDrill) {
+      set((prev) => {
         const msg = `DRILL FAULT: ${processName} WAS A VALID SOVIET PROCESS (0 STRIKES IN TRAINING). CHECK GOST-84 RULES!`
         const entry = createLogEntry(
-          state.shiftTimeMinutes,
+          prev.shiftTimeMinutes,
           'SYS.DEFENSE',
           msg,
           'warn'
@@ -4656,15 +5204,15 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
           voltageDipIntensity: 0.65,
           komradSabotageFlashSec: 3.0,
           lastDecisionFeedback: msg,
-          terminalEntries: [...state.terminalEntries.slice(-24), entry],
+          terminalEntries: [...prev.terminalEntries.slice(-24), entry],
           terminalLogs: [
-            ...state.terminalLogs.slice(-24),
+            ...prev.terminalLogs.slice(-24),
             `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
           ],
           komradMessages: appendKomradFeed(
-            state.komradMessages,
+            prev.komradMessages,
             createKomradMsg(
-              state.shiftTimeMinutes,
+              prev.shiftTimeMinutes,
               KOMRAD_CYBER_VOX.DRILL_MISTAKE,
               'warning',
               'SYS.DEFENSE',
@@ -4673,57 +5221,53 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
             )
           ),
         }
-      }
+      })
+      return
+    }
 
-      const nextProgress = Math.min(99, state.ciaIntrusionProgress + 15)
-      const nextPumpThrottle: [number, number] = [
-        impact === 'pump_a' ? Math.min(state.pumpThrottle[0], 20) : state.pumpThrottle[0],
-        impact === 'pump_b' ? Math.min(state.pumpThrottle[1], 20) : state.pumpThrottle[1],
-      ]
-      const nextFeedwater =
-        impact === 'feedwater'
-          ? Math.max(0.1, state.feedwaterValve - 0.18)
-          : state.feedwaterValve
-      const nextGridImpulse =
-        impact === 'grid' ? -2.2 : state.gridTransientImpulse
-      const nextVoltage =
-        impact === 'lights' || impact === 'grid'
-          ? 0.95
-          : Math.max(state.voltageDipIntensity, 0.5)
-      const nextFlash = impact === 'lights' ? 4.0 : 2.0
-      const msg = `WRONG KILL: ${processName} TERMINATED! HARDWARE DISRUPTED (+15% CIA INTRUSION).`
-      const entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'SYS.DEFENSE',
-        msg,
-        'danger'
-      )
-      return {
-        ciaIntrusionProgress: nextProgress,
-        pumpThrottle: nextPumpThrottle,
-        feedwaterValve: nextFeedwater,
-        gridTransientImpulse: nextGridImpulse,
-        voltageDipIntensity: nextVoltage,
-        komradSabotageFlashSec: nextFlash,
-        lastDecisionFeedback: msg,
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
-        komradMessages: appendKomradFeed(
-          state.komradMessages,
-          createKomradMsg(
-            state.shiftTimeMinutes,
-            KOMRAD_CYBER_VOX.FIREWALL_WRONG_KILL,
-            'warning',
-            'SYS.DEFENSE',
-            KOMRAD_CYBER_VOX.FIREWALL_WRONG_KILL,
-            true
-          )
-        ),
+    const nextProgress = Math.min(99, state.ciaIntrusionProgress + 15)
+    const nextPumpThrottle: [number, number] = [
+      impact === 'pump_a' ? Math.min(state.pumpThrottle[0], 20) : state.pumpThrottle[0],
+      impact === 'pump_b' ? Math.min(state.pumpThrottle[1], 20) : state.pumpThrottle[1],
+    ]
+    const nextFeedwater =
+      impact === 'feedwater'
+        ? Math.max(0.1, state.feedwaterValve - 0.18)
+        : state.feedwaterValve
+    const nextGridImpulse =
+      impact === 'grid' ? -2.2 : state.gridTransientImpulse
+    const nextVoltage =
+      impact === 'lights' || impact === 'grid'
+        ? 0.95
+        : Math.max(state.voltageDipIntensity, 0.5)
+    const nextFlash = impact === 'lights' ? 4.0 : 2.0
+    const nextStrikesPreview = state.isGodMode
+      ? state.treasonStrikes
+      : Math.min(MAX_TREASON_STRIKES, state.treasonStrikes + 1)
+    const msg = `WRONG KILL: ${processName} TERMINATED! STRIKE ${nextStrikesPreview}/${MAX_TREASON_STRIKES} & HARDWARE DISRUPTED (+15% CIA INTRUSION).`
+    const statePatch: Partial<GameState> = {
+      ciaIntrusionProgress: nextProgress,
+      pumpThrottle: nextPumpThrottle,
+      feedwaterValve: nextFeedwater,
+      gridTransientImpulse: nextGridImpulse,
+      voltageDipIntensity: nextVoltage,
+      komradSabotageFlashSec: nextFlash,
+    }
+    if (state.isGodMode) {
+      set((prev) => ({ ...prev, ...statePatch, lastDecisionFeedback: msg }))
+      return
+    }
+    get().recordTreasonStrike(
+      `TERMINATING CRITICAL STATE DRIVER IN ZASHCHITA-84 (${processName})`,
+      'zashchita_kill',
+      {
+        spokenVoxText: KOMRAD_TIER1_SOURCE_VOX.zashchita_kill,
+        logSender: 'SYS.DEFENSE',
+        customFeedback: msg,
+        customLogText: msg,
+        statePatch,
       }
-    })
+    )
   },
 
   applyFirewallVictory: (
@@ -4784,61 +5328,47 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   },
 
   applyFirewallBreachPenalty: () => {
-    set((state) => {
-      const baseReactor = extractReactorState(state)
-      const candidateChannels = [12, 18, 24, 16, 20, 6, 30]
-      const nextAnom = { ...(baseReactor.coreTileAnomalies ?? {}) }
-      let added = 0
-      for (const ch of candidateChannels) {
-        if (added >= 2) break
-        if (!nextAnom[ch]) {
-          nextAnom[ch] = 'spent'
-          added += 1
-        }
+    const state = get()
+    const baseReactor = extractReactorState(state)
+    const candidateChannels = [12, 18, 24, 16, 20, 6, 30]
+    const nextAnom = { ...(baseReactor.coreTileAnomalies ?? {}) }
+    let added = 0
+    for (const ch of candidateChannels) {
+      if (added >= 2) break
+      if (!nextAnom[ch]) {
+        nextAnom[ch] = 'spent'
+        added += 1
       }
-      baseReactor.coreTileAnomalies = nextAnom
-      baseReactor.voidFraction = Math.min(0.65, baseReactor.voidFraction + 0.14)
-      const mapped = mapReactorToGameStateFields(baseReactor, state.tutorialPhase)
-      const nextStrikes = state.isGodMode
-        ? state.treasonStrikes
-        : Math.min(3, state.treasonStrikes + 1)
-      const nextPhase =
-        !state.isGodMode && nextStrikes >= 3 ? 'gulag' : state.phase
-      const msg =
-        'CIA BREACH AT 100%! +1 TREASON STRIKE, SPENT CORE CHANNELS & VOID SURGE!'
-      const entry = createLogEntry(
-        state.shiftTimeMinutes,
-        'SYS.DEFENSE',
-        msg,
-        'danger'
-      )
-      return {
-        ...mapped,
-        ciaIntrusionActive: false,
-        ciaIntrusionProgress: 0,
-        treasonStrikes: nextStrikes,
-        phase: nextPhase,
-        voltageDipIntensity: 1.0,
-        komradSabotageFlashSec: 4.5,
-        lastDecisionFeedback: msg,
-        terminalEntries: [...state.terminalEntries.slice(-24), entry],
-        terminalLogs: [
-          ...state.terminalLogs.slice(-24),
-          `[${entry.timestamp}] ${entry.sender}: ${entry.text}`,
-        ],
-        komradMessages: appendKomradFeed(
-          state.komradMessages,
-          createKomradMsg(
-            state.shiftTimeMinutes,
-            KOMRAD_CYBER_VOX.FIREWALL_FAIL,
-            'critical',
-            'SYS.DEFENSE',
-            KOMRAD_CYBER_VOX.FIREWALL_FAIL,
-            true
-          )
-        ),
+    }
+    baseReactor.coreTileAnomalies = nextAnom
+    baseReactor.voidFraction = Math.min(0.65, baseReactor.voidFraction + 0.14)
+    const mapped = mapReactorToGameStateFields(baseReactor, state.tutorialPhase)
+    const nextStrikesPreview = state.isGodMode
+      ? state.treasonStrikes
+      : Math.min(MAX_TREASON_STRIKES, state.treasonStrikes + 1)
+    const msg = `CIA BREACH AT 100%! STRIKE ${nextStrikesPreview}/${MAX_TREASON_STRIKES}, SPENT CORE CHANNELS & VOID SURGE!`
+    const statePatch: Partial<GameState> = {
+      ...mapped,
+      ciaIntrusionActive: false,
+      ciaIntrusionProgress: 0,
+      voltageDipIntensity: 1.0,
+      komradSabotageFlashSec: 4.5,
+    }
+    if (state.isGodMode) {
+      set((prev) => ({ ...prev, ...statePatch, lastDecisionFeedback: msg }))
+      return
+    }
+    get().recordTreasonStrike(
+      'ALLOWING 100% WESTERN CIA FIREWALL BREACH IN ZASHCHITA-84',
+      'zashchita_breach',
+      {
+        spokenVoxText: KOMRAD_CYBER_VOX.FIREWALL_FAIL,
+        logSender: 'SYS.DEFENSE',
+        customFeedback: msg,
+        customLogText: msg,
+        statePatch,
       }
-    })
+    )
   },
 
   jumpToTutorialPhase: (targetPhase: TutorialPhase) => {
@@ -4962,7 +5492,6 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   setGodMode: (enabled: boolean) => {
     if (enabled) {
       abortKomradGrab()
-      preVolkovStrikeCount = 0
     }
     set((state) => {
       const godText = enabled
@@ -5044,8 +5573,34 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     get().pullMainBreaker()
   },
 
+  debugSkipTo0558: () => {
+    const state = get()
+    if (
+      state.phase !== 'playing' ||
+      state.shiftCompletedAt0600 !== 'active' ||
+      state.siberiaGameOverActive ||
+      isKomradLiquidating()
+    ) {
+      return
+    }
+    if (state.tutorialPhase === 'AWAITING_VOLKOV_MAIL') {
+      state.skipTutorial()
+    }
+    lastBroadcastHour = 5
+    set({
+      shiftTimeMinutes: 358,
+      diagFeedActive: false,
+      lastDecisionFeedback:
+        'DEBUG: SHIFT CLOCK ADVANCED TO 05:58 — 06:00 END-OF-SHIFT CUTOFF IMMINENT!',
+    })
+  },
+
   debugCompleteShift: () => {
-    set({ shiftTimeMinutes: 360, phase: 'victory', diagFeedActive: false })
+    const state = get()
+    if (state.tutorialPhase === 'AWAITING_VOLKOV_MAIL') {
+      state.skipTutorial()
+    }
+    get().triggerShiftEnd0600()
   },
 
   tick: () => {
@@ -5054,6 +5609,7 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       state.phase !== 'playing' ||
       state.lobbyMenuPhase !== 'entered_control_room' ||
       !state.isShiftControlReady ||
+      state.shiftCompletedAt0600 !== 'active' ||
       state.siberiaGameOverActive ||
       isKomradLiquidating() ||
       state.tutorialPhase === 'AWAITING_VOLKOV_MAIL'
@@ -5061,10 +5617,18 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
       return
     }
 
-    // 1. Advance clock continuously without stopping at 10 minutes (wraps around 360 in-game minutes)
+    const isMidCatastrophe =
+      (!state.isGodMode && (state.coreMeltdown || state.steamExplosion)) ||
+      state.treasonStrikes >= MAX_TREASON_STRIKES
+
+    // 1. Advance shift clock cleanly toward 06:00 (360 in-game minutes) and trigger safe handover at 06:00
     const SHIFT_MINUTES_PER_SECOND = 1 / 1.75
     const rawNextMinutes = state.shiftTimeMinutes + SHIFT_MINUTES_PER_SECOND
-    const nextMinutes = rawNextMinutes % 360
+    if (rawNextMinutes >= 360 && !isMidCatastrophe) {
+      get().triggerShiftEnd0600()
+      return
+    }
+    const nextMinutes = Math.min(360, rawNextMinutes)
 
     // 2. Legacy Pravda Dot-Matrix background spawner disabled (H-08); manual DebugMenu spawnDirective remains intact.
     const nextPrinterProgress = 0
@@ -5091,11 +5655,9 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     }
 
     const nextPhase =
-      !state.isGodMode && state.treasonStrikes >= 3
-        ? 'gulag'
-        : !state.isGodMode && (state.coreMeltdown || state.steamExplosion)
-          ? 'meltdown'
-          : state.phase
+      !state.isGodMode && (state.coreMeltdown || state.steamExplosion)
+        ? 'meltdown'
+        : state.phase
 
     set({
       shiftTimeMinutes: nextMinutes,

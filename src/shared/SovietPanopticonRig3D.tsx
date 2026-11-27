@@ -13,9 +13,11 @@ import {
   abortKomradGrab,
   isKomradGrabActive,
   isKomradLiquidating,
+  isKomradStrike5Surging,
   komradGrabState,
   snapshotGrabGantryPose,
   stepKomradGrab,
+  stepKomradStrike5Surge,
 } from "./komradGrabState";
 import {
   getKomradVowelBand,
@@ -46,8 +48,6 @@ import {
 import type { KomradMood } from "./types";
 import {
   dispatchKomradGrabUltimatum,
-  getPreVolkovStrikeCount,
-  isPreVolkovPanelLocked,
   useGameStore,
 } from "./useGameStore";
 
@@ -988,6 +988,7 @@ function paintTurretFaceCRT(
   voxLoaded?: boolean,
   isDancing = false,
   danceBeat = 0,
+  staticJolt = false,
 ): void {
   if (isBlackout) {
     ctx.fillStyle = "#050706";
@@ -1143,6 +1144,16 @@ function paintTurretFaceCRT(
   for (let sy = 2; sy < h; sy += 4) {
     ctx.fillRect(0, sy, w, 1);
   }
+
+  if (staticJolt) {
+    for (let k = 0; k < 14; k++) {
+      const bandY = Math.floor(((blinkPhase * 73 + k * 41) % (h - 14)) + 4);
+      const bandH = k % 3 === 0 ? 10 : 4;
+      ctx.fillStyle =
+        k % 2 === 0 ? "rgba(255, 42, 42, 0.42)" : "rgba(230, 222, 195, 0.28)";
+      ctx.fillRect(10, bandY, w - 20, bandH);
+    }
+  }
 }
 
 export const SovietPanopticonRig3D: React.FC = React.memo(() => {
@@ -1220,7 +1231,6 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     shakeAmp: 0,
     lastMood: "normal" as KomradMood,
     lastTreasonStrikes: 0,
-    lastPreVolkovStrikes: 0,
     postGrabRetreatTimer: 0,
     wasGrabActive: false,
     lastShiftRunId: -1,
@@ -1318,7 +1328,8 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
     const t = state.clock.elapsedTime;
     const dt = Math.min(Math.max(delta, 0), MAX_FRAME_DT);
     const s = useGameStore.getState();
-    const isBlackout = s.isBlackout && !s.isGodMode;
+    const isLiquidatingNow = isKomradLiquidating();
+    const isBlackout = s.isBlackout && !s.isGodMode && !isLiquidatingNow;
     const vocal = stepKomradSpeech(t, dt);
 
     const camPos = state.camera.position;
@@ -1354,7 +1365,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         ts.wasArmActive = false;
         ts.wasGrabActive = false;
         ts.postGrabRetreatTimer = 0;
-        ts.lastPreVolkovStrikes = 0;
+        ts.lastTreasonStrikes = s.treasonStrikes;
         ts.wasDancing = false;
         ts.danceElapsedSec = 0;
         ts.arms[0].curRoll = 0;
@@ -1364,7 +1375,6 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       abortKomradGrab();
       ts.postGrabRetreatTimer = 0;
       ts.wasGrabActive = false;
-      ts.lastPreVolkovStrikes = 0;
       cancelKomradActuation();
     } else if (s.lobbyMenuPhase !== "entered_control_room" && isKomradGrabActive()) {
       abortKomradGrab();
@@ -1420,11 +1430,19 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       }
     }
 
+    stepKomradStrike5Surge(dt);
+    if (komradGrabState.strike5SurgeEventPending) {
+      komradGrabState.strike5SurgeEventPending = false;
+      ts.shakeAmp = 0.34;
+      playTurretServoWhir(1.6);
+    }
+
+    const strikesEscalated = s.treasonStrikes > ts.lastTreasonStrikes;
     if (
       (vocal.mood === "critical" && ts.lastMood !== "critical") ||
-      s.treasonStrikes > ts.lastTreasonStrikes
+      strikesEscalated
     ) {
-      ts.shakeAmp = 0.24;
+      ts.shakeAmp = Math.max(ts.shakeAmp, s.treasonStrikes >= 3 ? 0.28 : 0.22);
     }
     ts.lastMood = vocal.mood;
     ts.lastTreasonStrikes = s.treasonStrikes;
@@ -1843,193 +1861,253 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
         komradGrabState.justFinishedGrab = false;
         ts.postGrabRetreatTimer = 1.1;
       }
-      const preVolkovLocked = isPreVolkovPanelLocked(s);
-      const preVolkovStrikes = preVolkovLocked ? getPreVolkovStrikeCount() : 0;
-      const tier2Escalated =
-        preVolkovLocked &&
-        preVolkovStrikes >= 3 &&
-        preVolkovStrikes !== ts.lastPreVolkovStrikes;
-      if (tier2Escalated) {
-        ts.shakeAmp = 0.28;
-      }
-      ts.lastPreVolkovStrikes = preVolkovLocked ? preVolkovStrikes : 0;
-      const preferCloseEdge = preVolkovLocked && preVolkovStrikes >= 3;
+      const strike5Surging = isKomradStrike5Surging();
+      const tier2Escalated = strikesEscalated && s.treasonStrikes >= 3;
+      const preferCloseEdge = s.treasonStrikes >= 3 || strike5Surging;
 
       const seatedChanged = s.isSeatedAtDesk !== ts.lastSeatedAtDesk;
       ts.lastSeatedAtDesk = s.isSeatedAtDesk;
 
-      const anchorDistToCam = Math.hypot(
-        ts.anchorX - camPos.x,
-        ts.anchorZ - camPos.z,
-      );
-      const liveDistToCam = Math.hypot(ts.curX - camPos.x, ts.curZ - camPos.z);
-      const camMoved = Math.hypot(
-        camPos.x - ts.lastAnchorCamX,
-        camPos.z - ts.lastAnchorCamZ,
-      );
-      const anchorUnsafe = !isStrictlySafeCorridor(ts.anchorX, ts.anchorZ);
-      const personalSpaceBreach =
-        anchorDistToCam < MIN_TROLLEY_DIST || liveDistToCam < MIN_TROLLEY_DIST;
-      const meaningfulPlayerMove =
-        camMoved > PLAYER_MOVE_DEADBAND_M &&
-        (anchorDistToCam > MAX_TROLLEY_DIST ||
-          anchorDistToCam < MIN_TROLLEY_DIST + 0.15);
-
-      if (
-        exitedArm ||
-        exitedGrab ||
-        exitedDance ||
-        tier2Escalated ||
-        seatedChanged ||
-        anchorUnsafe ||
-        personalSpaceBreach ||
-        meaningfulPlayerMove
-      ) {
-        const safeTarget = computeSafePanopticonTarget(
-          {
-            camPos,
-            refX: ts.anchorX,
-            refZ: ts.anchorZ,
-            curX: ts.curX,
-            curZ: ts.curZ,
-            preferredSide: ts.preferredSide,
-            isSeatedAtDesk: s.isSeatedAtDesk,
-            isTalking: vocal.isTalking,
-            mood: vocal.mood,
-            isBlackout: false,
-            elapsedSec: t,
-            preferCloseEdge,
-          },
-          _safeTargetOut,
-        );
-        ts.anchorX = safeTarget.targetX;
-        ts.anchorZ = safeTarget.targetZ;
-        ts.preferredSide = safeTarget.chosenFlank;
-        ts.lastAnchorCamX = camPos.x;
-        ts.lastAnchorCamZ = camPos.z;
-        ts.nextDriftSec = t + SUPERVISORY_DRIFT_INTERVAL_SEC;
-      } else if (
-        t >= ts.nextDriftSec &&
-        Math.hypot(ts.curX - ts.anchorX, ts.curZ - ts.anchorZ) < 0.25
-      ) {
-        ts.driftPhase += 1.65;
-        const driftCandX =
-          ts.anchorX + Math.cos(ts.driftPhase) * SUPERVISORY_DRIFT_STEP_M;
-        const driftCandZ =
-          ts.anchorZ + Math.sin(ts.driftPhase) * SUPERVISORY_DRIFT_STEP_M;
-        projectOntoSafeCorridor(driftCandX, driftCandZ, _driftProjTmp);
-        const driftDistToCam = Math.hypot(
-          _driftProjTmp.x - camPos.x,
-          _driftProjTmp.z - camPos.z,
-        );
-        if (
-          isStrictlySafeCorridor(_driftProjTmp.x, _driftProjTmp.z) &&
-          driftDistToCam >= MIN_TROLLEY_DIST + 0.1 &&
-          driftDistToCam <= MAX_TROLLEY_DIST - 0.1 &&
-          segmentClearsDesk(
-            ts.curX,
-            ts.curZ,
-            _driftProjTmp.x,
-            _driftProjTmp.z,
-          )
-        ) {
-          ts.anchorX = _driftProjTmp.x;
-          ts.anchorZ = _driftProjTmp.z;
-          ts.preferredSide =
-            ts.anchorX > 0.35
-              ? 1
-              : ts.anchorX < -0.35
-                ? -1
-                : ts.preferredSide;
-        }
-        ts.nextDriftSec = t + SUPERVISORY_DRIFT_INTERVAL_SEC;
-      }
-
-      desiredTargetY = THREE.MathUtils.clamp(
-        vocal.mood === "critical"
-          ? 1.68
-          : vocal.isTalking || s.isSeatedAtDesk
-            ? 1.74
-            : vocal.mood === "warning"
-              ? 1.85
-              : 1.96 + Math.sin(t * 0.8) * 0.05,
-        TURRET_Y_EYE_MIN,
-        TURRET_Y_EYE_MAX,
-      );
-
-      computeCorridorSteerTarget(
-        ts.curX,
-        ts.curZ,
-        ts.anchorX,
-        ts.anchorZ,
-        camPos.x,
-        camPos.z,
-        _steerTmp,
-      );
-
-      let effectiveMinCamDist = MIN_TROLLEY_DIST * 0.92;
-      if (ts.postGrabRetreatTimer > 0) {
-        ts.postGrabRetreatTimer = Math.max(0, ts.postGrabRetreatTimer - dt);
-        if (liveDistToCam >= MIN_TROLLEY_DIST * 0.92) {
-          ts.postGrabRetreatTimer = 0;
+      if (strike5Surging) {
+        // Strike 5 intimidation surge: swoop aggressively beside/over the ISKRA-84 desk (or right in front of standing operator)
+        let surgeTargetX: number;
+        let surgeTargetZ: number;
+        if (s.isSeatedAtDesk) {
+          const flankSide = ts.curX < -0.15 ? -1 : ts.curX > 0.15 ? 1 : ts.preferredSide;
+          surgeTargetX = flankSide * 0.96;
+          surgeTargetZ = 1.46;
         } else {
-          effectiveMinCamDist = Math.min(
-            MIN_TROLLEY_DIST * 0.92,
-            liveDistToCam,
+          let dx = 0.0 - camPos.x;
+          let dz = 0.15 - camPos.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist < 0.1) {
+            dx = 0;
+            dz = -1;
+          } else {
+            dx /= dist;
+            dz /= dist;
+          }
+          surgeTargetX = THREE.MathUtils.clamp(
+            camPos.x + dx * 1.65,
+            ACTUATION_X_MIN,
+            ACTUATION_X_MAX,
+          );
+          surgeTargetZ = THREE.MathUtils.clamp(
+            camPos.z + dz * 1.65,
+            ACTUATION_Z_MIN,
+            ACTUATION_Z_MAX,
           );
         }
-      }
+        desiredTargetY = s.isSeatedAtDesk ? 1.56 : 1.64;
 
-      const patrolMaxSpeed =
-        ts.postGrabRetreatTimer > 0 || liveDistToCam < PUSH_TARGET_TROLLEY_DIST
-          ? THREE.MathUtils.clamp(
-              CRANE_PATROL_MAX_SPEED_XZ +
-                Math.max(0.6, PUSH_TARGET_TROLLEY_DIST - liveDistToCam) * 3.0,
-              CRANE_PATROL_MAX_SPEED_XZ,
-              CRANE_PATROL_RETREAT_MAX_SPEED_XZ,
+        const xzStep = stepHeavyCraneXZ(
+          ts.curX,
+          ts.curZ,
+          ts.velX,
+          ts.velZ,
+          surgeTargetX,
+          surgeTargetZ,
+          dt,
+          5.6,
+          22.0,
+          0.16,
+          false,
+          _craneXZOut,
+        );
+        ts.curX = xzStep.x;
+        ts.curZ = xzStep.z;
+        ts.velX = xzStep.vx;
+        ts.velZ = xzStep.vz;
+
+        const yStep = stepHeavyCraneAxis1D(
+          ts.curHeadY,
+          ts.velY,
+          desiredTargetY,
+          dt,
+          2.6,
+          10.0,
+          0.18,
+          _craneYOut,
+        );
+        ts.curHeadY = yStep.value;
+        ts.velY = yStep.velocity;
+        ts.anchorX = ts.curX;
+        ts.anchorZ = ts.curZ;
+        ts.postGrabRetreatTimer = 0.9;
+      } else {
+        const anchorDistToCam = Math.hypot(
+          ts.anchorX - camPos.x,
+          ts.anchorZ - camPos.z,
+        );
+        const liveDistToCam = Math.hypot(ts.curX - camPos.x, ts.curZ - camPos.z);
+        const camMoved = Math.hypot(
+          camPos.x - ts.lastAnchorCamX,
+          camPos.z - ts.lastAnchorCamZ,
+        );
+        const anchorUnsafe = !isStrictlySafeCorridor(ts.anchorX, ts.anchorZ);
+        const personalSpaceBreach =
+          anchorDistToCam < MIN_TROLLEY_DIST || liveDistToCam < MIN_TROLLEY_DIST;
+        const meaningfulPlayerMove =
+          camMoved > PLAYER_MOVE_DEADBAND_M &&
+          (anchorDistToCam > MAX_TROLLEY_DIST ||
+            anchorDistToCam < MIN_TROLLEY_DIST + 0.15);
+
+        if (
+          exitedArm ||
+          exitedGrab ||
+          exitedDance ||
+          tier2Escalated ||
+          seatedChanged ||
+          anchorUnsafe ||
+          personalSpaceBreach ||
+          meaningfulPlayerMove
+        ) {
+          const safeTarget = computeSafePanopticonTarget(
+            {
+              camPos,
+              refX: ts.anchorX,
+              refZ: ts.anchorZ,
+              curX: ts.curX,
+              curZ: ts.curZ,
+              preferredSide: ts.preferredSide,
+              isSeatedAtDesk: s.isSeatedAtDesk,
+              isTalking: vocal.isTalking,
+              mood: vocal.mood,
+              isBlackout: false,
+              elapsedSec: t,
+              preferCloseEdge,
+            },
+            _safeTargetOut,
+          );
+          ts.anchorX = safeTarget.targetX;
+          ts.anchorZ = safeTarget.targetZ;
+          ts.preferredSide = safeTarget.chosenFlank;
+          ts.lastAnchorCamX = camPos.x;
+          ts.lastAnchorCamZ = camPos.z;
+          ts.nextDriftSec = t + SUPERVISORY_DRIFT_INTERVAL_SEC;
+        } else if (
+          t >= ts.nextDriftSec &&
+          Math.hypot(ts.curX - ts.anchorX, ts.curZ - ts.anchorZ) < 0.25
+        ) {
+          ts.driftPhase += 1.65;
+          const driftCandX =
+            ts.anchorX + Math.cos(ts.driftPhase) * SUPERVISORY_DRIFT_STEP_M;
+          const driftCandZ =
+            ts.anchorZ + Math.sin(ts.driftPhase) * SUPERVISORY_DRIFT_STEP_M;
+          projectOntoSafeCorridor(driftCandX, driftCandZ, _driftProjTmp);
+          const driftDistToCam = Math.hypot(
+            _driftProjTmp.x - camPos.x,
+            _driftProjTmp.z - camPos.z,
+          );
+          if (
+            isStrictlySafeCorridor(_driftProjTmp.x, _driftProjTmp.z) &&
+            driftDistToCam >= MIN_TROLLEY_DIST + 0.1 &&
+            driftDistToCam <= MAX_TROLLEY_DIST - 0.1 &&
+            segmentClearsDesk(
+              ts.curX,
+              ts.curZ,
+              _driftProjTmp.x,
+              _driftProjTmp.z,
             )
-          : CRANE_PATROL_MAX_SPEED_XZ;
+          ) {
+            ts.anchorX = _driftProjTmp.x;
+            ts.anchorZ = _driftProjTmp.z;
+            ts.preferredSide =
+              ts.anchorX > 0.35
+                ? 1
+                : ts.anchorX < -0.35
+                  ? -1
+                  : ts.preferredSide;
+          }
+          ts.nextDriftSec = t + SUPERVISORY_DRIFT_INTERVAL_SEC;
+        }
 
-      const xzStep = stepHeavyCraneXZ(
-        ts.curX,
-        ts.curZ,
-        ts.velX,
-        ts.velZ,
-        _steerTmp.x,
-        _steerTmp.z,
-        dt,
-        patrolMaxSpeed,
-        CRANE_PATROL_MAX_ACCEL_XZ,
-        CRANE_PATROL_SMOOTH_TIME_XZ,
-        true,
-        _craneXZOut,
-        camPos.x,
-        camPos.z,
-        effectiveMinCamDist,
-      );
-      ts.curX = xzStep.x;
-      ts.curZ = xzStep.z;
-      ts.velX = xzStep.vx;
-      ts.velZ = xzStep.vz;
+        desiredTargetY = THREE.MathUtils.clamp(
+          vocal.mood === "critical"
+            ? 1.68
+            : vocal.isTalking || s.isSeatedAtDesk
+              ? 1.74
+              : vocal.mood === "warning"
+                ? 1.85
+                : 1.96 + Math.sin(t * 0.8) * 0.05,
+          TURRET_Y_EYE_MIN,
+          TURRET_Y_EYE_MAX,
+        );
 
-      const yStep = stepHeavyCraneAxis1D(
-        ts.curHeadY,
-        ts.velY,
-        desiredTargetY,
-        dt,
-        CRANE_PATROL_MAX_SPEED_Y,
-        CRANE_PATROL_MAX_ACCEL_Y,
-        CRANE_PATROL_SMOOTH_TIME_Y,
-        _craneYOut,
-      );
-      ts.curHeadY = yStep.value;
-      ts.velY = yStep.velocity;
+        computeCorridorSteerTarget(
+          ts.curX,
+          ts.curZ,
+          ts.anchorX,
+          ts.anchorZ,
+          camPos.x,
+          camPos.z,
+          _steerTmp,
+        );
 
-      if (
-        Math.hypot(ts.velX, ts.velZ) > 0.75 &&
-        Math.hypot(ts.anchorX - ts.curX, ts.anchorZ - ts.curZ) > 0.45
-      ) {
-        playTurretServoWhir(0.9);
+        let effectiveMinCamDist = MIN_TROLLEY_DIST * 0.92;
+        if (ts.postGrabRetreatTimer > 0) {
+          ts.postGrabRetreatTimer = Math.max(0, ts.postGrabRetreatTimer - dt);
+          if (liveDistToCam >= MIN_TROLLEY_DIST * 0.92) {
+            ts.postGrabRetreatTimer = 0;
+          } else {
+            effectiveMinCamDist = Math.min(
+              MIN_TROLLEY_DIST * 0.92,
+              liveDistToCam,
+            );
+          }
+        }
+
+        const patrolMaxSpeed =
+          ts.postGrabRetreatTimer > 0 || liveDistToCam < PUSH_TARGET_TROLLEY_DIST
+            ? THREE.MathUtils.clamp(
+                CRANE_PATROL_MAX_SPEED_XZ +
+                  Math.max(0.6, PUSH_TARGET_TROLLEY_DIST - liveDistToCam) * 3.0,
+                CRANE_PATROL_MAX_SPEED_XZ,
+                CRANE_PATROL_RETREAT_MAX_SPEED_XZ,
+              )
+            : CRANE_PATROL_MAX_SPEED_XZ;
+
+        const xzStep = stepHeavyCraneXZ(
+          ts.curX,
+          ts.curZ,
+          ts.velX,
+          ts.velZ,
+          _steerTmp.x,
+          _steerTmp.z,
+          dt,
+          patrolMaxSpeed,
+          CRANE_PATROL_MAX_ACCEL_XZ,
+          CRANE_PATROL_SMOOTH_TIME_XZ,
+          true,
+          _craneXZOut,
+          camPos.x,
+          camPos.z,
+          effectiveMinCamDist,
+        );
+        ts.curX = xzStep.x;
+        ts.curZ = xzStep.z;
+        ts.velX = xzStep.vx;
+        ts.velZ = xzStep.vz;
+
+        const yStep = stepHeavyCraneAxis1D(
+          ts.curHeadY,
+          ts.velY,
+          desiredTargetY,
+          dt,
+          CRANE_PATROL_MAX_SPEED_Y,
+          CRANE_PATROL_MAX_ACCEL_Y,
+          CRANE_PATROL_SMOOTH_TIME_Y,
+          _craneYOut,
+        );
+        ts.curHeadY = yStep.value;
+        ts.velY = yStep.velocity;
+
+        if (
+          Math.hypot(ts.velX, ts.velZ) > 0.75 &&
+          Math.hypot(ts.anchorX - ts.curX, ts.anchorZ - ts.curZ) > 0.45
+        ) {
+          playTurretServoWhir(0.9);
+        }
       }
     }
 
@@ -2662,8 +2740,10 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
           ledMat.color.setHex(
             Math.floor(t * 14 + armIdx) % 2 === 0 ? 0xff2a2a : 0xffb000,
           );
-        } else if (inLobbyWaiting || controlRoomPowerState.zone2 <= 0.01) {
+        } else if (inLobbyWaiting || (controlRoomPowerState.zone2 <= 0.01 && s.shiftCompletedAt0600 === "active")) {
           ledMat.color.setHex(0x163820);
+        } else if (s.shiftCompletedAt0600 !== "active") {
+          ledMat.color.setHex(0x28c858);
         } else if (isActiveArm) {
           ledMat.color.setHex(0xffb830);
         } else if (isDancing) {
@@ -2701,7 +2781,9 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
 
     // Articulated Cyclops Optic Lens & 4 Motorized Brass Shutter Blades
     const liquidationGlare =
-      komradGrabState.phase === "liquidating" || s.siberiaGameOverActive;
+      komradGrabState.phase === "liquidating" ||
+      s.siberiaGameOverActive ||
+      isKomradStrike5Surging();
     if (turretOpticMatRef.current) {
       if (isBlackout) {
         turretOpticMatRef.current.color.setHex(0x220808);
@@ -2753,10 +2835,14 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
       } else if (inLobbyWaiting) {
         turretCrtMatRef.current.color.copy(_turretCrtStandbyTint);
       } else {
+        const crtPowerBlend =
+          s.shiftCompletedAt0600 !== "active"
+            ? Math.max(0.55, controlRoomPowerState.zone2)
+            : controlRoomPowerState.zone2;
         turretCrtMatRef.current.color.lerpColors(
           _turretCrtStandbyTint,
           _turretCrtFullTint,
-          controlRoomPowerState.zone2,
+          crtPowerBlend,
         );
       }
     }
@@ -2812,9 +2898,10 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
           ? `${Math.round(vocal.spectrum16[0] / 28)}-${Math.round(vocal.spectrum16[5] / 28)}-${Math.round(vocal.spectrum16[10] / 28)}-${Math.round(vocal.spectrum16[15] / 28)}`
           : "";
       const danceBeatParity = isDancing ? beatIndex % 2 : 0;
+      const staticJolt = s.strike5SurgeFlashSec > 0;
       const sig = `${isBlackout}|${isDancing}|${danceBeatParity}|${isDancing ? blinkBucket : 0}|${vocal.mood}|${pose}|${vocal.isTalking}|${energyQ}|${vocal.activeVowel ?? ""}|${vocal.rolledR}|${vocal.activeWord ?? ""}|${vocal.voxLoaded ? 1 : 0}|${specSig}|${
-        vocal.mood === "critical" ? blinkBucket % 2 : 0
-      }`;
+        vocal.mood === "critical" || staticJolt ? blinkBucket % 2 : 0
+      }|${staticJolt ? blinkBucket : 0}`;
 
       if (sig !== ts.lastSig) {
         ts.lastSig = sig;
@@ -2843,6 +2930,7 @@ export const SovietPanopticonRig3D: React.FC = React.memo(() => {
             vocal.voxLoaded,
             isDancing,
             danceBeatParity,
+            staticJolt,
           );
           tex.needsUpdate = true;
         }
