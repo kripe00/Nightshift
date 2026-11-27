@@ -632,6 +632,7 @@ function ElevatorDepartureAndSummaryOverlay() {
 
 export function App() {
   const phase = useGameStore((s) => s.phase)
+  const isPaused = useGameStore((s) => s.isPaused)
   const lobbyMenuPhase = useGameStore((s) => s.lobbyMenuPhase)
   const shiftCompletedAt0600 = useGameStore((s) => s.shiftCompletedAt0600)
   const elevatorDeparturePhase = useGameStore((s) => s.elevatorDeparturePhase)
@@ -811,12 +812,12 @@ export function App() {
   ])
 
   useEffect(() => {
-    if (phase !== 'playing' || !isShiftControlReady) return
+    if (phase !== 'playing' || !isShiftControlReady || isPaused) return
     const interval = window.setInterval(() => {
       tick()
     }, 1000)
     return () => window.clearInterval(interval)
-  }, [phase, isShiftControlReady, tick])
+  }, [phase, isShiftControlReady, isPaused, tick])
 
   // Allow pressing Space or Enter to engage the 3D Main Breaker when in boot/end phase,
   // or to re-close the Main Breaker during an active shift if it tripped open (isBlackout === true).
@@ -962,6 +963,7 @@ export function App() {
 
       {/* 100% True 3D First-Person Soviet Control Room Canvas (Locked dpr=1, unshadowed, stencil-free for 60 FPS micro-pixel aesthetic) */}
       <Canvas
+        frameloop={isPaused ? 'demand' : 'always'}
         dpr={1}
         camera={{ position: [-0.38, 1.65, 8.42], fov: 68, near: 0.12, far: 150 }}
         gl={{ powerPreference: 'high-performance', antialias: false, stencil: false }}

@@ -35,6 +35,21 @@ export function startSoundtrack(): void {
   })
 }
 
+export function setSoundtrackPaused(paused: boolean): void {
+  if (!isStarted || !normalTrack || !redlineTrack) return
+  if (paused) {
+    normalTrack.pause()
+    redlineTrack.pause()
+  } else {
+    void normalTrack.play().catch(() => {
+      // Autoplay blocked until interaction
+    })
+    void redlineTrack.play().catch(() => {
+      // Autoplay blocked until interaction
+    })
+  }
+}
+
 export function updateSoundtrackState(isRedlineOrCrisis: boolean, muted: boolean): void {
   currentMuted = muted
   if (!isStarted || !normalTrack || !redlineTrack) return

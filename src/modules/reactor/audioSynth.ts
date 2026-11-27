@@ -1,6 +1,19 @@
 // Procedural 1984 Soviet Control Room Web Audio Synthesizer (Zero External Assets)
 
 let audioCtx: AudioContext | null = null
+let isMasterAudioPaused = false
+
+export function setMasterAudioPaused(paused: boolean): void {
+  isMasterAudioPaused = paused
+  if (!audioCtx) return
+  if (paused) {
+    if (audioCtx.state === 'running') {
+      void audioCtx.suspend().catch(() => {})
+    }
+  } else if (audioCtx.state === 'suspended') {
+    void audioCtx.resume().catch(() => {})
+  }
+}
 
 export function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null
@@ -13,7 +26,7 @@ export function getAudioContext(): AudioContext | null {
       audioCtx = new AudioContextClass()
     }
   }
-  if (audioCtx && audioCtx.state === 'suspended') {
+  if (audioCtx && audioCtx.state === 'suspended' && !isMasterAudioPaused) {
     void audioCtx.resume()
   }
   return audioCtx

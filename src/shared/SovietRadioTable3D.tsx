@@ -1823,6 +1823,7 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
         const gs = useGameStore.getState();
         const inLobbyMenuLocked = gs.lobbyMenuPhase === "menu_locked";
         const shouldDuck =
+          gs.isPaused ||
           gs.diagFeedActive ||
           gs.isMusicMuted ||
           gs.phase !== "playing" ||
@@ -2146,6 +2147,25 @@ export const SovietRadioTable3D: React.FC<SovietRadioTable3DProps> = React.memo(
     useEffect(() => {
       handleProgramEndedRef.current = advanceStationProgram;
     }, [advanceStationProgram]);
+
+    const isPaused = useGameStore((s) => s.isPaused);
+    useEffect(() => {
+      const engine = audioEngineRef.current;
+      if (!engine || engine.disposed) return;
+      if (isPaused) {
+        if (engine.ctx.state === "running") {
+          void engine.ctx.suspend().catch(() => {});
+        }
+        if (!engine.ambientPlayer.paused) {
+          engine.ambientPlayer.pause();
+        }
+        if (!engine.player.paused) {
+          engine.player.pause();
+        }
+      } else if (engine.ctx.state === "suspended") {
+        void engine.ctx.resume().catch(() => {});
+      }
+    }, [isPaused]);
 
     useEffect(() => {
       return onKremlinFontReady(() => {

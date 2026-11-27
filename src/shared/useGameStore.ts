@@ -1,5 +1,7 @@
 // Shared Contract: Cross-module Zustand store
 import { create } from 'zustand'
+import { setMasterAudioPaused } from '../modules/reactor/audioSynth'
+import { setSoundtrackPaused } from '../modules/reactor/soundtrackPlayer'
 import {
   INITIAL_BATTERY_STORED_MWH,
   MAX_BATTERY_CAPACITY_MWH,
@@ -1682,6 +1684,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     )
     lastPostShiftLockMs = -10000
     updatePointerLockInteraction({ pauseMenuOpen: false })
+    setMasterAudioPaused(false)
+    setSoundtrackPaused(false)
     set((prev) => ({
       isPaused: false,
       shiftTimeMinutes: 360,
@@ -1787,6 +1791,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     const nextShiftPadded = String(nextShiftNumber).padStart(2, '0')
     airlockDoorState.skipLobbyMenuRunId = nextShiftRunId
     updatePointerLockInteraction({ pauseMenuOpen: false })
+    setMasterAudioPaused(false)
+    setSoundtrackPaused(false)
     const freshEntries = [
       createLogEntry(
         0,
@@ -1883,6 +1889,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
   setSiberiaGameOverActive: (active: boolean) => {
     if (active) {
       updatePointerLockInteraction({ pauseMenuOpen: false })
+      setMasterAudioPaused(false)
+      setSoundtrackPaused(false)
     }
     set((state) =>
       state.siberiaGameOverActive === active
@@ -1909,10 +1917,14 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
         return
       }
       updatePointerLockInteraction({ pauseMenuOpen: true })
+      setMasterAudioPaused(true)
+      setSoundtrackPaused(true)
       set({ isPaused: true })
       return
     }
     updatePointerLockInteraction({ pauseMenuOpen: false })
+    setMasterAudioPaused(false)
+    setSoundtrackPaused(false)
     if (state.isPaused) {
       set({ isPaused: false })
     }
@@ -2446,6 +2458,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     resetKomradTrackers()
     resetSovOsRuntime()
     updatePointerLockInteraction({ pauseMenuOpen: false })
+    setMasterAudioPaused(false)
+    setSoundtrackPaused(false)
     const cold = createColdStartState()
     const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const entry = createLogEntry(
@@ -2529,6 +2543,8 @@ export const useGameStore = create<GameState & SiberiaLiquidationStoreSlice>((se
     resetKomradTrackers()
     resetSovOsRuntime()
     updatePointerLockInteraction({ pauseMenuOpen: false })
+    setMasterAudioPaused(false)
+    setSoundtrackPaused(false)
     const cold = createColdStartState()
     const mapped = mapReactorToGameStateFields(cold, 'AWAITING_VOLKOV_MAIL')
     const freshEntries = [
